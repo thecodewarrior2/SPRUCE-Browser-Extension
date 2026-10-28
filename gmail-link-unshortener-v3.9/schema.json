@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "title": "Gmail Link Unshortener Policy",
+  "description": "Configuration policy for the Gmail Link Unshortener & Tracker Blocker Chrome extension.",
+  "type": "object",
+  "properties": {
+    "managedAllowlist": {
+      "title": "Managed Allowlist",
+      "description": "List of trusted domains that bypass all scanning, unshortening, and threat checks.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "description": "Domain name (e.g., internal.mycompany.com)"
+      }
+    },
+    "managedBlocklist": {
+      "title": "Managed Blocklist",
+      "description": "Custom tracking, advertising, or redirect domains to forcibly unshorten, trace, and clean.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "description": "Domain name (e.g., click.marketing.com)"
+      }
+    },
+    "managedDohEndpoint": {
+      "title": "Custom DoH Endpoint",
+      "description": "Secure DNS-over-HTTPS resolver endpoint URL.",
+      "type": "string"
+    },
+    "managedRemoveTrackingPixels": {
+      "title": "Remove Tracking Pixels Completely",
+      "description": "If true, completely removes tracking pixel <img> elements from the email DOM instead of replacing them with a visual placeholder icon.",
+      "type": "boolean"
+    }
+  }
+}
