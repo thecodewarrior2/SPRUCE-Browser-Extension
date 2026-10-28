@@ -1,0 +1,129 @@
+{
+  "managedEnableLinkUnmasking": {
+    "Value": true
+  },
+  "managedEnableTrackerReveal": {
+    "Value": true
+  },
+  "managedEnablePhishingFeeds": {
+    "Value": true
+  },
+  "managedEnableSenderChecks": {
+    "Value": true
+  },
+  "managedEnableSendCheck": {
+    "Value": true
+  },
+  "managedEnableQrScanning": {
+    "Value": true
+  },
+  "managedEnableAttachmentScanning": {
+    "Value": true
+  },
+  "managedEnableOutlookSupport": {
+    "Value": true
+  },
+  "managedEnableProtonSupport": {
+    "Value": true
+  },
+  "managedEnableYahooSupport": {
+    "Value": true
+  },
+  "managedEnableAolSupport": {
+    "Value": true
+  },
+  "managedEnableZohoSupport": {
+    "Value": true
+  },
+  "managedEnableIcloudSupport": {
+    "Value": true
+  },
+  "managedEnableFastmailSupport": {
+    "Value": true
+  },
+  "managedEnableGmxSupport": {
+    "Value": true
+  },
+  "managedEnableOneTimeLinkProtection": {
+    "Value": true
+  },
+  "managedEnableMismatchWarnings": {
+    "Value": true
+  },
+  "managedEnableHiddenLinkProtection": {
+    "Value": true
+  },
+  "managedEnableClickConfirmation": {
+    "Value": true
+  },
+  "managedVisualOverrides": {
+    "Value": true
+  },
+  "managedEnableTrackingPixelBlocking": {
+    "Value": true
+  },
+  "managedRemoveTrackingPixels": {
+    "Value": true
+  },
+  "managedEnableThirdPartyResolution": {
+    "Value": true
+  },
+  "managedEnableDnsThreatCheck": {
+    "Value": true
+  },
+  "managedDnsQuad9": {
+    "Value": true
+  },
+  "managedDnsCloudflareSecurity": {
+    "Value": true
+  },
+  "managedDnsCloudflareFamily": {
+    "Value": true
+  },
+  "managedDnsControlD": {
+    "Value": true
+  },
+  "managedDnsDns4eu": {
+    "Value": false
+  },
+  "managedDnsAdGuard": {
+    "Value": true
+  },
+  "managedEnableRemoteListSync": {
+    "Value": true
+  },
+  "managedEnableResultCache": {
+    "Value": true
+  },
+  "managedEnableHistoryLog": {
+    "Value": true
+  },
+  "managedRetentionDays": {
+    "Value": 30
+  },
+  "managedDohEndpoint": {
+    "Value": "https://dns.example.com/dns-query?name={hostname}&type=A"
+  },
+  "managedDohMethod": {
+    "Value": "GET"
+  },
+  "managedUnshortenerEndpoint": {
+    "Value": "https://unshorten.example.com/?url={url}"
+  },
+  "managedUnshortenerMethod": {
+    "Value": "GET"
+  },
+  "managedUseUnshortenMeFallback": {
+    "Value": true
+  },
+  "managedAllowlist": {
+    "Value": [
+      "internal.example.com"
+    ]
+  },
+  "managedBlocklist": {
+    "Value": [
+      "click.marketing.example"
+    ]
+  }
+}

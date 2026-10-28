@@ -1,0 +1,476 @@
+# Changelog
+
+## 5.32 — Check links before sending; Help reorganized
+
+- **Checking links before sending (Gmail).** When you press Send, or Ctrl/⌘+Enter, the links you wrote are checked before the email goes. The quoted original you're replying to is not checked. The checks:
+  - Typos: endings such as “.con”, “.cmo”, “.ocm”, “.comm”, “.nte”, “.ogr”; beginnings such as “http//”, “htp://”, “hhtps://”, “http:/”; addresses with no ending; two dots in a row.
+  - Look-alike domains of well-known brands, and link text that shows a different website than the link goes to.
+  - Whether the domain exists and has a website address (Cloudflare 1.1.1.1, site name only).
+  - Whether the site is dangerous, using the full link pipeline: blocklist, phishing lists, DNS threat filters, short links.
+  - Whether the website answers. This is one request from your browser, as when your reader clicks; no page is read. Sites that don't answer, or have an invalid security certificate, are reported. It is never done for one-time links.
+
+  If anything's wrong, a dialog lists the links and why, with **Go back and fix** (focused) or **Send anyway**. Emails without links send at once.
+- **It never blocks sending on its own failures.** Checks that can't finish (network down, more than 20 seconds) don't hold up the email. If the check itself fails, the email is sent as normal and the failure is logged.
+- **It follows the privacy levels.** At Offline only, just typos and look-alikes are checked, with no network request.
+- **Setting:** “Check links before sending (Gmail)” is on by default, with policy key `managedEnableSendCheck`.
+- **Help reorganized:**
+  - “What the warnings mean”, “Your privacy”, “Limitations”, “Permissions” and “Architecture deep dive” are now sub-topics under “How it works”.
+  - The new feature is described in How it works, Features, What the warnings mean, Your privacy (with network details), Limitations and Troubleshooting.
+
+## 5.31 — Calmer, clearer in-email display
+
+- **Fewer markings in busy emails.** When an email has five or more Caution (amber) links, they're no longer marked one by one; the banner says it once per kind, for example "6 links in this email show one website but go to another". With fewer, they're marked as before. Dangerous (red) links always keep their red marking and icon, and are also listed in the banner.
+- **Banner: "Show details" and "What should I do?"**
+  - Both stay closed until clicked, so the banner stays one or two lines.
+  - Details lists the links in the email's order (text → real destination, with the reason for dangerous ones). Pointing at an entry highlights the link in the email, and clicking scrolls to it. It also works with the keyboard.
+  - "What should I do?" shows short advice that fits the findings.
+- **Hover card instead of the browser's slow plain tooltip.** Pointing at (or tabbing to) a checked link shows a small card: the verdict, the real destination, notes, and a **Copy address** button. It's lightweight: one element per page, created on first use, driven by one page-wide listener, with nothing running per link. Escape or moving away closes it. The sender's own link titles are kept exactly as written.
+- **QR results:**
+  - A web address is now a clickable link (opens in a new tab), unless it's flagged as dangerous.
+  - Anything else, such as a one-time code, stays plain text.
+  - Every result has a **Copy** button.
+  - There's no banner for QR codes alone.
+- **Light and dark themes.** Banners, QR and attachment notices, and the hover card follow Gmail's light or dark theme, using soft colors that keep strong contrast. Attachment notices use the same calmer style as the banner.
+- Amber links described in the banner open normally; red links still ask before opening.
+- Help → What the warnings mean describes the hover card, the banner buttons, many-links summaries and QR results.
+
+## 5.30 — One calm banner per email instead of marking every company link
+
+- **Company links (Google's c.gle, g.co, goo.gle; Microsoft's aka.ms) are no longer highlighted or given an icon,** however many an email contains, so forwarded emails full of them stay readable. Their tooltip keeps only the facts ("Google short link (c.gle). Where it leads couldn't be looked up. Address: …"), with no caution text.
+- **One banner at the top of each email,** full width, collecting every finding about the email as a whole.
+  - Identical findings are grouped and counted: a forwarded email with 12 company links gets one sentence ("12 Google links (c.gle) in a forwarded part of this email can't be checked…").
+  - Sender warnings moved into the same banner, so an email has at most one notice area.
+  - The style is calmer: a light background with an amber or red left edge, instead of solid red blocks.
+  - Wording adapts to the count ("A Google link … where it leads" / "12 Google links … where they lead").
+- **Red cases** (a Google-only link from an unrelated sender, or failed company verification) are still red in the banner, and those links still ask before opening. Amber cases don't.
+- **Outside Gmail,** company links are also described in the banner instead of being marked one by one; there the sender can't be verified.
+- Help → What the warnings mean and Troubleshooting describe the banner.
+
+## 5.29 — Trust but verify: sender checks (Gmail), limitations documented
+
+- **Company links checked against the sender (Gmail).** A company-only short link (Google's c.gle, g.co, goo.gle; Microsoft's aka.ms) whose destination can't be looked up is now judged by who sent the email:
+  - **Unmarked** (only logged as "Verified company link") when Gmail verified the email as sent by that company directly to you. "Directly" means DMARC pass for the company's domain, your address in To/Cc, and not a mailing-list copy. For Google, Microsoft, Apple, Amazon and PayPal, the sending server must also belong to the company, the tell of the 2025 Google DKIM-replay attack.
+  - **Amber** in a forwarded or quoted part, in a re-sent or mailing-list copy, or when the email's verification couldn't be read.
+  - **Red** for Google-only links (amber for aka.ms, which is copied widely) in mail from anyone else, or when the email claims to be from the company but failed its verification.
+- **Sender warnings (Gmail),** shown above the email:
+  - red when the sender's name claims a well-known brand (about 35 brands; look-alike letters folded) but the address isn't the brand's
+  - red when a brand domain fails its sender verification
+  - red when the sender's domain imitates a brand
+  - amber when a genuine company notification contains a phone number and payment wording, which attackers abuse (Apple, Microsoft and PayPal cases in 2025–2026)
+
+  People whose names contain brand words ("Chase Miller") and brands' real alternate sending domains (facebookmail.com, microsoftonline.com, youtube.com…) are not flagged.
+- **How it reads the verdict:**
+  - Gmail's "Show original" for that email, fetched from Gmail itself with your session, only when the email contains a company-only link or a sender name claiming a brand. It is cached per email and nothing is sent elsewhere.
+  - Only the topmost Authentication-Results stamped by `mx.google.com` counts (RFC 8601), so forged "pass" headers inside a message are ignored.
+  - If the read fails, the sender is treated as not checked (logged once).
+  - The new setting "Check who sent the email (Gmail)" is on by default, with policy key `managedEnableSenderChecks`.
+- **Sign-in links that redirect elsewhere** (real Microsoft or Google sign-in pages with a `redirect_uri` to another site) are marked Caution.
+- **Documentation (planned "Phase 0"):**
+  - New Help → **Limitations** section: the lookup-service limits, company links, what site-name threat checks can't judge, opaque gateways, sender checks, the daily lists, QR codes and attachments, other webmail, pixels, and the privacy levels.
+  - A recommendation to use your own lookup service, in Help, in Settings → Your own services, and in the log message when a lookup fails.
+  - New **Google Web Risk guide** for Google Workspace (Help → Deploying in organizations), with policy JSON. Web Risk and Safe Browsing replies are now recognized, with reasons such as "Phishing (Google Web Risk)".
+- The self-hosted lookup service prototype was removed from the extension and handed off as a separate project.
+
+## 5.28 — Unresolved short links shown as Caution
+
+- **A short link whose destination couldn't be looked up is now amber ("Caution")**, with the reason in its tooltip. Previously it only got a note, and a company's own short link (such as Google's c.gle labelled "admin.google.com") showed no warning at all, although its destination was unknown. Example tooltip: "Caution: Google short link (c.gle): its destination couldn't be looked up (too long for unshorten.me, which accepts up to 100 characters)". At the Private and Offline levels, where short links aren't looked up, nothing changes.
+- **Reported: c.gle links weren't decoded.** unshorten.me stores addresses in a 100-character field and rejects longer ones ("value too long for type character varying(100)"), and Google's c.gle links are about 130 characters. Such links are no longer sent to unshorten.me at all; your organization's own lookup service is still tried.
+- **Failed lookups are remembered.** The same link is no longer looked up, and logged, every time an email is re-scanned (the reported "×24"). It's retried after 30 minutes after temporary problems (network, rate limit), or after a day after permanent ones. This is kept in memory only and limited to 500 links.
+- The Link Inspector shows why a lookup failed, and Help → Troubleshooting explains amber short links.
+
+## 5.27 — Two warning levels, company domains, file names
+
+- **Two warning levels for misleading links.**
+  - **Caution (new, amber, ⚠ triangle):** link text that shows a different site, raw IP addresses and international characters. Common in legitimate mail, so the text is kept and clicking asks "Caution: … Open it anyway?".
+  - **Danger (red, 🛑):** look-alike brand domains, link text showing a well-known brand's address while going elsewhere, and hidden user names. Threats found by security services and phishing lists stay red too.
+  - QR-code and attachment link bars use the same two levels. The popup shows a separate **Caution** count, in a 3×2 grid with Not verified in blue so the two can't be confused.
+- **Companies' own domains count as one** (Google with Gmail, YouTube and c.gle; Microsoft with aka.ms and Outlook; Amazon, Meta, Apple, LinkedIn, X). Link text and destination within one company no longer cause a warning.
+- **Big brands' short-link domains are now looked up** like any shortener: c.gle, g.co, goo.gle, youtu.be, aka.ms, msft.it, amzn.to, amzn.eu, a.co, fb.me, apple.co, spoti.fi, adobe.ly, ebay.to. Reported example: a Google Admin email's `admin.google.com` → `c.gle/…` link was wrongly flagged red and not decoded.
+- **File names in link text are recognized as files, not websites.**
+  - Covers many more endings that are also real internet domains (.build, .md, .py, .sh, .rs, .app, .zip…).
+  - Link text shown as code (`<code>`, `<pre>`…) is never treated as a website claim.
+  - Reported example: GitHub's "In meson.build" link was flagged.
+- **Help → What the warnings mean** explains both levels and the company short links. The features list is updated.
+
+## 5.26 — Accessible, consistent design (WCAG 2.1 AA) in light and dark
+
+- **One color palette.**
+  - Every color in the Options page and the popup now comes from about 30 named design tokens in the new shared `theme.css` (text, muted text, surfaces, borders, accent, success, danger, warning, neutral and switch colors). Dark mode only redefines the tokens.
+  - About 55 hard-coded colors and the old piece-by-piece dark-mode overrides (about 60 rules) are gone, including colors set from code, which the old overrides could not reach.
+  - Text tokens meet 4.5:1 on every surface they are used on; controls meet 3:1.
+- **Fixed in dark mode (reported):**
+  - the white WHOIS buttons
+  - unreadable "How this link was handled:" in the Link Inspector
+  - invisible expand arrows on folded sections
+  - unreadable gray and yellow buttons ("Test", "Clear log", "Copy…", "Export log"); text on yellow is now always dark
+  - an "on" switch with too little contrast
+- **Contrast audit.** A new automated check measures the WCAG contrast of every visible piece of text against its real background, and of the switches. It covers both themes, every tab, every Help topic, every Logging view, the Link Inspector's results, the dialogs and the popup. Result: 0 failures in light and dark mode.
+- **Accessibility (WCAG 2.1 AA):**
+  - **Names for screen readers:** every switch (31) and the retention-days field are named after their setting; the 10 text fields have labels instead of placeholder-only hints; the ✕ button is named.
+  - **Tabs:** proper tab roles, the selected state, and arrow-key / Home / End navigation. The Help and Logging menus announce the current section.
+  - **Dialogs:** announced as dialogs with their title, and close with Escape.
+  - **Keyboard focus:** an outline is always visible, including on switches.
+  - **Structure:** both pages declare their language, and the heading outline no longer skips a level.
+  - **Motion:** the system's "reduce motion" setting is respected.
+- **Design fixes:**
+  - Switches no longer slide from off to on every time a page opens; they appear in their real state and animate only when you click them. Knobs are white in both themes.
+  - The Link Inspector tab has an icon like the other tabs (🔍).
+  - "Inspect & Decode" → "Inspect link". "Export Logs" → "Export log". The dialog titles are "Restore settings" and "Synced shortener list". "Checked by: Multi-DoH" → "several security services". The popup header uses the product name.
+- **Help:** an Accessibility section in About & credits, and an Accessibility group in the features list.
+
+## 5.25 — More webmail, full review, documentation
+
+- **New webmail support (experimental):** Yahoo Mail, AOL Mail, Zoho Mail (all regional sites), iCloud Mail, Fastmail and GMX (gmx.com, .net, .de, .at, .ch, .co.uk, .fr, .es). Each can be switched on or off in Settings → Other webmail and by policy.
+  - All supported webmail is described in one table (`WEBMAIL_SITES` in shared.js), shared by the content script and the popup, so a change in a site's layout needs a one-line fix.
+  - Messages shown in frames are read from the page when the frame allows it. The extension also runs inside each site's own message frames.
+  - iCloud is only active on its Mail pages.
+- **Toolbar icon and popup with frames.** Each part of a page (the page and any message frames) now reports its own state, and the background combines them per tab: active if any part shows a message, with counts and statistics added up. The popup asks the background for this combined state instead of messaging the page. After a service-worker restart, the background asks the page again.
+- **Reset respects managed settings.** "Reset my settings to defaults" (renamed from "Reset all settings to defaults") now skips every setting managed by Google Workspace, Intune or Group Policy, including the user's stored value underneath it. The confirmation says how many settings were left unchanged.
+- **Third-party lists at most once a day.** This applies to all four lists (two shortener lists, OpenPhish, Phishing Army), whatever asks for the update: the daily alarm, installation, re-enabling sync, or "Update now", which now explains when the next update can happen. The phishing lists were previously checked every 6 and 12 hours.
+- **Naming and wording:**
+  - "Error log entries" → "Application log entries", with the remaining "error log" wording in comments updated.
+  - Buttons and headings use sentence case throughout ("Clear log", "Save service", "Test resolver", "Custom threat resolver"…).
+  - The popup's "Synced Trackers" is now "Synced shortener domains", and "Show Visual Highlights" is now "Show results on links", matching Settings.
+  - The Link Inspector uses plain language ("Where the link goes", "Checked: nothing found", "Flagged: …") and its colors work in dark mode.
+  - Tooltips use the full product name.
+  - The manifest description is updated.
+- **Fixed:** the Link Inspector's progress message showed "goesspection" (a fragment of the previous wording).
+- **Help, reorganized and brought up to date:**
+  - "For administrators" is merged into "Deploying in organizations" (new section "What can be managed").
+  - **Architecture deep dive → Features:** a complete features list by area.
+  - **Permissions:** rewritten to cover every permission.
+  - **Troubleshooting:** new entries for the grey icon, the once-a-day limit, the other webmail apps and the reset behavior.
+  - **How it works:** names all supported webmail.
+- **Credits:**
+  - License notes for each third-party source.
+  - The bundled shortener snapshot is credited to its source lists.
+  - Trocker (Apache-2.0), ZXing, pdf.js license file, and the security researchers whose public reports informed the detections.
+  - A trademark notice.
+- **Code review:**
+  - Automated checks for unused functions (256 examined), unused CSS classes (133), missing element IDs, unmatched messages, unused settings and constants, and leftover debugging code. No dead code was found apart from the popup's old count request, which was removed.
+  - All HTML built from data is escaped.
+  - Every user-facing word was reviewed for spelling.
+
+## 5.24 — Quiet PDF scanning
+
+- **Fixed:** Chrome's Errors page (chrome://extensions → Errors) listed two pdf.js warnings from `scanner.html` after a PDF attachment was scanned. Both were routine notices, not failures:
+  - **"Setting up fake worker":** pdf.js runs inside the hidden scanner page by design, because workers don't start reliably in offscreen documents.
+  - **"Indexing all PDF objects":** the PDF had a damaged internal index, which pdf.js rebuilds automatically.
+
+  pdf.js now reports errors only, so real problems still appear.
+- **Verified:** a normal PDF and a deliberately damaged one are both still fully read (QR code and link found) with no warnings. The same test reproduces the warnings with the previous version.
+
+## 5.23 — Toolbar icon shows when the extension is working
+
+- **Fixed: the badge count stayed after leaving an email.** Gmail keeps opened messages in the page, hidden, when you go back to the inbox or switch labels, and counts only dropped when a message was removed. The badge was also only updated when an email opened.
+  - Counts now include only messages that are actually on screen.
+  - The state is re-checked on any page change (at most 4 times a second, and only reported when it changes), on Gmail's in-page navigation, when returning to the tab, and when protection is switched on or off.
+  - The popup statistics also count only on-screen messages.
+- **Active vs. idle icon.**
+  - **Active:** the toolbar icon is in full color with the count while an email is open and being checked. Its tooltip says what was done, e.g. "checking this email (2 links fixed or flagged, 1 tracking pixel blocked)".
+  - **Idle:** otherwise the icon is greyed out with no count, and its tooltip says it's not active.
+  - Grey is the default on every tab and website, and a tab that loads a new page starts out grey.
+  - A global "ERR" warning still shows on every tab until it's resolved.
+- **Help → What the warnings mean** explains the three icon states.
+
+## 5.22 — Popup statistics, dark mode, deployment guide
+
+- **Popup statistics for the open email.**
+  - It shows **Scanned**, **Safe**, **Unsafe**, **Not verified** and **Unscanned** links. Scanned = safe + unsafe + not verified.
+  - "Not verified" means checked but not confirmed safe, for example an email tracking link or unreachable security services. "Unscanned" means still being checked or not checkable.
+  - Only web links count (not `mailto:` or in-page anchors). Disabled `javascript:`/`data:` links count as unsafe.
+  - "Links cleaned" and "Tracking pixels blocked" stay on a single line.
+- **Dark mode** for the popup and the Options page, with an **Appearance** selector (Follow system (default) / Light / Dark) in both. The choice is remembered and shared by both pages, and applied before the page draws, so there's no flash. Everything has dark styles, including the architecture diagram, badges and status cards. The setting is a personal preference, so it isn't part of backups or policies.
+- **Help → Deploying in organizations.** Step-by-step instructions for:
+  - choosing a distribution route (Chrome Web Store, Edge Add-ons, the Chrome Web Store version in Edge, self-hosting)
+  - Google Workspace: force install and Policy for extensions JSON
+  - Microsoft Edge with Intune: Settings catalog force install or ExtensionSettings, plus extension settings via the registry and a platform script
+  - Chrome on Windows with Intune
+  - verification and tips
+
+  The admin guide summarizes them.
+- **New: "Copy registry script"** (Settings → Backup & Google Workspace). It generates a PowerShell script that writes your current settings as extension policy for both Edge and Chrome:
+  - on/off settings and numbers as REG_DWORD
+  - text as REG_SZ
+  - the allowed and blocked site lists as numbered values in a subkey
+
+## 5.21 — Research follow-up: new resolvers, phishing lists, attachment and QR detections
+
+- **New free security resolver: Control D (malware), on by default.** Free, no account, blocklists rebuilt every 30 minutes.
+  - **DNS4EU Protective** is available as an option (off by default; intended for individuals).
+  - Both use RFC 8484 and are read with one generic DNS answer reader. A sinkhole address, or "does not exist" for a name that really exists, counts as a block.
+  - Mullvad DNS (shutting down 2026-11-02) and dns0.eu (discontinued) were deliberately not added.
+- **Local phishing lists, on by default.**
+  - The OpenPhish community feed (exact phishing URLs, every 12 hours) and Phishing Army (phishing hostnames, every 6 hours, CC BY-NC 4.0) are downloaded and matched on the device. Nothing about you is sent.
+  - Same safeguards as the shortener lists: size limits, a minimum size, and the previous copy is kept when a download fails or looks broken.
+  - Major sites are never blocked by these lists, and shared hosting is never blocked from a single URL entry.
+  - List verdicts are never cached, so delisted sites recover immediately.
+  - "Offline only" turns the lists off. URLhaus and ThreatFox were excluded: they now require an account key.
+- **Look-alike domains.** Links are flagged when their site name imitates a well-known brand:
+  - look-alike characters, including Cyrillic or Greek letters in punycode domains, decoded locally
+  - a one-letter typo (amazom.com)
+  - "paypal.com.something.xyz"
+  - the brand name plus words like "login" or "secure"
+
+  Real brand domains, their subdomains and regional versions (paypal.co.uk) are never flagged.
+- **Attachments (checked on the device):**
+  - **SVG and HTML files:** scripts, auto-redirects, code obfuscation (atob/eval), forms posting elsewhere, password fields and pre-filled victim addresses are flagged "⛔ DO NOT OPEN". Hidden destinations, including base64-encoded ones, are extracted and checked.
+  - **Calendar invites (.ics):** links in the invite are checked.
+  - **Encrypted ZIP/RAR archives:** a warning, since mail filters can't scan inside them.
+  - **File names:** names with hidden text-direction characters (e.g. "invoice‮fdp.exe") are flagged.
+  - **Finding attachments:** download links are used as a fallback when Gmail's attachment attribute is missing.
+- **QR codes drawn without an image.** Phishing campaigns draw QR codes with HTML tables or block characters (█▀▄) to dodge image scanners. These are now found, turned back into a QR grid and decoded, including light-on-dark drawings.
+- **Risky links.** `javascript:`, `data:`, `vbscript:`, `blob:` and `file:` links in emails are disabled and marked.
+- **Gateways:**
+  - New decoders: **Libraesva UrlSand** (`urlsand.esvalabs.com/?u=`) and **Forcepoint Remote Browser Isolation** (`rbi.forcepoint.net/loader?url=`).
+  - Named as protected (destination stored by the service): Hornetsecurity, SpamTitan LinkLock, Vade, Intermedia LinkSafe / Proofpoint Essentials, Zix/AppRiver; INKY shows its destination domain.
+  - ShareASale links without a scheme are handled.
+- **Proton Mail.** Messages are now read from the parent page, because Proton's sandboxed message frames don't allow extension scripts to run inside them.
+- **Efficiency.** The phishing lists are loaded once and shared by all links of an email (100 links: 103 storage reads, 2 writes). The new checks run only when relevant content is present: tables of at least 21×21 cells, block characters, or attachments.
+- **Settings and help:**
+  - New settings with Workspace policy keys: "Check links against phishing lists" (with "Update now" and entry counts), Control D, DNS4EU. The attachment and QR descriptions are updated.
+  - Help: new "What the warnings mean" entries, updated privacy and network tables, list status under "This installation right now", and new credits (Control D, DNS4EU, OpenPhish, Phishing Army CC BY-NC 4.0, pdf.js, tracker-list projects, ZXing techniques).
+- **New permissions:** `unlimitedStorage` (the phishing lists can be several MB), plus access to freedns.controld.com, protective.joindns4.eu, openphish.com and phishing.army.
+
+## 5.20 — QR codes, attachments, cloud-storage phishing, pixel fixes, more webmail
+
+- **QR codes in emails (your issue #3).** QR codes in email images are now read on the device and their destination is checked like a link.
+  - A bar under the image shows where the code leads: grey for "not verified", green for "checked, nothing found", red "⛔ DO NOT SCAN" when the destination is flagged (the image also gets a red outline).
+  - Images are read from Google's image proxy, never from the sender's server.
+  - QR images are no longer mistaken for tracking pixels.
+  - Only QR-shaped images (8 per message) and large posters (3 per message) are scanned, so ordinary banners cost nothing.
+- **Attachments (your issue #1).** Image and PDF attachments (up to 10 MB, first 10 pages) are opened on the device, using your own Gmail session, to find QR codes. Links inside PDFs are listed and checked too. Nothing is uploaded.
+- **How QR reading works:**
+  - The QR decoder is new, self-contained and has no dependencies. Chrome's built-in detector is used where it exists (macOS, ChromeOS).
+  - PDFs are rendered with pdf.js (Mozilla, Apache-2.0), bundled in `lib/`. Small shims in `compat.js` cover recent JavaScript features pdf.js uses that some Chrome versions lack.
+  - All of this runs in a hidden scanner document that is created on demand, runs at most 2 scans at a time, and closes after 1 minute idle.
+  - Tested against all 40 QR versions × 4 error-correction levels (158/158), 244/244 realistic images (posters, banners, rotation, perspective, blur, JPEG, colored, inverted, logos) with no false readings, and full Reed-Solomon correction.
+- **Cloud-storage phishing pages (your issue #2).**
+  - Links to web pages in public buckets (Google Cloud Storage, Firebase Storage, S3, Azure Blob, R2, IPFS) are flagged "DO NOT CLICK". DNS filters never block these domains, so they used to show as safe.
+  - Hidden data after "#" (base64 tracking IDs or a recipient's address, as in the documented 2026 spam kit) is decoded and shown, and the link is marked "pre-targeted".
+  - Firebase Hosting, Cloudflare Pages and Azure Static Websites are flagged only when they carry such hidden data.
+  - A 🔍 on Google Cloud Storage and Firebase Storage links reads the page's code on request, without running it and without sending the "#" data, to find where it redirects. For the kit in your notes, that's a hard-coded IP address.
+  - These pages are never treated as one-time links, whatever their wording.
+- **Tracking pixels (your issue #5).** The Boston Scally newsletter lost 16 of its 21 real images because `cdn.klaviyomail.com` is on the tracker list and a domain match overrode the size check.
+  - **Added:** open-pixel address rules that apply at any size. They cover SendGrid, Mailchimp, HubSpot, Brevo, Salesforce Marketing Cloud, Postmark, Mailgun, Marketo, ActiveCampaign, Shopify Email, Amazon SES, Klaviyo (brand-domain `/o/<id>`) and generic `trk.`/`t.` `/open` trackers.
+  - **Changed:** an image larger than 20 px is never a pixel. Tracker-domain matches now only count for small or unknown-size images.
+  - **Removed:** the broad host-prefix rule (`c.`, `s.`, `e.`, `click.`…) and the short-path rule (`/l`, `/r`, `/c`…), which caused false positives.
+  - **Verified:** all 21 content images of that email are kept and its 1×1 tracker is still removed.
+- **Outlook on the web and Proton Mail (experimental, your issue #4).** Link checking and pixel blocking also run there. QR scanning only reads images those sites host themselves. There's a switch for each, and Workspace policy keys. These sites could not be tested here, so please report what you see.
+- **Decoder fixes from the research:**
+  - Avanan's versioned `/v2/r0N/` links, including its "https:/" quirk.
+  - Trend Micro links whose destination is unencoded, so its own "&" no longer cuts it short.
+  - Barracuda's base64-encoded destinations.
+  - Mimecast's newer `mimecastprotect.com` links, with the destination-domain hint.
+  - New: Google Meet `linkredirect` (abused in 2026 phishing chains) and Google Ads `aclk`/`iclk`/DoubleClick `pcs/click` variants.
+- **unshorten.me** stays enabled by default as before.
+- **New settings:** "Check QR codes in emails" and "Check attachments", plus the Outlook and Proton switches. "Offer to reveal" now also covers cloud pages. All have policy keys.
+- **New permissions (Chrome asks once):**
+  - `offscreen`, for the hidden scanner document.
+  - Access to `*.googleusercontent.com`, to read Gmail's proxied images for QR codes.
+  - Access to `storage.googleapis.com` and `firebasestorage.googleapis.com`, for on-request page inspection.
+  - The Outlook and Proton sites.
+
+## 5.19 — Full code review: performance, correctness, cleanup
+
+**Resource use (measured on one email with 100 links, 15 different sites and a 5,000-domain synced list):**
+
+| | Before | After |
+|---|---|---|
+| DNS requests | 520 | 60 (one round per site) |
+| Storage reads | 400 | 102 |
+| Storage writes | 170 | 2 |
+| Toolbar badge updates | one per link and pixel | one per burst |
+
+- **Shared checks.** Links to the same site checked at the same moment now share one round of DNS requests.
+- **Remembered verdicts.** Flagged verdicts are remembered as well as safe ones (never "unknown"). The memory is capped at 1,000 sites and cleared whenever settings change.
+- **Settings read once.** Settings are read once and kept in memory until they change, instead of being re-read for every link. Lookup tables built from the synced list (thousands of domains) are built once per settings version, not several times per link.
+- **Combined writes.** Log entries, history entries and cached results for a whole email are combined into one storage write, about half a second after the burst.
+- **Smaller messages to Gmail.** Gmail no longer receives the full synced shortener list (thousands of domains) with every scan; it never used it.
+- **Gmail tab:**
+  - An image that finishes loading late now checks only itself. Previously every late image re-scanned every image in every open message.
+  - The page observer skips nodes that can't contain a message before searching them.
+  - Badge updates are coalesced.
+- **Options page:**
+  - The Settings tab now re-renders only when settings or lists change. New log entries refresh only the status card, and cache writes made while Gmail is in use are ignored.
+  - The architecture page refreshes at most once a second while visible, and reads the bundled snapshot file once.
+
+**Bugs fixed:**
+- **Conversations.** Opening another message in a conversation wiped the earlier messages' state, so the highlights toggle no longer reached their links and the badge undercounted. State is now kept for messages still on screen and released for messages Gmail removes, and counts are computed from what's displayed.
+- **Settings changes.** Switching a resolver off (for example Cloudflare Family) didn't take effect until the service worker restarted, because earlier verdicts were reused. The verdict memory is now cleared on any settings change.
+- **Quad9.** Server errors (SERVFAIL, REFUSED…) were counted as a successful security check and could contribute to "safe". Only real answers count now, and other replies are logged as warnings. A hostname ending in a dot also produced a malformed Quad9 query.
+- **Link Inspector.** "Not verified" results (such as email trackers) are now shown on a neutral card instead of a green one.
+- **Downloads.** Two CSV exports never released their download's memory.
+
+**Cleanup:**
+- Removed the unused `scanLinks` message handler, the service worker's `activate` handler (navigation preload doesn't apply to extensions), leftover `reservedKeys` filters, the Gmail console "loaded" message, and five unused CSS rules from the old Privacy tab.
+- Spelling is now consistently American (recognize, behavior, analyze). No misspellings were found.
+- Added header comments describing each file's role.
+- **Icons added** (16, 32, 48, 128 px), shown in the toolbar and on the extensions page. The Chrome Web Store requires them.
+- Help's architecture page documents the caching and batching ("Efficient by design").
+
+## 5.18 — Reveal email tracking links on request
+
+- **New: 🔍 on email tracking links.** Point at a link from Brevo, SendGrid, Klaviyo, Mailchimp or similar, and a small blue 🔍 appears beside it.
+  - **Stays out of the way.** The icon is hidden until the link is hovered, so newsletters with dozens of links stay uncluttered. It's also reachable with the keyboard (Tab, then Enter).
+  - **Asks first.** Clicking the icon asks before doing anything. The prompt names the provider and the service the link will be sent to (unshorten.me, or your own unshortener), and says plainly that the sender will see it as a click. Cancelling sends nothing.
+  - **After revealing:** the link points straight at its real destination, keeps its text, and the tooltip says where it goes. The destination is checked like any other link: it's flagged in red if dangerous or if it contradicts the link's text (for example text "paypal.com" leading elsewhere), and clicking it then asks first. Revealing never opens the link, and reveals are never cached.
+  - **Never offered for unsubscribe, sign-in or other one-time links,** or when the privacy level doesn't allow online lookups (Private, Offline only).
+  - **Controls:** Settings → Links → More options → "Offer to reveal email tracking links" (on by default), and the Workspace policy key `managedEnableTrackerReveal`. When it's off, tracking links are never sent anywhere.
+  - Unrevealed tracking links are not counted as "cleaned" on the toolbar badge.
+- The blocklist reveal and the tracker reveal now share one implementation, as does "ask before opening a flagged link".
+- New file `content.css` (shows the 🔍 on hover). Help and the architecture deep dive document the reveal, including the updated lookup rules and network table.
+
+## 5.17 — Honest tracker reporting, Logging tab, layout fixes
+
+- **Email click trackers are recognized and reported honestly.**
+  - Links from Brevo/Sendinblue (`sendibm*.com`, `sendibt*.com`), Klaviyo, and SendGrid or Mailchimp on a company's own "branded" domain (for example `ablink.r.sofi.com/ls/click?upn=…`) are now recognized by provider domain families and path signatures, not just a fixed domain list.
+  - Their destination is stored by the email provider and can't be decoded; SendGrid's code was confirmed to be encrypted. Learning it would mean following the link, which registers a click as the recipient, so they are still never followed or sent anywhere.
+  - Previously they were logged and cached as "Safe" by "Zero-Touch Scanner", although only the tracker's own domain had been checked. They are now "Not verified: email tracking link", with the provider named in the link tooltip, History and Link Inspector. They're still flagged if the tracker's domain itself is malicious, and are never cached.
+  - Older History rows of this kind are relabeled, and cached results from earlier versions are cleared once.
+  - A tracker whose text names another site (for example `wired.com`) no longer risks a false "misleading link" warning.
+- **"Zero-Touch Scanner" is gone.** Results say what actually happened: "Direct link (checked only)", the decoder that unwrapped the link, "unshorten.me", or "Email tracker (provider), not followed".
+- **History and URL cache:**
+  - No more duplicate addresses. When a link didn't need unmasking, the destination column says "Same as original" (no second copy and no copy button), "Not revealed (email tracking link)", or "— (tracking image, not a link)" for pixels.
+  - Statistics strips: History shows links checked, unmasked, flagged, not verified, email trackers, pixels blocked and entries kept. The URL cache shows cached links, decoded offline, looked up online, direct links, flagged, oldest entry and storage used. The application log shows errors, warnings and info in the last 24 hours and entries kept. Counts use the same rules as the tables, so they always agree.
+  - The URL cache now updates live while the page is open (newest first). Previously new entries appeared only after typing a filter.
+  - Wider Status columns.
+- **Logging tab.** "Error Logs", "History" and "URL Cache" are now one Logging tab with the same side-menu layout as Help: Application log · History · URL cache. The log is titled "Application Log", since it holds warnings and routine events as well as errors. All links and messages that pointed to "Error Logs" now point to Logging → Application log.
+- **Allowed & blocked sites:** proper spacing under the card heading. Both columns now share one grid, so their headings, descriptions, input boxes and "Site" table headers line up exactly whatever the text length.
+
+## 5.16 — Popup fix
+
+- **Fixed: "Open Settings" in the toolbar popup did nothing when clicked soon after opening the popup.** The popup connected its buttons only after loading settings. Since 5.10, that loading step can wait a few seconds in browsers that are slow to answer the first read of policy storage, and during the wait the button was dead.
+  - Buttons are now connected immediately, and the counts and highlight switch fill in afterwards.
+  - The button is now also a real link to the Settings page, so it works even if the popup's script fails entirely. When the script is running, it reuses an already-open Settings tab instead of opening a second one, and then closes the popup.
+  - If the standard way of opening Settings fails, the popup falls back to a new tab and records a warning in Error Logs.
+
+## 5.15 — Redesigned Options page and Help
+
+- **Tabs:** Settings · Link Inspector · History · URL Cache · Error Logs · Help. Features, Privacy, Resolvers and Domain Policies are merged into **Settings**; Privacy and Credits are replaced by **Help**.
+- **Settings** is one page in three layers:
+  - **Status card.** For example: "Protection is on · Privacy level: Standard · Threat checks on · Shortener list updated 2 hours ago". It turns amber or red, with a link to Error Logs, when threat checks are unavailable or errors occurred.
+  - **Privacy level.** Standard (default), Private (no link sent to any lookup service) or Offline only (nothing leaves the browser). Changing an individual switch shows "Custom", and levels blocked by policy are marked.
+  - **Grouped sections.** Links, Tracking pixels, Lookups & threat checks, Allowed & blocked sites, Data on this device, and Backup & Google Workspace. Advanced options (threat-check services, your own services, backup and policy) are folded away by default.
+  - **Also:** a one-time dismissible "New here?" line, "Reset all settings to defaults", lock notes that say "🔒 Set by your organization", plain-language labels, and an "Update now" link for the shortener list. Previously the list update existed in code but nothing in the interface could trigger it, and it reported success even when it failed.
+  - **Removed:** the duplicate tracking-pixel switch and the header import/export buttons, which moved to Backup.
+- **Help** has eight sections: How it works, What the warnings mean, Your privacy (with a live "what is sent, to whom, on or off now" table and a goal-to-setting guide), Troubleshooting, For administrators, Architecture deep dive, Permissions, and About & credits.
+- **Architecture deep dive**, for researchers and technicians:
+  - **Design and structure:** design principles, a component diagram, a file map, and the 13-step link pipeline with function names.
+  - **Engines:** the threat-check engine and verdict rules, short-link lookup rules, misleading-link and pixel heuristics, and community-list safeguards.
+  - **Interfaces:** every network request, internal messages, storage layout, the logging model, the full settings and policy reference, and platform APIs.
+  - **Live state:** a snapshot of this installation.
+  - **Generated from the running code:** tables marked LIVE (decoders and the redirect table, one-time regular expressions, resolvers, list safeguards, network requests, settings, logging limits, installation state) are built from the code itself, so they cannot drift from the installed version. Shared constants moved to `shared.js` to make this possible.
+
+## 5.14 — Complete, categorized logging
+
+- **Every failure now reaches the Error Logs tab.**
+  - Previously only list-sync failures did. Everything else was silent or went only to the developer console.
+  - Now recorded: unreachable DNS resolvers (each one, with the reason), use of the AdGuard backup, links shown as "not verified" and why, and unshorten.me failures (including rate limits).
+  - Also: custom resolver and unshortener errors, with hints for bad API keys and missing permission; crashes while analysing a link; cache write failures (for example, full storage); and the bundled snapshot failing to load.
+  - Also: install, update and scheduled-task failures, uncaught errors in the background, Options page and popup, and failures in the Gmail content script. Only this extension's own failures are captured from Gmail, never Gmail's.
+  - Options page problems are recorded too: unreadable or rejected backup files, refused host permissions, failed resolver tests and clipboard failures.
+- **Levels and sources.**
+  - Each entry is Error (needs attention), Warning (worked around) or Info (routine: list updates, cleanup, restores, settings changes, install and update).
+  - Each entry names its source, shows the full date, and can be filtered by level.
+  - Repeats within 10 minutes are counted (×N) instead of flooding the log, which now keeps 200 entries instead of 20.
+  - The CSV export includes level, source and count.
+- **Privacy.** Error messages contain only a link's site (`https://host/…`), never its path or query.
+- **Everything in its right place:**
+  - The popup's activity feed now receives errors only; warnings and routine events stay in the Error tab. Routine storage cleanup was previously shown there as an "Error".
+  - Resolution History no longer calls unverified links "Safe": they show "Not verified" with the reason.
+  - Tracking pixels are no longer listed as "Unsafe" links; they show "Tracking pixel removed" or "neutralized".
+  - Blocklisted links are now recorded (once per 10 minutes) as "Blocked", like other flagged links.
+  - Entries from earlier versions are displayed correctly. The history CSV export shows the same statuses plus which service resolved each link.
+- **Retention.** The error log and popup activity now follow the "Delete data automatically after" setting, like the cache and history.
+- The Error Logs and Resolution History tabs update live while the Options page is open.
+
+## 5.13 — Bring-your-own resolvers
+
+- **New: custom unshortener** (Resolvers tab, or by policy). It's your own service for expanding short links, tried before unshorten.me.
+  - It receives exactly the links unshorten.me would. One-time links, email-provider links and unrevealed blocklisted links are never sent.
+  - The reply is read automatically from common fields (`resolved_url`, `long_url`, `final_url`, `destination`, `url`; also one level down) or from a plain-text reply. Optionally, name the field yourself.
+  - "Fall back to unshorten.me" (on by default) can be switched off to keep short links away from unshorten.me entirely.
+  - The reveal prompt for blocklisted links names the exact services the link will be sent to.
+- **Custom threat resolver now works with real threat APIs.**
+  - It now supports POST requests, request bodies and request headers (for API keys).
+  - A `{url}` placeholder sends the full link, for URL-based APIs. One-time links still only ever send their domain.
+  - Replies are understood automatically for DNS-over-HTTPS, Google Safe Browsing (`matches`, and `{}` for clean), URLhaus (`query_status`) and simple `malicious`/`blocked` APIs. An optional "Flag field" covers anything else.
+  - An error reply (for example an invalid API key) now counts as "no answer". Previously, any well-formed reply counted as "clean".
+  - Results from a resolver that receives full links are cached per link, not per domain.
+  - The URLhaus example in the Resolvers tab previously could not work, because it needs POST. It now does, and complete example configurations are given for DNS-over-HTTPS, URLhaus, Google Safe Browsing and Bitly.
+- **Both custom endpoints:**
+  - Each has a Test button that tests the form as typed, before saving, and reports exactly what came back.
+  - Saving asks the browser for access to that one host.
+  - Every new setting has a Workspace policy key (see `schema.json` and the admin guide).
+- **API keys are protected.** Request headers set by policy are masked in the Options page, and headers are never written to backups or changed by a restore.
+
+## 5.12 — More offline decoding
+
+All decoders now live in `decoders.js`. Each identifies its format by exact host and path, never by text elsewhere in the URL. Formats marked *[verify]* were built from published documentation and examples, not real samples; if one is wrong, the link simply isn't decoded.
+
+- **Security gateways** (also used for one-time links, because they return the complete original URL): Barracuda Link Protection, Sophos *[verify]*, Trend Micro, Symantec/Broadcom *[verify]*, Cisco Secure Email *[verify]*, Check Point Harmony Email/Avanan *[verify]*, and Microsoft Teams SafeLinks. These are in addition to Proofpoint, Microsoft SafeLinks and Amazon SES.
+- **Platform, search, advertising and affiliate redirects:**
+  - Social and community sites: Facebook link warning, Messenger, Instagram, Threads, Reddit, Steam, Tumblr, VK, Medium and Disqus *[verify]*.
+  - Search engines: Bing click links (widely abused in phishing), Yahoo and DuckDuckGo.
+  - Google: AMP pages, and the Translate proxy (also abused in phishing).
+  - Advertising: Google Ads and DoubleClick *[verify]*.
+  - Shopping: Amazon email links and eBay.
+  - Affiliate networks: Awin, Rakuten, CJ, Impact, Partnerize, Skimlinks and ShareASale.
+- **Encoded JSON payloads** (Substack, Mandrill, Customer.io and similar trackers): decoded only when the payload contains exactly one web address, so an unsubscribe link can never be picked by mistake.
+- **Destinations written into the path** of known redirect and tracking hosts.
+- **Short links expanded offline**, with no lookup: youtu.be (tracking parameter removed), redd.it, dai.ly, flic.kr and instagr.am.
+- **Recognized but not decodable:** Mimecast links (including the destination domain when Mimecast includes it), Fortinet links and email-provider trackers are explained in the link tooltip and the Link Inspector.
+- **Fixes found while testing:**
+  - The base64 decoder (from 5.8) could pull a link out of a larger encoded payload and attach fragments of that payload to it. It now refuses when the link is embedded in other data.
+  - Destinations written unencoded into a URL path were percent-decoded anyway, corrupting characters such as `%20`. This affected the Amazon SES decoder since 5.8.
+  - Double-encoded destinations are now handled.
+
+## 5.11
+
+- **Auto-update safeguards for the community shortener lists** (fully automatic, no maintenance needed):
+  - Each list is tracked separately, so one list being unreachable never removes the other's domains.
+  - Domains newly added to a list are held until they have appeared on three separate days. Repeated "Force Sync" clicks do not shorten this. Domains removed from a list stop being used immediately.
+  - A download that changes more than 25% of a list at once (minimum allowance: 250 entries) is not applied, and the event is logged. A genuine large change is accepted automatically once 7 days pass without a successful sync.
+  - The first download is used in full as the starting point. The same applies after sync has been off, or has failed, for more than 7 days, so a stale list is never compared with today's.
+  - Turning sync back on (by the user, a restored backup or a policy change) syncs immediately.
+  - Sync results are written to the Error Logs tab as diagnostics, not to the popup's activity feed.
+- **Bundled snapshot** (`shortener-snapshot.txt`): a fresh install has shortener coverage immediately, even with no network. It is used as a fallback until each list has been downloaded once. Users upgrading from 5.10 keep their current list as the fallback instead. The snapshot currently holds a starter set of well-known shorteners; `tools/refresh-snapshot.js` replaces it with the full community lists.
+- **Safer backups and restores:**
+  - Backups (format 2) contain only settings the user actually changed, so defaults always come from the installed version.
+  - Older backups no longer switch the Cloudflare Family filter off. They cannot show whether it was off deliberately, so it is left on and the user is told.
+  - Cached link results are never restored; they are rebuilt automatically.
+  - Imported domains are normalized and capped at 5,000 per list. A custom resolver that is not `https://` is rejected.
+  - "Overwrite" now also returns settings missing from the backup to their defaults.
+  - The restore dialog lists exactly what will be skipped and why.
+
+## 5.10
+
+- **Cloudflare Family is on by default again.** Adult sites are flagged as "DO NOT CLICK". Users can still turn it off unless the policy locks it.
+- **AdGuard is now a backup resolver.** It is queried only when none of the security resolvers (Quad9, Cloudflare Security, custom) can be reached, so it normally sees no lookups at all. A match then flags the link, except on known email-tracker and shortener hosts, which AdGuard blocks by design. Results from the backup alone are not cached, so the primary resolvers are retried next time.
+- **Blocklisted links are hidden, not resolved.**
+  - A link on a blocklisted domain is flagged immediately. It is not decoded, DNS-checked or sent to unshorten.me.
+  - A 🔍 icon next to the link asks whether to reveal its destination, and says whether anything will be sent to a third party.
+  - Only after confirmation is the link decoded and, if it is a short link and third-party resolution is on, looked up.
+  - Revealing never opens the link, and the link stays flagged. One-time-link protection still applies during a reveal, and reveals are never cached.
+- The 5.9 amber "advisory" notes are removed. Every resolver now either flags a link or stays silent.
+- Cached results are cleared once on upgrade, because Family verdicts changed.
+- **Options page fix (pre-existing bug).** In testing, the first read of policy storage on page load never returned. The Options page then showed every switch as off, and changing a switch was not saved. Storage reads now time out and retry once; in testing the retry always got a real answer, so policy locks still apply.
+
+## 5.9 — Security hardening
+
+- **Scan bypass closed.** Links are skipped only when their parsed host is `mail.google.com`. Previously any link merely containing that text was never scanned.
+- **Wrapper decoders match by exact host.** Proofpoint, SafeLinks, SES and the Google, Facebook, LinkedIn, Slack and YouTube shims no longer match text anywhere in the URL, so a link can no longer pose as a SafeLinks or Google redirect.
+- **SafeLinks double-decoding fixed.** Destinations containing `%25` were corrupted, and a bare `%` caused decoding to fail.
+- **Both hosts are checked.** The destination and the link's own host are both checked, so the verdict covers wherever the click actually goes, including when visual highlights are off.
+- **Generic redirect decoding is limited to real redirect and tracking hosts.** Social share links (Facebook, LinkedIn, X, Pinterest…) are no longer rewritten to the article.
+- **Sender styling is preserved.** Each link's original inline style, title and inner markup are restored exactly, so styled call-to-action buttons are no longer blanked.
+- **The blocklist now blocks.** A link whose own host or destination is blocklisted is flagged with no lookup needed. The blocklist wins over the allowlist and is re-applied on cache hits. Blocklist verdicts are never cached, so removing a domain takes effect immediately.
+- **Severity tiers.** (Superseded in 5.10.)
+- **Synced shortener lists are treated as untrusted.**
+  - Lists are capped at 2 MB and 50,000 entries.
+  - Entries for major sites are ignored.
+  - A domain that is only on a synced list is sent to unshorten.me only for URLs shaped like short links.
+  - Synced lists no longer suppress warnings or remove images.
+- **Tracking-parameter cleanup** no longer re-encodes URLs that had nothing to remove.
+- **One-time migration.** Results cached by 5.8 are cleared once, because verdicts are now computed differently, and the stored synced list is re-sanitized.

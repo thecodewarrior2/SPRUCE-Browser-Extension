@@ -1,0 +1,19 @@
+/* Injected into Gmail by the extension. Only affects elements the extension itself adds. */
+
+/* The 🔍 next to an email tracking link stays out of the way until the link is pointed at
+   (or the icon itself is hovered or focused with the keyboard). */
+.unshortener-icon.unshortener-hover-reveal {
+    opacity: 0;
+    transition: opacity 0.12s ease-in-out;
+}
+a:hover + .unshortener-icon.unshortener-hover-reveal,
+a:focus + .unshortener-icon.unshortener-hover-reveal,
+.unshortener-icon.unshortener-hover-reveal:hover,
+.unshortener-icon.unshortener-hover-reveal:focus {
+    opacity: 1;
+}
+.unshortener-icon.unshortener-hover-reveal:focus {
+    outline: 2px solid #1a73e8;
+    outline-offset: 1px;
+    border-radius: 50%;
+}

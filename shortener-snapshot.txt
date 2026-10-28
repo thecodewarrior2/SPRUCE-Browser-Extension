@@ -1,0 +1,66 @@
+# Bundled shortener snapshot: used on a fresh install until the community lists have been
+# downloaded once, and as a fallback while a list cannot be reached.
+#
+# STARTER SET: well-established shorteners only. This is NOT yet a copy of the community lists.
+# To replace it with the full community lists, run on any internet-connected computer:
+#     node tools/refresh-snapshot.js
+# then package the extension. The daily auto-update keeps the lists current after install either way.
+#
+# One domain per line. Lines starting with # are ignored. Built-in shorteners (shared.js) are not repeated.
+a.co
+amzn.to
+youtu.be
+goo.gle
+g.co
+fb.me
+fb.watch
+pin.it
+tmblr.co
+flic.kr
+redd.it
+git.io
+aka.ms
+ibm.biz
+spoti.fi
+apple.co
+nyti.ms
+wapo.st
+cnn.it
+bbc.in
+reut.rs
+bloom.bg
+econ.st
+politi.co
+es.pn
+ti.me
+n.pr
+bzfd.it
+trib.al
+dlvr.it
+ift.tt
+hubs.ly
+hubs.la
+ht.ly
+lnk.to
+smarturl.it
+shorturl.at
+short.gy
+t.ly
+s.id
+bit.do
+cli.gs
+tr.im
+su.pr
+po.st
+mcaf.ee
+ln.is
+zpr.io
+kutt.it
+cutt.us
+urlz.fr
+clck.ru
+vk.cc
+u.to
+ouo.io
+bc.vc
+soo.gd

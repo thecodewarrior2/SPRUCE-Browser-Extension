@@ -1,0 +1,1291 @@
+// shared.js — loaded by the service worker (importScripts), the Gmail content script,
+// the popup and the options page, so every part of the extension uses ONE definition of
+// settings, domain lists and link-analysis rules.
+
+// ---------------------------------------------------------------------------
+// SETTINGS
+// Every setting can be changed by the user (stored in chrome.storage.local) and can be
+// locked by a Google Workspace / Chrome policy (chrome.storage.managed, keys = managedKey).
+// A managed value always wins and the UI shows the setting as locked.
+// All features are ON by default.
+// ---------------------------------------------------------------------------
+const SETTING_DEFS = [
+    // Link protection
+    { key: 'enableLinkUnmasking',         managedKey: 'managedEnableLinkUnmasking',         def: true, type: 'boolean' },
+    // 🔍 on email tracking links: on request, send the link to the lookup service to reveal its destination.
+    { key: 'enableTrackerReveal',         managedKey: 'managedEnableTrackerReveal',         def: true, type: 'boolean' },
+    // QR codes (email images and attachments) are decoded on this device; their destinations are checked like links.
+    // Local phishing lists (OpenPhish community feed, Phishing Army), downloaded periodically and matched on the device.
+    { key: 'enablePhishingFeeds',         managedKey: 'managedEnablePhishingFeeds',         def: true, type: 'boolean' },
+    // Sender checks (Gmail): reads the open email's authentication results from Gmail when needed.
+    { key: 'enableSenderChecks',          managedKey: 'managedEnableSenderChecks',          def: true, type: 'boolean' },
+    // Checks the links in an email being sent (Gmail) when Send is pressed.
+    { key: 'enableSendCheck',             managedKey: 'managedEnableSendCheck',             def: true, type: 'boolean' },
+    { key: 'enableQrScanning',            managedKey: 'managedEnableQrScanning',            def: true, type: 'boolean' },
+    { key: 'enableAttachmentScanning',    managedKey: 'managedEnableAttachmentScanning',    def: true, type: 'boolean' },
+    // Other webmail (experimental): the extension also works on these sites.
+    { key: 'enableOutlookSupport',        managedKey: 'managedEnableOutlookSupport',        def: true, type: 'boolean' },
+    { key: 'enableProtonSupport',         managedKey: 'managedEnableProtonSupport',         def: true, type: 'boolean' },
+    { key: 'enableYahooSupport',          managedKey: 'managedEnableYahooSupport',          def: true, type: 'boolean' },
+    { key: 'enableAolSupport',            managedKey: 'managedEnableAolSupport',            def: true, type: 'boolean' },
+    { key: 'enableZohoSupport',           managedKey: 'managedEnableZohoSupport',           def: true, type: 'boolean' },
+    { key: 'enableIcloudSupport',         managedKey: 'managedEnableIcloudSupport',         def: true, type: 'boolean' },
+    { key: 'enableFastmailSupport',       managedKey: 'managedEnableFastmailSupport',       def: true, type: 'boolean' },
+    { key: 'enableGmxSupport',            managedKey: 'managedEnableGmxSupport',            def: true, type: 'boolean' },
+    { key: 'enableOneTimeLinkProtection', managedKey: 'managedEnableOneTimeLinkProtection', def: true, type: 'boolean' },
+    { key: 'enableMismatchWarnings',      managedKey: 'managedEnableMismatchWarnings',      def: true, type: 'boolean' },
+    { key: 'enableHiddenLinkProtection',  managedKey: 'managedEnableHiddenLinkProtection',  def: true, type: 'boolean' },
+    { key: 'enableClickConfirmation',     managedKey: 'managedEnableClickConfirmation',     def: true, type: 'boolean' },
+    { key: 'visualOverridesActive',       managedKey: 'managedVisualOverrides',             def: true, type: 'boolean' },
+    // Tracking pixels
+    { key: 'enableTrackingPixelBlocking', managedKey: 'managedEnableTrackingPixelBlocking', def: true, type: 'boolean' },
+    { key: 'removeTrackingPixels',        managedKey: 'managedRemoveTrackingPixels',        def: true, type: 'boolean' },
+    // Data sharing (see Settings → Privacy level)
+    { key: 'enableThirdPartyResolution',  managedKey: 'managedEnableThirdPartyResolution',  def: true, type: 'boolean' },
+    { key: 'enableDnsThreatCheck',        managedKey: 'managedEnableDnsThreatCheck',        def: true, type: 'boolean' },
+    { key: 'dnsQuad9',                    managedKey: 'managedDnsQuad9',                    def: true, type: 'boolean' },
+    { key: 'dnsCloudflareSecurity',       managedKey: 'managedDnsCloudflareSecurity',       def: true, type: 'boolean' },
+    // Adult-content filter: on by default; a match flags the link. Users can turn it off.
+    { key: 'dnsCloudflareFamily',         managedKey: 'managedDnsCloudflareFamily',         def: true, type: 'boolean' },
+    // AdGuard is a BACKUP resolver: only queried when no primary security resolver answers.
+    { key: 'dnsControlD',                 managedKey: 'managedDnsControlD',                 def: true, type: 'boolean' },
+    { key: 'dnsDns4eu',                   managedKey: 'managedDnsDns4eu',                   def: false, type: 'boolean' },
+    { key: 'dnsAdGuard',                  managedKey: 'managedDnsAdGuard',                  def: true, type: 'boolean' },
+    { key: 'enableRemoteListSync',        managedKey: 'managedEnableRemoteListSync',        def: true, type: 'boolean' },
+    // Local data
+    { key: 'enableResultCache',           managedKey: 'managedEnableResultCache',           def: true, type: 'boolean' },
+    { key: 'enableHistoryLog',            managedKey: 'managedEnableHistoryLog',            def: true, type: 'boolean' },
+    { key: 'retentionDays',               managedKey: 'managedRetentionDays',               def: 30,   type: 'integer', min: 1, max: 365 },
+    // Custom threat resolver (Settings → Your own services). Placeholders: {hostname}, {url}.
+    { key: 'customDohEndpoint',           managedKey: 'managedDohEndpoint',                 def: '',   type: 'string' },
+    { key: 'customDohMethod',             managedKey: 'managedDohMethod',                   def: 'GET', type: 'enum', values: ['GET', 'POST'] },
+    { key: 'customDohBody',               managedKey: 'managedDohBody',                     def: '',   type: 'string' },
+    { key: 'customDohHeaders',            managedKey: 'managedDohHeaders',                  def: '',   type: 'string', secret: true },
+    { key: 'customDohFlagField',          managedKey: 'managedDohFlagField',                def: '',   type: 'string' },
+    // Custom unshortener (Settings → Your own services). Placeholders: {url}, {url_noscheme}, {hostname}.
+    { key: 'customUnshortenerEndpoint',   managedKey: 'managedUnshortenerEndpoint',         def: '',   type: 'string' },
+    { key: 'customUnshortenerMethod',     managedKey: 'managedUnshortenerMethod',           def: 'GET', type: 'enum', values: ['GET', 'POST'] },
+    { key: 'customUnshortenerBody',       managedKey: 'managedUnshortenerBody',             def: '',   type: 'string' },
+    { key: 'customUnshortenerHeaders',    managedKey: 'managedUnshortenerHeaders',          def: '',   type: 'string', secret: true },
+    { key: 'customUnshortenerField',      managedKey: 'managedUnshortenerField',            def: '',   type: 'string' },
+    // When a custom unshortener is set: still fall back to unshorten.me if it gives no answer?
+    { key: 'useUnshortenMeFallback',      managedKey: 'managedUseUnshortenMeFallback',      def: true, type: 'boolean' }
+];
+// secret: true => may hold API keys; never written to exported backups.
+
+const SETTING_BY_KEY = Object.fromEntries(SETTING_DEFS.map(d => [d.key, d]));
+
+function coerceSetting(def, value) {
+    if (def.type === 'boolean') return typeof value === 'boolean' ? value : undefined;
+    if (def.type === 'string') return typeof value === 'string' ? value.trim() : undefined;
+    if (def.type === 'enum') {
+        if (typeof value !== 'string') return undefined;
+        const v = value.trim().toUpperCase();
+        return def.values.includes(v) ? v : undefined;
+    }
+    if (def.type === 'integer') {
+        if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
+        return Math.min(def.max, Math.max(def.min, Math.round(value)));
+    }
+    return undefined;
+}
+
+function normalizeDomain(value) {
+    return String(value || '').trim().toLowerCase()
+        .replace(/^[a-z][a-z0-9+.-]*:\/\//, '')
+        .replace(/[\/?#].*$/, '')
+        .replace(/^\*\./, '')
+        .replace(/\.$/, '');
+}
+
+function normalizeDomainList(list) {
+    if (!Array.isArray(list)) return [];
+    return [...new Set(list.map(normalizeDomain).filter(Boolean))];
+}
+
+function storageGetOnce(area, keys, timeoutMs) {
+    return new Promise((resolve) => {
+        let done = false;
+        const finish = (value) => { if (!done) { done = true; resolve(value); } };
+        const timer = setTimeout(() => finish(null), timeoutMs);   // null = no answer in time
+        try {
+            if (!chrome.storage || !chrome.storage[area]) { clearTimeout(timer); return finish({}); }
+            chrome.storage[area].get(keys, (result) => {
+                clearTimeout(timer);
+                if (chrome.runtime.lastError || !result) return finish({});
+                finish(result);
+            });
+        } catch (e) {
+            clearTimeout(timer);
+            finish({});
+        }
+    });
+}
+
+// A storage read that can never hang. Some Chromium builds never answer the first
+// chrome.storage.managed.get() made while a page is loading, which used to leave the options page
+// with every switch shown as off. A read that does not answer is retried once; a second
+// non-answer counts as "nothing stored" so the page still renders.
+async function storageGet(area, keys) {
+    const first = await storageGetOnce(area, keys, 1500);
+    if (first !== null) return first;
+    const second = await storageGetOnce(area, keys, 3000);
+    return second !== null ? second : {};
+}
+
+// Returns the effective configuration: user values overridden by managed policy.
+async function loadEffectiveSettings() {
+    const defaults = {};
+    SETTING_DEFS.forEach(d => { defaults[d.key] = d.def; });
+    defaults.customAllowlist = [];
+    defaults.customBlocklist = [];
+    defaults.remoteShorteners = [];
+
+    const local = await storageGet('local', defaults);
+    const managed = await storageGet('managed', null);
+
+    const values = {};
+    const locked = {};
+    SETTING_DEFS.forEach(d => {
+        const managedValue = coerceSetting(d, managed[d.managedKey]);
+        // A managed empty string for the DoH endpoint is "not set", not a lock.
+        if (managedValue !== undefined && !(d.type === 'string' && managedValue === '')) {
+            values[d.key] = managedValue;
+            locked[d.key] = true;
+        } else {
+            const localValue = coerceSetting(d, local[d.key]);
+            values[d.key] = localValue !== undefined ? localValue : d.def;
+        }
+    });
+
+    const managedAllowlist = normalizeDomainList(managed.managedAllowlist);
+    const managedBlocklist = normalizeDomainList(managed.managedBlocklist);
+    return {
+        values,
+        locked,
+        managedAllowlist,
+        managedBlocklist,
+        allowlist: [...new Set([...normalizeDomainList(local.customAllowlist), ...managedAllowlist])],
+        blocklist: [...new Set([...normalizeDomainList(local.customBlocklist), ...managedBlocklist])],
+        remoteShorteners: Array.isArray(local.remoteShorteners) ? local.remoteShorteners : []
+    };
+}
+
+// ---------------------------------------------------------------------------
+// DOMAIN LISTS
+// ---------------------------------------------------------------------------
+
+// Public URL shorteners: generic, not per-recipient. Safe to resolve over the network.
+const publicShorteners = [
+    'bit.ly', 't.co', 'tinyurl.com', 'ow.ly', 'is.gd', 'buff.ly', 'cutt.ly',
+    'rebrand.ly', 'bl.ink', 'rb.gy', 'v.gd', 'j.mp', 'lnkd.in', 'db.tt',
+    'qr.ae', 'snip.ly', 'adf.ly', 'shorte.st', 't2m.io', 'kurzelinks.de',
+    'goo.gl', 'wp.me', 'short.io', 'x.co', 'tiny.cc', 'clk.im', 'b.link',
+    'flyn.im', 'flyn.to',
+    // Big brands' own short-link domains (looked up like any shortener)
+    'c.gle', 'g.co', 'goo.gle', 'youtu.be', 'aka.ms', 'msft.it', 'amzn.to', 'amzn.eu', 'a.co', 'fb.me', 'apple.co', 'spoti.fi', 'adobe.ly', 'ebay.to'
+];
+
+// Email-service-provider click trackers: per-recipient, may wrap reset / unsubscribe /
+// confirmation links. Flagged as trackers, but NEVER requested over the network.
+const espTrackers = [
+    'klclick.com', 'klclick1.com', 'klclick2.com', 'klclick3.com', 'klaviyo.com', 'klaviyomail.com',
+    'rs6.net', 'mktoweb.com', 'exacttarget.com', 'acemlna.com', 'acems1.com',
+    'kit-mail3.com', 'ck.page', 'convertkit-mail.com', 'awstrack.me',
+    'list-manage.com', 'sendgrid.net', 'hubapi.com', 'omnisend.com',
+    'campaign-archive.com', 'mailchi.mp', 'aweber.com', 'infusionsoft.com',
+    'keap-link.com', 'sg.us-west-2.awstrack.me', 'ct.sendgrid.net',
+    'sparkpost.com', 'sparkpostmail.com', 'sparkpostmail2.com', 'e.sparkpost.com', 'spmta.com',
+    'click.pstmrk.it', 'mandrillapp.com', 'mailgun.net',
+    'pardot.com', 'iterable.com', 'braze.com', 'sendinblue.com'
+];
+
+const defaultShorteners = [...publicShorteners, ...espTrackers];
+
+// Exact host or a real subdomain of it. Never a substring match: "evilgoogle.com" does not
+// match "google.com", and "evil.com/?x=urldefense.com" does not match "urldefense.com".
+function hostMatches(hostname, domain) {
+    const h = String(hostname || '').toLowerCase().replace(/\.$/, '');
+    const d = String(domain || '').toLowerCase();
+    return h === d || h.endsWith('.' + d);
+}
+
+function hostInSet(hostname, set) {
+    const parts = String(hostname || '').toLowerCase().split('.');
+    for (let i = 0; i < parts.length - 1; i++) {
+        if (set.has(parts.slice(i).join('.'))) return true;
+    }
+    return false;
+}
+
+// Approximation of the registrable domain (no full public-suffix list).
+const SECOND_LEVEL_LABELS = new Set(['co', 'com', 'org', 'net', 'gov', 'edu', 'ac', 'or', 'ne', 'go']);
+function registrableDomain(hostname) {
+    const host = String(hostname || '').toLowerCase().replace(/\.$/, '');
+    const parts = host.split('.');
+    if (parts.length <= 2) return host;
+    const tld = parts[parts.length - 1];
+    const sld = parts[parts.length - 2];
+    if (tld.length === 2 && SECOND_LEVEL_LABELS.has(sld)) return parts.slice(-3).join('.');
+    return parts.slice(-2).join('.');
+}
+
+// Structural check for short links on shorteners that are not on any list (new services,
+// private domains). Matches the typical shape: a bare two-label domain with a 2-letter country
+// TLD, no query string, and one short random-looking code, e.g. https://flyn.im/Eb1kG7.
+// This only decides whether the link may be resolved; one-time-link protection still applies first.
+function looksLikeShortLink(urlString) {
+    let u;
+    try { u = new URL(urlString); } catch (e) { return false; }
+    if (u.search || u.hash || u.username || u.password || u.port) return false;
+    const parts = u.hostname.toLowerCase().split('.');
+    if (parts.length !== 2) return false;
+    const [label, tld] = parts;
+    if (tld.length !== 2 || label.length > 8) return false;
+    const segments = u.pathname.split('/').filter(Boolean);
+    if (segments.length !== 1) return false;
+    const code = segments[0];
+    if (!/^[A-Za-z0-9_-]{4,12}$/.test(code)) return false;
+    return /\d/.test(code) || (/[a-z]/.test(code) && /[A-Z]/.test(code));
+}
+
+// ---------------------------------------------------------------------------
+// ONE-TIME / UNSUBSCRIBE LINK DETECTION
+// Links matching these patterns are never requested over the network, never cached,
+// and never logged in full. They are only unwrapped by strict offline decoders.
+// ---------------------------------------------------------------------------
+const SINGLE_USE_PATH_RE = /\/(reset|forgot|password|passwd|verify|verification|validate|activate|activation|confirm|confirmation|login|log-in|signin|sign-in|signup|sign-up|auth|oauth|magic|otp|invitation|invite|accept|approve|redeem|claim|rsvp|unsubscribe|unsub|optout|opt-out|optin|opt-in|subscribe|preferences|manage|remove)(?=[\/_.?#&=-]|$)/i;
+const SINGLE_USE_PARAM_RE = /(token|code|auth|key|nonce|ticket|sig|signature|magic|otp|hash|session|jwt|reset|verify|confirm|unsub\w*|optout)=/i;
+const SINGLE_USE_TEXT_RE = /\b(reset|forgot|password|verify|verification|confirm|activate|log ?in|sign ?in|unsubscribe|unsub|opt[- ]?out|manage (?:your )?(?:email )?(?:preferences|subscription)|update (?:your )?preferences|accept (?:the )?invitation|approve|redeem|claim|magic link|one[- ]time)\b/i;
+
+function isSingleUseToken(urlString, linkText = '') {
+    let haystack = urlString || '';
+    try { haystack += ' ' + decodeURIComponent(urlString); } catch (e) {}
+    try { haystack += ' ' + decodeURIComponent(decodeURIComponent(urlString)); } catch (e) {}
+    return SINGLE_USE_PATH_RE.test(haystack) ||
+           SINGLE_USE_PARAM_RE.test(haystack) ||
+           SINGLE_USE_TEXT_RE.test(linkText || '');
+}
+
+function redactOneTimeUrl(urlString) {
+    try { return `${new URL(urlString).origin}/[one-time link redacted]`; }
+    catch (e) { return '[one-time link redacted]'; }
+}
+
+// ---------------------------------------------------------------------------
+// LINK ANALYSIS (used by the content script)
+// ---------------------------------------------------------------------------
+
+// True for anchors deliberately hidden with font-size:0 or near-zero opacity.
+// Takes an element's inline CSSStyleDeclaration. (A substring test on "font-size: 0"
+// would wrongly match "font-size: 0.9em", so the value is parsed.)
+function isGhostAnchorStyle(style) {
+    if (!style) return false;
+    if (style.fontSize !== '' && style.fontSize !== undefined && parseFloat(style.fontSize) === 0) return true;
+    if (style.opacity !== '' && style.opacity !== undefined && parseFloat(style.opacity) <= 0.01) return true;
+    return false;
+}
+
+// Link text such as "meson.build", "README.md" or "setup.py" is a file name, not a website, even though
+// .build, .md, .py, .sh, .zip… are also real internet endings. Bare text ending in one of these is not
+// treated as a claim about where the link goes.
+const FILE_EXTENSION_TLDS = new Set([
+    'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'zip', 'rar', 'png', 'jpg', 'jpeg', 'gif', 'svg',
+    'txt', 'csv', 'html', 'htm', 'php', 'asp', 'aspx', 'mp3', 'mp4', 'mov', 'json', 'xml', 'js', 'css', 'ics',
+    'build', 'md', 'py', 'sh', 'rs', 'pl', 'so', 'ps', 'ai', 'mk', 'ml', 'app', 'gz', 'tar', 'exe', 'dmg', 'iso',
+    'log', 'cfg', 'ini', 'yml', 'yaml', 'toml', 'lock', 'sql', 'bak', 'vue', 'tsx', 'jsx', 'kt', 'swift', 'java',
+    'cpp', 'hpp', 'rb', 'go', 'ts', 'cs', 'lua', 'cmake', 'mod', 'sum', 'conf', 'env', 'csproj', 'sln', 'gradle'
+]);
+
+// Companies that own several domains, including their own short-link domains. Link text and destination
+// within one family are consistent (text "gmail.com" pointing to google.com, or Google's c.gle).
+const BRAND_FAMILIES = [
+    { name: 'Google',    labels: ['google'], domains: ['gmail.com', 'youtube.com', 'youtu.be', 'android.com', 'withgoogle.com', 'blogger.com', 'googleblog.com', 'c.gle', 'g.co', 'goo.gle', 'goo.gl', 'gle'] },
+    { name: 'Microsoft', labels: [], domains: ['microsoft.com', 'microsoftonline.com', 'live.com', 'office.com', 'outlook.com', 'microsoft365.com', 'office365.com', 'azure.com', 'windows.com', 'xbox.com', 'bing.com', 'skype.com', 'sharepoint.com', 'aka.ms', 'msft.it'] },
+    { name: 'Amazon',    labels: ['amazon'], domains: ['amzn.to', 'amzn.eu', 'a.co', 'primevideo.com', 'audible.com'] },
+    { name: 'Meta',      labels: [], domains: ['facebook.com', 'facebookmail.com', 'fb.com', 'fb.me', 'instagram.com', 'whatsapp.com', 'messenger.com', 'meta.com', 'threads.net'] },
+    { name: 'PayPal',    labels: ['paypal'], domains: ['paypal.com'] },
+    { name: 'Apple',     labels: [], domains: ['apple.com', 'icloud.com', 'apple.co', 'me.com'] },
+    { name: 'LinkedIn',  labels: [], domains: ['linkedin.com', 'lnkd.in'] },
+    { name: 'X',         labels: [], domains: ['twitter.com', 'x.com', 't.co'] }
+];
+function brandOfDomain(regDomain) {
+    if (!regDomain) return null;
+    const label = regDomain.split('.')[0];
+    const f = BRAND_FAMILIES.find(b => b.domains.includes(regDomain) || b.labels.includes(label));
+    return f ? f.name : null;
+}
+
+// How serious a problem found by detectLinkProblem is:
+//   'danger'  — deliberate deception (look-alike brand domains, hidden user names): red, "DO NOT CLICK"
+//   'caution' — suspicious but common in legitimate mail (text shows another site, raw IP address,
+//               international characters): amber, "Caution"
+function linkProblemSeverity(problem) {
+    if (!problem) return null;
+    return /^look-alike domain|username\/password|\(a well-known brand\)/.test(problem) ? 'danger' : 'caution';
+}
+
+// Returns a human-readable problem description, or null if the link looks consistent.
+//  visibleText : text the reader sees for the link
+//  originalUrl : href as written in the email
+//  finalUrl    : destination after unwrapping
+//  trackerDomains : Set of shortener / tracker domains (destination unresolved => skip text check)
+function detectLinkProblem(visibleText, originalUrl, finalUrl, trackerDomains) {
+    let dest;
+    try { dest = new URL(finalUrl); } catch (e) { return null; }
+    const host = dest.hostname.toLowerCase();
+
+    if (dest.username || dest.password) {
+        return 'link hides its real destination behind a username/password prefix';
+    }
+    if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.startsWith('[')) {
+        return 'link points to a raw IP address instead of a domain name';
+    }
+    { const la = lookalikeOf(host); if (la) return `look-alike domain: ${host} ${la}`; }   // imitates a well-known brand
+    { const sr = signInRedirectProblem(finalUrl); if (sr) return sr; }
+    if (host.split('.').some(label => label.startsWith('xn--'))) {
+        return 'link uses an internationalized (punycode) domain that can imitate a trusted site';
+    }
+
+    const text = String(visibleText || '').trim();
+    if (!text) return null;
+    const whole = text.match(/^(?:https?:\/\/)?((?:[a-z0-9-]+\.)+[a-z]{2,})(?::\d+)?(?:[\/?#]\S*)?$/i);
+    const embedded = text.match(/\bhttps?:\/\/((?:[a-z0-9-]+\.)+[a-z]{2,})/i) ||
+                     text.match(/\b(www\.(?:[a-z0-9-]+\.)+[a-z]{2,})/i);
+    const found = whole || embedded;
+    if (!found) return null;
+
+    const textHost = found[1].toLowerCase();
+    const textTld = textHost.split('.').pop();
+    if (FILE_EXTENSION_TLDS.has(textTld)) return null;
+
+    const textDomain = registrableDomain(textHost);
+    const destDomain = registrableDomain(host);
+    if (textDomain === destDomain) return null;
+    { const brand = brandOfDomain(textDomain); if (brand && brand === brandOfDomain(destDomain)) return null; }   // same company
+
+    let originalHost = '';
+    try { originalHost = new URL(originalUrl).hostname.toLowerCase(); } catch (e) {}
+    if (originalHost && registrableDomain(originalHost) === textDomain) return null; // text is just the (short)link itself
+    if (trackerDomains && (hostInSet(host, trackerDomains) || hostInSet(textHost, trackerDomains))) return null; // unresolved tracker
+    if (emailTrackerProvider(finalUrl)) return null; // unresolved email tracker (incl. branded domains): its host says nothing about the destination
+
+    // Text that shows a well-known brand's address while going elsewhere is a classic phishing trick.
+    if (PROTECTED_BRANDS.includes(textDomain)) return `link text shows ${textHost} (a well-known brand) but the link goes to ${host}`;
+    return `link text shows ${textHost} but the link goes to ${host}`;
+}
+
+// ---------------------------------------------------------------------------
+// BACKUP / RESTORE
+// Format 2 (5.11+) backups contain only the settings the user actually changed, so defaults always
+// come from the installed version: a default changed in a later version is never undone by
+// restoring an older backup. Cached link results are never restored (they are rebuilt automatically
+// and could otherwise carry outdated or tampered verdicts).
+// ---------------------------------------------------------------------------
+const BACKUP_FORMAT = 2;
+const MAX_IMPORTED_DOMAINS = 5000;
+
+// Older (format 1) backups wrote EVERY setting, including untouched defaults. For a setting whose
+// default has changed between versions, those values cannot be told apart from a deliberate
+// choice, so they are not restored. (Cloudflare Family was off by default only in 5.9.)
+const LEGACY_AMBIGUOUS_VALUES = {
+    dnsCloudflareFamily: { values: [false], label: 'Cloudflare Family adult-content filter', keep: 'on' }
+};
+
+// Valid custom endpoint: empty (not set) or an https:// address once placeholders are filled in.
+function isValidDohEndpoint(value) {
+    if (value === '') return true;
+    if (!/^https:\/\//i.test(value)) return false;
+    const filled = value.replace(/\{(hostname|url|url_noscheme)\}/g, 'example.com');
+    try { new URL(filled); return true; } catch (e) { return false; }
+}
+
+function buildBackup(allItems, extensionVersion) {
+    const backup = {
+        exportFormat: BACKUP_FORMAT,
+        extensionVersion: extensionVersion || '',
+        exportDate: new Date().toLocaleString(),
+        customAllowlist: normalizeDomainList(allItems.customAllowlist),
+        customBlocklist: normalizeDomainList(allItems.customBlocklist),
+        settings: {},
+        urlCacheNote: 'Included for your records only. Cached results are not restored on import; they are rebuilt automatically.',
+        secretsNote: 'Request headers for custom resolvers (which may contain API keys) are not included. Re-enter them after restoring.',
+        urlCache: {}
+    };
+    SETTING_DEFS.forEach(d => {
+        if (!Object.prototype.hasOwnProperty.call(allItems, d.key)) return;   // never changed: use the installed default
+        if (d.secret) return;                                                  // API keys are never exported
+        const v = coerceSetting(d, allItems[d.key]);
+        if (v !== undefined) backup.settings[d.key] = v;
+    });
+    Object.keys(allItems).forEach(k => {
+        if (k.startsWith('http://') || k.startsWith('https://')) backup.urlCache[k] = allItems[k];
+    });
+    return backup;
+}
+
+// Decides what a restore will do, without touching storage.
+//  data    : parsed backup file
+//  current : { customAllowlist, customBlocklist } currently stored
+//  mode    : 'merge' | 'overwrite'
+// Returns { updates, removeKeys, notes, settingsCount, cacheCount, legacy }.
+function planImport(data, current, mode) {
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+        throw new Error('This file is not a backup from this extension.');
+    }
+    const legacy = !(Number(data.exportFormat) >= BACKUP_FORMAT);
+    const notes = [];
+    const updates = {};
+    const removeKeys = [];
+
+    // Domain lists: normalized and size-limited.
+    const lists = [['customAllowlist', 'allowlist'], ['customBlocklist', 'blocklist']];
+    lists.forEach(([key, label]) => {
+        let incoming = normalizeDomainList(data[key]);
+        if (incoming.length > MAX_IMPORTED_DOMAINS) {
+            notes.push(`Only the first ${MAX_IMPORTED_DOMAINS} ${label} entries were restored.`);
+            incoming = incoming.slice(0, MAX_IMPORTED_DOMAINS);
+        }
+        updates[key] = mode === 'overwrite'
+            ? incoming
+            : [...new Set([...normalizeDomainList(current && current[key]), ...incoming])];
+    });
+
+    // Feature settings: known keys with valid types only.
+    const incoming = {};
+    if (data.settings && typeof data.settings === 'object' && !Array.isArray(data.settings)) {
+        Object.keys(data.settings).forEach(k => {
+            const def = SETTING_BY_KEY[k];
+            if (!def || def.secret) return;
+            const v = coerceSetting(def, data.settings[k]);
+            if (v !== undefined) incoming[k] = v;
+        });
+    }
+    if (legacy) {
+        // Format 1 also stored these two at the top level.
+        if (!('removeTrackingPixels' in incoming) && typeof data.removeTrackingPixels === 'boolean') {
+            incoming.removeTrackingPixels = data.removeTrackingPixels;
+        }
+        if (!('customDohEndpoint' in incoming) && typeof data.customDohEndpoint === 'string') {
+            incoming.customDohEndpoint = data.customDohEndpoint.trim();
+        }
+        Object.keys(LEGACY_AMBIGUOUS_VALUES).forEach(k => {
+            const rule = LEGACY_AMBIGUOUS_VALUES[k];
+            if (k in incoming && rule.values.includes(incoming[k])) {
+                delete incoming[k];
+                notes.push(`${rule.label}: left ${rule.keep}. This older backup cannot show whether it was switched off on purpose; change it in Settings if you want it off.`);
+            }
+        });
+    }
+    if ('customUnshortenerEndpoint' in incoming) {
+        if (!isValidDohEndpoint(incoming.customUnshortenerEndpoint)) {
+            delete incoming.customUnshortenerEndpoint;
+            notes.push('Custom unshortener: not restored, because it is not a valid https:// address.');
+        } else if (incoming.customUnshortenerEndpoint === '' && mode === 'merge') {
+            delete incoming.customUnshortenerEndpoint;
+        } else if (incoming.customUnshortenerEndpoint) {
+            notes.push('Custom unshortener restored. Open Settings → Your own services and click its Save button so your browser can grant it access.');
+        }
+    }
+    if ('customDohEndpoint' in incoming) {
+        if (!isValidDohEndpoint(incoming.customDohEndpoint)) {
+            delete incoming.customDohEndpoint;
+            notes.push('Custom resolver: not restored, because it is not a valid https:// address.');
+        } else if (incoming.customDohEndpoint === '' && mode === 'merge') {
+            delete incoming.customDohEndpoint;          // merging never clears an existing resolver
+        } else if (incoming.customDohEndpoint) {
+            notes.push('Custom resolver restored. Open Settings → Your own services and click Save service so your browser can grant it access.');
+        }
+    }
+    Object.assign(updates, incoming);
+
+    // Overwrite: settings missing from the backup go back to the installed defaults.
+    if (mode === 'overwrite') {
+        SETTING_DEFS.forEach(d => { if (!d.secret && !(d.key in incoming)) removeKeys.push(d.key); });
+    }
+
+    const cacheCount = data.urlCache && typeof data.urlCache === 'object' ? Object.keys(data.urlCache).length : 0;
+    if (cacheCount) notes.push(`${cacheCount} cached link result(s) in the backup were not restored; they are rebuilt automatically as you open mail.`);
+
+    return { updates, removeKeys, notes, settingsCount: Object.keys(incoming).length, cacheCount, legacy };
+}
+
+// ---------------------------------------------------------------------------
+// APPLICATION LOG REPORTING from the Options page and popup (the background writes the entry, so all
+// writes are serialized in one place). level: 'error' | 'warning' | 'info'.
+// ---------------------------------------------------------------------------
+function reportToLog(level, source, message) {
+    try {
+        chrome.runtime.sendMessage({ action: 'logEvent', level, source, message: String(message) }, () => { void chrome.runtime.lastError; });
+    } catch (e) { /* the extension is being reloaded */ }
+}
+
+// Records uncaught failures of an extension page in the application log.
+function installPageErrorLogging(source) {
+    if (typeof window === 'undefined') return;
+    window.addEventListener('error', (e) => {
+        reportToLog('error', source, `Unexpected error: ${e.message || e.error}${e.filename ? ` (${String(e.filename).split('/').pop()}:${e.lineno})` : ''}`);
+    });
+    window.addEventListener('unhandledrejection', (e) => {
+        const r = e.reason;
+        reportToLog('error', source, `Unhandled failure: ${r && r.message ? r.message : r}`);
+    });
+}
+
+// ---------------------------------------------------------------------------
+// CONSTANTS SHARED WITH THE HELP PAGE
+// Defined here (not in background.js) so the Help → Architecture page displays the exact values the
+// extension runs on, instead of a copy that could drift.
+// ---------------------------------------------------------------------------
+const REMOTE_LIST_URLS = [
+    'https://raw.githubusercontent.com/PeterDaveHello/url-shorteners/master/list',
+    'https://raw.githubusercontent.com/boutetnico/url-shorteners/master/list.txt'
+];
+
+const REMOTE_LIST_MAX_BYTES = 2 * 1024 * 1024;
+
+const REMOTE_LIST_MAX_DOMAINS = 50000;
+
+const PROTECTED_DOMAINS = new Set([
+    'google.com', 'gmail.com', 'googleusercontent.com', 'googleapis.com', 'youtube.com', 'gstatic.com',
+    'microsoft.com', 'outlook.com', 'office.com', 'office365.com', 'live.com', 'sharepoint.com', 'microsoftonline.com',
+    'apple.com', 'icloud.com', 'amazon.com', 'amazonaws.com', 'facebook.com', 'instagram.com', 'whatsapp.com',
+    'linkedin.com', 'twitter.com', 'x.com', 'github.com', 'gitlab.com', 'paypal.com', 'stripe.com',
+    'dropbox.com', 'box.com', 'zoom.us', 'slack.com', 'salesforce.com', 'docusign.com', 'docusign.net',
+    'adobe.com', 'wikipedia.org', 'cloudflare.com', 'okta.com', 'atlassian.net', 'atlassian.com', 'notion.so', 'figma.com'
+]);
+
+const REMOTE_LIST_HOLD_SIGHTINGS = 3;                          // seen on 3 separate days
+
+const REMOTE_LIST_SIGHTING_GAP_MS = 20 * 60 * 60 * 1000;       // sightings at least 20 h apart
+
+const REMOTE_LIST_FRESH_START_MS = 7 * 24 * 60 * 60 * 1000;    // gap after which a download is a new start
+
+const REMOTE_LIST_MAX_CHANGE_RATIO = 0.25;                     // > 25% changed in one download => hold it
+
+const REMOTE_LIST_MIN_CHANGE_LIMIT = 250;                      // ...but always allow up to 250 changes
+
+const JSON_DNS_PROVIDERS = [
+    { id: 'dnsCloudflareSecurity', name: 'Cloudflare Security', role: 'primary', reason: 'Malware or Phishing (Cloudflare Security)', url: h => `https://security.cloudflare-dns.com/dns-query?name=${h}&type=A` },
+    { id: 'dnsCloudflareFamily',   name: 'Cloudflare Family',   role: 'content', reason: 'Adult content (Cloudflare Family)',            url: h => `https://family.cloudflare-dns.com/dns-query?name=${h}&type=A` },
+    { id: 'dnsAdGuard',            name: 'AdGuard (backup)',    role: 'backup',  reason: 'Malware, phishing or tracking (AdGuard DNS backup resolver)', url: h => `https://dns.adguard-dns.com/resolve?name=${h}&type=A` }
+];
+const MAX_ERROR_LOGS = 200;
+const MAX_HISTORY = 50;
+const MAX_ACTIVITY = 10;
+const LOG_DEDUPE_MS = 10 * 60 * 1000;       // identical messages within 10 minutes are counted, not repeated
+const SAFE_CACHE_MS = 6 * 60 * 60 * 1000;
+
+// ---------------------------------------------------------------------------
+// PRIVACY LEVELS (Settings → Privacy level). Each level sets these three switches; any other
+// combination is shown as "Custom".
+// ---------------------------------------------------------------------------
+const PRIVACY_PRESETS = {
+    standard: { label: 'Standard',     values: { enableThirdPartyResolution: true,  enableDnsThreatCheck: true,  enableRemoteListSync: true,  enablePhishingFeeds: true } },
+    private:  { label: 'Private',      values: { enableThirdPartyResolution: false, enableDnsThreatCheck: true,  enableRemoteListSync: true,  enablePhishingFeeds: true } },
+    offline:  { label: 'Offline only', values: { enableThirdPartyResolution: false, enableDnsThreatCheck: false, enableRemoteListSync: false, enablePhishingFeeds: false } }
+};
+
+function currentPreset(values) {
+    for (const [id, p] of Object.entries(PRIVACY_PRESETS)) {
+        if (Object.entries(p.values).every(([k, v]) => values[k] === v)) return id;
+    }
+    return 'custom';
+}
+
+// A level is unavailable if it would need to change a setting locked by policy to another value.
+function presetAvailable(id, cfg) {
+    return Object.entries(PRIVACY_PRESETS[id].values).every(([k, v]) => !cfg.locked[k] || cfg.values[k] === v);
+}
+
+// ---------------------------------------------------------------------------
+// EMAIL-PROVIDER CLICK TRACKERS
+// Their destination is stored on the provider's servers and is only revealed by following the link,
+// which registers a click as the recipient (and can unsubscribe or sign in). They are recognized
+// three ways: the built-in domain list, provider domain families, and provider path signatures,
+// which also catch "branded" tracking domains such as links.yourbank.com run by SendGrid.
+// ---------------------------------------------------------------------------
+const EMAIL_TRACKER_HOST_PATTERNS = [
+    { re: /(^|\.)sendibm\d*\.com$/i, provider: 'Brevo/Sendinblue' },
+    { re: /(^|\.)sendibt\d*\.com$/i, provider: 'Brevo/Sendinblue' },
+    { re: /(^|\.)klclick\d*\.com$/i, provider: 'Klaviyo' }
+];
+const EMAIL_TRACKER_PATH_SIGNATURES = [
+    { test: (u) => /^\/(ls|wf)\/click$/i.test(u.pathname) && u.searchParams.has('upn'), provider: 'SendGrid' },
+    { test: (u) => /^\/mk\/(cl|mr)\//i.test(u.pathname), provider: 'Brevo/Sendinblue' },
+    { test: (u) => /^\/track\/click$/i.test(u.pathname) && u.searchParams.has('u') && u.searchParams.has('id'), provider: 'Mailchimp' }
+];
+
+// Returns the provider name (or 'an email provider') if the URL is a click tracker, else null.
+function emailTrackerProvider(urlString) {
+    let u;
+    try { u = new URL(urlString); } catch (e) { return null; }
+    const host = u.hostname.toLowerCase();
+    for (const p of EMAIL_TRACKER_HOST_PATTERNS) if (p.re.test(host)) return p.provider;
+    for (const p of EMAIL_TRACKER_PATH_SIGNATURES) if (p.test(u)) return p.provider;
+    if (hostInSet(host, ESP_TRACKER_SET)) return 'an email provider';
+    return null;
+}
+
+// Built once (the arrays never change at runtime) instead of on every lookup.
+const PUBLIC_SHORTENER_SET = new Set(publicShorteners);
+const ESP_TRACKER_SET = new Set(espTrackers);
+const BUILTIN_TRACKER_SET = new Set([...publicShorteners, ...espTrackers]);
+
+// ---------------------------------------------------------------------------
+// OPEN-PIXEL ADDRESSES
+// Definitive tracking pixels: these URLs exist only to record that an email was opened, so they are
+// blocked at any size. Sources: Ugly Email and Leave Me Alone tracker lists, EasyPrivacy, and the
+// providers' own URL formats. Everything else is judged by size (see checkPixel in content.js).
+// ---------------------------------------------------------------------------
+const OPEN_PIXEL_RULES = [
+    { name: 'SendGrid',        test: (u) => /\/wf\/open$/i.test(u.pathname) && u.searchParams.has('upn') },
+    { name: 'Mailchimp',       test: (u) => hostMatches(u.hostname, 'list-manage.com') && /\/track\/open\.php$/i.test(u.pathname) },
+    { name: 'HubSpot',         test: (u) => /\/e2t\/o\//i.test(u.pathname) || /^t\.(hubspotemail\.net|signaux|sidekickopen)/i.test(u.hostname) },
+    { name: 'Brevo',           test: (u) => (/(^|\.)sendibt\d*\.com$/i.test(u.hostname) && /\/tr\/op\//i.test(u.pathname)) || /^\/mk\/op\//i.test(u.pathname) },
+    { name: 'Salesforce Marketing Cloud', test: (u) => /^click\./i.test(u.hostname) && /\/open\.aspx$/i.test(u.pathname) },
+    { name: 'Postmark',        test: (u) => hostMatches(u.hostname, 'pstmrk.it') && /^\/open/i.test(u.pathname) },
+    { name: 'Mailgun',         test: (u) => /^\/e\/o\//.test(u.pathname) },
+    { name: 'Marketo',         test: (u) => /\/trk$/i.test(u.pathname) && u.searchParams.has('t') },
+    { name: 'ActiveCampaign',  test: (u) => /\/lt\.php$/i.test(u.pathname) && u.searchParams.get('l') === 'open' },
+    { name: 'Shopify Email',   test: (u) => /\/tools\/emails\/open\//i.test(u.pathname) },
+    { name: 'Amazon SES',      test: (u) => hostMatches(u.hostname, 'awstrack.me') && /^\/I0\//.test(u.pathname) },
+    { name: 'Klaviyo',         test: (u) => /^\/o\/[0-9A-HJKMNP-TV-Z]{26}$/.test(u.pathname) },     // click.brand.com/o/<ULID>
+    { name: 'Open tracker',    test: (u) => /^(trk|ctrk|track|tracking|open|t)\d*\./i.test(u.hostname) && /\/open(\/|\.|$)/i.test(u.pathname) }
+];
+
+// Name of the provider whose open pixel this is, or null.
+function openPixelRule(urlString) {
+    let u;
+    try { u = new URL(urlString); } catch (e) { return null; }
+    for (const r of OPEN_PIXEL_RULES) { try { if (r.test(u)) return r.name; } catch (e) { /* ignore */ } }
+    return null;
+}
+
+// ---------------------------------------------------------------------------
+// WEB PAGES HOSTED IN CLOUD STORAGE
+// Phishing kits host a tiny HTML redirector in a public bucket (storage.googleapis.com, Firebase,
+// S3, Azure, R2, IPFS) because the domain is trusted and never blocked by DNS filters. Recipient or
+// campaign data rides in the #fragment, which is never sent to the server. Legitimate email almost
+// never links to a raw HTML file in a bucket.
+// ---------------------------------------------------------------------------
+const CLOUD_STORAGE_PLATFORMS = [
+    { re: /^storage\.googleapis\.com$/i,            name: 'Google Cloud Storage', bucket: true, inspectable: true },
+    { re: /^firebasestorage\.googleapis\.com$/i,    name: 'Firebase Storage',     bucket: true, inspectable: true },
+    { re: /\.storage\.googleapis\.com$/i,           name: 'Google Cloud Storage', bucket: true },
+    { re: /(^|\.)s3[.-]([a-z0-9-]+\.)?amazonaws\.com$/i, name: 'Amazon S3',       bucket: true },
+    { re: /\.blob\.core\.windows\.net$/i,           name: 'Azure Blob Storage',   bucket: true },
+    { re: /\.r2\.dev$/i,                            name: 'Cloudflare R2',        bucket: true },
+    { re: /^(ipfs\.io|dweb\.link|cloudflare-ipfs\.com|gateway\.pinata\.cloud)$|\.ipfs\.(dweb\.link|w3s\.link|nftstorage\.link)$/i, name: 'IPFS gateway', bucket: true },
+    { re: /\.(web\.app|firebaseapp\.com)$/i,        name: 'Firebase Hosting' },
+    { re: /\.pages\.dev$/i,                         name: 'Cloudflare Pages' },
+    { re: /\.web\.core\.windows\.net$/i,            name: 'Azure Static Websites' }
+];
+
+// Decodes data hidden in a URL fragment: base64 "key=value" tracking data, or an email address.
+function decodeFragmentPayload(hash) {
+    const raw = String(hash || '').replace(/^#/, '').replace(/^[?/!]+/, '');
+    if (!raw) return null;
+    const looksLike = (s) => {
+        if (/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(s)) return 'email';
+        if (/^[\w.-]+=[^&]*(&[\w.-]+=[^&]*)+$/.test(s)) return 'tracking';
+        return null;
+    };
+    let plain = raw;
+    try { plain = decodeURIComponent(raw); } catch (e) { /* keep raw */ }
+    if (looksLike(plain)) return { kind: looksLike(plain), decoded: plain, encoded: false };
+    if (/^[A-Za-z0-9+/_-]{8,}={0,2}$/.test(raw)) {
+        try {
+            const bin = atob(raw.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(raw.length / 4) * 4, '='));
+            if (/^[\x20-\x7e]+$/.test(bin) && looksLike(bin)) return { kind: looksLike(bin), decoded: bin, encoded: true };
+        } catch (e) { /* not base64 */ }
+    }
+    return null;
+}
+
+// Returns { platform, inspectable, reason, fragment } when the URL is a suspicious page on a cloud
+// storage or hosting platform, else null.
+function cloudStoragePage(urlString) {
+    let u;
+    try { u = new URL(urlString); } catch (e) { return null; }
+    const host = u.hostname.toLowerCase();
+    const p = CLOUD_STORAGE_PLATFORMS.find(x => x.re.test(host));
+    if (!p) return null;
+    let path = u.pathname;
+    try { path = decodeURIComponent(path); } catch (e) { /* keep */ }
+    const isHtml = /\.(s?html?|xhtml|svg|php)$/i.test(path) || p.name === 'IPFS gateway';
+    const fragment = decodeFragmentPayload(u.hash);
+    // Buckets: any HTML page. Hosting platforms (also used by real sites): only with hidden fragment data.
+    if (!(p.bucket ? isHtml : !!fragment)) return null;
+    let reason = `Web page hosted in public cloud storage (${p.name}), a common phishing technique`;
+    if (fragment) reason = `Pre-targeted link: page in public cloud storage (${p.name}) carrying hidden ${fragment.kind === 'email' ? 'recipient' : 'tracking'} data`;
+    return { platform: p.name, inspectable: !!p.inspectable, reason, fragment };
+}
+
+// Finds where a downloaded redirector page sends visitors, by reading its code (never running it).
+// Covers meta refresh, location assignments/replace/assign and "'http://' + variable" building.
+function extractRedirectTargets(html) {
+    const text = String(html || '').slice(0, 512 * 1024);
+    const found = [];
+    const add = (u) => { if (u && /^https?:\/\//i.test(u) && !found.includes(u)) found.push(u); };
+    const vars = {};
+    for (const m of text.matchAll(/\b(?:var|let|const)\s+([A-Za-z_$][\w$]*)\s*=\s*(['"])([^'"]{1,300})\2/g)) vars[m[1]] = m[3];
+    for (const m of text.matchAll(/<meta[^>]+http-equiv\s*=\s*["']?refresh["']?[^>]*content\s*=\s*["'][^"']*url\s*=\s*([^"'>\s]+)/gi)) add(m[1]);
+    for (const m of text.matchAll(/(?:location(?:\.href)?|location\.replace|location\.assign|window\.open)\s*(?:=|\()\s*([^;\n]{1,400})/g)) {
+        // evaluate simple concatenations of string literals and known variables
+        let out = '';
+        let ok = true;
+        for (const part of m[1].split('+')) {
+            const t = part.trim().replace(/\)\s*$/, '');
+            const lit = t.match(/^(['"`])(.*)\1$/);
+            if (lit) out += lit[2];
+            else if (vars[t] !== undefined) out += vars[t];
+            else { if (out) break; ok = false; break; }
+        }
+        if (ok || out) add(out);
+    }
+    for (const m of text.matchAll(/["'](https?:\/\/[^"'\s<>]{4,300})["']/g)) add(m[1]);
+    return found;
+}
+
+// ---------------------------------------------------------------------------
+// MORE PROTECTIVE RESOLVERS (RFC 8484 wire format, no account). Block signals differ by provider, so
+// answers are interpreted generically: a sinkhole address (0.0.0.0, 127.x, ::) or an NXDOMAIN for a
+// name the reference resolver can resolve both count as a block.
+// ---------------------------------------------------------------------------
+const WIRE_DNS_PROVIDERS = [
+    { id: 'dnsControlD', name: 'Control D (malware)', role: 'primary', reason: 'Malware or Phishing (Control D)', url: 'https://freedns.controld.com/p1' },
+    { id: 'dnsDns4eu',   name: 'DNS4EU Protective',   role: 'primary', reason: 'Malware or Phishing (DNS4EU)',    url: 'https://protective.joindns4.eu/dns-query' }
+];
+
+// ---------------------------------------------------------------------------
+// PHISHING LISTS: downloaded periodically, matched on the device (no lookups, nothing sent).
+// OpenPhish: exact phishing URLs. Phishing Army: phishing hostnames (CC BY-NC 4.0).
+// ---------------------------------------------------------------------------
+const PHISH_FEEDS = [
+    { id: 'openphish',    name: 'OpenPhish community feed', url: 'https://openphish.com/feed.txt', kind: 'url', license: 'OpenPhish Terms of Use', home: 'https://openphish.com' },
+    { id: 'phishingarmy', name: 'Phishing Army (extended)', url: 'https://phishing.army/download/phishing_army_blocklist_extended.txt', kind: 'domain', license: 'CC BY-NC 4.0', home: 'https://phishing.army' }
+];
+// Every third-party list (shortener lists and phishing lists) is downloaded at most once a day, even
+// when "Update now" is clicked, out of respect for the projects that publish them for free.
+const THIRD_PARTY_LIST_MIN_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const PHISH_FEED_MAX_BYTES = 40 * 1024 * 1024;
+const PHISH_FEED_MAX_ENTRIES = 1500000;
+const PHISH_FEED_MIN_ENTRIES = 20;          // a download smaller than this is treated as broken and ignored
+
+// Normalized form used for exact URL matching: lowercase host, no default port, no fragment.
+function normalizeFeedUrl(urlString) {
+    try {
+        const u = new URL(String(urlString).trim());
+        if (!/^https?:$/.test(u.protocol)) return null;
+        u.hash = '';
+        return u.href.replace(/\/$/, '');
+    } catch (e) { return null; }
+}
+
+// ---------------------------------------------------------------------------
+// LOOK-ALIKE DOMAINS: names built to resemble a well-known brand.
+// ---------------------------------------------------------------------------
+const PROTECTED_BRANDS = ['paypal.com', 'microsoft.com', 'office.com', 'office365.com', 'outlook.com', 'live.com', 'apple.com', 'icloud.com',
+    'amazon.com', 'netflix.com', 'docusign.com', 'dropbox.com', 'wellsfargo.com', 'chase.com', 'bankofamerica.com', 'citibank.com',
+    'capitalone.com', 'americanexpress.com', 'coinbase.com', 'binance.com', 'metamask.io', 'facebook.com', 'instagram.com', 'whatsapp.com',
+    'linkedin.com', 'google.com', 'gmail.com', 'youtube.com', 'adobe.com', 'fedex.com', 'usps.com', 'spotify.com', 'steamcommunity.com',
+    'roblox.com', 'ebay.com', 'walmart.com', 'target.com', 'costco.com', 'bestbuy.com', 'verizon.com', 'tmobile.com', 'xfinity.com',
+    'comcast.com', 'zoom.us', 'slack.com', 'salesforce.com', 'intuit.com', 'quickbooks.com', 'venmo.com', 'zellepay.com', 'cash.app',
+    'stripe.com', 'shopify.com', 'github.com', 'twitter.com', 'telegram.org', 'discord.com', 'booking.com', 'airbnb.com', 'norton.com',
+    'mcafee.com', 'geeksquad.com', 'dhl.com', 'ups.com', 'irs.gov', 'att.com'];
+const CREDENTIAL_WORDS = new Set(['login', 'log', 'signin', 'sign', 'secure', 'security', 'verify', 'verification', 'account', 'accounts',
+    'update', 'support', 'billing', 'wallet', 'auth', 'confirm', 'recovery', 'unlock', 'service', 'services', 'help', 'refund', 'payment']);
+const CONFUSABLE_MAP = { 'а': 'a', 'е': 'e', 'о': 'o', 'р': 'p', 'с': 'c', 'у': 'y', 'х': 'x', 'і': 'i', 'ј': 'j', 'ѕ': 's', 'ԁ': 'd',
+    'ɡ': 'g', 'һ': 'h', 'ӏ': 'l', 'ο': 'o', 'α': 'a', 'ρ': 'p', 'ν': 'v', 'τ': 't', 'κ': 'k', 'ı': 'i', 'ɑ': 'a', 'ℓ': 'l', 'ⅼ': 'l',
+    'á': 'a', 'à': 'a', 'â': 'a', 'ä': 'a', 'ã': 'a', 'å': 'a', 'é': 'e', 'è': 'e', 'ê': 'e', 'ë': 'e', 'í': 'i', 'ì': 'i', 'î': 'i',
+    'ï': 'i', 'ó': 'o', 'ò': 'o', 'ô': 'o', 'ö': 'o', 'õ': 'o', 'ú': 'u', 'ù': 'u', 'û': 'u', 'ü': 'u', 'ý': 'y', 'ñ': 'n', 'ç': 'c',
+    '0': 'o', '1': 'l', '3': 'e', '5': 's' };
+
+// RFC 3492 punycode decoding of one label ("xn--…" without the prefix).
+function punycodeDecodeLabel(input) {
+    const base = 36, tMin = 1, tMax = 26, skew = 38, damp = 700;
+    let n = 128, i = 0, bias = 72;
+    const out = [];
+    let basic = input.lastIndexOf('-');
+    if (basic < 0) basic = 0;
+    for (let j = 0; j < basic; j++) out.push(input.charCodeAt(j));
+    const adapt = (delta, numPoints, first) => {
+        delta = first ? Math.floor(delta / damp) : delta >> 1;
+        delta += Math.floor(delta / numPoints);
+        let k = 0;
+        while (delta > ((base - tMin) * tMax) >> 1) { delta = Math.floor(delta / (base - tMin)); k += base; }
+        return k + Math.floor((base - tMin + 1) * delta / (delta + skew));
+    };
+    for (let idx = basic > 0 ? basic + 1 : 0; idx < input.length;) {
+        const oldi = i;
+        for (let w = 1, k = base; ; k += base) {
+            if (idx >= input.length) return null;
+            const c = input.charCodeAt(idx++);
+            const digit = c - 48 < 10 ? c - 22 : c - 65 < 26 ? c - 65 : c - 97 < 26 ? c - 97 : base;
+            if (digit >= base) return null;
+            i += digit * w;
+            const t = k <= bias ? tMin : k >= bias + tMax ? tMax : k - bias;
+            if (digit < t) break;
+            w *= base - t;
+        }
+        bias = adapt(i - oldi, out.length + 1, oldi === 0);
+        n += Math.floor(i / (out.length + 1));
+        i %= out.length + 1;
+        out.splice(i++, 0, n);
+    }
+    return String.fromCodePoint(...out);
+}
+
+function unicodeLabel(label) {
+    if (!/^xn--/i.test(label)) return label;
+    try { return punycodeDecodeLabel(label.slice(4).toLowerCase()) || label; } catch (e) { return label; }
+}
+
+function confusableSkeleton(label) {
+    return Array.from(label.toLowerCase(), ch => CONFUSABLE_MAP[ch] || ch).join('').replace(/rn/g, 'm').replace(/vv/g, 'w').replace(/-/g, '');
+}
+
+function editDistanceAtMost1(a, b) {
+    if (a === b) return true;
+    if (Math.abs(a.length - b.length) > 1) return false;
+    let i = 0, j = 0, edits = 0;
+    while (i < a.length && j < b.length) {
+        if (a[i] === b[j]) { i++; j++; continue; }
+        if (++edits > 1) return false;
+        if (a.length > b.length) i++;
+        else if (a.length < b.length) j++;
+        else if (a[i + 1] === b[j] && a[i] === b[j + 1]) { i += 2; j += 2; }   // swapped letters
+        else { i++; j++; }
+    }
+    return edits + (a.length - i) + (b.length - j) <= 1;
+}
+
+// Returns a description if `host` imitates a protected brand, else null.
+function lookalikeOf(host) {
+    host = String(host || '').toLowerCase().replace(/\.$/, '');
+    const reg = registrableDomain(host);
+    if (!reg) return null;
+    for (const brand of PROTECTED_BRANDS) if (hostMatches(host, brand)) return null;   // the real thing
+    const label = reg.split('.')[0];
+    const uLabel = unicodeLabel(label);
+    const skeleton = confusableSkeleton(uLabel);
+    const tokens = uLabel.split('-');
+    for (const brand of PROTECTED_BRANDS) {
+        const bl = brand.split('.')[0];
+        if (host.startsWith(brand + '.')) return `starts with "${brand}" but is really ${reg}`;
+        if (bl.length < 4) continue;
+        if (uLabel !== bl && skeleton === bl) return `imitates ${brand} with look-alike characters`;
+        if (bl.length >= 6 && label !== bl && editDistanceAtMost1(label, bl)) return `is one letter away from ${brand}`;
+        if (tokens.length > 1 && tokens.includes(bl) && tokens.some(t => CREDENTIAL_WORDS.has(t))) return `uses the name "${bl}" but isn't ${brand}`;
+    }
+    return null;
+}
+
+// ---------------------------------------------------------------------------
+// ATTACHMENT ANALYZERS (pure text/byte checks, run on the device)
+// ---------------------------------------------------------------------------
+// SVG and HTML attachments: phishing kits put scripts, redirects and fake login forms in them.
+function analyzeMarkup(text, kind) {
+    const t = String(text || '').slice(0, 2 * 1024 * 1024);
+    const flags = [];
+    const test = (re, label) => { if (re.test(t)) flags.push(label); };
+    test(/<script\b/i, 'contains JavaScript');
+    if (kind === 'svg') test(/<foreignObject\b/i, 'embeds a web page inside the image');
+    test(/\son(load|error|click|mouseover|focus|begin|end|animationstart|pageshow)\s*=/i, 'runs code automatically');
+    test(/location(\.href)?\s*=|location\.(replace|assign)\s*\(|window\.open\s*\(/i, 'redirects the browser to another site');
+    test(/\batob\s*\(|\bFunction\s*\(|\beval\s*\(|document\.write\s*\(|unescape\s*\(|fromCharCode\s*\(/i, 'hides code from inspection');
+    test(/<meta[^>]+http-equiv\s*=\s*["']?refresh/i, 'redirects automatically');
+    test(/<form\b[^>]*action\s*=\s*["']?https?:/i, 'sends a form to another site');
+    test(/<input\b[^>]*type\s*=\s*["']?password/i, 'asks for a password');
+    const urls = new Set(extractRedirectTargets(t));
+    for (const m of t.matchAll(/\b(?:href|action|src)\s*=\s*["'](https?:\/\/[^"'\s<>]{4,300})/gi)) urls.add(m[1]);
+    for (const m of t.matchAll(/atob\s*\(\s*["'`]([A-Za-z0-9+/=_-]{12,})["'`]\s*\)|["'`](aHR0c[A-Za-z0-9+/=_-]{10,})["'`]/g)) {
+        try {
+            const dec = atob((m[1] || m[2]).replace(/-/g, '+').replace(/_/g, '/'));
+            for (const u of dec.match(/https?:\/\/[\x21-\x7e]{4,300}/g) || []) urls.add(u.replace(/["'<>)]+$/, ''));
+        } catch (e) { /* not base64 */ }
+    }
+    if (/#[^"'\s<>]*[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[a-z]{2,}/i.test(t)) flags.push('carries an email address for a pre-filled fake login');
+    // XML namespace identifiers (xmlns="http://www.w3.org/2000/svg" …) look like URLs but aren't links.
+    return { flags, urls: [...urls].filter(u => /^https?:\/\//i.test(u) && !/^https?:\/\/www\.w3\.org\//i.test(u)).slice(0, 10) };
+}
+
+// Calendar invites (.ics): links in the description/location bypass normal body scanning.
+function extractIcsUrls(text) {
+    const unfolded = String(text || '').slice(0, 1024 * 1024).replace(/\r?\n[ \t]/g, '').replace(/\\n/g, ' ').replace(/\\,/g, ',').replace(/\\;/g, ';');
+    const out = new Set();
+    for (const m of unfolded.matchAll(/https?:\/\/[^\s"<>\\]{4,500}/g)) out.add(m[0].replace(/[),.;]+$/, ''));
+    return [...out].slice(0, 10);
+}
+
+// Encrypted archives can't be scanned by mail filters, which is why attackers send them with the
+// password in the email body. Reads only the first bytes.
+function archiveInfo(bytes) {
+    const b = bytes;
+    if (b.length >= 8 && b[0] === 0x50 && b[1] === 0x4B && b[2] === 0x03 && b[3] === 0x04) {
+        return { format: 'ZIP', encrypted: (b[6] & 1) === 1 };
+    }
+    if (b.length >= 6 && b[0] === 0x37 && b[1] === 0x7A && b[2] === 0xBC && b[3] === 0xAF && b[4] === 0x27 && b[5] === 0x1C) {
+        return { format: '7-Zip', encrypted: null };       // encryption can't be read from the start of the file
+    }
+    if (b.length >= 12 && b[0] === 0x52 && b[1] === 0x61 && b[2] === 0x72 && b[3] === 0x21 && b[4] === 0x1A && b[5] === 0x07) {
+        if (b[6] === 0x01 && b[7] === 0x00) {              // RAR5: header CRC (4 bytes), size vint, type vint (4 = encryption header)
+            let p = 12;
+            while (p < b.length && (b[p] & 0x80)) p++;
+            return { format: 'RAR', encrypted: b[p + 1] === 4 ? true : null };
+        }
+        return { format: 'RAR', encrypted: null };
+    }
+    return null;
+}
+
+// Characters that reverse text direction can disguise "invoice‮fdp.exe" as "invoiceexe.pdf".
+function hasDirectionTricks(name) {
+    return /[\u202A-\u202E\u2066-\u2069\u200E\u200F]/.test(String(name || ''));
+}
+
+// Links that run code or open embedded content instead of a web page.
+function riskyScheme(href) {
+    const m = /^\s*(javascript|data|vbscript|blob|file):/i.exec(String(href || ''));
+    return m ? m[1].toLowerCase() : null;
+}
+
+// ---------------------------------------------------------------------------
+// SUPPORTED WEBMAIL (besides Gmail). Shared by the content script (where message bodies are) and the
+// popup (which sites are supported). Selectors were written from public knowledge of each app and
+// are marked experimental: if a site changes its layout, only this table needs updating.
+//   body        message-body containers in the page
+//   readFrames  also read same-site frames from the page (messages shown in frames)
+//   frameBody   inside a frame on the site, treat the whole frame as the message
+//   path        only on these paths (sites that host other apps, such as iCloud)
+//   imageParams query parameters of the site's image proxy that hold the original image address
+// ---------------------------------------------------------------------------
+const WEBMAIL_SITES = [
+    { id: 'outlook',  name: 'Outlook on the web', settingKey: 'enableOutlookSupport',
+      host: /(^|\.)outlook\.(live|office|office365)\.com$|^outlook\.cloud\.microsoft$/,
+      body: '[aria-label="Message body"], [role="document"]', imageParams: ['url', 'Url'] },
+    { id: 'proton',   name: 'Proton Mail', settingKey: 'enableProtonSupport',
+      host: /^mail\.proton\.me$/, body: '[data-shortcut-target="message-container"] .message-content',
+      readFrames: true, frameBody: true, imageParams: ['Url', 'url'] },
+    { id: 'yahoo',    name: 'Yahoo Mail', settingKey: 'enableYahooSupport',
+      host: /^mail\.yahoo\.com$/, body: '[data-test-id="message-view-body-content"], [data-test-id="message-view-body"]', imageParams: ['url', 'u'] },
+    { id: 'aol',      name: 'AOL Mail', settingKey: 'enableAolSupport',
+      host: /^mail\.aol\.com$/, body: '[data-test-id="message-view-body-content"], [data-test-id="message-view-body"]', imageParams: ['url', 'u'] },
+    { id: 'zoho',     name: 'Zoho Mail', settingKey: 'enableZohoSupport',
+      host: /^mail\.(zoho\.(com|eu|in|com\.au|jp|sa)|zohocloud\.ca)$/, body: '.zmMailContent, .zmPVContent, [class*="mail-content"]',
+      readFrames: true, imageParams: ['url'] },
+    { id: 'icloud',   name: 'iCloud Mail', settingKey: 'enableIcloudSupport',
+      host: /^(www\.)?icloud\.com$/, path: /^\/(mail|applications\/mail)/, body: '.mail-message-defaults, [class*="message-body"], [class*="MessageBody"]',
+      readFrames: true, frameBody: true, imageParams: ['url'] },
+    { id: 'fastmail', name: 'Fastmail', settingKey: 'enableFastmailSupport',
+      host: /^(app|www|beta)\.fastmail\.com$/, body: '.v-Message-body, .v-MessageBody, [class*="Message-body"]', imageParams: ['url'] },
+    { id: 'gmx',      name: 'GMX', settingKey: 'enableGmxSupport',
+      host: /(^|\.)gmx\.(com|net|de|at|ch|co\.uk|fr|es)$/, body: '.mail-body, .mail-content, [class*="mail-detail"]',
+      readFrames: true, frameBody: true, imageParams: ['url', 'u'] }
+];
+
+// The supported webmail entry for a page address (Gmail included), or null.
+function webmailSiteFor(urlString) {
+    let u;
+    try { u = new URL(urlString); } catch (e) { return null; }
+    if (u.hostname === 'mail.google.com') return { id: 'gmail', name: 'Gmail', settingKey: null };
+    return WEBMAIL_SITES.find(s => s.host.test(u.hostname) && (!s.path || s.path.test(u.pathname))) || null;
+}
+
+// ---------------------------------------------------------------------------
+// SENDER CHECKS ("trust but verify", Gmail)
+// A company-only short link (c.gle…) whose destination can't be looked up is trusted only when the
+// email really came from that company, directly to the user. Gmail's own verdict is read from the
+// message's original source (Authentication-Results stamped by mx.google.com), only when needed.
+// Separately, sender names claiming a brand, brand domains failing verification, look-alike sender
+// domains and abuse of genuine company notification systems are flagged.
+// ---------------------------------------------------------------------------
+
+// Short-link domains only the company's own systems or staff can create. foreignSender: how
+// serious it is to find one in mail from someone else. aka.ms links are made by Microsoft staff but
+// copied into partner and IT newsletters everywhere, so that case is only a caution.
+// Lower-case host name of a URL, or null.
+function urlHostname(urlString) {
+    try { return new URL(urlString).hostname.toLowerCase(); } catch (e) { return null; }
+}
+
+const COMPANY_ONLY_SHORTENERS = {
+    'c.gle':   { brand: 'Google',    foreignSender: 'danger' },
+    'g.co':    { brand: 'Google',    foreignSender: 'danger' },
+    'goo.gle': { brand: 'Google',    foreignSender: 'caution' },
+    'aka.ms':  { brand: 'Microsoft', foreignSender: 'caution' }
+};
+function companyOnlyShortener(urlString) {
+    const host = urlHostname(urlString);
+    return host && COMPANY_ONLY_SHORTENERS[host] ? Object.assign({ host }, COMPANY_ONLY_SHORTENERS[host]) : null;
+}
+
+// Brands whose genuine mail must pass with both DKIM and SPF aligned before a company link is
+// trusted (a re-sent copy of a genuine message passes DKIM only).
+const HIGH_VALUE_BRANDS = new Set(['Google', 'Microsoft', 'Apple', 'Amazon', 'PayPal']);
+
+// Personal-mail domains: an address here is a private person, never the company (icloud.com,
+// outlook.com and gmail.com belong to brands, but their users are not the brand).
+const PERSONAL_MAIL_DOMAINS = new Set(['gmail.com', 'googlemail.com', 'outlook.com', 'hotmail.com', 'live.com', 'msn.com',
+    'yahoo.com', 'ymail.com', 'aol.com', 'icloud.com', 'me.com', 'mac.com', 'proton.me', 'protonmail.com', 'pm.me',
+    'gmx.com', 'gmx.net', 'gmx.de', 'web.de', 'mail.com', 'zoho.com', 'zohomail.com', 'yandex.com', 'yandex.ru',
+    'fastmail.com', 'tutanota.com', 'tuta.io', 'qq.com', '163.com', '126.com', 'hotmail.co.uk', 'yahoo.co.uk',
+    'outlook.de', 'hotmail.de', 'hotmail.fr', 'yahoo.fr', 'libero.it', 'orange.fr', 'free.fr']);
+function isPersonalMailDomain(domain) {
+    const d = String(domain || '').toLowerCase();
+    return PERSONAL_MAIL_DOMAINS.has(d) || /^(hotmail|outlook|live|yahoo)\.[a-z.]{2,6}$/.test(d);
+}
+
+// The company a sending domain belongs to (null for personal mail and unknown domains).
+function brandOfSender(domain) {
+    const d = String(domain || '').toLowerCase().replace(/^.*@/, '');
+    if (!d || isPersonalMailDomain(d)) return null;
+    return brandOfDomain(registrableDomain(d)) || brandOfDomain(d);
+}
+
+// Brands people impersonate in sender names. ambiguous: also an ordinary word or name ("Apple
+// Smith", "Chase"), so it only counts next to words like Support, Security or Billing.
+const SENDER_NAME_BRANDS = [
+    { name: 'Google', tokens: ['google', 'gmail', 'google workspace', 'youtube'] },
+    { name: 'Microsoft', tokens: ['microsoft', 'office 365', 'microsoft 365', 'outlook', 'onedrive', 'sharepoint', 'teams'], ambiguousTokens: ['outlook', 'teams'] },
+    { name: 'Apple', tokens: ['apple', 'icloud', 'itunes', 'app store'], ambiguousTokens: ['apple'] },
+    { name: 'Amazon', tokens: ['amazon', 'amazon prime', 'aws'] },
+    { name: 'PayPal', tokens: ['paypal'] },
+    { name: 'Meta', tokens: ['facebook', 'instagram', 'whatsapp', 'meta'], ambiguousTokens: ['meta'] },
+    { name: 'LinkedIn', tokens: ['linkedin'] },
+    { name: 'Netflix', tokens: ['netflix'], domains: ['netflix.com'] },
+    { name: 'DocuSign', tokens: ['docusign'], domains: ['docusign.com', 'docusign.net'] },
+    { name: 'Dropbox', tokens: ['dropbox'], domains: ['dropbox.com', 'dropboxmail.com'] },
+    { name: 'Wells Fargo', tokens: ['wells fargo'], domains: ['wellsfargo.com'] },
+    { name: 'Bank of America', tokens: ['bank of america'], domains: ['bankofamerica.com', 'bofa.com'] },
+    { name: 'Chase', tokens: ['chase'], ambiguousTokens: ['chase'], domains: ['chase.com', 'jpmorgan.com'] },
+    { name: 'Coinbase', tokens: ['coinbase'], domains: ['coinbase.com'] },
+    { name: 'Adobe', tokens: ['adobe'], domains: ['adobe.com'] },
+    { name: 'FedEx', tokens: ['fedex'], domains: ['fedex.com'] },
+    { name: 'UPS', tokens: ['ups'], ambiguousTokens: ['ups'], domains: ['ups.com'] },
+    { name: 'DHL', tokens: ['dhl'], domains: ['dhl.com', 'dhl.de'] },
+    { name: 'USPS', tokens: ['usps', 'postal service'], domains: ['usps.com', 'usps.gov'] },
+    { name: 'IRS', tokens: ['irs', 'internal revenue service'], domains: ['irs.gov'] },
+    { name: 'Norton', tokens: ['norton', 'norton 360'], ambiguousTokens: ['norton'], domains: ['norton.com', 'nortonlifelock.com', 'gen.digital'] },
+    { name: 'McAfee', tokens: ['mcafee'], domains: ['mcafee.com'] },
+    { name: 'Geek Squad', tokens: ['geek squad'], domains: ['geeksquad.com', 'bestbuy.com'] },
+    { name: 'Venmo', tokens: ['venmo'], domains: ['venmo.com'] },
+    { name: 'Zelle', tokens: ['zelle'], domains: ['zellepay.com'] },
+    { name: 'Cash App', tokens: ['cash app', 'cashapp'], domains: ['cash.app', 'square.com', 'squareup.com'] },
+    { name: 'eBay', tokens: ['ebay'], domains: ['ebay.com'] },
+    { name: 'Walmart', tokens: ['walmart'], domains: ['walmart.com'] },
+    { name: 'Costco', tokens: ['costco'], domains: ['costco.com'] },
+    { name: 'Verizon', tokens: ['verizon'], domains: ['verizon.com', 'verizonwireless.com'] },
+    { name: 'AT&T', tokens: ['at&t', 'att'], ambiguousTokens: ['att'], domains: ['att.com', 'att.net'] },
+    { name: 'Xfinity', tokens: ['xfinity', 'comcast'], domains: ['xfinity.com', 'comcast.com', 'comcast.net'] },
+    { name: 'Spotify', tokens: ['spotify'], domains: ['spotify.com'] },
+    { name: 'Steam', tokens: ['steam'], ambiguousTokens: ['steam'], domains: ['steampowered.com', 'steamcommunity.com'] },
+    { name: 'Intuit', tokens: ['intuit', 'quickbooks', 'turbotax'], domains: ['intuit.com', 'quickbooks.com', 'turbotax.com'] },
+    { name: 'Zoom', tokens: ['zoom'], ambiguousTokens: ['zoom'], domains: ['zoom.us', 'zoom.com'] }
+];
+const SENDER_CONTEXT_WORDS = /\b(support|security|account|accounts|billing|team|service|services|help|helpdesk|alert|alerts|notification|notifications|payment|payments|customer|verification|verify|notice|center|centre|id|online|store|delivery|shipping|refund|invoice|admin|no-?reply|official|protection|fraud|department)\b/;
+
+// Folds look-alike characters so "PаyPal" (Cyrillic а) still reads as "paypal".
+function foldName(s) {
+    return Array.from(String(s || '').normalize('NFKC').toLowerCase(), ch => (CONFUSABLE_MAP[ch] && !/[0-9]/.test(ch) ? CONFUSABLE_MAP[ch] : ch)).join('');
+}
+
+// The brand a sender's display name claims, or null.
+function displayNameBrand(displayName) {
+    const name = foldName(displayName).replace(/[^a-z0-9& ]+/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!name) return null;
+    for (const b of SENDER_NAME_BRANDS) {
+        for (const t of b.tokens) {
+            if (!new RegExp(`(^| )${t.replace(/[&]/g, '\\&')}( |$)`).test(name)) continue;
+            if ((b.ambiguousTokens || []).includes(t) && name !== t && !SENDER_CONTEXT_WORDS.test(name)) continue;
+            return b;
+        }
+    }
+    return null;
+}
+
+// Whether a sending domain belongs to the brand named in the display name.
+function senderDomainOwnedBy(brand, domain) {
+    const d = String(domain || '').toLowerCase();
+    if (!d || isPersonalMailDomain(d)) return false;
+    if (brandOfSender(d) === brand.name) return true;
+    const reg = registrableDomain(d);
+    return (brand.domains || []).some(x => reg === x || d === x || d.endsWith('.' + x));
+}
+
+// Parses the header block of a raw message: [[lower-case name, value], …] in order (unfolded).
+function parseRawHeaders(raw) {
+    const text = String(raw || '').replace(/\r\n/g, '\n');
+    const end = text.indexOf('\n\n');
+    const block = (end >= 0 ? text.slice(0, end) : text).replace(/\n[ \t]+/g, ' ');
+    const out = [];
+    for (const line of block.split('\n')) {
+        const i = line.indexOf(':');
+        if (i > 0 && !/\s/.test(line.slice(0, i))) out.push([line.slice(0, i).toLowerCase(), line.slice(i + 1).trim()]);
+    }
+    return out;
+}
+
+const EMAIL_IN_TEXT_RE = /[A-Za-z0-9._%+'-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
+const domainOfAddress = (a) => String(a || '').toLowerCase().replace(/^.*@/, '').replace(/[>\s]+$/, '');
+
+// Reads the receiver's verdict. Only the topmost Authentication-Results whose authserv-id matches
+// isReceiver counts (RFC 8601: anything lower may have been written by the sender). Returns null
+// when there is no such header.
+function parseAuthResults(raw, isReceiver = (id) => id === 'mx.google.com') {
+    const headers = parseRawHeaders(raw);
+    const ar = headers.find(([n, v]) => n === 'authentication-results' && isReceiver(v.split(';')[0].trim().toLowerCase()));
+    if (!ar) return null;
+    const v = ar[1];
+    const result = (m) => { const r = new RegExp(`\\b${m}=([a-z]+)`, 'i').exec(v); return r ? r[1].toLowerCase() : 'none'; };
+    const fromHeader = (headers.find(([n]) => n === 'from') || [])[1] || '';
+    const fm = /^\s*"?([^"<]*?)"?\s*<([^>]+)>/.exec(fromHeader);
+    const addrs = (name) => headers.filter(([n]) => n === name).map(([, x]) => x).join(', ').match(EMAIL_IN_TEXT_RE) || [];
+    const hf = /header\.from=([^\s;]+)/i.exec(v);
+    const mf = /smtp\.mailfrom=([^\s;]+)/i.exec(v);
+    return {
+        dmarc: result('dmarc'), spf: result('spf'), dkim: result('dkim'), arc: result('arc'),
+        headerFrom: hf ? domainOfAddress(hf[1]) : domainOfAddress(fm ? fm[2] : fromHeader),
+        spfDomain: mf ? domainOfAddress(mf[1]) : '',
+        dkimDomains: Array.from(v.matchAll(/dkim=pass[^;]*?header\.(?:i=@?|d=)([^\s;]+)/gi), m => domainOfAddress(m[1])),
+        fromName: fm ? fm[1].trim() : '',
+        fromAddress: (fm ? fm[2] : (fromHeader.match(EMAIL_IN_TEXT_RE) || [''])[0]).toLowerCase(),
+        to: addrs('to').map(a => a.toLowerCase()),
+        cc: addrs('cc').map(a => a.toLowerCase()),
+        deliveredTo: ((headers.find(([n]) => n === 'delivered-to') || [])[1] || '').toLowerCase().trim(),
+        isList: headers.some(([n]) => n === 'list-id')
+    };
+}
+
+// Verdict for a company-only link whose destination is unknown: { verified } or { severity, code,
+// reason }. code groups identical findings so an email shows one summary line, not one per link:
+// forwarded | unchecked | notDirect | relayed | failed | foreign.
+function evaluateCompanyLink({ shortener, auth, inQuote }) {
+    const b = shortener.brand, host = shortener.host;
+    const unknown = 'its destination couldn\'t be looked up';
+    if (inQuote) return { severity: 'caution', code: 'forwarded', reason: `Forwarded ${b} link (${host}): ${unknown}, and who originally sent it can't be verified` };
+    if (!auth) return { severity: 'caution', code: 'unchecked', reason: `${b} short link (${host}): ${unknown}, and the sender couldn't be checked` };
+    const fromBrand = brandOfSender(auth.headerFrom);
+    if (fromBrand === b && auth.dmarc === 'pass') {
+        const direct = !!auth.deliveredTo && [...auth.to, ...auth.cc].includes(auth.deliveredTo) && !auth.isList;
+        const spfAligned = auth.spf === 'pass' && brandOfSender(auth.spfDomain) === b;
+        if (direct && (!HIGH_VALUE_BRANDS.has(b) || spfAligned)) return { verified: true };
+        return { severity: 'caution', code: !direct ? 'notDirect' : 'relayed', reason: !direct
+            ? `${b} short link (${host}) in an email verified as sent by ${b}, but not addressed to you directly (it may be a re-sent copy or a mailing list); ${unknown}`
+            : `${b} short link (${host}) in an email signed by ${b} but relayed through another server; ${unknown}` };
+    }
+    if (fromBrand === b) return { severity: 'danger', code: 'failed', reason: `This email claims to come from ${b} but failed ${b}'s sender verification; its ${b} link (${host}) can't be trusted` };
+    return { severity: shortener.foreignSender, code: 'foreign', sender: auth.headerFrom || '', reason: `Only ${b} issues ${host} links, but this email came from ${auth.headerFrom || 'another sender'}, not ${b}; ${unknown}` };
+}
+
+// Text that suggests a call-or-pay scam inside a genuine notification (attackers put it in fields
+// such as account or organization names that the company's system then mails out).
+const SCAM_PHONE_RE = /(?:\+?1[\s.-]?)?\(?\b\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}\b/;
+const SCAM_WORDS_RE = /\b(payment|charged|charge|invoice|refund|order|subscription|renewal|purchase|transaction|bitcoin|crypto|gift ?cards?|call (us|now|immediately)|cancel)\b/i;
+
+// Findings about the sender: [{ severity, message }], plus info for the log.
+function evaluateSender({ displayName, address, auth, bodyText }) {
+    const findings = [];
+    const info = [];
+    const domain = domainOfAddress(address);
+    const claimed = displayNameBrand(displayName);
+    if (claimed && !senderDomainOwnedBy(claimed, domain)) {
+        findings.push({ severity: 'danger', message: `The sender's name says “${String(displayName).trim()}”, but the address ${address} isn't ${claimed.name}'s. Don't trust links, attachments or phone numbers in this email.` });
+    }
+    const la = domain && !isPersonalMailDomain(domain) ? lookalikeOf(domain) : null;
+    if (la) findings.push({ severity: 'danger', message: `The sender's address (${domain}) ${la}.` });
+    if (auth) {
+        const fromBrand = brandOfSender(auth.headerFrom);
+        if (fromBrand && auth.dmarc === 'fail') {
+            findings.push({ severity: 'danger', message: `This email claims to come from ${fromBrand} (${auth.headerFrom}) but failed ${fromBrand}'s sender verification. It is probably forged.` });
+        } else if (fromBrand && auth.dmarc === 'pass') {
+            info.push(`Sender passed ${fromBrand}'s sender authentication (${auth.headerFrom}, DMARC pass).`);
+            const text = String(bodyText || '');
+            if (SCAM_PHONE_RE.test(text) && SCAM_WORDS_RE.test(text)) {
+                findings.push({ severity: 'caution', message: `This is a genuine ${fromBrand} message, but it contains a phone number and payment wording. Attackers can make company systems send such text. Don't call numbers or pay from an unexpected message; contact ${fromBrand} through its official website.` });
+            }
+        }
+    }
+    return { findings, info };
+}
+
+// Sign-in links (Microsoft, Google) that send you on to another site afterwards: a phishing trick
+// that uses the real sign-in page as a redirector.
+function signInRedirectProblem(urlString) {
+    let u;
+    try { u = new URL(urlString); } catch (e) { return null; }
+    const host = u.hostname.toLowerCase();
+    const isSignIn = /(^|\.)login\.microsoftonline\.com$|(^|\.)login\.live\.com$/.test(host) || (host === 'accounts.google.com' && /\/o\/oauth2/.test(u.pathname));
+    if (!isSignIn) return null;
+    const target = u.searchParams.get('redirect_uri') || u.searchParams.get('redirect_url');
+    const tHost = target ? urlHostname(target) : null;
+    if (tHost && brandOfSender(tHost) !== brandOfSender(host)) {
+        return `sign-in link that sends you on to ${tHost} afterwards, a trick that uses the real sign-in page to reach another site`;
+    }
+    return null;
+}
+
+// One summary sentence for `count` company links that share the same finding (email banner).
+function companyLinkSummary(code, count, brand, host, sender) {
+    const many = count > 1;
+    const links = many ? `${count} ${brand} links (${host})` : `a ${brand} link (${host})`;
+    const Links = links.charAt(0).toUpperCase() + links.slice(1);
+    const they = many ? 'they' : 'it', them = many ? 'them' : 'it', lead = many ? 'lead' : 'leads';
+    switch (code) {
+        case 'forwarded': return `${Links} in a forwarded part of this email can't be checked: where ${they} ${lead} couldn't be looked up, and who originally sent ${them} can't be verified.`;
+        case 'unchecked': return `${Links} in this email can't be checked: where ${they} ${lead} couldn't be looked up, and the sender couldn't be verified.`;
+        case 'notDirect': return `${Links} in this email can't be checked: the email was sent by ${brand}, but not directly to you (it may be a re-sent or mailing-list copy), and where ${they} ${lead} couldn't be looked up.`;
+        case 'relayed':   return `${Links} in this email can't be checked: the email was signed by ${brand} but relayed through another server, and where ${they} ${lead} couldn't be looked up.`;
+        case 'failed':    return `This email claims to come from ${brand} but failed ${brand}'s sender verification. Don't trust its ${links}.`;
+        case 'foreign':   return `This email contains ${links}, which only ${brand} issues, but it came from ${sender || 'another sender'}, not ${brand}. Don't trust ${them}.`;
+        default:          return `${Links} in this email can't be checked.`;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// CHECKING LINKS BEFORE SENDING (offline part). The network part (DNS existence, threat checks,
+// reachability) is in background.js: checkOutgoingLinks.
+// ---------------------------------------------------------------------------
+
+// Endings that are almost always typing mistakes (none of these is a real top-level domain).
+const TLD_TYPOS = { con: 'com', cmo: 'com', ocm: 'com', vom: 'com', xom: 'com', cpm: 'com', cim: 'com', comm: 'com',
+    coom: 'com', comn: 'com', clm: 'com', cok: 'com', nte: 'net', ner: 'net', nett: 'net', ogr: 'org', orgg: 'org',
+    rog: 'org', ord: 'org', eud: 'edu', edi: 'edu', gvo: 'gov', ogv: 'gov', ifno: 'info', inf: 'info' };
+
+// Web addresses typed with a broken beginning, e.g. "http//example.com", "htp://", "hhtps://".
+const MALFORMED_SCHEME_RE = /(?:^|[\s(<"'])((?:h+t+p+s?|htps?|hhtps?|htttps?|ttps?|https?)(?::\/\/|:\/(?!\/)|\/\/|:\\\\|;\/\/|::\/\/)[^\s<>"',)]+)/gi;
+function findMalformedUrls(text) {
+    const out = [];
+    for (const m of String(text || '').matchAll(MALFORMED_SCHEME_RE)) {
+        const s = m[1];
+        if (/^https?:\/\//i.test(s)) continue;                       // well-formed
+        out.push(s);
+    }
+    return [...new Set(out)].slice(0, 20);
+}
+
+// Problems that can be seen without any network lookup, in plain words.
+function outgoingLinkOfflineProblems(url, linkText) {
+    const problems = [];
+    let u;
+    try { u = new URL(url); } catch (e) { return ['isn\'t a valid web address']; }
+    if (!/^https?:$/.test(u.protocol)) return problems;
+    const host = u.hostname.toLowerCase().replace(/\.$/, '');
+    const isIp = /^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.includes(':');
+    if (!isIp) {
+        if (!host.includes('.')) problems.push('has no domain ending (such as .com)');
+        else {
+            const tld = host.split('.').pop();
+            if (TLD_TYPOS[tld]) problems.push(`ends in “.${tld}”, which looks like a typo for “.${TLD_TYPOS[tld]}”`);
+            if (/\.\./.test(u.hostname)) problems.push('has two dots in a row in its domain');
+        }
+        const la = lookalikeOf(host);
+        if (la) problems.push(`goes to ${host}, which ${la}`);
+    }
+    // The visible text names a different website than the link goes to (easy to do when editing).
+    const shown = String(linkText || '').trim();
+    const textHost = /^(https?:\/\/)?(www\.)?([a-z0-9-]+\.)+[a-z]{2,}(\/\S*)?$/i.test(shown) ? (urlHostname(/^https?:/i.test(shown) ? shown : 'https://' + shown) || '') : '';
+    if (textHost && registrableDomain(textHost) !== registrableDomain(host)) problems.push(`its text shows ${textHost}, but the link goes to ${host}`);
+    return problems;
+}

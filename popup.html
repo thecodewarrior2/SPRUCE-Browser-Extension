@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <link rel="stylesheet" href="theme.css">
+    <script src="theme.js"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body { 
+            width: 320px; 
+            margin: 0; 
+            padding: 14px; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+            background: var(--surface);
+            color: var(--text);
+        }
+        .center { text-align: center; }
+        
+        .toggle-container { 
+            background: var(--surface-2); 
+            border: 1px solid var(--border); 
+            border-radius: 8px; 
+            padding: 10px 12px; 
+            margin-bottom: 10px; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+        }
+        .toggle-label { font-size: 12px; font-weight: bold; color: var(--text); text-align: left; }
+        .toggle-sublabel { font-size: 10px; color: var(--text-muted); font-weight: normal; margin-top: 2px; }
+        
+        .switch { position: relative; display: inline-block; width: 40px; height: 22px; flex-shrink: 0; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--control-off); transition: .2s; border-radius: 22px; }
+        .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: #ffffff; transition: .2s; border-radius: 50%; }
+        input:checked + .slider { background-color: var(--switch-on); }
+        input:checked + .slider:before { transform: translateX(18px); }
+
+        .info-box { 
+            font-size: 12px; 
+            color: var(--text-2); 
+            background: var(--surface-3); 
+            padding: 10px 12px; 
+            border-radius: 8px; 
+            margin-bottom: 10px; 
+            text-align: left; 
+            line-height: 1.6; 
+        }
+        
+        .btn-secondary { 
+            background-color: var(--accent-solid); 
+            color: var(--on-solid); 
+            border: none; 
+            padding: 9px 12px; 
+            font-size: 12px; 
+            font-weight: bold; 
+            border-radius: 6px; 
+            cursor: pointer; 
+            width: 100%; 
+            margin-bottom: 12px;
+        }
+        .btn-secondary:hover { background-color: var(--accent-solid-hover); }
+        a.btn-secondary { display: block; text-align: center; text-decoration: none; }
+        
+        h5 { margin: 0 0 6px 0; font-size: 12px; color: var(--text-2); }
+        .list-container { 
+            font-size: 11px; 
+            padding: 0; 
+            margin: 0 0 8px 0;
+            list-style-type: none; 
+            max-height: 110px; 
+            overflow-y: auto; 
+            background: var(--surface-2); 
+            border: 1px solid var(--border-subtle);
+            border-radius: 6px;
+        }
+        .list-container li { padding: 6px 8px; border-bottom: 1px solid var(--border-subtle); word-break: break-all; }
+        .list-container li:last-child { border-bottom: none; }
+        
+        .btn-clear { 
+            background-color: var(--neutral-solid); 
+            color: var(--on-solid); 
+            font-size: 11px; 
+            padding: 5px 10px; 
+            border: none; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            width: 100%;
+        }
+        .btn-clear:hover { background-color: var(--neutral-solid-hover); }
+        
+        .stat-highlight { color: var(--danger-text); font-weight: bold; }
+        .stat-green { color: var(--success-text); font-weight: bold; }
+        .header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .header-row h4 { margin: 0; font-size: 14px; }
+        #themeSelect { font-size: 11px; padding: 2px 4px; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: inherit; }
+        .box-title { font-weight: bold; color: var(--text); margin-bottom: 6px; }
+        .stats-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; margin-bottom: 6px; text-align: center; }
+        .sg { background: var(--surface); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 4px 2px; }
+        .sg b { display: block; font-size: 15px; color: var(--text); }
+        .sg span { display: block; font-size: 9.5px; line-height: 1.2; color: var(--text-muted); }
+        .sg.good b { color: var(--success-text); } .sg.bad b { color: var(--danger-text); } .sg.warn b { color: var(--info-text); } .sg.caution b { color: var(--warn-text); } .sg.muted b { color: var(--text-muted); }
+        .stats-note { font-size: 10px; color: var(--text-muted); margin: 2px 0 4px; min-height: 0; }
+
+    </style>
+</head>
+<body>
+    <div class="center">
+        <div class="header-row">
+            <h4>Gmail Link Unshortener</h4>
+            <select id="themeSelect" title="Appearance" aria-label="Appearance">
+                <option value="system">🖥 System</option>
+                <option value="light">☀ Light</option>
+                <option value="dark">🌙 Dark</option>
+            </select>
+        </div>
+        
+        <div class="toggle-container">
+            <div class="toggle-label">
+                Show results on links
+                <div class="toggle-sublabel" id="visualSublabel">Red warnings and real destinations</div>
+            </div>
+            <label class="switch">
+                <input type="checkbox" id="visualToggle" aria-label="Show results on links" checked>
+                <span class="slider"></span>
+            </label>
+        </div>
+
+        <div class="info-box">
+            <div style="border-bottom: 1px solid var(--border); padding-bottom: 6px; margin-bottom: 6px;">
+                <div class="box-title">Current email</div>
+                <div class="stats-grid" title="Links in the email(s) open in this Gmail tab">
+                    <div class="sg"><b id="stScanned">–</b><span>Scanned</span></div>
+                    <div class="sg good"><b id="stSafe">–</b><span>Safe</span></div>
+                    <div class="sg caution" title="Suspicious but common in legitimate mail, for example link text that shows a different site"><b id="stCaution">–</b><span>Caution</span></div>
+                    <div class="sg bad"><b id="stUnsafe">–</b><span>Unsafe</span></div>
+                    <div class="sg warn" title="Checked, but the site could not be confirmed safe (for example an email tracking link, or the security services couldn't be reached)"><b id="stNotVerified">–</b><span>Not verified</span></div>
+                    <div class="sg muted" title="Still being checked, or could not be checked (see Settings → Logging)"><b id="stUnscanned">–</b><span>Unscanned</span></div>
+                </div>
+                <div id="statsNote" class="stats-note"></div>
+                <div>Links cleaned: <span id="linkCount" class="stat-green">0</span> · Tracking pixels blocked: <span id="pixelCount" class="stat-highlight">0</span></div>
+            </div>
+            <div><strong>Synced shortener domains:</strong> <span id="syncedCount">0</span></div>
+            <div><strong>Allowed &amp; blocked sites:</strong> <span id="customCount">0</span></div>
+        </div>
+
+        <a id="openSettingsBtn" class="btn-secondary" href="options.html" target="_blank" rel="noopener">⚙️ Open Settings</a>
+    </div>
+    
+    <h5>Recent activity</h5>
+    <ul id="activityList" class="list-container"></ul>
+    <button id="clearActivityBtn" class="btn-clear" style="display:none;">Clear activity</button>
+
+    <script src="shared.js"></script>
+    <script src="popup.js"></script>
+</body>
+</html>
