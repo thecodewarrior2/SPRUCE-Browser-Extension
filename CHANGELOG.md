@@ -1,5 +1,13 @@
 # Changelog
 
+## 5.47 — Sender icons in their own database (Firefox build, same as Chrome 5.47)
+
+- **Sender icons are stored as raw images in the extension's own database (IndexedDB)** instead of as text in the settings storage: about a quarter smaller (no base64), and saving a new icon is one small write instead of rewriting every remembered icon. A full set of 1,500 icons is about 1.1 MB instead of 1.5 MB.
+- Icons are kept exactly as Google sends them. Tests on 40 common sender sites showed they are already well compressed: re-encoding (PNG, WebP), shrinking to 16 pixels, or tracing to SVG and optimizing with SVGO all made them larger, blurrier or less accurate.
+- Icons saved by earlier versions are moved over automatically the first time an icon is needed, then the old copy is removed.
+- Each site is remembered for 30 days, at most 1,500 sites (oldest removed first). Delete now and Logging → Senders → Clear empty it. Logging → Senders shows how much space the icons use.
+- If the database can't be opened, icons still show; they are just fetched again when needed.
+
 ## 5.46 — Lighter on memory, battery and the user's own actions (Firefox build, same as Chrome 5.46)
 
 - **Large lists use about a third of the memory.** The downloaded phishing lists, the scam-sender list, the shortener lists and the remembered Spam moves are kept as one sorted block of text with a small index and searched by halving, instead of a table with an entry per item: for Phishing Army (about 153,000 domains), 4.9 MB instead of 15.7 MB, built in about 36 ms instead of 95 ms each time the background starts (measured). Each lookup still takes about a microsecond. Lists are now stored sorted. Results are unchanged.

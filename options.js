@@ -279,6 +279,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const keys = Object.keys(items).filter(k => k.startsWith('http://') || k.startsWith('https://'));
             // Sender data too (servers' addresses per email, countries, sender verdicts). Conversations
             // remembered as moved to or taken out of Spam are kept, so they're never moved again.
+            iconStore.clear().catch(() => {});
             chrome.storage.local.remove([...keys, 'senderMessageCache', 'geoCache', 'senderDomainCache', 'senderResultCache', 'faviconCache'], () => {
                 chrome.storage.local.set({ resolutionHistory: [], recentActivity: [] }, () => {
                     reportToLog('info', 'Options page', `Cache, resolution history and activity deleted by the user (${keys.length} cached entries).`);
@@ -859,7 +860,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const statItem = (label, value) => { const d = document.createElement('div'); d.className = 'stat'; const b = document.createElement('b'); b.textContent = value; d.append(b, ` ${label}`); return d; };
 
     function renderSenderLog() {
-        chrome.storage.local.get({ senderResultCache: {}, faviconCache: {} }, (items) => {
+        Promise.all([new Promise(r => chrome.storage.local.get({ senderResultCache: {} }, r)), iconStore.all().catch(() => [])]).then(([items, iconRecs]) => {
+            const iconBySite = new Map(iconRecs.map(rec => [rec.site, rec]));
             const tbody = document.querySelector('#senderTable tbody');
             if (!tbody) return;
             tbody.replaceChildren();
@@ -867,9 +869,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const rows = Object.values(items.senderResultCache || {}).filter(v => v && v.r).sort((a, b) => b.ts - a.ts);
             const counts = {};
             rows.forEach(v => { counts[v.r.status] = (counts[v.r.status] || 0) + 1; });
-            const icons = Object.values(items.faviconCache || {});
+            const withIcon = iconRecs.filter(i => i.bytes);
+            const iconKB = withIcon.reduce((n, i) => n + i.bytes.byteLength, 0) / 1024;
             document.getElementById('senderStats').replaceChildren(statItem('senders remembered', rows.length), statItem('flagged', counts.flagged || 0),
-                statItem('caution', counts.caution || 0), statItem('icons remembered', icons.filter(i => i.d).length), statItem('sites without an icon', icons.filter(i => !i.d).length));
+                statItem('caution', counts.caution || 0), statItem(`icons remembered (${iconKB < 10 ? iconKB.toFixed(1) : Math.round(iconKB)} KB)`, withIcon.length), statItem('sites without an icon', iconRecs.length - withIcon.length));
             for (const v of rows) {
                 const r = v.r;
                 const text = `${r.address} ${r.domain} ${r.status} ${(r.reasons || []).join(' ')} ${r.checks || ''}`.toLowerCase();
@@ -879,8 +882,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const code = document.createElement('code'); code.textContent = r.address; who.appendChild(code);
                 if (r.move) { const n = document.createElement('div'); n.style.cssText = 'font-size: 11px; color: var(--danger-text);'; n.textContent = 'Its emails are moved to Spam'; who.appendChild(n); }
                 const look = cell();
-                const fav = items.faviconCache[siteOfSender(r.domain)];
-                if (fav && fav.d && /^data:image\//.test(fav.d)) { const img = document.createElement('img'); img.src = fav.d; img.width = 16; img.height = 16; img.alt = ''; img.style.marginRight = '6px'; look.appendChild(img); }
+                const fav = iconDataUrl(iconBySite.get(siteOfSender(r.domain)));
+                if (fav) { const img = document.createElement('img'); img.src = fav; img.width = 16; img.height = 16; img.alt = ''; img.style.marginRight = '6px'; look.appendChild(img); }
                 else { const blank = document.createElement('span'); blank.style.cssText = 'display:inline-block;width:16px;margin-right:6px;'; blank.title = 'No icon'; look.appendChild(blank); }
                 if (r.country) {
                     const f = document.createElement('span');
@@ -932,10 +935,10 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('spamLogSearch').addEventListener('input', renderSpamLog);
     document.getElementById('clearSenderCacheBtn').addEventListener('click', () => {
         if (!confirm('Forget the remembered sender checks, icons and countries? They are looked up again as you open Gmail.')) return;
-        chrome.storage.local.remove(['senderResultCache', 'faviconCache', 'geoCache', 'senderDomainCache', 'senderMessageCache'], () => {
+        iconStore.clear().catch(() => {}).then(() => chrome.storage.local.remove(['senderResultCache', 'faviconCache', 'geoCache', 'senderDomainCache', 'senderMessageCache'], () => {
             reportToLog('info', 'Options page', 'Sender data (checks, icons, countries) cleared by the user.');
             renderSenderLog();
-        });
+        }));
     });
     document.getElementById('clearSpamLogBtn').addEventListener('click', () => {
         if (!confirm('Clear the list of emails moved to Spam? Conversations already moved are still never moved again.')) return;

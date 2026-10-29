@@ -28,7 +28,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'managed' || Object.keys(changes).some(k => !k.startsWith('http') && !NON_CONFIG_KEYS.has(k))) invalidateConfig();
     // Sender data cleared in Settings (Logging → Senders, or Delete now) is forgotten in memory too.
     if (area === 'local' && typeof senderResultCache !== 'undefined') {
-        const caches = { senderResultCache, faviconCache, geoCache, senderDomainCache };
+        const caches = { senderResultCache, geoCache, senderDomainCache };
         for (const [k, c] of Object.entries(changes)) if (caches[k] && c.newValue === undefined) caches[k].forget();
     }
     // Stored link results removed by any path (Clear cache, expiry) leave the in-memory memo too.
@@ -251,6 +251,7 @@ self.addEventListener('unhandledrejection', (event) => {
 // ---------------------------------------------------------------------------
 async function pruneExpiredData(retentionDays = 30) {
     const cutoffMs = Date.now() - (retentionDays * 24 * 60 * 60 * 1000);
+    iconStore.prune().catch(() => {});              // sender icons: their own 30 days and size limit
     const items = await storageGet('local', null);
     const keysToRemove = [];
     const updates = {};
@@ -1226,10 +1227,9 @@ async function feedHit(urlString) {
 //   senderResultCache   address → the last verdict        (SAFE_CACHE_MS; shown in Logging → Senders)
 //   senderDomainCache   domain → DNS threat verdict        (SAFE_CACHE_MS)
 //   geoCache            IP address → country               (30 days)
-//   faviconCache        site → icon (data: URL, or none)   (30 days)
+//   icons               site → icon bytes, or none          (30 days; IndexedDB, see icon-store.js)
 // ---------------------------------------------------------------------------
 const GEO_CACHE_MS = 30 * 24 * 60 * 60 * 1000;
-const FAVICON_CACHE_MS = 30 * 24 * 60 * 60 * 1000;
 
 // A Map kept in chrome.storage.local under one key: read once, written at most every few seconds,
 // entries older than ttl dropped, the oldest dropped first beyond max.
@@ -1261,7 +1261,26 @@ function persistentMap(key, max, ttl) {
 const senderResultCache = persistentMap('senderResultCache', 3000, SAFE_CACHE_MS);
 const senderDomainCache = persistentMap('senderDomainCache', 2000, SAFE_CACHE_MS);
 const geoCache = persistentMap('geoCache', 3000, GEO_CACHE_MS);
-const faviconCache = persistentMap('faviconCache', 1500, FAVICON_CACHE_MS);
+// Icons saved by versions before 5.47 (data: URLs in storage.local "faviconCache") move to the icon
+// store once, then the old copy is removed.
+let legacyIconsMoved = null;
+function moveLegacyIcons() {
+    if (!legacyIconsMoved) legacyIconsMoved = (async () => {
+        const old = (await storageGet('local', { faviconCache: null })).faviconCache;
+        if (!old || typeof old !== 'object') return;
+        let moved = 0;
+        for (const [site, v] of Object.entries(old)) {
+            if (!v || !(Date.now() - v.ts < ICON_STORE_TTL_MS)) continue;
+            const m = /^data:(image\/[a-z0-9.+-]+);base64,([A-Za-z0-9+/=]+)$/i.exec(v.d || '');
+            const bytes = m ? Uint8Array.from(atob(m[2]), c => c.charCodeAt(0)).buffer : null;
+            await iconStore.put(site, m ? m[1] : '', bytes);
+            moved++;
+        }
+        await chrome.storage.local.remove('faviconCache');
+        logInfo(`Sender icons moved to the icon store (${moved} sites); they now take about a quarter less space.`, 'Sender checks');
+    })().catch((e) => { legacyIconsMoved = null; logWarning(`Moving saved sender icons failed (${errorText(e)}); they are fetched again when needed.`, 'Sender checks'); });
+    return legacyIconsMoved;
+}
 const geoInFlight = new Map();
 const iconInFlight = new Map();
 
@@ -1313,8 +1332,9 @@ const SENDER_ICON_MAX_BYTES = 8 * 1024;
 async function senderIcon(site) {
     const s = normalizeDomain(site);
     if (!SENDER_DOMAIN_RE.test(s)) return '';
-    const hit = await faviconCache.get(s);
-    if (hit) return hit.d || '';
+    await moveLegacyIcons();
+    const hit = await iconStore.get(s).catch(() => null);
+    if (hit) return iconDataUrl(hit);
     if (iconInFlight.has(s)) return iconInFlight.get(s);
     const p = (async () => {
         try {
@@ -1324,7 +1344,7 @@ async function senderIcon(site) {
             // server error, a web filter's block page, an answer that isn't an image) is not remembered,
             // so a short outage or a filter rule never leaves icons blank for a month.
             if (res.status === 404) {
-                faviconCache.set(s, { d: '' });
+                await iconStore.put(s, '', null).catch(e => logWarning(`Saving the icon for ${s} failed (${errorText(e)}).`, 'Sender checks'));
                 logInfo(`Sender icon for ${s}: none (the site has no icon; left blank); remembered for 30 days.`, 'Sender checks');
                 return '';
             }
@@ -1333,15 +1353,12 @@ async function senderIcon(site) {
                 return '';
             }
             const buf = await res.arrayBuffer();
-            let d = '';
-            // At most SENDER_ICON_MAX_BYTES (a 32-pixel icon is normally 1–3 KB); a larger one is left blank.
-            if (buf.byteLength > 0 && buf.byteLength <= SENDER_ICON_MAX_BYTES) {
-                let bin = '';
-                const bytes = new Uint8Array(buf);
-                for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
-                d = `data:${type.split(';')[0]};base64,${btoa(bin)}`;
-            }
-            faviconCache.set(s, { d });
+            // Kept exactly as Google sends it (already well compressed; re-encoding made icons larger).
+            // At most SENDER_ICON_MAX_BYTES (a 32-pixel icon is normally under 3 KB); a larger one is left blank.
+            const keep = buf.byteLength > 0 && buf.byteLength <= SENDER_ICON_MAX_BYTES;
+            const rec = { type: type.split(';')[0].trim().toLowerCase(), bytes: keep ? buf : null };
+            await iconStore.put(s, rec.type, rec.bytes).catch(e => logWarning(`Saving the icon for ${s} failed (${errorText(e)}); it is fetched again next time.`, 'Sender checks'));
+            const d = iconDataUrl(rec);
             logInfo(`Sender icon for ${s}: ${d ? 'found' : `too large (${Math.round(buf.byteLength / 1024)} KB; left blank)`}; remembered for 30 days.`, 'Sender checks');
             return d;
         } catch (e) {
