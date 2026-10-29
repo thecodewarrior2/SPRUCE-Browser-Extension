@@ -508,6 +508,8 @@
                     <input type="file" id="importFileInput" accept=".json" style="display: none;"></div>
                 <div class="setting-row"><div class="setting-text">Manage with Firefox enterprise policy<div class="setting-desc">Every setting and list can be set and locked by your administrator with Firefox's <code>policies.json</code> (or the equivalent Windows Group Policy / Intune or macOS profile). This button copies a complete <code>policies.json</code> that installs the add-on and locks your current settings. <a href="#" data-help-link="deploy">Administrator guide</a><div id="copyPolicyResult" style="margin-top: 4px; color: var(--success-text);"></div></div></div>
                     <button id="copyPolicyJsonBtn" class="btn-action">Copy policies.json</button></div>
+                <div class="setting-row"><div class="setting-text">Manage with Microsoft Intune (Firefox on Windows)<div class="setting-desc">Copies a PowerShell script that writes the same policy to the Windows registry, where Firefox reads Group Policy, for an Intune platform script (or Group Policy / any device-management tool). <a href="#" data-help-link="deploy" data-help-anchor="deploy-intune">Intune guide</a><div id="copyIntuneResult" style="margin-top: 4px; color: var(--success-text);"></div></div></div>
+                    <button id="copyIntuneScriptBtn" class="btn-action">Copy Intune script</button></div>
             </details>
 
             <div class="reset-row">
@@ -801,7 +803,7 @@
 
 <section id="help-deploy" class="help-section">
 <h2>Deploying in organizations</h2>
-<p class="lead">Install the add-on for everyone automatically and set (or lock) its settings centrally with Firefox enterprise policies.</p>
+<p class="lead">Install the add-on for everyone automatically and set (or lock) its settings centrally with Firefox enterprise policies: a <code>policies.json</code> file (any platform), the Windows registry (Microsoft Intune, Group Policy) or a macOS configuration profile.</p>
 <div class="callout-warn"><b>Before you start.</b> Always test with a small pilot group first and check the result at <code>about:policies</code>, which lists the active policies and marks errors.</div>
 
 <h3 id="deploy-prepare">1. Publish the add-on</h3>
@@ -812,7 +814,7 @@
 </ul>
 <p>The extension's settings are delivered as <b>extension policy</b>: every setting has a policy key (listed in the <a href="#" data-help-link="architecture" data-help-anchor="arch-settings">settings reference</a>). A policy value always wins and appears with 🔒 to the user; anything you don't set stays under the user's control.</p>
 
-<h3 id="deploy-policies">2. policies.json (Windows, macOS and Linux)</h3>
+<h3 id="deploy-policies">2. policies.json (Linux, Windows and macOS)</h3>
 <ol class="simple-list">
   <li>Generate the file from <b>Settings → Backup &amp; enterprise policy → Copy policies.json</b>, replace <code>ADDON-SLUG</code>, and delete the settings you don't want to lock. The format is:
     <div class="deploy-code">{
@@ -834,13 +836,33 @@
     }
   }
 }</div></li>
-  <li>Put it in a folder named <code>distribution</code> in the Firefox installation folder (for example <code>C:\Program Files\Mozilla Firefox\distribution\policies.json</code>, <code>/Applications/Firefox.app/Contents/Resources/distribution/policies.json</code>, or <code>/usr/lib/firefox/distribution/policies.json</code>; on Linux <code>/etc/firefox/policies/policies.json</code> also works). Deploy it with any device-management tool, for example an Intune platform script or Win32 app.</li>
+  <li>Put it in a folder named <code>distribution</code> in the Firefox installation folder (for example <code>C:\Program Files\Mozilla Firefox\distribution\policies.json</code>, <code>/Applications/Firefox.app/Contents/Resources/distribution/policies.json</code>, or <code>/usr/lib/firefox/distribution/policies.json</code>; on Linux <code>/etc/firefox/policies/policies.json</code> also works). Deploy it with any device-management tool. On Windows managed with Intune or Group Policy, use the registry instead (next section).</li>
   <li><code>installation_mode</code> <code>force_installed</code> installs the add-on and stops users removing it; <code>normal_installed</code> installs it but lets users disable it.</li>
   <li>Restart Firefox. <b>Check</b>: <code>about:policies</code> lists the policies, <code>about:addons</code> shows the add-on, and Settings shows 🔒 on the locked options.</li>
 </ol>
-<p>Firefox also reads the same policies from Windows Group Policy / Intune (with Mozilla's ADMX templates) and from macOS configuration profiles; see Mozilla's <a href="https://mozilla.github.io/policy-templates/" target="_blank" rel="noopener noreferrer">policy templates</a>. <code>policies.json</code> is the simplest way to deliver the extension's own settings on every platform.</p>
+<h3 id="deploy-intune">3. Windows with Microsoft Intune or Group Policy</h3>
+<p>On Windows, Firefox also reads policy from the registry (<code>HKLM\SOFTWARE\Policies\Mozilla\Firefox</code>), which is where Group Policy and Intune write it. If both the registry and <code>policies.json</code> set the same top-level policy (for example <code>ExtensionSettings</code> or <code>3rdparty</code>), <b>the registry wins</b> and that part of <code>policies.json</code> is ignored, so deliver this add-on's policy one way only.</p>
+<ol class="simple-list">
+  <li>In this add-on, choose <b>Settings → Backup &amp; enterprise policy → Copy Intune script</b>. It produces a PowerShell script that force-installs the add-on and writes your current settings. Replace <code>ADDON-SLUG</code> and delete the settings you don't want to lock (they are on the <code>$Settings</code> line).</li>
+  <li>In the Microsoft Intune admin center, go to <b>Devices → Scripts and remediations → Platform scripts → Add → Windows 10 and later</b>, upload the .ps1 file, and set <b>Run this script using the logged on credentials: No</b> (runs as system) and <b>Run script in 64 bit PowerShell host: Yes</b>.</li>
+  <li><b>Assign</b> it to a pilot group, then to everyone. To change settings later, upload a new version of the script (or use a <b>Remediation</b> that re-applies it on a schedule).</li>
+  <li><b>Check</b> on a device after restarting Firefox: <code>about:policies</code> lists <code>ExtensionSettings</code> and <code>3rdparty</code> without errors, and Settings shows 🔒 on locked options.</li>
+</ol>
+<p>The script writes:</p>
+<div class="deploy-code">HKLM\SOFTWARE\Policies\Mozilla\Firefox\ExtensionSettings\link-unshortener@gmail-link-scanner
+    installation_mode   REG_SZ   force_installed
+    install_url         REG_SZ   https://addons.mozilla.org/firefox/downloads/latest/&lt;slug&gt;/latest.xpi
+HKLM\SOFTWARE\Policies\Mozilla\Firefox\3rdparty\Extensions
+    link-unshortener@gmail-link-scanner   REG_SZ   {"managedRetentionDays":14,"managedBlocklist":["tracking.example.com"]}</div>
+<ul class="simple-list">
+  <li><b>Settings as one JSON value:</b> Firefox parses the add-on's value as JSON, so every setting keeps its type. You can write the same values with <b>Group Policy Preferences → Registry</b> on domain-joined computers.</li>
+  <li><b>Installing with Mozilla's ADMX templates instead:</b> if you already manage Firefox with Mozilla's ADMX templates (imported in Intune under <b>Devices → Configuration → Import ADMX</b>, or in Group Policy), you can install the add-on with their <b>Extensions → Extension Management</b> setting and keep only the <code>3rdparty</code> part of the script; the templates have no setting for an add-on's own policy.</li>
+</ul>
 
-<h3 id="deploy-webrisk">3. Threat checks with Google Web Risk</h3>
+<h3 id="deploy-macos">4. macOS</h3>
+<p>On macOS, deliver the same policy as a configuration profile (for example with Intune or Jamf) for the <code>org.mozilla.firefox</code> domain, with <code>EnterprisePoliciesEnabled</code> set to true and the <code>ExtensionSettings</code> and <code>3rdparty</code> dictionaries from <code>policies.json</code>; or place <code>policies.json</code> as above (an app update can replace it, so a profile is more reliable). See Mozilla's <a href="https://mozilla.github.io/policy-templates/" target="_blank" rel="noopener noreferrer">policy templates</a>.</p>
+
+<h3 id="deploy-webrisk">5. Threat checks with Google Web Risk</h3>
 <p>Google's Web Risk API checks full addresses against Google's lists of phishing and malware pages (the data behind Google Safe Browsing). It needs a Google Cloud project with billing enabled; check Google's current Web Risk pricing first. <b>Note:</b> unlike the built-in checks, which only send site names, Web Risk receives the full link (one-time links are never sent).</p>
 <ol class="simple-list">
   <li>In the Google Cloud console, sign in with your Google account and create or choose a project.</li>
@@ -859,7 +881,7 @@ Flag field:      (leave empty: Google's replies are recognized automatically)</d
 </ol>
 <p>Google Safe Browsing (v4, <code>threatMatches:find</code>) is also understood, but Google limits it to non-commercial use; organizations should use Web Risk. <b>Short links:</b> Google has no API to expand them; use your own lookup service (<a href="#" data-help-link="limitations">Limitations</a>).</p>
 
-<h3 id="deploy-settings">4. What can be managed</h3>
+<h3 id="deploy-settings">6. What can be managed</h3>
 <p>Every setting, both site lists (allowed and blocked) and both custom services can be set and locked. Anything you don't set stays under the user's control, and <b>Reset my settings to defaults</b> never changes managed settings.</p>
 <ul class="simple-list">
   <li><b>Settings and lists:</b> all keys are in the <a href="#" data-help-link="architecture" data-help-anchor="arch-settings">settings reference</a> (generated from the code) and in <code>ADMIN-GUIDE.md</code> in the extension package.</li>
@@ -869,7 +891,7 @@ Flag field:      (leave empty: Google's replies are recognized automatically)</d
   <li><b>Changes</b> to policy apply without reinstalling, from the next message opened.</li>
 </ul>
 
-<h3 id="deploy-admin-only">5. Administrator-only policies</h3>
+<h3 id="deploy-admin-only">7. Administrator-only policies</h3>
 <p>These exist only in the policy; there's no setting for them here, and they aren't in backups or in <b>Copy policies.json</b>. Full details and examples are in <code>ADMIN-GUIDE.md</code>.</p>
 <ul class="simple-list">
   <li><code>managedHidePopupSettingsButton</code> and <code>managedHideRecentActivity</code> remove the <b>Open Settings</b> button and the <b>Recent activity</b> list from the toolbar popup. Settings stays reachable from <code>about:addons</code> → the add-on → <b>Options</b>.</li>
@@ -884,7 +906,7 @@ Flag field:      (leave empty: Google's replies are recognized automatically)</d
 
 <p><b>Best practice:</b> use both identifiers: the vendor's link domains (every webmail) and a header rule with a secret value (Gmail). List only domains the vendor owns, and keep the list current. <code>ADMIN-GUIDE.md</code> has a best-practice checklist and step-by-step setups for KnowBe4 and Wizer, with links to their documentation.</p>
 
-<h3 id="deploy-tips">6. Tips</h3>
+<h3 id="deploy-tips">8. Tips</h3>
 <ul class="simple-list">
   <li><b>Lock only what matters.</b> Settings you leave out of the policy keep their defaults and remain adjustable by users.</li>
   <li><b>API keys</b> for your own resolver or unshortener can be delivered by policy (<code>managedDohHeaders</code>, <code>managedUnshortenerHeaders</code>); users see them masked and they are never included in backups.</li>
@@ -945,7 +967,7 @@ Flag field:      (leave empty: Google's replies are recognized automatically)</d
 <h4>For organizations</h4>
 <ul class="simple-list">
   <li>Every setting, list and custom service can be set and locked by Firefox enterprise policy (policies.json, Group Policy / Intune, macOS profiles); managed settings show 🔒 and are never changed by a reset.</li>
-  <li>One-click export of a ready-to-deploy <code>policies.json</code>.</li>
+  <li>One-click export of a ready-to-deploy <code>policies.json</code> or a PowerShell script for Microsoft Intune / Group Policy.</li>
   <li>Your own short-link and threat-check services, with API keys hidden from users.</li>
 </ul>
 <h4>Using it</h4>

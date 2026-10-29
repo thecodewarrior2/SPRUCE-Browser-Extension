@@ -286,30 +286,72 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Produces the JSON an administrator pastes into Admin console > Policy for extensions.
-    // A complete Firefox policies.json: install the add-on and lock the current settings
+    // The policy for the current settings: install the add-on and lock every setting and both lists
     // (policies → 3rdparty → Extensions → add-on ID, read by the extension as storage.managed).
-    document.getElementById('copyPolicyJsonBtn').addEventListener('click', async () => {
+    const INSTALL_URL = 'https://addons.mozilla.org/firefox/downloads/latest/ADDON-SLUG/latest.xpi';
+    async function currentPolicySettings() {
         const cfg = await loadEffectiveSettings();
         const settings = {};
         SETTING_DEFS.forEach(d => { settings[d.managedKey] = cfg.values[d.key]; });
         const local = await new Promise(r => chrome.storage.local.get({ customAllowlist: [], customBlocklist: [] }, r));
         settings.managedAllowlist = normalizeDomainList(local.customAllowlist);
         settings.managedBlocklist = normalizeDomainList(local.customBlocklist);
+        return settings;
+    }
+
+    function buildPoliciesJson(settings) {
         const id = chrome.runtime.id;
-        const policies = { policies: {
-            ExtensionSettings: { [id]: { installation_mode: 'force_installed', install_url: 'https://addons.mozilla.org/firefox/downloads/latest/ADDON-SLUG/latest.xpi' } },
+        return JSON.stringify({ policies: {
+            ExtensionSettings: { [id]: { installation_mode: 'force_installed', install_url: INSTALL_URL } },
             '3rdparty': { Extensions: { [id]: settings } }
-        } };
-        const out = document.getElementById('copyPolicyResult');
-        try {
-            await navigator.clipboard.writeText(JSON.stringify(policies, null, 2));
-            out.textContent = 'Copied. Replace ADDON-SLUG with the add-on\'s address on addons.mozilla.org, and delete any settings you do not want to lock.';
-        } catch (e) {
-            out.style.color = 'var(--danger-text)';
-            out.textContent = 'Copy failed.';
-            reportToLog('warning', 'Options page', `Copying policies.json to the clipboard failed: ${e.message || e}`);
-        }
-    });
+        } }, null, 2);
+    }
+
+    // PowerShell for Intune (or any Windows management tool) that writes the same policy to the registry
+    // Firefox reads (HKLM\SOFTWARE\Policies\Mozilla\Firefox). The add-on's settings go in as one JSON
+    // string, which Firefox parses, so every value keeps its type. Keys are only created when missing:
+    // New-Item -Force on an existing key would wipe other add-ons' values under 3rdparty\Extensions.
+    function buildIntuneScript(settings) {
+        const q = (v) => `'${String(v).replace(/'/g, "''")}'`;
+        return [
+            '# Gmail Link Unshortener — Firefox policy for Windows (Microsoft Intune, Group Policy or any management tool).',
+            `# Generated ${new Date().toISOString().slice(0, 10)} from the Options page (version ${chrome.runtime.getManifest().version}).`,
+            '# Intune: Devices → Scripts and remediations → Platform scripts → Add (Windows 10 and later);',
+            '# run as system (logged on credentials: No) in 64-bit PowerShell. Check the result at about:policies.',
+            '#',
+            "# IMPORTANT: replace ADDON-SLUG with the add-on's address on addons.mozilla.org (or set $InstallUrl to",
+            '# your own signed .xpi). Delete any settings in $Settings you do not want to lock.',
+            `$AddonId = ${q(chrome.runtime.id)}`,
+            `$InstallUrl = ${q(INSTALL_URL)}`,
+            `$Settings = ${q(JSON.stringify(settings))}`,
+            '',
+            "$Firefox = 'HKLM:\\SOFTWARE\\Policies\\Mozilla\\Firefox'",
+            '$Install = "$Firefox\\ExtensionSettings\\$AddonId"',
+            'if (-not (Test-Path $Install)) { New-Item -Path $Install -Force | Out-Null }',
+            "New-ItemProperty -Path $Install -Name 'installation_mode' -PropertyType String -Value 'force_installed' -Force | Out-Null",
+            "New-ItemProperty -Path $Install -Name 'install_url' -PropertyType String -Value $InstallUrl -Force | Out-Null",
+            '$Extensions = "$Firefox\\3rdparty\\Extensions"',
+            'if (-not (Test-Path $Extensions)) { New-Item -Path $Extensions -Force | Out-Null }',
+            'New-ItemProperty -Path $Extensions -Name $AddonId -PropertyType String -Value $Settings -Force | Out-Null',
+            ''
+        ].join('\r\n');
+    }
+
+    for (const [btn, result, build, done] of [
+        ['copyPolicyJsonBtn', 'copyPolicyResult', buildPoliciesJson, 'Copied. Replace ADDON-SLUG with the add-on\'s address on addons.mozilla.org, and delete any settings you do not want to lock.'],
+        ['copyIntuneScriptBtn', 'copyIntuneResult', buildIntuneScript, 'Copied. Paste it into a .ps1 file and replace ADDON-SLUG before deploying.']
+    ]) {
+        document.getElementById(btn).addEventListener('click', async () => {
+            const out = document.getElementById(result);
+            try {
+                await navigator.clipboard.writeText(build(await currentPolicySettings()));
+                out.style.color = ''; out.textContent = done;
+            } catch (e) {
+                out.style.color = 'var(--danger-text)'; out.textContent = 'Copy failed.';
+                reportToLog('warning', 'Options page', `Copying the policy (${btn}) failed: ${e.message || e}`);
+            }
+        });
+    }
 
     // Endpoint address fields have a Save button (it asks the browser for access to the host).
     const ENDPOINT_FIELDS = [

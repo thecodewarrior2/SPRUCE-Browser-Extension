@@ -13,7 +13,8 @@ Firefox passes an add-on's policy from `policies` → `3rdparty` → `Extensions
    `C:\Program Files\Mozilla Firefox\distribution\policies.json`,
    `/Applications/Firefox.app/Contents/Resources/distribution/policies.json` or
    `/usr/lib/firefox/distribution/policies.json`; on Linux `/etc/firefox/policies/policies.json` also
-   works), with Intune, Group Policy file copy or any device-management tool.
+   works), with any device-management tool. On Windows managed with Intune or Group Policy, use the
+   registry instead (see below).
 3. Restart Firefox and check `about:policies`.
 
 ```json
@@ -44,8 +45,43 @@ use its address instead. The examples below show only the add-on's own settings 
 the add-on ID). `policy-example.json` lists every key with its default value. Users can also generate a
 starting point from **Options → Settings → Backup & enterprise policy → "Copy policies.json"**.
 
-Firefox also reads policies from Windows Group Policy / Intune (Mozilla's ADMX templates) and macOS
-configuration profiles; see <https://mozilla.github.io/policy-templates/>.
+## Windows: Microsoft Intune and Group Policy
+
+On Windows, Firefox also reads policy from the registry (`HKLM\SOFTWARE\Policies\Mozilla\Firefox`),
+where Intune and Group Policy write it. When the registry and `policies.json` both set the same
+top-level policy (`ExtensionSettings` or `3rdparty`), **the registry wins** and that part of
+`policies.json` is ignored, so deliver this add-on's policy one way only.
+
+1. **Options → Settings → Backup & enterprise policy → "Copy Intune script"** produces a PowerShell
+   script that force-installs the add-on and writes the current settings. Replace `ADDON-SLUG` and
+   delete the settings you don't want to lock from the `$Settings` line.
+2. Intune admin center → **Devices → Scripts and remediations → Platform scripts → Add → Windows 10
+   and later**: upload the .ps1, set *Run this script using the logged on credentials* to **No** and
+   *Run script in 64 bit PowerShell host* to **Yes**, and assign it to a pilot group first.
+3. Restart Firefox on a test device and check `about:policies`.
+
+The script writes:
+
+```
+HKLM\SOFTWARE\Policies\Mozilla\Firefox\ExtensionSettings\link-unshortener@gmail-link-scanner
+    installation_mode   REG_SZ   force_installed
+    install_url         REG_SZ   https://addons.mozilla.org/firefox/downloads/latest/<slug>/latest.xpi
+HKLM\SOFTWARE\Policies\Mozilla\Firefox\3rdparty\Extensions
+    link-unshortener@gmail-link-scanner   REG_SZ   {"managedRetentionDays":14,"managedBlocklist":["internal.example.com"]}
+```
+
+Firefox parses the add-on's value as JSON, so every setting keeps its type. On domain-joined computers
+the same values can be written with **Group Policy Preferences → Registry**. If you already manage
+Firefox with Mozilla's ADMX templates (Intune: **Devices → Configuration → Import ADMX**), you can
+install the add-on with their **Extensions → Extension Management** setting and keep only the
+`3rdparty` part of the script; the templates have no setting for an add-on's own policy.
+
+## macOS
+
+Deliver the same policy as a configuration profile for the `org.mozilla.firefox` domain (Intune, Jamf
+or similar) with `EnterprisePoliciesEnabled` set to true and the `ExtensionSettings` and `3rdparty`
+dictionaries from `policies.json`. A `policies.json` inside the app bundle works too, but an app
+update can replace it. See <https://mozilla.github.io/policy-templates/>.
 
 ## Keys
 | Key | Type | Default | Purpose |

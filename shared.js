@@ -76,7 +76,10 @@ const SETTING_DEFS = [
 const SETTING_BY_KEY = Object.fromEntries(SETTING_DEFS.map(d => [d.key, d]));
 
 function coerceSetting(def, value) {
-    if (def.type === 'boolean') return typeof value === 'boolean' ? value : undefined;
+    if (def.type === 'boolean') {
+        if (typeof value === 'boolean') return value;
+        return value === 1 || value === 0 ? value === 1 : undefined;   // a Windows registry DWORD
+    }
     if (def.type === 'string') return typeof value === 'string' ? value.trim() : undefined;
     if (def.type === 'enum') {
         if (typeof value !== 'string') return undefined;

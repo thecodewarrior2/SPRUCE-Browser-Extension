@@ -57,8 +57,9 @@ attached to the same add-on on every computer.
 
 ## For administrators
 
-Settings can be forced with Firefox enterprise policy (`policies.json`, Group Policy / Intune or macOS
-profiles). See [ADMIN-GUIDE.md](ADMIN-GUIDE.md); [`policy-example.json`](policy-example.json) is a
+Settings can be forced with Firefox enterprise policy: `policies.json` on any platform, the Windows
+registry with Microsoft Intune or Group Policy (Settings → **Copy Intune script** generates the
+PowerShell), or a macOS configuration profile. See [ADMIN-GUIDE.md](ADMIN-GUIDE.md); [`policy-example.json`](policy-example.json) is a
 complete `policies.json` with every key.
 
 Some policies exist for administrators only, with no setting in the extension:
