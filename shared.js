@@ -262,6 +262,52 @@ function hostMatches(hostname, domain) {
     return h === d || h.endsWith('.' + d);
 }
 
+// COMPACT LOOKUP LISTS. A large list of strings (a downloaded phishing or shortener list, the
+// remembered Spam moves) kept as one sorted block of text plus an index of where each entry starts,
+// and searched by halving (about 17 steps for 150,000 entries). It takes about a third of the memory
+// of a Set of the same entries and builds in milliseconds. Lists are stored sorted, so building one
+// only checks the order (an unsorted or old copy is sorted then). Works wherever a Set's has() is used.
+function compactSet(entries) {
+    let text = Array.isArray(entries) ? entries.join('\n') : String(entries || '');
+    const index = (t) => {
+        const starts = [];
+        let sorted = true, prev = null;
+        for (let p = 0; p < t.length;) {
+            let e = t.indexOf('\n', p);
+            if (e < 0) e = t.length;
+            if (e > p) {
+                const v = t.slice(p, e);
+                if (prev !== null && v < prev) sorted = false;
+                prev = v;
+                starts.push(p);
+            }
+            p = e + 1;
+        }
+        return { starts, sorted };
+    };
+    let { starts, sorted } = index(text);
+    if (!sorted) {
+        text = [...new Set(text.split('\n').filter(Boolean))].sort().join('\n');
+        starts = index(text).starts;
+    }
+    const at = new Uint32Array(starts);
+    const entryAt = (i) => { const e = text.indexOf('\n', at[i]); return text.slice(at[i], e < 0 ? text.length : e); };
+    return {
+        size: at.length,
+        has(value) {
+            const s = String(value);
+            let lo = 0, hi = at.length - 1;
+            while (lo <= hi) {
+                const mid = (lo + hi) >>> 1, v = entryAt(mid);
+                if (v === s) return true;
+                if (v < s) lo = mid + 1; else hi = mid - 1;
+            }
+            return false;
+        },
+        text: () => text
+    };
+}
+
 function hostInSet(hostname, set) {
     const parts = String(hostname || '').toLowerCase().split('.');
     for (let i = 0; i < parts.length - 1; i++) {

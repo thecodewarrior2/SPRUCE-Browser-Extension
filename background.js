@@ -47,7 +47,7 @@ function cfgSets(cfg) {
             allow: new Set(cfg.allowlist),
             block: new Set(cfg.blocklist),
             managedBlock: new Set(cfg.managedBlocklist),
-            remote: new Set(cfg.remoteShorteners),
+            remote: compactSet(cfg.remoteShorteners),
             trusted: new Set(cfg.trustedSenders)
         };
         derivedSets.set(cfg, sets);
@@ -405,7 +405,7 @@ function combineListState(listState) {
         else allEstablished = false;
     }
     if (!allEstablished) (listState.fallback || []).forEach(d => out.add(d));
-    return Array.from(out);
+    return Array.from(out).sort();                       // sorted: loads as a compact list without sorting
 }
 
 async function loadBundledSnapshot() {
@@ -1117,7 +1117,7 @@ async function lookupShortLink(shortUrl, cfg) {
 // Same safeguards as the shortener lists: size limits, a minimum size, and the previous copy is kept
 // whenever a download fails or looks broken. Major sites are never blocked by these lists.
 // ---------------------------------------------------------------------------
-let feedSets = null;            // Promise of { url: Map, domain: Map }, loaded once and shared; reset when a list changes
+let feedSets = null;            // Promise of { url, domain, address } lookups, loaded once and shared; reset when a list changes
 
 function sanitizeFeed(feed, text) {
     const out = new Set();
@@ -1164,7 +1164,8 @@ async function syncPhishFeeds(force = false) {
             if (text.length > PHISH_FEED_MAX_BYTES) throw new Error(`list too large (${text.length} bytes)`);
             const entries = sanitizeFeed(feed, text);
             if (entries.size < PHISH_FEED_MIN_ENTRIES) throw new Error(`only ${entries.size} entries; keeping the previous copy`);
-            await chrome.storage.local.set({ [`feed_${feed.id}`]: { updated: Date.now(), count: entries.size, entries: [...entries].join('\n') } });
+            // Stored sorted, so it loads as a compact list without sorting (see compactSet).
+            await chrome.storage.local.set({ [`feed_${feed.id}`]: { updated: Date.now(), count: entries.size, entries: [...entries].sort().join('\n') } });
             changed = true;
             logInfo(`${feed.name}: updated (${entries.size.toLocaleString()} entries).`, 'Phishing lists');
         } catch (e) {
@@ -1181,15 +1182,19 @@ function loadFeedSets() {
     return feedSets;                                     // parallel links share one read
 }
 
+// One lookup per kind of entry over that kind's lists: has(entry), get(entry) → the list's name.
+function feedLookup(parts) {
+    const find = (k) => parts.find(p => p.list.has(k));
+    return { size: parts.reduce((n, p) => n + p.list.size, 0), has: (k) => !!find(k), get: (k) => { const p = find(k); return p ? p.name : undefined; } };
+}
 async function readFeedSets() {
     const stored = await storageGet('local', PHISH_FEEDS.map(f => `feed_${f.id}`));
-    const sets = { url: new Map(), domain: new Map(), address: new Map() };     // entry → feed name
+    const parts = { url: [], domain: [], address: [] };
     for (const feed of PHISH_FEEDS) {
         const rec = stored[`feed_${feed.id}`];
-        if (!rec || !rec.entries) continue;
-        for (const e of rec.entries.split('\n')) if (e) sets[feed.kind].set(e, feed.name);
+        if (rec && rec.entries) parts[feed.kind].push({ name: feed.name, list: compactSet(rec.entries) });
     }
-    return sets;
+    return { url: feedLookup(parts.url), domain: feedLookup(parts.domain), address: feedLookup(parts.address) };
 }
 
 // Name of the list that has this URL (or its host) as phishing, else null.
@@ -1306,6 +1311,7 @@ async function countryOfIp(ip) {
 
 // The site icon for a sender's site, as a data: URL, or '' when the site has none. Google's icon
 // service answers 404 (with a generic globe) for sites without an icon: those get no icon at all.
+const SENDER_ICON_MAX_BYTES = 8 * 1024;
 async function senderIcon(site) {
     const s = normalizeDomain(site);
     if (!SENDER_DOMAIN_RE.test(s)) return '';
@@ -1316,18 +1322,29 @@ async function senderIcon(site) {
         try {
             const res = await fetchWithTimeout(`https://www.google.com/s2/favicons?domain=${encodeURIComponent(s)}&sz=32`, { credentials: 'omit', referrerPolicy: 'no-referrer' }, 6000);
             const type = res.headers.get('content-type') || '';
+            // Google answers 404 for a site without an icon: remembered as "none". Any other failure (a
+            // server error, a web filter's block page, an answer that isn't an image) is not remembered,
+            // so a short outage or a filter rule never leaves icons blank for a month.
+            if (res.status === 404) {
+                faviconCache.set(s, { d: '' });
+                logInfo(`Sender icon for ${s}: none (the site has no icon; left blank); remembered for 30 days.`, 'Sender checks');
+                return '';
+            }
+            if (!res.ok || !/^image\//.test(type)) {
+                logWarning(`The icon for ${s} could not be fetched (HTTP ${res.status}${/^image\//.test(type) ? '' : `, ${type.split(';')[0] || 'no type'}`}); left blank for now and asked again later.`, 'Sender checks');
+                return '';
+            }
+            const buf = await res.arrayBuffer();
             let d = '';
-            if (res.ok && /^image\//.test(type)) {
-                const buf = await res.arrayBuffer();
-                if (buf.byteLength > 0 && buf.byteLength < 64 * 1024) {
-                    let bin = '';
-                    const bytes = new Uint8Array(buf);
-                    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
-                    d = `data:${type.split(';')[0]};base64,${btoa(bin)}`;
-                }
+            // At most SENDER_ICON_MAX_BYTES (a 32-pixel icon is normally 1–3 KB); a larger one is left blank.
+            if (buf.byteLength > 0 && buf.byteLength <= SENDER_ICON_MAX_BYTES) {
+                let bin = '';
+                const bytes = new Uint8Array(buf);
+                for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+                d = `data:${type.split(';')[0]};base64,${btoa(bin)}`;
             }
             faviconCache.set(s, { d });
-            logInfo(`Sender icon for ${s}: ${d ? 'found' : 'none (the site has no icon; left blank)'}; remembered for 30 days.`, 'Sender checks');
+            logInfo(`Sender icon for ${s}: ${d ? 'found' : `too large (${Math.round(buf.byteLength / 1024)} KB; left blank)`}; remembered for 30 days.`, 'Sender checks');
             return d;
         } catch (e) {
             logWarning(`The icon for ${s} could not be fetched (${errorText(e)}); left blank for now.`, 'Sender checks');
