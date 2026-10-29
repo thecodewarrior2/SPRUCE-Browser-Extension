@@ -1727,6 +1727,21 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         return true;
     }
 
+    // Phishing-simulation check by link domains: the email's links, unwrapped offline (no network).
+    if (request.action === 'unwrapLinksOffline') {
+        if (!sender || sender.id !== chrome.runtime.id || !Array.isArray(request.urls)) { sendResponse(null); return false; }
+        getConfig().then(async (cfg) => {
+            const ctx = decoderContext(cfg);
+            const out = [];
+            for (const u of request.urls.slice(0, 200)) {
+                if (typeof u !== 'string') continue;
+                try { out.push((await unwrapNestedUrl(u, false, ctx)).unwrappedUrl); } catch (e) { out.push(u); }
+            }
+            sendResponse(out);
+        }).catch(() => sendResponse(null));
+        return true;
+    }
+
     if (request.action === 'syncPhishFeeds') {
         syncPhishFeeds().then(r => sendResponse(r)).catch(() => sendResponse({ failures: 1 }));
         return true;
@@ -1760,7 +1775,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'getSettings') {
         // Only what the Gmail tab uses (the synced shortener list can hold thousands of domains and is
         // needed only here in the background).
-        getConfig().then(cfg => sendResponse({ values: cfg.values, locked: cfg.locked, allowlist: cfg.allowlist, blocklist: cfg.blocklist })).catch((e) => { logError(`Settings could not be loaded: ${errorText(e)}`, 'Background'); sendResponse(null); });
+        getConfig().then(cfg => sendResponse({ values: cfg.values, locked: cfg.locked, allowlist: cfg.allowlist, blocklist: cfg.blocklist, policy: cfg.policy })).catch((e) => { logError(`Settings could not be loaded: ${errorText(e)}`, 'Background'); sendResponse(null); });
         return true;
     }
 

@@ -97,9 +97,61 @@ function inBodies(suffix) {
     const out = [];
     for (const r of scanRoots()) {
         const sel = r.body.split(',').map(x => x.trim() + (suffix ? ' ' + suffix : '')).join(', ');
-        for (const el of r.doc.querySelectorAll(sel)) if (!isEditable(el)) out.push(el);
+        for (const el of r.doc.querySelectorAll(sel)) if (!isEditable(el) && phishSimGate(suffix ? (el.closest(r.body) || el) : el)) out.push(el);
     }
     return out;
+}
+
+// Phishing simulations (administrator policies). While rules exist, an email is checked only after it
+// is known not to be a training email:
+//   - managedPhishSimulationDomains (every webmail): every link goes to the vendor's domains;
+//   - managedPhishSimulationRules (Gmail): the vendor's header (and secret value / sending address).
+// A training email is left completely alone (no lookups that could count as a click, no pixel
+// blocking that would hide "opened", no banners). If the check can't be made, the email is checked as
+// usual.
+let weakRulesLogged = false;
+let refusedDomainsLogged = false;
+function phishSimGate(body) {
+    const rules = SITE.id === 'gmail' ? ((lastPolicy && lastPolicy.phishSimRules) || []) : [];
+    const domains = (lastPolicy && lastPolicy.phishSimDomains) || [];
+    if (!rules.length && !domains.length) return true;
+    const st = body.dataset.unshortenerSim;
+    if (st === 'no') return true;
+    if (st === 'yes' || st === 'pending') return false;
+    const refused = (lastPolicy && lastPolicy.phishSimDomainsRefused) || [];
+    if (!refusedDomainsLogged && refused.length) {
+        refusedDomainsLogged = true;
+        reportEvent('warning', `Phishing simulation domains ignored: ${refused.map(r => `${r.domain} (${r.why})`).join('; ')}. A real phishing email linking only there would otherwise go unchecked; list only domains your training vendor owns.`);
+    }
+    if (!weakRulesLogged && rules.some(r => r.weak)) {
+        weakRulesLogged = true;
+        reportEvent('warning', `Phishing simulation rule${rules.filter(r => r.weak).length > 1 ? 's' : ''} ${rules.filter(r => r.weak).map(r => `“${r.name}”`).join(', ')} match a public header name only; a real phishing email could copy it. Add the vendor's secret header value or its sending addresses (Help for administrators: ADMIN-GUIDE.md).`);
+    }
+    body.dataset.unshortenerSim = 'pending';
+    identifySimulation(body, rules, domains).then(found => guarded('Checking for a phishing simulation', () => {
+        body.dataset.unshortenerSim = found ? 'yes' : 'no';
+        if (found) reportEvent('info', `Phishing simulation email (${found}): left unchecked, as set by your administrator.`);
+        scheduleScan();
+    })).catch(() => { body.dataset.unshortenerSim = 'no'; scheduleScan(); });
+    return false;
+}
+
+// What identifies the email as a training email ("KnowBe4", "links to ssuport.com"), or null.
+async function identifySimulation(body, rules, domains) {
+    if (domains.length) {
+        const hrefs = [...body.querySelectorAll('a[href]')].map(a => a.href).filter(h => /^https?:\/\//i.test(h)).slice(0, 200);
+        if (hrefs.length) {
+            const unwrapped = await new Promise(resolve => safeSend({ action: 'unwrapLinksOffline', urls: hrefs }, resolve));
+            const d = Array.isArray(unwrapped) ? linksAllOnSimulationDomains(unwrapped, domains) : null;
+            if (d) return `links to ${d}`;
+        }
+    }
+    if (rules.length) {
+        const h = await getMessageHeaders(body);
+        const rule = h ? matchPhishSimulation(h.raw, rules) : null;
+        if (rule) return rule.name;
+    }
+    return null;
 }
 function containerOf(el) { return el.closest(SITE.body) || (el.ownerDocument && el.ownerDocument.body) || null; }
 
@@ -226,7 +278,8 @@ const REVEAL_SVG = `<svg width="22" height="22" viewBox="0 0 24 24" style="verti
 // Email tracking link: small blue magnifier, shown when the link is hovered (see content.css).
 const TRACKER_REVEAL_SVG = `<svg width="16" height="16" viewBox="0 0 24 24" style="vertical-align: middle; display: inline-block;"><circle cx="12" cy="12" r="11" fill="#1a73e8" stroke="#ffffff" stroke-width="1.5"/><circle cx="10.5" cy="10.5" r="4.2" fill="none" stroke="#ffffff" stroke-width="2"/><path d="M13.6,13.6 L17.5,17.5" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round"/></svg>`;
 
-let lastSettings = {};   // settings used for the most recent scan (needed when a link is revealed later)
+let lastSettings = {};
+let lastPolicy = {};    // administrator-only policies (phishing simulation rules…)   // settings used for the most recent scan (needed when a link is revealed later)
 
 function findIcon(link) {
     const next = link.nextElementSibling;
@@ -641,6 +694,7 @@ function unshortenLinks() {
             return;
         }
         lastSettings = cfg.values;
+        lastPolicy = cfg.policy || {};
         if (SITE.settingKey && !cfg.values[SITE.settingKey]) return;     // support for this webmail switched off
         guarded('Checking attachments', scanAttachments);
         guarded('Looking for drawn QR codes', scanDrawnQr);
@@ -1197,7 +1251,9 @@ async function readUntilHeadersEnd(response) {
     return text;
 }
 
-function getMessageAuth(el) {
+// The open email's headers from Gmail's "Show original" ({ raw, auth }), read once per email and
+// shared by the sender checks and the phishing-simulation check; null if they can't be read.
+function getMessageHeaders(el) {
     const id = gmailMessageId(el);
     if (!id) return Promise.resolve(null);
     if (messageAuth.has(id)) return messageAuth.get(id);
@@ -1214,16 +1270,21 @@ function getMessageAuth(el) {
                 const pre = doc.querySelector('#raw_message_text, pre.raw_message_text, pre');
                 raw = pre ? pre.textContent : text;
             }
-            const auth = parseAuthResults(raw);
-            if (!auth) throw new Error('no authentication results from Gmail in the original message');
-            return auth;
+            return { raw, auth: parseAuthResults(raw) };
         })
         .catch(e => {
-            if (!authFetchFailureLogged) { authFetchFailureLogged = true; reportEvent('warning', `Sender checks: Gmail's original message could not be read (${e.message}), so senders are treated as not checked.`); }
+            if (!authFetchFailureLogged) { authFetchFailureLogged = true; reportEvent('warning', `Gmail's original message could not be read (${e.message}), so senders are treated as not checked.`); }
             return null;
         });
     messageAuth.set(id, p);
     return p;
+}
+
+function getMessageAuth(el) {
+    return getMessageHeaders(el).then(h => {
+        if (h && !h.auth && !authFetchFailureLogged) { authFetchFailureLogged = true; reportEvent('warning', 'Sender checks: no authentication results from Gmail in the original message, so senders are treated as not checked.'); }
+        return h ? h.auth : null;
+    });
 }
 
 // Links in quoted or forwarded parts were not written by this email's sender.

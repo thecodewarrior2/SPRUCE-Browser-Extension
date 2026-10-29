@@ -256,6 +256,54 @@
         "type": "string",
         "description": "Domain name (e.g., click.marketing.com)"
       }
+    },
+    "managedHidePopupSettingsButton": {
+      "title": "Hide the Settings button in the toolbar popup (administrator only)",
+      "description": "true removes the \"Open Settings\" button from the toolbar popup. There is no matching setting in the extension. Settings can still be opened by typing chrome-extension://<extension ID>/options.html in the address bar, for example by IT staff. Default: false.",
+      "type": "boolean"
+    },
+    "managedHideRecentActivity": {
+      "title": "Hide recent activity in the toolbar popup (administrator only)",
+      "description": "true removes the \"Recent activity\" list and its Clear button from the toolbar popup. There is no matching setting in the extension; activity is still recorded in Settings → Logging. Default: false.",
+      "type": "boolean"
+    },
+    "managedPhishSimulationRules": {
+      "title": "Phishing simulation emails to leave unchecked (administrator only, Gmail)",
+      "description": "Rules that identify your organization's phishing simulation (security awareness training) emails, such as KnowBe4 or Wizer. An email matching a rule is not checked at all: no link is looked up (a lookup could be recorded by the vendor as a click), no tracking pixel is blocked (the vendor's open tracking keeps working) and no warning is shown. A rule matches when the email has the header; if \"value\" is set, the header must contain it; if \"ips\" is set, Gmail must have received the email from one of those addresses. Use a secret value (such as KnowBe4's X-KB4TOKEN) or the vendor's sending addresses: a public header name alone could be copied by a real phishing email. Gmail only. See ADMIN-GUIDE.md.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Label for the application log, e.g. \"KnowBe4\"."
+          },
+          "header": {
+            "type": "string",
+            "description": "Header name the vendor adds, e.g. \"X-PHISHTEST\", \"X-KB4TOKEN\" or \"X-TestPhish\"."
+          },
+          "value": {
+            "type": "string",
+            "description": "Optional: text the header's value must contain (case-insensitive), ideally a secret token from the vendor's console."
+          },
+          "ips": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Optional: the vendor's sending addresses or ranges (IPv4/IPv6, CIDR such as 147.160.167.0/26). Leave out when the vendor delivers by direct injection (KnowBe4 DMI, Wizer DED)."
+          }
+        }
+      }
+    },
+    "managedPhishSimulationDomains": {
+      "title": "Phishing simulation link domains (administrator only, every webmail)",
+      "description": "Domains your phishing-simulation (security training) vendor uses for its links, such as KnowBe4's or Wizer's landing domains. An email is treated as a training email, and left completely unchecked, only if it has links and EVERY link (after unwrapping SafeLinks, Proofpoint and similar rewrites) goes to one of these domains or their subdomains. One link anywhere else and the email is checked as usual, so a phishing email can't hide behind a training link. Works in Gmail and every supported webmail. Can be combined with managedPhishSimulationRules. See ADMIN-GUIDE.md.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "description": "Domain name, e.g. ssuport.com"
+      }
     }
   }
 }

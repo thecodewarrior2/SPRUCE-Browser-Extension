@@ -64,6 +64,16 @@ Settings can be forced with Google Workspace, Microsoft Intune or Group Policy. 
 [ADMIN-GUIDE.md](ADMIN-GUIDE.md) and the schema in [`schema.json`](schema.json);
 [`policy-example.json`](policy-example.json) shows a complete policy.
 
+Some policies exist for administrators only, with no setting in the extension:
+
+- **Phishing simulations:** training emails from KnowBe4, Wizer and others are left completely
+  unchecked, so the extension never records a false click or hides an open. They're recognized by their
+  link domains in every webmail (`managedPhishSimulationDomains`: all links must go to the vendor's
+  domains) or by header in Gmail (`managedPhishSimulationRules`, ideally with a secret value).
+- **A simpler popup** (`managedHidePopupSettingsButton`, `managedHideRecentActivity`): hides the
+  Settings button and recent activity; Settings stays reachable at
+  `chrome-extension://<ID>/options.html`.
+
 ## Repository layout
 
 | Path | Role |

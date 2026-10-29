@@ -125,5 +125,17 @@
     "Value": [
       "click.marketing.example"
     ]
+  },
+  "managedHidePopupSettingsButton": {
+    "Value": false
+  },
+  "managedHideRecentActivity": {
+    "Value": false
+  },
+  "managedPhishSimulationRules": {
+    "Value": []
+  },
+  "managedPhishSimulationDomains": {
+    "Value": []
   }
 }

@@ -167,7 +167,14 @@ async function loadEffectiveSettings() {
         managedBlocklist,
         allowlist: [...new Set([...normalizeDomainList(local.customAllowlist), ...managedAllowlist])],
         blocklist: [...new Set([...normalizeDomainList(local.customBlocklist), ...managedBlocklist])],
-        remoteShorteners: Array.isArray(local.remoteShorteners) ? local.remoteShorteners : []
+        remoteShorteners: Array.isArray(local.remoteShorteners) ? local.remoteShorteners : [],
+        // Administrator-only policies: set by policy alone (no setting in the extension, not in backups).
+        policy: {
+            hideSettingsButton: managed.managedHidePopupSettingsButton === true,
+            hideRecentActivity: managed.managedHideRecentActivity === true,
+            phishSimRules: normalizePhishSimRules(managed.managedPhishSimulationRules),
+            ...splitSimulationDomains(normalizeDomainList(managed.managedPhishSimulationDomains).slice(0, 500))
+        }
     };
 }
 
@@ -1309,4 +1316,144 @@ function findBareDomains(text) {
         out.push(`http://${m[1]}${(m[2] || '').replace(/[.,;:!?)\]]+$/, '')}`);
     }
     return [...new Set(out)].slice(0, 40);
+}
+
+// ---------------------------------------------------------------------------
+// PHISHING SIMULATIONS (administrator policy managedPhishSimulationRules, Gmail)
+// Training emails from KnowBe4, Wizer and similar services are recognized by the header they add
+// (ideally with a secret value) and, optionally, by the vendor's sending servers; such an email is
+// not checked at all, so no lookup can register a "click" with the vendor and nothing is hidden.
+// ---------------------------------------------------------------------------
+const IP_V4_RE = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+function ipToBig(ip) {
+    const s = String(ip || '').trim().toLowerCase().replace(/^\[|\]$/g, '');
+    const v4 = IP_V4_RE.exec(s.replace(/^::ffff:/, ''));
+    if (v4) {
+        const parts = v4.slice(1).map(Number);
+        if (parts.some(p => p > 255)) return null;
+        return { v: 4, n: parts.reduce((a, p) => (a << 8n) + BigInt(p), 0n) };
+    }
+    if (!/^[0-9a-f:]+$/.test(s) || !s.includes(':')) return null;
+    const [head, tail] = s.split('::');
+    if (s.split('::').length > 2) return null;
+    const h = head ? head.split(':') : [], t = tail !== undefined && tail ? tail.split(':') : [];
+    const missing = 8 - h.length - t.length;
+    if (missing < 0 || (tail === undefined && missing !== 0)) return null;
+    const groups = [...h, ...Array(tail === undefined ? 0 : missing).fill('0'), ...t];
+    if (groups.length !== 8 || groups.some(g => !/^[0-9a-f]{1,4}$/.test(g))) return null;
+    return { v: 6, n: groups.reduce((a, g) => (a << 16n) + BigInt(parseInt(g, 16)), 0n) };
+}
+// "147.160.167.0/26", "23.21.109.197", "2a02:2c8:1:400::29" or an IPv6 range.
+function ipInList(ip, list) {
+    const a = ipToBig(ip);
+    if (!a) return false;
+    for (const entry of list || []) {
+        const [addr, bitsText] = String(entry).trim().split('/');
+        const b = ipToBig(addr);
+        if (!b || b.v !== a.v) continue;
+        const width = a.v === 4 ? 32 : 128;
+        const bits = bitsText === undefined ? width : Number(bitsText);
+        if (!Number.isInteger(bits) || bits < 0 || bits > width) continue;
+        const shift = BigInt(width - bits);
+        if ((a.n >> shift) === (b.n >> shift)) return true;
+    }
+    return false;
+}
+
+function normalizePhishSimRules(raw) {
+    if (!Array.isArray(raw)) return [];
+    const out = [];
+    for (const r of raw.slice(0, 20)) {
+        if (!r || typeof r !== 'object') continue;
+        const header = String(r.header || '').trim();
+        if (!/^[A-Za-z0-9-]{1,100}$/.test(header)) continue;
+        const ips = Array.isArray(r.ips) ? r.ips.map(String).filter(x => ipToBig(x.split('/')[0])).slice(0, 100) : [];
+        out.push({
+            name: String(r.name || header).slice(0, 60),
+            header: header.toLowerCase(),
+            value: typeof r.value === 'string' ? r.value.trim().slice(0, 500) : '',
+            ips,
+            weak: !(typeof r.value === 'string' && r.value.trim()) && !ips.length   // public header only: spoofable
+        });
+    }
+    return out;
+}
+
+// The address of the server that handed the email to Gmail: the topmost Received header written by
+// Gmail ("by mx.google.com"); lower ones could have been written by the sender. Null when the email
+// was placed in the mailbox directly (vendors' "direct injection"), which has no such hop.
+function gmailDeliveringIp(headers) {
+    for (const [n, v] of headers) {
+        if (n !== 'received') continue;
+        if (!/\bby mx\.google\.com\b/i.test(v)) continue;
+        const from = v.split(/\bby mx\.google\.com\b/i)[0];
+        const m = /\[([0-9a-f:.]+)\]/i.exec(from);
+        return m ? m[1] : null;
+    }
+    return null;
+}
+
+// The first rule an email matches, or null. A rule matches when the header is present (and, if set,
+// its value contains the rule's value) and, if the rule lists addresses, Gmail received the email
+// from one of them.
+function matchPhishSimulation(raw, rules) {
+    if (!rules || !rules.length) return null;
+    const headers = parseRawHeaders(raw);
+    let ip;
+    for (const rule of rules) {
+        const values = headers.filter(([n]) => n === rule.header).map(([, v]) => v);
+        if (!values.length) continue;
+        if (rule.value && !values.some(v => v.toLowerCase().includes(rule.value.toLowerCase()))) continue;
+        if (rule.ips.length) {
+            if (ip === undefined) ip = gmailDeliveringIp(headers);
+            if (!ip || !ipInList(ip, rule.ips)) continue;
+        }
+        return rule;
+    }
+    return null;
+}
+
+// Training emails recognized by their links (administrator policy managedPhishSimulationDomains, every
+// webmail): an email counts as a simulation only if it has links and EVERY link, after unwrapping
+// security-gateway rewrites, goes to the vendor's domains. One link anywhere else and it's checked as
+// usual, so a phishing email can't hide behind a single training-domain link. Returns the domain that
+// matched, or null.
+function linksAllOnSimulationDomains(urls, domains) {
+    const web = (urls || []).filter(u => /^https?:\/\//i.test(u));
+    if (!web.length || !domains || !domains.length) return null;
+    let first = null;
+    for (const u of web) {
+        const host = urlHostname(u);
+        const d = host && domains.find(x => host === x || host.endsWith('.' + x));
+        if (!d) return null;
+        first = first || d;
+    }
+    return first;
+}
+
+// Domains that must never be training domains: anyone can host pages or links there, so a real
+// phishing email whose links all point to one would otherwise be left unchecked. Such entries in
+// managedPhishSimulationDomains are refused (and logged).
+const SHARED_PLATFORM_SUFFIXES = ['amazonaws.com', 'cloudfront.net', 'windows.net', 'azurewebsites.net', 'azureedge.net',
+    'googleapis.com', 'googleusercontent.com', 'appspot.com', 'web.app', 'firebaseapp.com', 'pages.dev', 'workers.dev', 'r2.dev',
+    'github.io', 'githubusercontent.com', 'gitlab.io', 'netlify.app', 'vercel.app', 'herokuapp.com', 'onrender.com', 'glitch.me',
+    'surge.sh', 'wixsite.com', 'weebly.com', 'godaddysites.com', 'squarespace.com', 'wordpress.com', 'blogspot.com', 'webflow.io',
+    'dropbox.com', 'box.com', 'notion.site', 'canva.site', 'ipfs.io', 'dweb.link', 'mailchimp.com', 'list-manage.com',
+    'sendgrid.net', 'hubspot.com', 'hs-sites.com', 'typeform.com', 'jotform.com', 'surveymonkey.com', 'formstack.com',
+    '000webhostapp.com', 'linktr.ee', 'docusign.net', 'adobe.com'];
+function refusedSimulationDomain(d) {
+    const reg = registrableDomain(d) || d;
+    if (isPersonalMailDomain(d)) return 'a personal email provider';
+    if (brandOfDomain(reg) || brandOfDomain(d)) return 'a well-known company\'s domain, where anyone can host content';
+    if (typeof publicShorteners !== 'undefined' && (publicShorteners.includes(d) || publicShorteners.includes(reg))) return 'a public link shortener';
+    if (SHARED_PLATFORM_SUFFIXES.some(s => d === s || d.endsWith('.' + s))) return 'a shared hosting or sending platform';
+    return null;
+}
+function splitSimulationDomains(list) {
+    const phishSimDomains = [], phishSimDomainsRefused = [];
+    for (const d of list) {
+        const why = refusedSimulationDomain(d);
+        if (why) phishSimDomainsRefused.push({ domain: d, why }); else phishSimDomains.push(d);
+    }
+    return { phishSimDomains, phishSimDomainsRefused };
 }

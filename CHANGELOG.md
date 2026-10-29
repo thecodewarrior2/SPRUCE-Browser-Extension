@@ -1,5 +1,69 @@
 # Changelog
 
+## 5.38 — Best practices for phishing training; shared platforms refused as training domains
+
+- **ADMIN-GUIDE.md: the phishing-training section is rewritten around best practice.**
+  - **Why** training emails need special handling, and a table comparing the two methods (link domains in every webmail vs. header rules in Gmail), including which can be spoofed.
+  - **A best-practice checklist:**
+    - use both identifiers;
+    - make header rules unforgeable with a secret value or sending addresses;
+    - list only vendor-owned root domains;
+    - keep the lists current;
+    - mirror your mail-filter allow-listing;
+    - roll out to a pilot group first;
+    - treat tokens as secrets;
+    - tell users training emails won't show warnings.
+  - **KnowBe4, step by step:**
+    - where to find the phish link domains (Phishing → Domains) and the secret header (PST Header Token `X-KB4TOKEN`, or a custom header);
+    - ready-to-paste policy;
+    - adding hidden new domains to the policy before showing them;
+    - the published US sending addresses for setups without a token;
+    - Direct Message Injection;
+    - links to KnowBe4's documentation.
+  - **Wizer, step by step:**
+    - its landing domains and sending addresses;
+    - its fixed public header `X-TestPhish`, which is why it must be combined with addresses, or left out with Direct Email Delivery (DED);
+    - links to Wizer's documentation.
+  - **Other vendors:** what to take from their allow-listing guides.
+  - **Reference sections** for each policy.
+  - **Verifying and troubleshooting,** with a symptom table, and Intune notes.
+- **Shared platforms are refused as training domains.** Real phishing is hosted on them, so an email linking only there must never go unchecked. Refused entries are ignored, with a warning in the log naming each one and why:
+  - well-known companies' domains (`docs.google.com`, `sharepoint.com`…);
+  - public link shorteners (`bit.ly`…);
+  - personal email providers;
+  - shared hosting or sending platforms (`*.amazonaws.com`, `*.github.io`, `*.web.app`, Mailchimp, SendGrid…).
+- Help → Deploying in organizations summarizes the best practice and the refusal.
+
+## 5.37 — Training emails recognized in every webmail, by link domains
+
+- **New administrator policy `managedPhishSimulationDomains`** (schema only; no setting in the extension). It lists the link domains your phishing-simulation vendor uses, which the vendors publish for allow-listing.
+  - An email whose links all go to those domains, or their subdomains, is left completely unchecked: no lookups, no pixel blocking, no checks, no banner. It's logged as “Phishing simulation email (links to ssuport.com): left unchecked…”.
+  - It works in Gmail, Outlook on the web and every other supported webmail; the header rules from 5.36 need Gmail.
+  - **Safety:** one link anywhere else and the email is checked as usual, so a phishing email can't hide behind a training link. A phisher also can't host pages on the vendor's domains, which makes this safer than a public header name.
+  - Links rewritten by security gateways (SafeLinks, Proofpoint, Mimecast…) are unwrapped offline first, and look-alike or suffix tricks (“ssuport.com.evil.example”) don't match.
+- **Combined with the header rules:** an email matching either policy is left unchecked. With domain rules alone, no message headers are read.
+- **Tested with a simulated training campaign** in Gmail and Outlook:
+  - two training emails (SafeLinks- and Proofpoint-wrapped, with an open-tracking pixel) were left byte-for-byte untouched;
+  - a copycat phishing email containing one training link was checked, and its fake “paypal.com” link marked red;
+  - an ordinary email was checked as usual.
+- **Documented** in ADMIN-GUIDE.md (new comparison table and section), schema.json, policy-example.json, the README, and Help → Deploying in organizations and Limitations.
+
+## 5.36 — Administrator policies: phishing simulations, a simpler popup
+
+Both features exist only in the policy (schema), with no setting in the extension, as requested. They're documented in ADMIN-GUIDE.md (new section “Administrator-only policies”), schema.json, policy-example.json, the README, and Help → Deploying in organizations and Limitations.
+
+- **Phishing simulation emails are left unchecked (Gmail),** with policy `managedPhishSimulationRules`.
+  - Training emails from KnowBe4, Wizer and similar services are recognized by the header the vendor adds (KnowBe4 `X-PHISHTEST` or a token in `X-KB4TOKEN`, Wizer `X-TestPhish`). A rule can also require a secret text in that header, and/or delivery by Gmail from the vendor's sending addresses (IPv4/IPv6 ranges).
+  - A matching email is left completely untouched: no link is looked up (the vendor could record a lookup as a click), no tracking pixel is blocked (its open tracking keeps working), and no QR code, attachment or sender check runs. No warning is shown. Each one is logged.
+  - **Security:** default headers are public, so real phishing could copy them. A rule with neither a secret value nor addresses is still honored, but logged as a warning. Only the delivery hop written by Gmail's own server counts as the sending address; forged lower lines are ignored.
+  - **Direct injection** (KnowBe4 DMI, Wizer DED) has no sending server, so the guide recommends a secret header value for it.
+  - While rules are set, an email is checked once its headers are read. If they can't be read, it's checked as usual. The headers are read once per email, shared with the sender checks.
+- **A simpler popup.**
+  - `managedHidePopupSettingsButton` removes “Open Settings” from the toolbar popup.
+  - `managedHideRecentActivity` removes the Recent activity list. Activity is still recorded in Settings → Logging.
+  - Settings stays reachable at `chrome-extension://<ID>/options.html`.
+- These policies aren't part of user backups, and **Copy as policy JSON** doesn't produce them.
+
 ## 5.35 — Merged the repository's offline changes
 
 The GitHub repository (based on 5.32) had documentation and packaging changes; the code there was unchanged from 5.32, so all 5.33 and 5.34 fixes are kept.

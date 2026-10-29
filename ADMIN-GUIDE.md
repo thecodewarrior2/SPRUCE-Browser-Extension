@@ -28,6 +28,10 @@ Anything you do **not** set stays under the user's control (all features are on 
 | managedEnablePhishingFeeds | boolean | true | Download the OpenPhish community feed and Phishing Army (CC BY-NC 4.0) lists (at most once a day) and match links on the device |
 | managedDnsControlD / managedDnsDns4eu | boolean | true / false | Additional free security resolvers (Control D malware; DNS4EU Protective, EU) |
 | managedEnableSenderChecks | boolean | true | Gmail: read Gmail's sender verification when needed; trust company-only links (c.gle…) only in mail verified as from that company directly to the user; warn about brand impersonation |
+| managedHidePopupSettingsButton | boolean | false | Administrator only (no setting in the extension): remove "Open Settings" from the toolbar popup; Settings stays reachable at chrome-extension://<ID>/options.html |
+| managedHideRecentActivity | boolean | false | Administrator only: remove "Recent activity" from the toolbar popup |
+| managedPhishSimulationDomains | array of strings | [] | Administrator only, every webmail: training-vendor link domains; an email whose links ALL go there is left unchecked |
+| managedPhishSimulationRules | array of objects | [] | Administrator only, Gmail: phishing-simulation emails to leave unchecked (see "Administrator-only policies") |
 | managedEnableSendCheck | boolean | true | Gmail: check the links in an email when Send is pressed, and list problems (typos, unreachable or non-existent sites, look-alike, phishing and malware sites) before it goes |
 | managedEnableQrScanning | boolean | true | Decode QR codes in email images on the device and check their destinations |
 | managedEnableAttachmentScanning | boolean | true | Check attachments on the device (≤ 10 MB): QR codes in images/PDFs, scripts in SVG/HTML, links in calendar invites, encrypted archives, disguised file names |
@@ -83,6 +87,207 @@ The extension's **Help → Deploying in organizations** section has step-by-step
 - **Chrome on Windows with Intune:** Settings catalog → Google Chrome → Extensions → force-install list (import Google's ADMX templates if needed). The same registry script covers its settings.
 
 Verify at `chrome://policy` / `edge://policy`. Menu names in admin consoles change over time, so expect small wording differences.
+
+## Administrator-only policies
+
+These keys exist only in the policy. The extension has no setting for them, users can't see or change
+them, and they're not included in backups. **Copy as policy JSON** doesn't produce them either, so add
+them by hand.
+
+### Hide the Settings button and recent activity
+
+```json
+{
+  "managedHidePopupSettingsButton": { "Value": true },
+  "managedHideRecentActivity":      { "Value": true }
+}
+```
+
+- `managedHidePopupSettingsButton` removes **Open Settings** from the toolbar popup.
+- `managedHideRecentActivity` removes the **Recent activity** list and its **Clear activity** button from
+  the popup. Activity is still recorded and visible in Settings → Logging.
+- **Settings stay reachable** for IT staff and anyone who knows the address: type
+  `chrome-extension://nnbeoijlicodfplamcelmdlkjggddfla/options.html` in the address bar (Edge: the same
+  address with the extension's Edge ID). Hiding the button is a convenience, not a lock: to stop users
+  changing a setting, set that setting by policy.
+
+### Phishing simulation (training) emails
+
+**Why this matters.** Security-awareness services (KnowBe4, Wizer and others) send simulated phishing
+emails and record who opens them, clicks their links or reports them. To this extension they look like
+real phishing, so without configuration it would:
+
+- **warn users,** which spoils the test;
+- **block the vendor's open-tracking pixel,** so "opened" isn't recorded;
+- **possibly cause a false "click":** reading mail never visits a link's destination, but a short link
+  can be looked up through a lookup service, and a user can click the 🔍 reveal.
+
+Emails you identify as training are **left completely untouched**: no link is looked up or marked, no
+pixel is blocked, no QR code, attachment or sender check runs, and no banner is shown. Each one is noted
+in Settings → Logging (*"Phishing simulation email (KnowBe4): left unchecked, as set by your
+administrator"*).
+
+Two policies identify training emails. Use one or both; an email matching **either** is left unchecked.
+
+| Policy | Identifies training emails by | Works in | Spoofable? |
+|---|---|---|---|
+| `managedPhishSimulationDomains` | **all** of the email's links going to the vendor's own domains | every supported webmail | No: a phisher can't host pages on the vendor's domains |
+| `managedPhishSimulationRules` | a header the vendor adds, plus a **secret value** in it and/or the vendor's **sending addresses** | Gmail | Only if you rely on a public header name alone |
+
+#### Best practices
+
+1. **Use both identifiers.** Allow the vendor's **link domains** (every webmail) *and* add a **header
+   rule** (Gmail). Domains cover Outlook, Proton and the rest; the header rule covers training emails
+   without links (attachment tests) and keeps working when the vendor rotates domains.
+2. **Make header rules unforgeable.** Use the vendor's **secret token** or a **custom header and value
+   only you know** (KnowBe4 supports both). If the vendor's header is fixed and public (Wizer's
+   `X-TestPhish`), add its **sending addresses**, unless it delivers by direct injection; then rely on
+   the domains.
+3. **List only domains the vendor owns.** Never list shared platforms: `docs.google.com`,
+   `sharepoint.com`, `bit.ly`, cloud hosting (`*.amazonaws.com`, `*.github.io`, `*.web.app`), personal
+   email domains. Real phishing is hosted there; an email linking only there would go unchecked. The
+   extension refuses such entries and logs a warning, but don't rely on that.
+4. **Use root domains** (`phish.example`, not `www.phish.example`): subdomains are included
+   automatically.
+5. **Keep the lists current.** Vendors add domains. Review the list before each new campaign or
+   template, and when the vendor announces new domains. Until a new domain is listed, its emails are
+   simply checked as usual (the safe outcome).
+6. **Mirror your mail-filter allow-listing.** The values you put in Google Workspace's content
+   compliance rule, inbound gateway or Microsoft 365 Advanced Delivery policy (header, addresses,
+   simulation URLs) are the same ones this extension needs.
+7. **Roll out in stages.** Apply the policy to a pilot organizational unit, send a test campaign to it,
+   check the log, then widen.
+8. **Treat the configuration as sensitive.** Secret header values are visible in the policy to
+   administrators; don't publish them, and regenerate the token in the vendor console if it leaks.
+9. **Tell your users** that training emails won't show the extension's warnings. That's intended:
+   the test measures whether people spot phishing without help.
+
+#### KnowBe4
+
+| You need | Where to find it in KnowBe4 | KnowBe4 documentation |
+|---|---|---|
+| Phish link domains | KSAT console → **Phishing → Domains**, *Root Domain* column (or **Download CSV**) | [Manage Phish Link Domains](https://support.knowbe4.com/hc/en-us/articles/360061705153-Manage-Phish-Link-Domains) |
+| A secret header | KSAT → **Account Settings → Phishing**: *Enable PST Header Token* (adds `X-KB4TOKEN`) or *Add Custom Header* (your own name and value) | [Console Account Settings: Phishing](https://support.knowbe4.com/hc/en-us/articles/12732930359699-KnowBe4-Console-Account-Settings-Phishing) |
+| Default header and sending addresses | *KnowBe4's IP Addresses, Hostnames, and Headers* section | [Whitelisting Guide](https://support.knowbe4.com/hc/en-us/articles/203645138-Whitelisting-Guide) |
+| Domain changes over time | Phish domain and landing domain change notes | [Phish Domain and Landing Domain Release Notes](https://support.knowbe4.com/hc/en-us/articles/115007240248-Phish-Domain-and-Landing-Domain-Release-Notes) |
+
+Related KnowBe4 articles for your mail system:
+[Whitelist by Email Header in Google Workspace](https://support.knowbe4.com/hc/en-us/articles/115004295208-Whitelist-by-Email-Header-in-Google-Workspace),
+[Whitelist by IP Address in Google Workspace](https://support.knowbe4.com/hc/en-us/articles/115002797527-Whitelist-by-IP-Address-in-Google-Workspace),
+[Advanced Delivery Policies in Microsoft Defender](https://support.knowbe4.com/hc/en-us/articles/4404511190803-Advanced-Delivery-Policies-in-Microsoft-Defender).
+
+Steps:
+
+1. In KSAT, turn on **Enable PST Header Token** (or **Add Custom Header**) and copy the token or value.
+2. Copy your **root phish link domains** from **Phishing → Domains**.
+3. Add both to the policy:
+
+```json
+{
+  "managedPhishSimulationDomains": { "Value": ["<root domain 1>", "<root domain 2>", "<…all from Phishing → Domains>"] },
+  "managedPhishSimulationRules":   { "Value": [
+    { "name": "KnowBe4", "header": "X-KB4TOKEN", "value": "<your KSAT token>" }
+  ] }
+}
+```
+
+- **KnowBe4 adds new system phish link domains hidden.** Before you show (un-hide) a new domain in
+  **Phishing → Domains**, add it to `managedPhishSimulationDomains`.
+- **Default header without a token:** `X-PHISHTEST` is public. If you can't use a token, require
+  KnowBe4's sending addresses instead (published in the Whitelisting Guide; in October 2026 the US
+  addresses were `23.21.109.197`, `23.21.109.212` and `147.160.167.0/26`):
+  `{ "name": "KnowBe4", "header": "X-PHISHTEST", "ips": ["23.21.109.197", "23.21.109.212", "147.160.167.0/26"] }`.
+- **Direct Message Injection (DMI)**, which KnowBe4 recommends for Google Workspace, places emails in
+  mailboxes without passing through KnowBe4's mail servers, so `ips` can't match. Use the token header.
+
+#### Wizer
+
+| You need | Wizer documentation |
+|---|---|
+| Phishing (landing page) domains and sending addresses | [Wizer IPs and domains](https://learn.wizer-training.com/knowledge/wizer-ips-and-domains) |
+| The header (`X-TestPhish`) and Google Workspace allow-listing | [Whitelisting for Google Workspace](https://learn.wizer-training.com/knowledge/how-to-whitelist-by-ip-address-in-gsuite) |
+| Direct Email Delivery (DED) for Google Workspace | [How To Set Up DED for Google Workspace](https://learn.wizer-training.com/knowledge/how-to-set-up-ded-for-google-workspace) |
+| The full setup checklist | [Wizer Phishing Simulation Checklist](https://learn.wizer-training.com/knowledge/phishing-simulation-checklist) |
+
+Steps:
+
+1. Copy **all** phishing domains from *Wizer IPs and domains* (they look like ordinary support or
+   login sites, such as `ssuport.com`, `the-verification.com` or `account-protector.com`).
+2. Copy Wizer's sending addresses from the same page, unless you use DED.
+3. Add them to the policy:
+
+```json
+{
+  "managedPhishSimulationDomains": { "Value": ["ssuport.com", "the-verification.com", "account-protector.com", "<…the rest of Wizer's list>"] },
+  "managedPhishSimulationRules":   { "Value": [
+    { "name": "Wizer", "header": "X-TestPhish", "ips": ["<Wizer sending addresses>"] }
+  ] }
+}
+```
+
+- **Wizer's header is fixed and public**, so never use it without `ips`. With **DED**, leave the header
+  rule out and rely on the domains.
+
+#### Other vendors
+
+Look for the vendor's **Google Workspace or Microsoft 365 allow-listing guide**. It names:
+
+- the **header** to allow in a content-compliance rule (use it in `managedPhishSimulationRules`,
+  ideally with a secret value if the vendor offers one);
+- the **sending addresses** for the inbound gateway or email allowlist (`ips`);
+- the **phishing or landing domains** for web filters, or the *simulation URLs* for Microsoft 365
+  Advanced Delivery (`managedPhishSimulationDomains`).
+
+#### Reference: `managedPhishSimulationDomains` (every webmail)
+
+- **The rule:** an email is a training email only if it has links and **every** link goes to one of
+  these domains or their subdomains. Links rewritten by a security gateway (Microsoft SafeLinks,
+  Proofpoint URL Defense, Mimecast, Barracuda…) are unwrapped first, offline, so the real destination
+  counts.
+- **One link anywhere else** and the email is checked as usual, so a phishing email can't hide
+  behind a single training link; its other links are still checked and marked. Look-alikes such as
+  `ssuport.com.evil.example` don't match.
+- **Refused entries:** well-known companies' domains, public link shorteners, personal email
+  providers, and shared hosting or sending platforms are ignored, with a warning in the log.
+- **Not recognized:** emails with no links (attachment tests; use a header rule in Gmail), and
+  simulations that also link to a real site, such as a genuine logo link. Both are checked as usual.
+- Up to 500 domains.
+
+#### Reference: `managedPhishSimulationRules` (Gmail)
+
+| Field | Meaning |
+|---|---|
+| `name` | A label for the log, e.g. `"KnowBe4"`. |
+| `header` | The header the vendor adds (name only, any case). |
+| `value` | Optional: the header's value must contain this text (any case). Use a **secret token**. |
+| `ips` | Optional: Gmail must have received the email from one of these addresses or ranges (IPv4/IPv6, CIDR). Only the hop written by Gmail's own server counts; lower `Received` lines can be forged by a sender. |
+
+All the fields you set must match; up to 20 rules. A rule with a public header name and neither `value`
+nor `ips` is still honored, but logged as a warning, because a real phishing email could copy the header.
+
+**Limits:** Gmail only, because the extension reads the headers from Gmail's *Show original*. While
+header rules are set, each email in Gmail is checked a fraction of a second later than usual, once its
+headers are read. If they can't be read, the email is checked normally: the extension errs toward
+protection.
+
+#### Verify and troubleshoot
+
+1. Confirm the policy arrived: `chrome://policy` (Edge: `edge://policy`) → this extension.
+2. Send a test campaign to yourself (or a pilot group) and open it in each webmail you use.
+3. In Settings → Logging, look for *"Phishing simulation email (…): left unchecked"*. The text in
+   brackets shows what matched: the rule's name, or *links to <domain>*.
+
+| Symptom | Likely cause |
+|---|---|
+| The training email still shows warnings | One of its links isn't on the domain list (a new vendor domain, or a link to a real site), or the header rule's value or addresses don't match. Open the link's hover card to see its real domain. |
+| Warning *"Phishing simulation domains ignored: …"* | A listed domain is a shared platform. Remove it; list only vendor-owned domains. |
+| Warning *"… match a public header name only"* | Add a secret `value` or the vendor's `ips` to that rule. |
+| Works in Gmail but not Outlook | Header rules are Gmail-only; add the vendor's link domains. |
+
+**Intune / registry:** both values are lists. In the registry, write each as a JSON string (REG_SZ),
+for example `["ssuport.com","the-verification.com"]` or
+`[{"name":"KnowBe4","header":"X-KB4TOKEN","value":"…"}]`, and confirm at `chrome://policy` that they
+were read as lists.
 
 ## Resetting settings
 

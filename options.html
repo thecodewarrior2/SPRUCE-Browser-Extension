@@ -789,6 +789,7 @@
 <tr><td>Company short links</td><td>Links like Google's c.gle can't be decoded offline. In Gmail they're trusted only when the email verifiably came from that company directly to you; otherwise, and in other webmail, they're mentioned in the banner at the top of the email (never marked one by one).</td><td>Your own lookup service, which can expand them.</td></tr>
 <tr><td>Threat checks</td><td>The built-in checks judge whole websites by name, not individual pages, so phishing pages on shared hosting (Google Docs, Firebase, Weebly…) aren't detected by them. Each service blocks different sites, and a network that blocks these services leaves links "not verified".</td><td>Your own threat resolver, for example <a href="#" data-help-link="deploy" data-help-anchor="deploy-webrisk">Google Web Risk</a>, which checks full addresses.</td></tr>
 <tr><td>Security-gateway links</td><td>Mimecast, Hornetsecurity, SpamTitan LinkLock, Vade, Intermedia/Proofpoint Essentials and Zix keep the destination on their own servers; it can't be read from the link. The gateway checks it when you click.</td><td>—</td></tr>
+<tr><td>Phishing simulations</td><td>Training emails (KnowBe4, Wizer…) are recognized only when your administrator has set rules for them: by their link domains in every webmail, or by header in Gmail. Otherwise they're checked like any email, so their links may be marked.</td><td>Your administrator: <code>managedPhishSimulationDomains</code>, <code>managedPhishSimulationRules</code>.</td></tr>
 <tr><td>Checking links before sending</td><td>Gmail only. A website that answers with an error page (such as “page not found”) still counts as working: only sites that don't answer at all, or have an invalid certificate, are reported. At the Offline only level just typos and look-alikes are checked. One-time links are never visited.</td><td>—</td></tr>
 <tr><td>Sender checks</td><td>Available in Gmail only. They prove which company's servers sent an email, not that its content is safe: attackers can make company systems send their text, and compromised accounts send genuine mail.</td><td>Stay alert to unexpected requests even from real companies.</td></tr>
 <tr><td>Phishing lists</td><td>Updated once a day, so brand-new phishing sites may not be listed yet.</td><td>—</td></tr>
@@ -886,7 +887,22 @@ Flag field:      (leave empty: Google's replies are recognized automatically)</d
   <li><b>Changes</b> to policy apply without reinstalling, from the next message opened.</li>
 </ul>
 
-<h3 id="deploy-tips">7. Tips</h3>
+<h3 id="deploy-admin-only">7. Administrator-only policies</h3>
+<p>These exist only in the policy; there's no setting for them here, and they aren't in backups or in <b>Copy as policy JSON</b>. Full details and examples are in <code>ADMIN-GUIDE.md</code>.</p>
+<ul class="simple-list">
+  <li><code>managedHidePopupSettingsButton</code> and <code>managedHideRecentActivity</code> remove the <b>Open Settings</b> button and the <b>Recent activity</b> list from the toolbar popup. Settings stays reachable by typing <code>chrome-extension://<span class="ext-id">nnbeoijlicodfplamcelmdlkjggddfla</span>/options.html</code> in the address bar.</li>
+  <li><code>managedPhishSimulationDomains</code> (every webmail) lists your training vendor's link domains. An email whose links <b>all</b> go to those domains (after unwrapping SafeLinks, Proofpoint and similar) is left completely unchecked; one link anywhere else and it's checked as usual, so real phishing can't hide behind a training link. Shared platforms (such as <code>docs.google.com</code>, <code>sharepoint.com</code>, <code>bit.ly</code> or cloud hosting) are refused, with a warning in the log.</li>
+  <li><code>managedPhishSimulationRules</code> (Gmail) lists your phishing-simulation (security training) emails, for example from KnowBe4 or Wizer, by the header the vendor adds, a secret value in it, and/or the vendor's sending addresses. In Gmail, a matching email is left completely unchecked: no link is looked up (which the vendor could record as a click), no tracking pixel is blocked and no warning is shown. Use a secret value or the sending addresses: a public header name alone could be copied by real phishing.</li>
+</ul>
+<div class="deploy-code">"managedPhishSimulationDomains": { "Value": ["ssuport.com", "the-verification.com"] },
+"managedPhishSimulationRules": { "Value": [
+  { "name": "KnowBe4", "header": "X-KB4TOKEN", "value": "YOUR-KSAT-TOKEN" },
+  { "name": "Wizer", "header": "X-TestPhish", "ips": ["&lt;Wizer's sending addresses&gt;"] }
+] }</div>
+
+<p><b>Best practice:</b> use both identifiers: the vendor's link domains (every webmail) and a header rule with a secret value (Gmail). List only domains the vendor owns, and keep the list current. <code>ADMIN-GUIDE.md</code> has a best-practice checklist and step-by-step setups for KnowBe4 and Wizer, with links to their documentation.</p>
+
+<h3 id="deploy-tips">8. Tips</h3>
 <ul class="simple-list">
   <li><b>Lock only what matters.</b> Settings you leave out of the policy keep their defaults and remain adjustable by users.</li>
   <li><b>API keys</b> for your own resolver or unshortener can be delivered by policy (<code>managedDohHeaders</code>, <code>managedUnshortenerHeaders</code>); users see them masked and they are never included in backups.</li>

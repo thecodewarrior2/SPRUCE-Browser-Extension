@@ -59,6 +59,11 @@ function initPopup() {
     // Then fill in data, all in parallel; nothing above waits for it.
     loadActivity();
     loadEffectiveSettings().then((cfg) => {
+        // Administrator policies (no setting in the extension): hide the Settings button and/or the
+        // recent activity. Settings stays reachable at chrome-extension://<id>/options.html.
+        const pol = cfg.policy || {};
+        if (pol.hideSettingsButton) { const b = document.getElementById('openSettingsBtn'); if (b) b.remove(); }
+        if (pol.hideRecentActivity) { const a = document.getElementById('activitySection'); if (a) a.remove(); }
         if (toggle) {
             toggle.checked = !!cfg.values.visualOverridesActive;
             if (cfg.locked.visualOverridesActive) {
