@@ -14,6 +14,12 @@
           "managedEnablePhishingFeeds": true,
           "managedEnableSenderChecks": true,
           "managedEnableSendCheck": true,
+          "managedEnableSenderIdentity": true,
+          "managedEnableSenderCountry": true,
+          "managedEnableSenderDomainCheck": true,
+          "managedEnableSenderAddressCheck": true,
+          "managedEnableAutoSpam": true,
+          "managedEnableSpamNotice": true,
           "managedEnableQrScanning": true,
           "managedEnableAttachmentScanning": true,
           "managedEnableOutlookSupport": true,
@@ -53,6 +59,10 @@
           ],
           "managedBlocklist": [
             "click.marketing.example"
+          ],
+          "managedPhishingSenders": [
+            "billing@paypa1-support.example",
+            "paypa1-support.example"
           ],
           "managedHidePopupSettingsButton": false,
           "managedHideRecentActivity": false,

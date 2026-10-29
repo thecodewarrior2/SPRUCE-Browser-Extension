@@ -291,6 +291,31 @@
             </div>
 
             <div class="card">
+                <h3>✉️ Senders (Gmail)</h3>
+                <p class="card-intro">Who each email is from, at a glance, in your inbox and in opened emails, and automatic protection from known phishing senders. <a href="#" data-help-link="senders">How sender checks work</a></p>
+                <div class="setting-row"><div class="setting-text">Show sender icons and domain labels<div class="setting-desc">Each sender gets its site's icon and a label with its domain, colored by the checks below: ✓ green when checked, amber for caution, ⛔ red when flagged. Point at a label for the details. Icons come from Google's icon service (only the site name is sent); in <em>Offline only</em> a letter is shown instead.</div></div>
+                    <label class="switch"><input type="checkbox" data-setting="enableSenderIdentity"><span class="slider"></span></label></div>
+                <div class="setting-row"><div class="setting-text">Show the sender's country<div class="setting-desc">A flag for the country of the server that sent the email, from Gmail's own delivery record (read emails only; unread ones are never opened to look). Otherwise the country the sender's domain ending names (such as .de), or where its website is hosted. Only the server's address is looked up, at country.is, once a month at most; in <em>Offline only</em> only the domain ending is used.</div></div>
+                    <label class="switch"><input type="checkbox" data-setting="enableSenderCountry"><span class="slider"></span></label></div>
+                <div class="setting-row"><div class="setting-text">Check sender domains for threats<div class="setting-desc">The sender's domain is checked with the same security services as links (only its name, for example <code>example.com</code>) and against the phishing lists. Gmail, Outlook.com and other big providers' domains, and your own organization's, are never judged as a whole.</div></div>
+                    <label class="switch"><input type="checkbox" data-setting="enableSenderDomainCheck"><span class="slider"></span></label></div>
+                <div class="setting-row"><div class="setting-text">Check sender addresses against phishing lists<div class="setting-desc">The address is compared on this device with your organization's list, your own list below, and a community list of scam and phishing senders (<a href="https://github.com/sefinek/Blacklisted-Emails" target="_blank" rel="noopener noreferrer">sefinek/Blacklisted-Emails</a>, downloaded with the phishing lists, at most once a day).</div></div>
+                    <label class="switch"><input type="checkbox" data-setting="enableSenderAddressCheck"><span class="slider"></span></label></div>
+                <div class="setting-row"><div class="setting-text">Move emails from flagged senders to Spam<div class="setting-desc">Only <strong>flagged</strong> senders (on a phishing list, or their domain blocked by a security service), never ones that are unverified, unknown or clean. Gmail's own Report spam is used, only for emails in your inbox, and never while you're typing or have emails selected. If you take an email back out of Spam, it stays where you put it. Your organization's phishing-training emails are never moved.</div></div>
+                    <label class="switch"><input type="checkbox" data-setting="enableAutoSpam"><span class="slider"></span></label></div>
+                <div class="setting-row"><div class="setting-text">Tell me when emails are moved<div class="setting-desc">A short notice at the top of Gmail says how many emails were moved, with a <strong>Review</strong> link to your Spam folder. Moves are also listed in the toolbar popup's recent activity and in Logging.</div></div>
+                    <label class="switch"><input type="checkbox" data-setting="enableSpamNotice"><span class="slider"></span></label></div>
+                <details class="more"><summary>Phishing senders</summary>
+                    <p class="card-intro">Emails from these addresses (<code>name@example.com</code>) or whole domains (<code>example.com</code>, which includes its subdomains) are flagged. Entries from your organization are marked and can't be removed here.</p>
+                    <div class="input-group">
+                        <input type="text" id="phishSenderInput" aria-label="Phishing sender address or domain" placeholder="e.g. billing@paypa1-support.com or paypa1-support.com">
+                        <button id="addPhishSenderBtn">Add</button>
+                    </div>
+                    <table id="phishSenderTable"><thead><tr><th>Address or domain</th><th style="width: 90px;"></th></tr></thead><tbody></tbody></table>
+                </details>
+            </div>
+
+            <div class="card">
                 <h3>👁️ Tracking pixels</h3>
                 <div class="setting-row"><div class="setting-text">Block tracking pixels<div class="setting-desc">Invisible images senders use to see when you open an email. Known open-tracking addresses are blocked at any size; otherwise only tiny or hidden images are, so real pictures (including from email providers' image servers) are never removed. <a href="#" data-help-link="privacy">What this can and can't do</a></div></div>
                     <label class="switch"><input type="checkbox" data-setting="enableTrackingPixelBlocking"><span class="slider"></span></label></div>
@@ -668,6 +693,7 @@
                     <button data-help="overview" class="active">How it works</button>
                     <div class="help-subnav" role="group" aria-label="How it works topics">
                         <button data-help="warnings" class="sub">What the warnings mean</button>
+                        <button data-help="senders" class="sub">Sender icons &amp; Spam</button>
                         <button data-help="privacy" class="sub">Your privacy</button>
                         <button data-help="limitations" class="sub">Limitations</button>
                         <button data-help="permissions" class="sub">Permissions</button>
@@ -690,6 +716,7 @@
   <div class="flow-step"><b>5. Shown</b><span>Safe links point straight to their destination. Dangerous ones are marked in red and ask before opening.</span></div>
 </div>
 <p><strong>When you send an email</strong> (Gmail), the links you wrote are checked before it goes: typos such as “.con” or “http//”, whether each website exists and works, and whether it's a look-alike, phishing or malware site. If something's wrong, you see which links and why, and choose <b>Go back and fix</b> or <b>Send anyway</b>.</p>
+<p><strong>In your Gmail inbox</strong>, every sender gets its site's icon, a country flag and a label with its domain, colored by a check of the sender: its address against phishing-sender lists and its domain against the same security services as links. Emails from a <b>flagged</b> sender are moved to Spam for you, once, with a short notice to review them. See <a href="#" data-help-link="senders">Sender icons &amp; Spam</a>.</p>
 <p>Everything you see is also available in this window: the <strong>Link Inspector</strong> shows each step for any link you paste, and <strong>Logging</strong> holds the application log (every problem and event), the history of checked links and the URL cache. Technical readers will find every detail in the <a href="#" data-help-link="architecture">architecture deep dive</a>.</p>
 </section>
 
@@ -732,9 +759,39 @@
 </table>
 </section>
 
+<section id="help-senders" class="help-section">
+<h2>Sender icons &amp; Spam (Gmail)</h2>
+<p class="lead">See who an email is really from before you open it, and let emails from known phishing senders go straight to Spam. Every part can be switched off in <a href="#" data-goto-tab="settings">Settings → Senders</a>, or set by your organization.</p>
+<h3>What you see</h3>
+<table class="help-table">
+<tr><th style="width: 32%;">You see</th><th>Meaning</th></tr>
+<tr><td>The site's icon before the sender's name</td><td>The icon of the sender's website, so a familiar company is easy to spot and an imitation looks wrong. A letter is shown when there's no icon, or at the <b>Offline only</b> privacy level (nothing is requested then).</td></tr>
+<tr><td>A flag 🇩🇪 next to the icon</td><td>Where the email came from. Point at it to see which: <b>Sent from a server in…</b> (from Gmail's own delivery record; read emails and opened emails only), <b>registered under…</b> (the domain ending, such as .de or .uk), or <b>website hosted in…</b>. Generic endings sold worldwide (.io, .co, .tv…) give no country. On some Windows computers flags appear as two letters (DE).</td></tr>
+<tr><td><span style="background:#e6f4ea;color:#0d652d;border:1px solid #81c995;padding:0 6px;border-radius:4px;">✓ example.com</span></td><td><b>Checked:</b> no phishing list or security service flags this sender. (<b>Trusted</b> also shows green: the domain is on your Always allowed list.)</td></tr>
+<tr><td><span style="background:#f1f3f4;color:#3c4043;border:1px solid #dadce0;padding:0 6px;border-radius:4px;">example.com</span></td><td><b>Not verified</b> (the checks are off, offline or couldn't be reached) or <b>Unknown</b> (the sender's domain doesn't exist, so replies can't reach it). Neither is ever moved to Spam.</td></tr>
+<tr><td><span style="background:#fef7e0;color:#5c3c00;border:1px solid #f9ab00;padding:0 6px;border-radius:4px;">⚠ example.com</span></td><td><b>Caution:</b> the domain is blocked only by a content filter (Cloudflare Family) or by the backup service. Shown, never moved.</td></tr>
+<tr><td><span style="background:#fce8e6;color:#a50e0e;border:1px solid #c5221f;padding:0 6px;border-radius:4px;">⛔ example.com</span></td><td><b>Flagged sender:</b> the address or domain is on a phishing-sender list (your organization's, yours or the community list), its domain is on a phishing list, or a security service blocks its domain as malware or phishing. Point at the label for the reason. Opened, the email also gets a red banner.</td></tr>
+<tr><td>🛡️ “2 emails from flagged senders were moved to Spam.” at the top of Gmail</td><td>The extension moved them. <b>Review</b> opens your Spam folder. The notice goes away by itself after 15 seconds (not while you point at it), or with ×. Moves are also listed in the toolbar popup's recent activity and in Logging.</td></tr>
+</table>
+<h3>When an email is moved to Spam</h3>
+<ul class="simple-list">
+  <li>Only when its sender is <b>flagged</b>. Unverified, unknown, caution and clean senders are never moved.</li>
+  <li>Only from your <b>inbox</b> (including its category tabs), as a list or opened. Never from Spam, Trash, Sent, labels, searches or All mail.</li>
+  <li>Gmail's own <b>Report spam</b> is used, exactly as if you clicked it; if Gmail asks “Report spam and unsubscribe?”, only plain <b>Report spam</b> is chosen (unsubscribing would confirm your address to a phisher). Anything unexpected is cancelled.</li>
+  <li><b>Never while you're busy:</b> not while you're typing, have a menu or dialog open, or have selected emails yourself (they would be reported too). It waits and tries again.</li>
+  <li><b>Once per conversation.</b> If you take an email back out of Spam (<b>Not spam</b>, or <b>Undo</b> right away), the extension remembers it and never moves it again. To stop a sender being flagged, add its domain to <b>Always allowed</b> (your organization's or your own phishing-sender entries still win).</li>
+  <li><b>Never</b> your organization's phishing-training emails (by their simulation domains, or their header rules: an unread training email whose headers can't be checked is left alone), and never emails from your own organization's domain, unless you or your organization listed that exact address (for example a hacked account).</li>
+  <li>Gmail, Outlook.com, Yahoo and other big providers' domains, and big companies' own domains, are never judged as a whole: there, only exact addresses on a list count.</li>
+</ul>
+<h3>Lists of phishing senders</h3>
+<p>Three lists are compared on this device: your organization's (policy <code>managedPhishingSenders</code>), your own (<b>Settings → Senders → Phishing senders</b>), and the community list <a href="https://github.com/sefinek/Blacklisted-Emails" target="_blank" rel="noopener noreferrer">sefinek/Blacklisted-Emails</a> (MIT license), downloaded with the phishing lists at most once a day. From the community list only exact addresses count, never whole domains, and never addresses at big companies' own domains.</p>
+<h3>Privacy</h3>
+<p>Nothing about your emails is sent anywhere. The checks send only: each sender's <b>domain</b> to the threat-check services (as for links), its <b>site name</b> to Google's icon service, and a sending server's <b>IP address</b> to country.is. Emails' headers are read from Gmail itself (your own session), and unread emails are never opened to read them, so nothing can change what Gmail shows as unread. At <b>Offline only</b> none of these requests are made. Details: <a href="#" data-help-link="privacy">Your privacy</a>.</p>
+</section>
+
 <section id="help-privacy" class="help-section">
 <h2>Your privacy</h2>
-<p class="lead">The extension has no account, no analytics and no server of its own. Your email's text, subject, sender, recipients and attachments are never sent anywhere.</p>
+<p class="lead">The extension has no account, no analytics and no server of its own. Your email's text, subject, sender's address, recipients and attachments are never sent anywhere. (In Gmail, the sender's <i>domain</i> can be checked like a link's site name; see below.)</p>
 <h3>Never leaves your browser</h3>
 <ul class="simple-list">
   <li><b>Email content.</b> Only link addresses, link text and image addresses are examined, locally.</li>
@@ -772,6 +829,9 @@
 <tr><td>The toolbar icon is grey</td><td>No email is open in this tab, or protection is switched off. It lights up when you open an email.</td></tr>
 <tr><td>"Update now" says the lists are already up to date</td><td>Third-party lists are downloaded at most once a day, out of respect for the free projects that publish them.</td></tr>
 <tr><td>Nothing happens in Outlook, Yahoo, Zoho, iCloud, Fastmail, GMX or Proton</td><td>Support for these apps is experimental. Check that the app is switched on under Settings → Other webmail, reload the tab, and if links are still not checked please report it with the application log.</td></tr>
+<tr><td>An email you trust was moved to Spam</td><td>Open Spam and click <b>Not spam</b>: it won't be moved again. Point at its sender label to see why it was flagged. To trust the whole domain, add it to <b>Always allowed</b>; if it's on your own phishing-sender list, remove it there.</td></tr>
+<tr><td>Emails from a flagged sender stay in the inbox</td><td>Moves happen only in the inbox, while you aren't typing and have no emails selected, and only for <b>flagged</b> senders (not unverified or caution). Check that <b>Move emails from flagged senders to Spam</b> is on. If Gmail's layout changed and Report spam can't be found, moving stops after three tries and the application log says so; reload Gmail to try again.</td></tr>
+<tr><td>No flag next to a sender</td><td>The country is known only for read emails (from Gmail's delivery record), for domain endings that name a country, or where the sender's website is hosted. At <b>Offline only</b> only the domain ending is used.</td></tr>
 <tr><td>A setting is greyed out with 🔒</td><td>Your organization manages it.</td></tr>
 <tr><td>Your own resolver doesn't work</td><td>Use its <b>Test</b> button; it shows the exact reply. Make sure you clicked <b>Save service</b> (this grants the browser access) and that the API key header is correct.</td></tr>
 <tr><td>Nothing happens in Gmail</td><td>Reload the Gmail tab after installing or updating the extension.</td></tr>
@@ -793,6 +853,7 @@
 <tr><td>Checking links before sending</td><td>Gmail only. A website that answers with an error page (such as “page not found”) still counts as working: only sites that don't answer at all, or have an invalid certificate, are reported. At the Offline only level just typos and look-alikes are checked. One-time links are never visited.</td><td>—</td></tr>
 <tr><td>Sender checks</td><td>Available in Gmail only. They prove which company's servers sent an email, not that its content is safe: attackers can make company systems send their text, and compromised accounts send genuine mail.</td><td>Stay alert to unexpected requests even from real companies.</td></tr>
 <tr><td>Phishing lists</td><td>Updated once a day, so brand-new phishing sites may not be listed yet.</td><td>—</td></tr>
+<tr><td>Sender icons and moving to Spam</td><td>Gmail only, in the web version. Moving uses Gmail's own Report spam button, recognized by its label in English and several other languages or by Gmail's internal action number; if Gmail changes its page, moving stops (and says so in the log) while the icons and warnings keep working. A phishing sender that is on no list and whose domain no security service blocks yet isn't flagged. Report spam also tells Google about the sender, as it does when you click it.</td><td>Your organization's own phishing-sender list (<code>managedPhishingSenders</code>).</td></tr>
 <tr><td>Look-alike domains</td><td>Compared with about 65 commonly impersonated brands.</td><td>Your own blocklist for local brands.</td></tr>
 <tr><td>QR codes and attachments</td><td>Attachments are checked in Gmail only (up to 10 MB; PDFs up to 10 pages). In other webmail, only images the webmail hosts are read. Badly damaged QR codes may not decode.</td><td>—</td></tr>
 <tr><td>Other webmail</td><td>Outlook, Proton, Yahoo, AOL, Zoho, iCloud, Fastmail and GMX support is experimental: their layouts were mapped from public information.</td><td>Report problems with the application log.</td></tr>
@@ -887,6 +948,7 @@ Flag field:      (leave empty: Google's replies are recognized automatically)</d
   <li><b>Settings and lists:</b> all keys are in the <a href="#" data-help-link="architecture" data-help-anchor="arch-settings">settings reference</a> (generated from the code) and in <code>ADMIN-GUIDE.md</code> in the extension package.</li>
   <li><b>Your own services:</b> <code>managedUnshortenerEndpoint</code> and <code>managedDohEndpoint</code> with their method, body and header keys. Headers (API keys) set by policy are masked from users and never included in backups.</li>
   <li><b>Host access for your own services:</b> Firefox can't grant access to a custom service by policy, so the service should send CORS headers, or users approve a one-time prompt.</li>
+  <li><b>Senders (Gmail):</b> sender icons, country flags, sender checks, moving flagged emails to Spam and the notice can each be set and locked (<code>managedEnableSenderIdentity</code>, <code>managedEnableSenderCountry</code>, <code>managedEnableSenderDomainCheck</code>, <code>managedEnableSenderAddressCheck</code>, <code>managedEnableAutoSpam</code>, <code>managedEnableSpamNotice</code>), and <code>managedPhishingSenders</code> lists your organization's known phishing senders (addresses or domains). Training emails matched by <code>managedPhishSimulationDomains</code> or <code>managedPhishSimulationRules</code> are never moved.</li>
   <li><b>Webmail apps:</b> each supported webmail can be switched on or off (<code>managedEnableOutlookSupport</code>, <code>managedEnableYahooSupport</code> and so on).</li>
   <li><b>Changes</b> to policy apply without reinstalling, from the next message opened.</li>
 </ul>
@@ -1159,7 +1221,8 @@ Flag field:      (leave empty: Google's replies are recognized automatically)</d
 <tr><td>Gmail and the supported webmail sites<br><span style="font-size: 11px;">mail.google.com, Outlook, Proton, Yahoo, AOL, Zoho, iCloud, Fastmail, GMX</span></td><td>Read the links, images and attachments of the message you have open, in your browser only.</td></tr>
 <tr><td><code>*.googleusercontent.com</code></td><td>Read email images through Google's image proxy (which Gmail already uses) to look for QR codes. The sender's server is never contacted.</td></tr>
 <tr><td>unshorten.me, Cloudflare, Quad9, Control D, DNS4EU, AdGuard</td><td>Short-link lookups and threat checks (see <a href="#" data-help-anchor="arch-network" data-help-link="architecture">every network request</a>).</td></tr>
-<tr><td>raw.githubusercontent.com, openphish.com, phishing.army</td><td>The shortener and phishing lists, downloaded at most once a day.</td></tr>
+<tr><td>raw.githubusercontent.com, openphish.com, phishing.army</td><td>The shortener, phishing and scam-sender lists, downloaded at most once a day.</td></tr>
+<tr><td><code>api.country.is</code></td><td>The country of a sending server for the sender flag (only its IP address is sent; at most once a month per address).</td></tr>
 <tr><td><code>storage.googleapis.com</code>, <code>firebasestorage.googleapis.com</code></td><td>Only when you click 🔍 on a cloud-storage link: reads that page's code to see where it redirects.</td></tr>
 <tr><td><code>storage</code> and <code>unlimitedStorage</code></td><td>Settings, cache, history, logs and the phishing lists (several MB), kept in this browser.</td></tr>
 <tr><td><code>alarms</code></td><td>The daily list updates and data cleanup.</td></tr>

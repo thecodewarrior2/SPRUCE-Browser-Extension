@@ -1275,7 +1275,9 @@ async function readUntilHeadersEnd(response) {
 // The open email's headers from Gmail's "Show original" ({ raw, auth }), read once per email and
 // shared by the sender checks and the phishing-simulation check; null if they can't be read.
 function getMessageHeaders(el) {
-    const id = gmailMessageId(el);
+    return getMessageHeadersById(gmailMessageId(el));
+}
+function getMessageHeadersById(id) {
     if (!id) return Promise.resolve(null);
     if (messageAuth.has(id)) return messageAuth.get(id);
     if (messageAuth.size >= MESSAGE_AUTH_MAX) messageAuth.delete(messageAuth.keys().next().value);
@@ -1907,6 +1909,533 @@ function scanSenders() {
     }
 }
 
+// ---------------------------------------------------------------------------
+// SENDER IDENTITY AND AUTOMATIC SPAM (Gmail). Every sender in the inbox list and in opened emails gets
+// its site icon, the country flag and a domain label colored by its check (checkSender in
+// background.js). An email whose sender is FLAGGED (never one that is unverified, unknown or clean) is
+// moved to Spam with Gmail's own Report spam button, only from the inbox and only once: conversations
+// the extension moved are remembered, so one the user takes back out of Spam stays where they put it.
+// A short notice at the top of Gmail says how many were moved, with a link to the Spam folder.
+// Nothing here runs on a training email from your phishing simulation (administrator policies).
+// ---------------------------------------------------------------------------
+const senderResults = new Map();           // "address" → Promise<result | null>, for this page
+const SENDER_RESULTS_MAX = 1000;
+const serverCountries = new Map();         // Gmail message id → Promise<{ from, country } | null>
+const spamQueue = new Map();               // conversation → { kind: 'row' | 'thread', row, address, reason, msgId }
+const spamAttempted = new Set();           // conversations tried on this page (moved or not): never tried twice
+let spamMoveRunning = false;
+let spamMoveTimer = null;
+let spamMoveFailures = 0;
+let splitViewLogged = false;
+const SPAM_MOVE_MAX_FAILURES = 3;          // Gmail's page no longer looks as expected: stop until it's reloaded
+let senderMessageCache = null;             // Promise<{ msg id → { from, ip, t } }>, kept between visits
+let senderMessageCacheTimer = null;
+const SENDER_MESSAGE_CACHE_MAX = 5000;
+const STATUS_TEXT = { flagged: 'Flagged sender', caution: 'Caution', clean: 'Checked', trusted: 'Trusted', unverified: 'Not verified', unknown: 'Unknown sender', pending: 'Checking…' };
+const STATUS_MARK = { flagged: '⛔', caution: '⚠', clean: '✓', trusted: '✓' };
+const STATUS_RANK = { flagged: 5, caution: 4, unknown: 3, unverified: 2, trusted: 1, clean: 1, pending: 0 };
+
+function senderFeaturesOn(S) {
+    return SITE.id === 'gmail' && !!(S.enableSenderIdentity || S.enableSenderDomainCheck || S.enableSenderAddressCheck);
+}
+
+function gmailIdFromHex(prefix, hex) {
+    if (!hex || !/^[0-9a-f]{6,16}$/i.test(hex)) return null;
+    try { return `${prefix}:${BigInt('0x' + hex).toString()}`; } catch (e) { return null; }
+}
+// "thread-f:<decimal>" from a list row's subject or an open conversation's title.
+function gmailThreadKey(el) {
+    if (!el) return null;
+    const perm = (el.getAttribute('data-thread-perm-id') || el.getAttribute('data-thread-id') || '').replace(/^#/, '');
+    if (/^thread-f:\d+$/.test(perm)) return perm;
+    return gmailIdFromHex('thread-f', el.getAttribute('data-legacy-thread-id'));
+}
+function rowThreadElement(row) { return row.querySelector('[data-thread-id], [data-legacy-thread-id]'); }
+function rowThreadKey(row) { return gmailThreadKey(rowThreadElement(row)); }
+function currentThreadKey() {
+    const h = [...document.querySelectorAll('h2[data-thread-perm-id], h2[data-legacy-thread-id]')].find(isShown);
+    return h ? gmailThreadKey(h) : null;
+}
+
+// The signed-in account ("Subject - name@school.org - Gmail" in the title), and its organization's
+// domain. The LAST address in the title is the account's: an email's subject comes first and can
+// contain any address. A personal-mail domain (gmail.com…) is no organization: others share it.
+function gmailAccountAddress() {
+    const all = (document.title || '').match(/[A-Za-z0-9._%+'-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g);
+    return all ? all[all.length - 1].toLowerCase() : '';
+}
+function ownOrgDomain() {
+    const d = domainOfAddress(gmailAccountAddress());
+    return d && !isPersonalMailDomain(d) ? d : '';
+}
+
+// Senders shown in a list row (up to 3, without the signed-in user), in the order Gmail shows them.
+function rowSenders(row) {
+    const me = gmailAccountAddress();
+    const out = new Map();
+    let spans = row.querySelectorAll('.yW [email], .yX [email]');
+    if (!spans.length) spans = row.querySelectorAll('[email]');
+    for (const s of spans) {
+        const address = normalizeSenderEntry(s.getAttribute('email'));
+        if (!address.includes('@') || address === me || out.has(address)) continue;
+        out.set(address, { address, name: s.getAttribute('name') || s.textContent.trim() });
+    }
+    return [...out.values()].slice(-3);
+}
+
+// Check results, one request per scan for all senders not yet known on this page.
+function senderResultsFor(addresses) {
+    const missing = addresses.filter(a => !senderResults.has(a));
+    if (missing.length) {
+        const batch = new Promise(resolve => safeSend({ action: 'checkSenders', senders: missing.map(address => ({ address })), ownDomain: ownOrgDomain() },
+            (r) => resolve(Array.isArray(r) ? r : [])));
+        missing.forEach((a, i) => {
+            if (senderResults.size >= SENDER_RESULTS_MAX) senderResults.delete(senderResults.keys().next().value);
+            const p = batch.then(r => {
+                const v = r[i] && r[i].status ? r[i] : null;
+                if (!v && senderResults.get(a) === p) senderResults.delete(a);      // no answer: asked again next time
+                // Couldn't be checked (network…): checked again after a while, not for the rest of the visit.
+                if (v && v.status === 'unverified') setTimeout(() => { if (senderResults.get(a) === p) senderResults.delete(a); }, 10 * 60 * 1000);
+                return v;
+            });
+            senderResults.set(a, p);
+        });
+    }
+    return Promise.all(addresses.map(a => senderResults.get(a)));
+}
+
+function loadSenderMessageCache() {
+    if (!senderMessageCache) {
+        senderMessageCache = new Promise(resolve => {
+            try { chrome.storage.local.get({ senderMessageCache: {} }, (r) => resolve(!chrome.runtime.lastError && r && r.senderMessageCache && typeof r.senderMessageCache === 'object' ? r.senderMessageCache : {})); }
+            catch (e) { resolve({}); }
+        });
+    }
+    return senderMessageCache;
+}
+function saveSenderMessageCache() {
+    if (senderMessageCacheTimer) return;
+    senderMessageCacheTimer = setTimeout(async () => {
+        senderMessageCacheTimer = null;
+        const cache = await loadSenderMessageCache();
+        const keys = Object.keys(cache);
+        if (keys.length > SENDER_MESSAGE_CACHE_MAX) keys.sort((a, b) => cache[a].t - cache[b].t).slice(0, keys.length - SENDER_MESSAGE_CACHE_MAX).forEach(k => delete cache[k]);
+        try { chrome.storage.local.set({ senderMessageCache: cache }, () => void chrome.runtime.lastError); } catch (e) { /* extension reloaded */ }
+    }, 2000);
+}
+
+// The country of the server that handed a message to Gmail ({ from, country }), from the message's own
+// headers (read once per message, same as the sender checks) and country.is. Read emails only: an
+// unread one is never fetched, so checking can't change what Gmail shows as unread.
+function serverCountryOf(msgId) {
+    if (!msgId) return Promise.resolve(null);
+    if (!serverCountries.has(msgId)) {
+        if (serverCountries.size >= SENDER_RESULTS_MAX) serverCountries.delete(serverCountries.keys().next().value);
+        serverCountries.set(msgId, (async () => {
+            const cache = await loadSenderMessageCache();
+            let info = cache[msgId];
+            if (!info) {
+                const h = await getMessageHeadersById(msgId);
+                if (!h) return null;
+                const headers = parseRawHeaders(h.raw);
+                const from = ((headers.find(([n]) => n === 'from') || [])[1] || '').match(EMAIL_IN_TEXT_RE);
+                info = { from: from ? from[from.length - 1].toLowerCase() : '', ip: gmailDeliveringIp(headers) || '', t: Date.now() };
+                cache[msgId] = info;
+                saveSenderMessageCache();
+            }
+            const country = info.ip ? await new Promise(resolve => safeSend({ action: 'senderCountry', ip: info.ip }, resolve)) : null;
+            return { from: info.from, country: isCountryCode(country) ? country : null };
+        })().catch(() => null));
+    }
+    return serverCountries.get(msgId);
+}
+
+// --- Drawing ---------------------------------------------------------------------------------------
+function senderIconEl(domain, S) {
+    const wrap = document.createElement('span');
+    wrap.className = 'unshortener-sender-icon';
+    const site = siteOfSender(domain);
+    const mono = () => {
+        const m = document.createElement('span');
+        m.className = 'unshortener-sender-mono';
+        m.textContent = (site.replace(/^www\./, '')[0] || '?').toUpperCase();
+        m.setAttribute('aria-hidden', 'true');
+        return m;
+    };
+    // Site icons come from Google's icon service (only the site name is sent), never from the sender.
+    // With threat checks off ("Offline only") nothing is requested: a letter is shown instead.
+    if (S.enableDnsThreatCheck) {
+        const img = document.createElement('img');
+        img.alt = '';
+        img.width = 16; img.height = 16;
+        img.decoding = 'async';
+        img.referrerPolicy = 'no-referrer';
+        img.addEventListener('error', () => img.replaceWith(mono()), { once: true });
+        img.src = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(site)}&sz=32`;
+        wrap.appendChild(img);
+    } else wrap.appendChild(mono());
+    return wrap;
+}
+
+function setSenderFlag(icon, country, source) {
+    let flag = icon.querySelector('.unshortener-sender-flag');
+    if (!country) { if (flag) flag.remove(); return; }
+    if (!flag) { flag = document.createElement('span'); flag.className = 'unshortener-sender-flag'; icon.appendChild(flag); }
+    const where = source === 'server' ? 'Sent from a server in' : source === 'host' ? 'Sender\'s website is hosted in' : 'Sender\'s domain is registered under';
+    flag.textContent = countryFlag(country);
+    flag.title = `${where} ${countryName(country)}`;
+    flag.setAttribute('role', 'img');
+    flag.setAttribute('aria-label', flag.title);
+}
+
+function senderChipEl(domain, dark, address) {
+    const chip = document.createElement('span');
+    chip.className = 'unshortener-sender-chip' + (dark ? ' unshortener-dark' : '');
+    const mark = document.createElement('span');
+    mark.className = 'unshortener-sender-mark';
+    mark.setAttribute('aria-hidden', 'true');
+    const name = document.createElement('span');
+    name.className = 'unshortener-sender-domain';
+    name.textContent = siteOfSender(domain);
+    chip.append(mark, name);
+    setChipResult(chip, null, address);
+    return chip;
+}
+
+function setChipResult(chip, r, address, extra) {
+    const status = r ? r.status : 'pending';
+    chip.dataset.status = status;
+    chip.querySelector('.unshortener-sender-mark').textContent = STATUS_MARK[status] || '';
+    const lines = [`${STATUS_TEXT[status] || status}: ${address}`];
+    if (r) lines.push(...r.reasons);
+    if (extra) lines.push(...extra);
+    chip.title = lines.join('\n');
+    chip.setAttribute('aria-label', lines.join('. '));
+}
+
+function removeSenderDecorations(root = document) {
+    root.querySelectorAll('.unshortener-sender-icon, .unshortener-sender-chip').forEach(e => e.remove());
+    root.querySelectorAll('[data-unshortener-sender]').forEach(e => { delete e.dataset.unshortenerSender; });
+}
+
+// --- Inbox list ------------------------------------------------------------------------------------
+function scanSenderRows(S) {
+    const rows = [...document.querySelectorAll('tr.zA')].filter(isShown);
+    if (!rows.length) return;
+    const dark = isDarkSurface(rows[0]);
+    for (const row of rows) {
+        const senders = rowSenders(row);
+        if (!senders.length) continue;
+        const threadEl = rowThreadElement(row);
+        const thread = gmailThreadKey(threadEl);
+        const msgId = threadEl ? gmailIdFromHex('msg-f', threadEl.getAttribute('data-legacy-last-message-id')) : null;
+        const key = [thread, msgId, ...senders.map(s => s.address), S.enableSenderIdentity ? 'id' : '', S.enableSenderCountry ? 'cc' : ''].join('|');
+        // Unchanged since the last scan (and Gmail hasn't redrawn the row without our label).
+        if (row.dataset.unshortenerSender === key && (!S.enableSenderIdentity || row.querySelector('.unshortener-sender-chip'))) continue;
+        removeSenderDecorations(row);
+        row.dataset.unshortenerSender = key;
+        // The sender shown first is the one decorated; a flagged one anywhere in the row wins.
+        let icon = null, chip = null;
+        if (S.enableSenderIdentity) {
+            const domain = domainOfAddress(senders[0].address);
+            icon = senderIconEl(domain, S);
+            chip = senderChipEl(domain, dark, senders[0].address);
+            const nameCell = row.querySelector('.yW') || row.querySelector('.yX');
+            const subject = row.querySelector('.xT') || row.querySelector('.y6');
+            if (nameCell) nameCell.insertBefore(icon, nameCell.firstChild);
+            if (subject) subject.insertBefore(chip, subject.firstChild);
+            else if (nameCell) nameCell.insertBefore(chip, icon.nextSibling);
+        }
+        senderResultsFor(senders.map(s => s.address)).then(results => guarded('Showing who sent an email', () => {
+            if (!row.isConnected || row.dataset.unshortenerSender !== key) return;
+            let i = 0;
+            results.forEach((r, k) => { if (r && (STATUS_RANK[r.status] || 0) > (STATUS_RANK[results[i] ? results[i].status : 'pending'] || 0)) i = k; });
+            const r = results[i], who = senders[i];
+            if (chip) {
+                chip.querySelector('.unshortener-sender-domain').textContent = siteOfSender(domainOfAddress(who.address));
+                setChipResult(chip, r, who.address);
+            }
+            if (icon && S.enableSenderCountry && r) {
+                setSenderFlag(icon, r.country, r.countrySource);
+                // A read email: the country of the server it really came from, when Gmail recorded it.
+                if (msgId && !row.classList.contains('zE') && S.enableDnsThreatCheck) {
+                    serverCountryOf(msgId).then(sc => {
+                        if (sc && sc.country && sc.from === senders[0].address && row.dataset.unshortenerSender === key) setSenderFlag(icon, sc.country, 'server');
+                    });
+                }
+            }
+            const flagged = results.find(x => x && x.move);
+            if (flagged && thread && S.enableAutoSpam) {
+                queueSpamMove(thread, { kind: 'row', row, address: flagged.address, reason: flagged.reasons.join(' '), msgId, unread: row.classList.contains('zE') });
+            }
+        }));
+    }
+}
+
+// --- Opened emails ---------------------------------------------------------------------------------
+function scanOpenedSenders(S) {
+    for (const body of inBodies('')) {               // training emails are never in this list (phishSimGate)
+        if (!isShown(body)) continue;
+        const msg = body.closest('.adn, [data-message-id], .gs') || body.parentElement;
+        const nameEl = msg && msg.querySelector('.gD[email]');
+        if (!nameEl) continue;
+        const address = normalizeSenderEntry(nameEl.getAttribute('email'));
+        if (!address.includes('@') || address === gmailAccountAddress()) continue;
+        const key = `${address}|${S.enableSenderIdentity ? 'id' : ''}|${S.enableSenderCountry ? 'cc' : ''}`;
+        const holder = nameEl.parentElement;
+        if (nameEl.dataset.unshortenerSender === key && (!S.enableSenderIdentity || !holder || holder.querySelector('.unshortener-sender-chip'))) continue;
+        if (holder) holder.querySelectorAll('.unshortener-sender-icon, .unshortener-sender-chip').forEach(e => e.remove());
+        nameEl.dataset.unshortenerSender = key;
+        const domain = domainOfAddress(address);
+        let icon = null, chip = null;
+        if (S.enableSenderIdentity && holder) {
+            icon = senderIconEl(domain, S);
+            chip = senderChipEl(domain, isDarkSurface(nameEl), address);
+            chip.style.marginLeft = '6px';
+            nameEl.insertAdjacentElement('beforebegin', icon);
+            const after = holder.querySelector('.go') || nameEl;
+            after.insertAdjacentElement('afterend', chip);
+        }
+        const thread = currentThreadKey();
+        const msgId = gmailMessageId(body);
+        Promise.all([senderResultsFor([address]), chip ? getMessageAuth(body) : null]).then(([[r], auth]) => guarded('Showing who sent an email', () => {
+            if (!nameEl.isConnected || nameEl.dataset.unshortenerSender !== key || !r) return;
+            const authLine = auth ? [`Gmail's sender verification: DMARC ${auth.dmarc}, SPF ${auth.spf}, DKIM ${auth.dkim}.`] : [];
+            if (chip) {
+                setChipResult(chip, r, address, authLine);
+                const label = chip.querySelector('.unshortener-sender-domain');
+                label.textContent = `${siteOfSender(domain)} · ${STATUS_TEXT[r.status] || r.status}`;
+            }
+            if (icon && S.enableSenderCountry) {
+                setSenderFlag(icon, r.country, r.countrySource);
+                if (S.enableDnsThreatCheck) serverCountryOf(msgId).then(sc => { if (sc && sc.country && sc.from === address && nameEl.dataset.unshortenerSender === key) setSenderFlag(icon, sc.country, 'server'); });
+            }
+            if (r.status === 'flagged') showSenderFindings(body, [{ severity: 'danger', message: `This sender is flagged. ${r.reasons.join(' ')} Don't open its links or attachments or reply with personal details.` }]);
+            if (r.move && thread && S.enableAutoSpam) queueSpamMove(thread, { kind: 'thread', address, reason: r.reasons.join(' '), msgId });
+        }));
+    }
+}
+
+// --- Moving to Spam --------------------------------------------------------------------------------
+function queueSpamMove(thread, item) {
+    if (spamAttempted.has(thread) || spamQueue.has(thread)) return;
+    spamQueue.set(thread, item);
+    scheduleSpamMoves();
+}
+function scheduleSpamMoves(delay = 800) {
+    clearTimeout(spamMoveTimer);
+    spamMoveTimer = setTimeout(() => runSpamMoves().catch(e => {
+        spamMoveRunning = false;
+        reportEvent('error', `Moving emails to Spam failed: ${e && e.message ? e.message : e}`);
+    }), delay);
+}
+
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+async function waitFor(test, ms) {
+    for (const end = Date.now() + ms; Date.now() < end; await sleep(100)) if (test()) return true;
+    return test();
+}
+function gmailPress(el) {
+    for (const t of ['mouseover', 'mousedown', 'mouseup', 'click']) {
+        el.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window, button: 0 }));
+    }
+}
+
+// The user is typing, has a menu or dialog open, or has selected emails: never act then (selected
+// emails would be reported together with ours). Checked again right before every click.
+function shownAll(selector) { return [...document.querySelectorAll(selector)].filter(isShown); }
+function selectedRows() {
+    return shownAll('tr.zA').filter(r => r.classList.contains('x7') || (r.querySelector('[role="checkbox"]') || { getAttribute: () => null }).getAttribute('aria-checked') === 'true');
+}
+function userBusy() {
+    const a = document.activeElement;
+    if (a && a !== document.body && (isEditable(a) || /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName))) return true;
+    return shownAll('[role="dialog"], [role="alertdialog"], [role="menu"], .unshortener-send-dialog').length > 0;
+}
+
+// Gmail's own Report spam button, by its label (several languages), or by Gmail's action number when
+// its label still says spam in another language. Never any other button.
+const REPORT_SPAM_LABEL = /^(report spam|spam melden|signaler comme spam|marcar como spam|denunciar spam|segnala come spam|als spam markeren|rapportér spam|rapporter som spam|rapportera som skräppost|zgłoś spam|nahlásit spam|ilmoita roskapostiksi)/i;
+const SPAM_WORD = /spam|skräp|迷惑|垃圾|스팸|спам/i;
+const UNSUBSCRIBE_LABEL = /unsubscribe|abmelden|abbestellen|désabonner|desuscribir|cancelar (la )?suscripción|annulla iscrizione|uitschrijven|afmeld|avsluta|wypisz/i;
+function gmailReportSpamButton() {
+    for (const b of document.querySelectorAll('[gh="mtb"] [role="button"], [gh="tm"] [role="button"], [act="9"][role="button"]')) {
+        if (!isShown(b) || b.getAttribute('aria-disabled') === 'true' || b.closest('[role="dialog"], [role="alertdialog"], [role="menu"]')) continue;
+        const label = (b.getAttribute('aria-label') || b.getAttribute('data-tooltip') || '').trim();
+        if (REPORT_SPAM_LABEL.test(label) || (b.getAttribute('act') === '9' && SPAM_WORD.test(label))) return b;
+    }
+    return null;
+}
+
+// Gmail sometimes asks "Report spam and unsubscribe?". Only plain Report spam is ever chosen
+// (unsubscribing from a phisher confirms your address); anything unclear is cancelled.
+async function confirmSpamDialog(before) {
+    let dialog = null;
+    await waitFor(() => (dialog = shownAll('[role="alertdialog"], [role="dialog"]').find(d => !before.has(d))), 900);
+    if (!dialog) return true;
+    const buttons = [...dialog.querySelectorAll('button, [role="button"]')].filter(isShown);
+    const plain = buttons.find(b => REPORT_SPAM_LABEL.test((b.textContent || b.getAttribute('aria-label') || '').trim()) && !UNSUBSCRIBE_LABEL.test(b.textContent || ''));
+    if (plain) { gmailPress(plain); return true; }
+    dialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true }));
+    return false;
+}
+
+async function reportSpamRows(items) {
+    if (selectedRows().length) return null;                    // the user's selection: try again later
+    const boxes = items.map(it => it.row.querySelector('[role="checkbox"]'));
+    if (boxes.some(b => !b)) return [];
+    const unselect = () => items.forEach((it, i) => { if (it.row.isConnected && boxes[i].getAttribute('aria-checked') === 'true') gmailPress(boxes[i]); });
+    boxes.forEach(gmailPress);
+    await sleep(200);
+    const sel = selectedRows();
+    if (sel.length !== items.length || items.some(it => !sel.includes(it.row))) { unselect(); return []; }
+    const btn = gmailReportSpamButton();
+    if (!btn || userBusy()) { unselect(); return btn ? null : []; }
+    const before = new Set(shownAll('[role="alertdialog"], [role="dialog"]'));
+    gmailPress(btn);
+    if (!await confirmSpamDialog(before)) { await sleep(200); unselect(); return []; }
+    const gone = (it) => !it.row.isConnected || !isShown(it.row) || rowThreadKey(it.row) !== it.thread;
+    if (!await waitFor(() => items.every(gone), 5000)) { unselect(); return items.filter(gone); }
+    return items;
+}
+
+async function reportSpamOpenThread(item) {
+    if (selectedRows().length) return null;                    // the toolbar would act on the selection
+    const btn = gmailReportSpamButton();
+    if (!btn) return [];
+    const before = new Set(shownAll('[role="alertdialog"], [role="dialog"]'));
+    gmailPress(btn);
+    if (!await confirmSpamDialog(before)) return [];
+    return await waitFor(() => currentThreadKey() !== item.thread, 5000) ? [item] : [];
+}
+
+// A training email from your phishing simulation must never be moved. Sender domains are compared with
+// the simulation domains; with header rules, the email's headers are read (if they can't be, or the
+// email is unread, it isn't moved).
+async function isPhishSimulation(item) {
+    const rules = (lastPolicy && lastPolicy.phishSimRules) || [], domains = (lastPolicy && lastPolicy.phishSimDomains) || [];
+    const d = domainOfAddress(item.address);
+    if (domains.some(x => d === x || d.endsWith('.' + x))) return true;
+    if (!rules.length) return false;
+    if (!item.msgId || item.unread) return true;
+    const h = await getMessageHeadersById(item.msgId);
+    return !h || !!matchPhishSimulation(h.raw, rules);
+}
+
+function movedThreads() {
+    return new Promise(resolve => {
+        try { chrome.storage.local.get({ spamMovedThreads: {} }, (r) => resolve(!chrome.runtime.lastError && r && r.spamMovedThreads ? r.spamMovedThreads : null)); }
+        catch (e) { resolve(null); }
+    });
+}
+
+async function runSpamMoves() {
+    if (spamMoveRunning || !spamQueue.size) return;
+    if (!lastSettings.enableAutoSpam || spamMoveFailures >= SPAM_MOVE_MAX_FAILURES) { spamQueue.clear(); return; }
+    // Hidden tab or not the inbox: wait (the queue is looked at again on the next scan).
+    if (document.hidden || !gmailViewAllowsAutoSpam(location.hash) || userBusy()) return;
+    spamMoveRunning = true;
+    try {
+        const memory = await movedThreads();
+        if (!memory) return;                                  // can't tell what was moved before: do nothing
+        // Split view (a conversation open beside the list): which one the toolbar acts on isn't certain,
+        // so nothing is moved there.
+        if (currentThreadKey() && shownAll('tr.zA').length) {
+            if (!splitViewLogged) { splitViewLogged = true; reportEvent('info', 'Emails from flagged senders are not moved to Spam while Gmail shows a conversation beside the list (split view); they are still marked.'); }
+            return;
+        }
+        const rows = [];
+        let open = null;
+        const current = currentThreadKey();
+        for (const [thread, it] of [...spamQueue]) {
+            const drop = () => { spamQueue.delete(thread); spamAttempted.add(thread); };
+            if (memory[thread]) { drop(); continue; }        // moved before: the user took it back out of Spam
+            it.thread = thread;
+            if (it.kind === 'thread') {
+                if (current !== thread) { spamQueue.delete(thread); continue; }
+            } else if (current || !it.row.isConnected || !isShown(it.row) || rowThreadKey(it.row) !== thread) { spamQueue.delete(thread); continue; }
+            if (await isPhishSimulation(it)) { drop(); reportEvent('info', `An email from ${it.address} matches your organization's phishing simulation, so it was not moved to Spam.`); continue; }
+            if (it.kind === 'thread') open = it; else rows.push(it);
+        }
+        const batch = open ? [open] : rows.slice(0, 20);
+        if (!batch.length || userBusy()) return;
+        const moved = open ? await reportSpamOpenThread(open) : await reportSpamRows(batch);
+        if (moved === null) return;                          // the user is busy or has emails selected: later
+        for (const it of batch) { spamQueue.delete(it.thread); spamAttempted.add(it.thread); }
+        if (moved.length) {
+            spamMoveFailures = 0;
+            safeSend({ action: 'recordSpamMoves', moves: moved.map(it => ({ thread: it.thread, address: it.address, reason: it.reason })) });
+            if (lastSettings.enableSpamNotice) showSpamNotice(moved.length);
+        }
+        if (moved.length < batch.length && ++spamMoveFailures >= SPAM_MOVE_MAX_FAILURES) {
+            reportEvent('warning', 'Emails from flagged senders could not be moved to Spam: Gmail\'s Report spam button wasn\'t found or didn\'t work. They are still marked; reload Gmail to try again.');
+        }
+    } finally {
+        spamMoveRunning = false;
+        if (spamQueue.size) scheduleSpamMoves(3000);          // waiting for the user: look again in a while
+    }
+}
+
+// A notice at the top of Gmail: how many emails were moved, with a link to the Spam folder. It goes
+// away after 15 seconds (not while pointed at or focused), or with ×.
+let spamNotice = null;
+function showSpamNotice(n) {
+    if (!spamNotice || !spamNotice.el.isConnected) {
+        const el = document.createElement('div');
+        el.className = 'unshortener-spam-notice' + (isDarkSurface(document.body) ? ' unshortener-dark' : '');
+        el.setAttribute('role', 'status');
+        el.setAttribute('aria-live', 'polite');
+        const text = document.createElement('span');
+        const review = document.createElement('a');
+        review.href = '#spam';
+        review.textContent = 'Review';
+        review.addEventListener('click', () => close());
+        const x = document.createElement('button');
+        x.type = 'button';
+        x.textContent = '×';
+        x.setAttribute('aria-label', 'Dismiss');
+        x.addEventListener('click', () => close());
+        el.append(text, review, x);
+        document.body.appendChild(el);
+        const state = { el, text, count: 0, timer: null };
+        let paused = false;
+        const close = () => { clearTimeout(state.timer); el.remove(); if (spamNotice === state) spamNotice = null; };
+        state.arm = () => { clearTimeout(state.timer); if (el.isConnected) state.timer = setTimeout(() => { if (!paused) close(); }, 15000); };
+        el.addEventListener('mouseenter', () => { paused = true; });
+        el.addEventListener('mouseleave', () => { paused = false; state.arm(); });
+        el.addEventListener('focusin', () => { paused = true; });
+        el.addEventListener('focusout', () => { paused = false; state.arm(); });
+        spamNotice = state;
+    }
+    spamNotice.count += n;
+    const c = spamNotice.count;
+    spamNotice.text.textContent = `🛡️ ${c} email${c === 1 ? '' : 's'} from flagged senders ${c === 1 ? 'was' : 'were'} moved to Spam.`;
+    spamNotice.arm();
+}
+
+// One pass over the inbox list and the opened emails.
+function scanSenderIdentity() {
+    if (SITE.id !== 'gmail') return;
+    safeSend({ action: 'getSettings' }, (cfg) => guarded('Checking senders', () => {
+        if (!cfg || !cfg.values) return;
+        lastSettings = cfg.values;
+        lastPolicy = cfg.policy || {};
+        const S = cfg.values;
+        if (!senderFeaturesOn(S)) {
+            if (document.querySelector('[data-unshortener-sender]')) removeSenderDecorations();
+            spamQueue.clear();
+            return;
+        }
+        if (!S.enableSenderIdentity && document.querySelector('.unshortener-sender-icon, .unshortener-sender-chip')) removeSenderDecorations();
+        scanSenderRows(S);
+        scanOpenedSenders(S);
+        if (spamQueue.size) scheduleSpamMoves();
+    }));
+}
+
+// Gmail's inbox rows are watched too, for the sender icons and checks.
+const WATCH_SELECTOR = SITE.id === 'gmail' ? `${SITE.body}, tr.zA` : SITE.body;
+
 // Watches for Gmail inserting a message body. Gmail changes the page constantly, so the callback
 // does as little as possible: text nodes and leaf elements (which cannot contain a message body)
 // are skipped before any search, and bursts of changes are debounced into a single scan.
@@ -1917,7 +2446,7 @@ const observer = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
         for (const node of mutation.addedNodes) {
             if (node.nodeType !== Node.ELEMENT_NODE) continue;
-            if (node.matches(SITE.body) || (node.firstElementChild && node.querySelector(SITE.body)) ||
+            if (node.matches(WATCH_SELECTOR) || (node.firstElementChild && node.querySelector(WATCH_SELECTOR)) ||
                 (SITE.readFrames && (node.tagName === 'IFRAME' || (node.firstElementChild && node.querySelector('iframe'))))) {
                 emailOpened = true;
                 break outer;
@@ -1933,17 +2462,21 @@ function scheduleScan() {
     mutationDebounceTimer = setTimeout(() => {
         refreshCounts();                       // forget messages Gmail removed; keep those still shown
         guarded('Scanning an email', unshortenLinks);
+        guarded('Checking senders', scanSenderIdentity);
         scheduleBadgeUpdate();
     }, 350);
 }
 
 observer.observe(document.body, { childList: true, subtree: true });
 if (document.querySelector(SITE.body) || (SITE.readFrames && document.querySelector('iframe'))) setTimeout(() => guarded('Scanning an email', unshortenLinks), 500);
+if (SITE.id === 'gmail') setTimeout(scheduleScan, 500);
 
 // Gmail switches views without reloading; report the state right away on navigation and tab switches.
-window.addEventListener('hashchange', scheduleBadgeUpdate);
+// Going back to the inbox shows the list Gmail kept, without inserting anything: scan it again.
+window.addEventListener('hashchange', () => { scheduleBadgeUpdate(); if (SITE.id === 'gmail') scheduleScan(); });
 window.addEventListener('popstate', scheduleBadgeUpdate);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) { lastReported = ''; scheduleBadgeUpdate(); } });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { lastReported = ''; scheduleBadgeUpdate(); if (spamQueue.size) scheduleSpamMoves(); } });
+const SENDER_SETTING_KEYS = ['enableSenderIdentity', 'enableSenderCountry', 'enableSenderDomainCheck', 'enableSenderAddressCheck', 'enableAutoSpam', 'customPhishingSenders', 'customAllowlist', 'enableDnsThreatCheck'];
 // Turning protection on or off in Settings or the popup takes effect on the icon immediately.
 chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
@@ -1952,6 +2485,12 @@ chrome.storage.onChanged.addListener((changes, area) => {
         if (key && changes[key]) { lastSettings[key] = changes[key].newValue; relevant = true; }
     }
     if (relevant) scheduleBadgeUpdate();
+    // Sender features switched on or off: drawn or removed right away.
+    if (SITE.id === 'gmail' && SENDER_SETTING_KEYS.some(k => changes[k])) {
+        senderResults.clear();
+        removeSenderDecorations();
+        scheduleScan();
+    }
 });
 scheduleBadgeUpdate();
 

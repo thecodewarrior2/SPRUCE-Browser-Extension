@@ -95,6 +95,12 @@ update can replace it. See <https://mozilla.github.io/policy-templates/>.
 | managedPhishSimulationDomains | array of strings | [] | Administrator only, every webmail: training-vendor link domains; an email whose links ALL go there is left unchecked |
 | managedPhishSimulationRules | array of objects | [] | Administrator only, Gmail: phishing-simulation emails to leave unchecked (see "Administrator-only policies") |
 | managedEnableSendCheck | boolean | true | Gmail: check the links in an email when Send is pressed, and list problems (typos, unreachable or non-existent sites, look-alike, phishing and malware sites) before it goes |
+| managedEnableSenderIdentity | boolean | true | Gmail: each sender's site icon and a domain label colored by the sender checks, in the inbox list and opened emails (icons from Google's icon service; a letter instead when `managedEnableDnsThreatCheck` is false) |
+| managedEnableSenderCountry | boolean | true | Gmail: country flag of the server that delivered the email (Gmail's Received header, read emails only; IP looked up at api.country.is, at most monthly per address), else the domain ending's country, else where the sender's website is hosted |
+| managedEnableSenderDomainCheck | boolean | true | Gmail: check sender domains with the DNS threat services (domain name only) and the phishing lists. Personal-mail providers, major companies' domains and the user's own organization domain are never judged as a whole |
+| managedEnableSenderAddressCheck | boolean | true | Gmail: compare sender addresses with `managedPhishingSenders`, the user's own list and the community scam-sender list (sefinek/Blacklisted-Emails, MIT; downloaded with the phishing lists) |
+| managedEnableAutoSpam | boolean | true | Gmail: move emails from **flagged** senders to Spam with Gmail's own Report spam (never unverified, unknown, caution or clean ones). Inbox only; never while the user types or has emails selected; never training emails, nor mail from the user's own organization domain unless that exact address is on `managedPhishingSenders` or the user's list (a compromised account); at most once per conversation (one taken back out of Spam stays) |
+| managedEnableSpamNotice | boolean | true | Gmail: a 15-second notice at the top of Gmail with the number moved and a **Review** link to Spam |
 | managedEnableQrScanning | boolean | true | Decode QR codes in email images on the device and check their destinations |
 | managedEnableAttachmentScanning | boolean | true | Check attachments on the device (≤ 10 MB): QR codes in images/PDFs, scripts in SVG/HTML, links in calendar invites, encrypted archives, disguised file names |
 | managedEnableOutlookSupport, managedEnableProtonSupport, managedEnableYahooSupport, managedEnableAolSupport, managedEnableZohoSupport, managedEnableIcloudSupport, managedEnableFastmailSupport, managedEnableGmxSupport | boolean | true | Experimental support for each webmail app (Outlook on the web, Proton, Yahoo, AOL, Zoho, iCloud, Fastmail, GMX) |
@@ -120,11 +126,12 @@ update can replace it. See <https://mozilla.github.io/policy-templates/>.
 | managedUnshortenerEndpoint | string (https) | empty | Custom unshortener, tried before unshorten.me; may contain `{url}`, `{url_noscheme}`, `{hostname}` |
 | managedUnshortenerMethod / managedUnshortenerBody / managedUnshortenerHeaders / managedUnshortenerField | string | GET / empty | Request method, body template, headers and optional destination field for the custom unshortener |
 | managedUseUnshortenMeFallback | boolean | true | Try unshorten.me when the custom unshortener gives no answer |
-| managedAllowlist / managedBlocklist | string array | empty | Merged with the user's own lists. Blocklisted links are flagged with their destination hidden; users can reveal it with the 🔍 icon (sends the link to unshorten.me only if third-party resolution is on). The blocklist wins over the allowlist |
+| managedAllowlist / managedBlocklist | string array | empty | Merged with the user's own lists. Blocklisted links are flagged with their destination hidden; users can reveal it with the 🔍 icon (sends the link to unshorten.me only if third-party resolution is on). The blocklist wins over the allowlist. A sender whose domain is on the allowlist is shown as trusted and never moved to Spam, unless it's on a phishing-sender list set by you or the user |
+| managedPhishingSenders | string array | empty | Gmail: your organization's known phishing senders, as full addresses (`billing@paypa1-support.com`) or whole domains (`paypa1-support.com`, subdomains included). Merged with the user's own list; users can't remove these entries. Emails from them are flagged and, with `managedEnableAutoSpam`, moved to Spam |
 
 ## Notes
-- **Privacy-strict baseline:** set `managedEnableThirdPartyResolution`, `managedEnableDnsThreatCheck` and
-  `managedEnableRemoteListSync` to `false` for a deployment that makes no third-party requests at all (links are still unwrapped offline).
+- **Privacy-strict baseline:** set `managedEnableThirdPartyResolution`, `managedEnableDnsThreatCheck`,
+  `managedEnableRemoteListSync` and `managedEnablePhishingFeeds` to `false` for a deployment that makes no third-party requests at all (links are still unwrapped offline; sender icons show a letter, and senders are checked only against `managedPhishingSenders` and the user's list).
 - **Custom endpoints and API keys:** headers set by policy (for example an API key) are masked in the Options page and never included in user backups. Examples for URLhaus, Google Safe Browsing and Bitly are in Settings → Your own services; check each service's terms of use.
 - **Custom endpoints and host access:** Firefox cannot grant new host access by policy. Either make sure the endpoint sends CORS headers,
   or allow users to approve the one-time host prompt when saving it.
@@ -137,6 +144,43 @@ update can replace it. See <https://mozilla.github.io/policy-templates/>.
 - **Backups and restore:** backups contain only settings the user changed, so restoring an old backup never undoes a newer default. Cached link results are never restored. Policy-locked settings always win over a restored backup.
 - **Troubleshooting:** every failure is recorded in **Options → Logging → Application log** with a level (Error, Warning, Info) and its source: DNS checks, list sync, custom resolvers, Gmail, restore and so on. Error messages contain only a link's site, never its full address. Errors also appear in the toolbar popup.
 - Policy changes apply without reinstalling; open Gmail tabs pick them up on the next message opened.
+
+## Sender icons and moving phishing to Spam (Gmail)
+
+All of this is on by default and every part has its own key above. In short:
+
+- **What decides "flagged":** the address or domain is on `managedPhishingSenders`, the user's own list or
+  the community scam-sender list (exact addresses only, never addresses at major companies' own domains); or
+  the sender's domain is on a phishing list (OpenPhish, Phishing Army) or blocked by a **security** resolver
+  (Quad9, Cloudflare Security, Control D, DNS4EU, your own resolver). A block by the Cloudflare Family content
+  filter or by the AdGuard backup alone only shows **caution**. Gmail.com, Outlook.com and other personal-mail
+  providers, major companies' domains (`PROTECTED_DOMAINS`) and your own organization's domain are never judged
+  by domain lists or DNS, only by exact addresses on a list.
+- **How emails are moved:** with Gmail's own **Report spam** button, which also reports the sender to Google, as
+  if the user had clicked it. If Gmail asks "Report spam and unsubscribe?", only plain Report spam is chosen.
+  Only from the inbox (and its category tabs), never while the user is typing, has a menu or dialog open, or has
+  selected emails. If Gmail's layout no longer matches, moving stops after three attempts and the application
+  log says so; icons and warnings keep working.
+- **Taken back out of Spam stays out:** each conversation moved is remembered (`spamMovedThreads`, a year,
+  at most 5,000) and never moved again.
+- **Phishing training:** an email whose sender's domain is in `managedPhishSimulationDomains`, or that matches
+  `managedPhishSimulationRules`, is never moved. With header rules, an unread email in the inbox list is left
+  alone, because its headers aren't read until it's opened (reading them could change its unread state). To
+  be safe, also list the training vendor's sending domains in `managedAllowlist`.
+- **Network:** sender domains go to the same DNS threat services as links' site names; site names to Google's
+  icon service (`www.google.com/s2/favicons`); a delivering server's IP address to `api.country.is`. With
+  `managedEnableDnsThreatCheck` false, none of these requests are made.
+- **Recommended rollout:** start a pilot with `managedEnableAutoSpam` set to `false` (flags only), review what
+  is flagged, add your own known phishing senders to `managedPhishingSenders`, then enable moving.
+
+In `policies.json`, under `3rdparty` → `Extensions` → `link-unshortener@gmail-link-scanner`:
+
+```json
+{
+  "managedEnableAutoSpam": true,
+  "managedPhishingSenders": ["billing@paypa1-support.example", "paypa1-support.example"]
+}
+```
 
 ## Deploying
 

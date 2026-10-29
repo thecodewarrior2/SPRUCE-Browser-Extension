@@ -293,9 +293,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const cfg = await loadEffectiveSettings();
         const settings = {};
         SETTING_DEFS.forEach(d => { settings[d.managedKey] = cfg.values[d.key]; });
-        const local = await new Promise(r => chrome.storage.local.get({ customAllowlist: [], customBlocklist: [] }, r));
+        const local = await new Promise(r => chrome.storage.local.get({ customAllowlist: [], customBlocklist: [], customPhishingSenders: [] }, r));
         settings.managedAllowlist = normalizeDomainList(local.customAllowlist);
         settings.managedBlocklist = normalizeDomainList(local.customBlocklist);
+        settings.managedPhishingSenders = normalizeSenderList(local.customPhishingSenders);
         return settings;
     }
 
@@ -653,10 +654,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function renderPolicies() {
-        chrome.storage.local.get({ customBlocklist: [], customAllowlist: [] }, (localResult) => {
+        chrome.storage.local.get({ customBlocklist: [], customAllowlist: [], customPhishingSenders: [] }, (localResult) => {
+            const renderSenders = (managedSenders) => {
+                const mine = normalizeSenderList(localResult.customPhishingSenders);
+                renderPolicyTable('phishSenderTable', [...new Set([...mine, ...managedSenders])], managedSenders, 'customPhishingSenders', 'No phishing senders added.');
+            };
             if (chrome.storage.managed) {
-                chrome.storage.managed.get(['managedAllowlist', 'managedBlocklist'], (managedResult) => {
-                    if (chrome.runtime.lastError) managedResult = {};
+                chrome.storage.managed.get(['managedAllowlist', 'managedBlocklist', 'managedPhishingSenders'], (managedResult) => {
+                    if (chrome.runtime.lastError || !managedResult) managedResult = {};
                     
                     if (managedResult.managedAllowlist || managedResult.managedBlocklist) {
                         document.getElementById('managedPolicyNotice').style.display = 'block';
@@ -667,15 +672,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     
                     renderPolicyTable('allowTable', combinedAllow, managedResult.managedAllowlist || [], 'customAllowlist');
                     renderPolicyTable('blockTable', combinedBlock, managedResult.managedBlocklist || [], 'customBlocklist');
+                    renderSenders(normalizeSenderList(managedResult.managedPhishingSenders));
                 });
             } else {
                 renderPolicyTable('allowTable', localResult.customAllowlist || [], [], 'customAllowlist');
                 renderPolicyTable('blockTable', localResult.customBlocklist || [], [], 'customBlocklist');
+                renderSenders([]);
             }
         });
     }
 
-    function renderPolicyTable(tableId, allDomains, managedDomains, storageKey) {
+    function renderPolicyTable(tableId, allDomains, managedDomains, storageKey, emptyText = 'No domains in this list.') {
         const tbody = document.querySelector(`#${tableId} tbody`);
         tbody.innerHTML = '';
 
@@ -716,7 +723,13 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         if (tbody.children.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="2" style="color: var(--text-muted);">No domains in this list.</td></tr>';
+            const tr = document.createElement('tr');
+            const td = document.createElement('td');
+            td.colSpan = 2;
+            td.style.color = 'var(--text-muted)';
+            td.textContent = emptyText;
+            tr.appendChild(td);
+            tbody.appendChild(tr);
         }
     }
 
@@ -726,6 +739,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.getElementById('addBlockBtn').addEventListener('click', () => {
         addDomainToPolicy('domainBlockInput', 'customBlocklist');
+    });
+
+    // Phishing senders: an address or a whole domain, normalized ("@example.com" → "example.com").
+    document.getElementById('addPhishSenderBtn').addEventListener('click', () => {
+        const input = document.getElementById('phishSenderInput');
+        const entry = normalizeSenderEntry(input.value);
+        if (!input.value.trim()) return;
+        if (!entry) { alert('Enter an email address (name@example.com) or a domain (example.com).'); return; }
+        chrome.storage.local.get({ customPhishingSenders: [] }, (result) => {
+            const list = normalizeSenderList(result.customPhishingSenders);
+            if (list.includes(entry)) { alert('This sender is already in the list.'); return; }
+            list.push(entry);
+            chrome.storage.local.set({ customPhishingSenders: list }, () => {
+                input.value = '';
+                reportToLog('info', 'Settings', `Phishing sender added: ${entry}.`);
+                renderPolicies();
+            });
+        });
     });
 
     function addDomainToPolicy(inputId, storageKey) {
@@ -990,7 +1021,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function showImportPreview() {
         if (!pendingImportData) return;
         const mode = document.querySelector('input[name="importMode"]:checked').value;
-        chrome.storage.local.get({ customAllowlist: [], customBlocklist: [] }, (current) => {
+        chrome.storage.local.get({ customAllowlist: [], customBlocklist: [], customPhishingSenders: [] }, (current) => {
             let plan;
             try { plan = planImport(pendingImportData, current, mode); }
             catch (err) {
@@ -1049,7 +1080,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const mode = document.querySelector('input[name="importMode"]:checked').value;
         const data = pendingImportData;
 
-        chrome.storage.local.get({ customAllowlist: [], customBlocklist: [] }, (current) => {
+        chrome.storage.local.get({ customAllowlist: [], customBlocklist: [], customPhishingSenders: [] }, (current) => {
             let plan;
             try { plan = planImport(data, current, mode); }
             catch (err) { alert(err.message); return; }
