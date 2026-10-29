@@ -1927,8 +1927,10 @@ let spamMoveRunning = false;
 let spamMoveTimer = null;
 let spamMoveFailures = 0;
 let splitViewLogged = false;
+let multiListLogged = false;
+let spamRetryDelay = 3000;
 const SPAM_MOVE_MAX_FAILURES = 3;          // Gmail's page no longer looks as expected: stop until it's reloaded
-let senderMessageCache = null;             // Promise<{ msg id → { from, ip, t } }>, kept between visits
+let senderMessageCache = null;             // Promise<{ msg id → { fh, ip, t } }>, kept between visits
 let senderMessageCacheTimer = null;
 const SENDER_MESSAGE_CACHE_MAX = 5000;
 const STATUS_TEXT = { flagged: 'Flagged sender', caution: 'Caution', clean: 'Checked', trusted: 'Trusted', unverified: 'Not verified', unknown: 'Unknown sender', pending: 'Checking…' };
@@ -2004,6 +2006,21 @@ function senderResultsFor(addresses) {
     return Promise.all(addresses.map(a => senderResults.get(a)));
 }
 
+// FNV-1a of the lower-case address: enough to tell whether the headers belong to the sender shown.
+function addressFingerprint(a) {
+    let h = 0x811c9dc5;
+    for (const c of String(a || '').trim().toLowerCase()) { h ^= c.codePointAt(0); h = Math.imul(h, 0x01000193) >>> 0; }
+    return h.toString(36);
+}
+// At most two "Show original" reads at once, so a long inbox doesn't flood Gmail with requests.
+let headerSlots = 2;
+const headerWaiters = [];
+async function withHeaderSlot(fn) {
+    if (headerSlots <= 0) await new Promise(r => headerWaiters.push(r)); else headerSlots--;
+    try { return await fn(); }
+    finally { const next = headerWaiters.shift(); if (next) next(); else headerSlots++; }
+}
+
 function loadSenderMessageCache() {
     if (!senderMessageCache) {
         senderMessageCache = new Promise(resolve => {
@@ -2018,6 +2035,9 @@ function saveSenderMessageCache() {
     senderMessageCacheTimer = setTimeout(async () => {
         senderMessageCacheTimer = null;
         const cache = await loadSenderMessageCache();
+        // Kept no longer than the auto-delete period (Settings → Logging), like the rest of the history.
+        const cutoff = Date.now() - (Number(lastSettings.retentionDays) || 30) * 864e5;
+        for (const k of Object.keys(cache)) if (!cache[k] || !(cache[k].t >= cutoff) || cache[k].from) delete cache[k];
         const keys = Object.keys(cache);
         if (keys.length > SENDER_MESSAGE_CACHE_MAX) keys.sort((a, b) => cache[a].t - cache[b].t).slice(0, keys.length - SENDER_MESSAGE_CACHE_MAX).forEach(k => delete cache[k]);
         try { chrome.storage.local.set({ senderMessageCache: cache }, () => void chrome.runtime.lastError); } catch (e) { /* extension reloaded */ }
@@ -2035,16 +2055,17 @@ function serverCountryOf(msgId) {
             const cache = await loadSenderMessageCache();
             let info = cache[msgId];
             if (!info) {
-                const h = await getMessageHeadersById(msgId);
+                const h = await withHeaderSlot(() => getMessageHeadersById(msgId));
                 if (!h) return null;
                 const headers = parseRawHeaders(h.raw);
                 const from = ((headers.find(([n]) => n === 'from') || [])[1] || '').match(EMAIL_IN_TEXT_RE);
-                info = { from: from ? from[from.length - 1].toLowerCase() : '', ip: gmailDeliveringIp(headers) || '', t: Date.now() };
+                // Only a short fingerprint of the From address is kept, never the address itself.
+                info = { fh: from ? addressFingerprint(from[from.length - 1]) : '', ip: gmailDeliveringIp(headers) || '', t: Date.now() };
                 cache[msgId] = info;
                 saveSenderMessageCache();
             }
             const country = info.ip ? await new Promise(resolve => safeSend({ action: 'senderCountry', ip: info.ip }, resolve)) : null;
-            return { from: info.from, country: isCountryCode(country) ? country : null };
+            return { fh: info.fh, country: isCountryCode(country) ? country : null };
         })().catch(() => null));
     }
     return serverCountries.get(msgId);
@@ -2160,11 +2181,13 @@ function scanSenderRows(S) {
                 // A read email: the country of the server it really came from, when Gmail recorded it.
                 if (msgId && !row.classList.contains('zE') && S.enableDnsThreatCheck) {
                     serverCountryOf(msgId).then(sc => {
-                        if (sc && sc.country && sc.from === senders[0].address && row.dataset.unshortenerSender === key) setSenderFlag(icon, sc.country, 'server');
+                        if (sc && sc.country && sc.fh === addressFingerprint(senders[0].address) && row.dataset.unshortenerSender === key) setSenderFlag(icon, sc.country, 'server');
                     });
                 }
             }
-            const flagged = results.find(x => x && x.move);
+            // Moved only when every sender shown is flagged: one flagged reply in a genuine conversation
+            // must not send everyone's messages to Spam.
+            const flagged = results.every(x => x && x.move) ? results[0] : null;
             if (flagged && thread && S.enableAutoSpam) {
                 queueSpamMove(thread, { kind: 'row', row, address: flagged.address, reason: flagged.reasons.join(' '), msgId, unread: row.classList.contains('zE') });
             }
@@ -2208,7 +2231,7 @@ function scanOpenedSenders(S) {
             }
             if (icon && S.enableSenderCountry) {
                 setSenderFlag(icon, r.country, r.countrySource);
-                if (S.enableDnsThreatCheck) serverCountryOf(msgId).then(sc => { if (sc && sc.country && sc.from === address && nameEl.dataset.unshortenerSender === key) setSenderFlag(icon, sc.country, 'server'); });
+                if (S.enableDnsThreatCheck) serverCountryOf(msgId).then(sc => { if (sc && sc.country && sc.fh === addressFingerprint(address) && nameEl.dataset.unshortenerSender === key) setSenderFlag(icon, sc.country, 'server'); });
             }
             if (r.status === 'flagged') showSenderFindings(body, [{ severity: 'danger', message: `This sender is flagged. ${r.reasons.join(' ')} Don't open its links or attachments or reply with personal details.` }]);
             if (r.move && thread && S.enableAutoSpam) queueSpamMove(thread, { kind: 'thread', address, reason: r.reasons.join(' '), msgId });
@@ -2244,8 +2267,10 @@ function gmailPress(el) {
 // The user is typing, has a menu or dialog open, or has selected emails: never act then (selected
 // emails would be reported together with ours). Checked again right before every click.
 function shownAll(selector) { return [...document.querySelectorAll(selector)].filter(isShown); }
+// Selected rows anywhere in the page, shown or not (a collapsed inbox section can hold a selection the
+// toolbar would act on too).
 function selectedRows() {
-    return shownAll('tr.zA').filter(r => r.classList.contains('x7') || (r.querySelector('[role="checkbox"]') || { getAttribute: () => null }).getAttribute('aria-checked') === 'true');
+    return [...document.querySelectorAll('tr.zA')].filter(r => r.classList.contains('x7') || (r.querySelector('[role="checkbox"]') || { getAttribute: () => null }).getAttribute('aria-checked') === 'true');
 }
 function userBusy() {
     const a = document.activeElement;
@@ -2269,9 +2294,13 @@ function gmailReportSpamButton() {
 
 // Gmail sometimes asks "Report spam and unsubscribe?". Only plain Report spam is ever chosen
 // (unsubscribing from a phisher confirms your address); anything unclear is cancelled.
+function newDialogs(before) { return shownAll('[role="alertdialog"], [role="dialog"]').filter(d => !before.has(d)); }
+function cancelNewDialogs(before) {
+    for (const d of newDialogs(before)) d.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true }));
+}
 async function confirmSpamDialog(before) {
     let dialog = null;
-    await waitFor(() => (dialog = shownAll('[role="alertdialog"], [role="dialog"]').find(d => !before.has(d))), 900);
+    await waitFor(() => (dialog = newDialogs(before)[0]), 1500);
     if (!dialog) return true;
     const buttons = [...dialog.querySelectorAll('button, [role="button"]')].filter(isShown);
     const plain = buttons.find(b => REPORT_SPAM_LABEL.test((b.textContent || b.getAttribute('aria-label') || '').trim()) && !UNSUBSCRIBE_LABEL.test(b.textContent || ''));
@@ -2280,47 +2309,95 @@ async function confirmSpamDialog(before) {
     return false;
 }
 
+// Still allowed to act, right now: the setting, the view and the user (checked before every click).
+function mayActNow() {
+    return !!lastSettings.enableAutoSpam && !document.hidden && gmailViewAllowsAutoSpam(location.hash) && !userBusy();
+}
+// Each row still shows the conversation it was checked for (Gmail can redraw a row for another one).
+function rowsStillMatch(items) {
+    return items.every(it => it.row.isConnected && isShown(it.row) && rowThreadKey(it.row) === it.thread);
+}
+
 async function reportSpamRows(items) {
-    if (selectedRows().length) return null;                    // the user's selection: try again later
+    if (selectedRows().length || !mayActNow() || !rowsStillMatch(items)) return null;   // try again later
     const boxes = items.map(it => it.row.querySelector('[role="checkbox"]'));
     if (boxes.some(b => !b)) return [];
     const unselect = () => items.forEach((it, i) => { if (it.row.isConnected && boxes[i].getAttribute('aria-checked') === 'true') gmailPress(boxes[i]); });
     boxes.forEach(gmailPress);
     await sleep(200);
     const sel = selectedRows();
-    if (sel.length !== items.length || items.some(it => !sel.includes(it.row))) { unselect(); return []; }
+    if (sel.length !== items.length || items.some(it => !sel.includes(it.row)) || !rowsStillMatch(items)) { unselect(); return []; }
     const btn = gmailReportSpamButton();
-    if (!btn || userBusy()) { unselect(); return btn ? null : []; }
+    if (!btn || !mayActNow()) { unselect(); return btn ? null : []; }
     const before = new Set(shownAll('[role="alertdialog"], [role="dialog"]'));
     gmailPress(btn);
-    if (!await confirmSpamDialog(before)) { await sleep(200); unselect(); return []; }
+    if (!await confirmSpamDialog(before)) { await sleep(200); cancelNewDialogs(before); unselect(); return []; }
     const gone = (it) => !it.row.isConnected || !isShown(it.row) || rowThreadKey(it.row) !== it.thread;
-    if (!await waitFor(() => items.every(gone), 5000)) { unselect(); return items.filter(gone); }
+    if (!await waitFor(() => items.every(gone), 5000)) { cancelNewDialogs(before); unselect(); return items.filter(gone); }
     return items;
 }
 
 async function reportSpamOpenThread(item) {
-    if (selectedRows().length) return null;                    // the toolbar would act on the selection
+    // The toolbar would act on a selection; and the conversation on screen must still be this one.
+    if (selectedRows().length || !mayActNow() || currentThreadKey() !== item.thread) return null;
     const btn = gmailReportSpamButton();
     if (!btn) return [];
     const before = new Set(shownAll('[role="alertdialog"], [role="dialog"]'));
     gmailPress(btn);
-    if (!await confirmSpamDialog(before)) return [];
-    return await waitFor(() => currentThreadKey() !== item.thread, 5000) ? [item] : [];
+    if (!await confirmSpamDialog(before)) { await sleep(200); cancelNewDialogs(before); return []; }
+    if (await waitFor(() => currentThreadKey() !== item.thread, 5000)) return [item];
+    cancelNewDialogs(before);
+    return [];
 }
 
-// A training email from your phishing simulation must never be moved. Sender domains are compared with
-// the simulation domains; with header rules, the email's headers are read (if they can't be, or the
-// email is unread, it isn't moved).
-async function isPhishSimulation(item) {
+// A training email from your phishing simulation must never be moved. Returns false (not one), 'yes',
+// or 'unverifiable'. Simulation link domains need the email's links, which only an opened email shows
+// (an opened one reaches this only after its links were checked), so a list row is unverifiable while
+// they're set. With header rules, the headers are read; an unread email's never are.
+async function phishSimulationState(item) {
     const rules = (lastPolicy && lastPolicy.phishSimRules) || [], domains = (lastPolicy && lastPolicy.phishSimDomains) || [];
     const d = domainOfAddress(item.address);
-    if (domains.some(x => d === x || d.endsWith('.' + x))) return true;
+    if (domains.some(x => d === x || d.endsWith('.' + x))) return 'yes';
+    if (domains.length && item.kind === 'row') return 'unverifiable';
     if (!rules.length) return false;
-    if (!item.msgId || item.unread) return true;
+    if (!item.msgId || item.unread) return 'unverifiable';
     const h = await getMessageHeadersById(item.msgId);
-    return !h || !!matchPhishSimulation(h.raw, rules);
+    if (!h) return 'unverifiable';
+    return matchPhishSimulation(h.raw, rules) ? 'yes' : false;
 }
+
+// Every other sender in the open conversation is flagged too (a flagged reply in a genuine
+// conversation must not send the colleagues' messages to Spam).
+async function conversationAllFlagged() {
+    const me = gmailAccountAddress();
+    const addresses = [...new Set([...document.querySelectorAll('.gD[email]')].filter(isShown)
+        .map(e => normalizeSenderEntry(e.getAttribute('email'))).filter(a => a.includes('@') && a !== me))];
+    if (!addresses.length) return false;
+    const results = await senderResultsFor(addresses);
+    return results.every(r => r && r.move);
+}
+
+// Remembered before Gmail is asked, so a conversation is never tried twice, even if the page is
+// reloaded or the background restarts in between. Resolves to false if it couldn't be saved.
+function rememberSpamThreads(items, log) {
+    return new Promise(resolve => safeSend({ action: 'recordSpamMoves', log,
+        moves: items.map(it => ({ thread: it.thread, address: it.address || '', reason: it.reason || '' })) }, r => resolve(r === true)));
+}
+
+// The user takes conversations out of Spam (Not spam, Move to Inbox): remembered, so that whatever
+// put them there (Gmail or the extension), the extension never moves them back.
+const NOT_SPAM_LABEL = /^(not spam|move to inbox|kein spam|in den posteingang|pas un spam|non spam|déplacer vers la boîte de réception|no es spam|mover a recibidos|non è spam|sposta in posta in arrivo|geen spam|verplaatsen naar inbox|nie jest spamem|não é spam|mover para a caixa de entrada|inte skräppost)/i;
+function inSpamView() { return /^#(spam(\/|$)|search\/.*in(:|%3A)spam)/i.test(location.hash); }
+function onRescueClick(e) {
+    if (!inSpamView()) return;
+    const b = e.target && e.target.closest ? e.target.closest('[role="button"]') : null;
+    if (!b || !NOT_SPAM_LABEL.test((b.getAttribute('aria-label') || b.getAttribute('data-tooltip') || b.textContent || '').trim())) return;
+    const threads = new Set(selectedRows().map(rowThreadKey).filter(Boolean));
+    const open = currentThreadKey();
+    if (open) threads.add(open);
+    if (threads.size) rememberSpamThreads([...threads].map(thread => ({ thread, reason: 'taken out of Spam by you' })), 'rescued');
+}
+if (SITE.id === 'gmail') document.addEventListener('mousedown', onRescueClick, true);
 
 function movedThreads() {
     return new Promise(resolve => {
@@ -2338,6 +2415,12 @@ async function runSpamMoves() {
     try {
         const memory = await movedThreads();
         if (!memory) return;                                  // can't tell what was moved before: do nothing
+        // Several lists on the inbox page (Multiple Inboxes, Priority Inbox sections): some can show
+        // conversations that aren't in the inbox, so nothing is moved from the list there.
+        if (!currentThreadKey() && new Set(shownAll('tr.zA').map(r => r.closest('table'))).size > 1) {
+            if (!multiListLogged) { multiListLogged = true; reportEvent('info', 'Emails from flagged senders are not moved to Spam from an inbox with several sections (Multiple Inboxes or Priority Inbox); they are still marked, and are moved when opened.'); }
+            return;
+        }
         // Split view (a conversation open beside the list): which one the toolbar acts on isn't certain,
         // so nothing is moved there.
         if (currentThreadKey() && shownAll('tr.zA').length) {
@@ -2354,19 +2437,36 @@ async function runSpamMoves() {
             if (it.kind === 'thread') {
                 if (current !== thread) { spamQueue.delete(thread); continue; }
             } else if (current || !it.row.isConnected || !isShown(it.row) || rowThreadKey(it.row) !== thread) { spamQueue.delete(thread); continue; }
-            if (await isPhishSimulation(it)) { drop(); reportEvent('info', `An email from ${it.address} matches your organization's phishing simulation, so it was not moved to Spam.`); continue; }
+            const sim = await phishSimulationState(it);
+            if (sim) {
+                drop();
+                reportEvent('info', sim === 'yes' ? `An email from ${it.address} matches your organization's phishing simulation, so it was not moved to Spam.`
+                    : `An email from ${it.address} wasn't moved to Spam from the list: with phishing-simulation rules set, it's moved only once it's opened and shown not to be a training email.`);
+                continue;
+            }
+            if (it.kind === 'thread' && !await conversationAllFlagged()) { drop(); continue; }
             if (it.kind === 'thread') open = it; else rows.push(it);
         }
-        // Looked at again right before acting: the checks above can take a moment (headers).
-        if (document.hidden || !gmailViewAllowsAutoSpam(location.hash) || currentThreadKey() !== current) return;
-        const batch = open ? [open] : rows.filter(it => it.row.isConnected && isShown(it.row) && rowThreadKey(it.row) === it.thread).slice(0, 20);
-        if (!batch.length || userBusy()) return;
+        // The settings (a policy may have changed) and the page are looked at again right before
+        // acting: the checks above can take a moment (headers).
+        const cfg = await new Promise(resolve => safeSend({ action: 'getSettings' }, resolve));
+        if (!cfg || !cfg.values) return;
+        lastSettings = cfg.values;
+        lastPolicy = cfg.policy || {};
+        if (!mayActNow() || currentThreadKey() !== current) return;
+        const batch = open ? [open] : rows.filter(it => rowsStillMatch([it])).slice(0, 20);
+        if (!batch.length) return;
+        // Everything that would make Gmail act on something else is checked before remembering, so a
+        // move put off for the user isn't recorded as done.
+        if (selectedRows().length || (open ? currentThreadKey() !== open.thread : !rowsStillMatch(batch))) return;
+        if (!await rememberSpamThreads(batch, false)) return;  // not remembered: don't move
         const moved = open ? await reportSpamOpenThread(open) : await reportSpamRows(batch);
         if (moved === null) return;                          // the user is busy or has emails selected: later
         for (const it of batch) { spamQueue.delete(it.thread); spamAttempted.add(it.thread); }
         if (moved.length) {
             spamMoveFailures = 0;
-            safeSend({ action: 'recordSpamMoves', moves: moved.map(it => ({ thread: it.thread, address: it.address, reason: it.reason })) });
+            spamRetryDelay = 3000;
+            rememberSpamThreads(moved, 'moved');
             if (lastSettings.enableSpamNotice) showSpamNotice(moved.length);
         }
         if (moved.length < batch.length && ++spamMoveFailures >= SPAM_MOVE_MAX_FAILURES) {
@@ -2374,7 +2474,10 @@ async function runSpamMoves() {
         }
     } finally {
         spamMoveRunning = false;
-        if (spamQueue.size) scheduleSpamMoves(3000);          // waiting for the user: look again in a while
+        if (spamQueue.size) {                                 // waiting for the user: look again in a while
+            scheduleSpamMoves(spamRetryDelay);
+            spamRetryDelay = Math.min(spamRetryDelay * 2, 60000);
+        }
     }
 }
 
@@ -2481,7 +2584,10 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) { la
 const SENDER_SETTING_KEYS = ['enableSenderIdentity', 'enableSenderCountry', 'enableSenderDomainCheck', 'enableSenderAddressCheck', 'enableAutoSpam', 'customPhishingSenders', 'customAllowlist', 'enableDnsThreatCheck'];
 // Turning protection on or off in Settings or the popup takes effect on the icon immediately.
 chrome.storage.onChanged.addListener((changes, area) => {
+    // A policy change (for example sender features locked off) applies at once.
+    if (area === 'managed' && SITE.id === 'gmail') { spamQueue.clear(); senderResults.clear(); removeSenderDecorations(); scheduleScan(); return; }
     if (area !== 'local') return;
+    if (changes.senderMessageCache && changes.senderMessageCache.newValue === undefined) senderMessageCache = null;   // cleared in Settings
     let relevant = false;
     for (const key of ['enableLinkUnmasking', 'enableTrackingPixelBlocking', SITE.settingKey]) {
         if (key && changes[key]) { lastSettings[key] = changes[key].newValue; relevant = true; }

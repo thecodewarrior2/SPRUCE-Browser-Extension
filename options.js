@@ -276,7 +276,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!confirm('Delete all cached links, resolution history and recent activity? Your settings and lists are kept.')) return;
         chrome.storage.local.get(null, (items) => {
             const keys = Object.keys(items).filter(k => k.startsWith('http://') || k.startsWith('https://'));
-            chrome.storage.local.remove(keys, () => {
+            // Sender data too (servers' addresses per email, countries, sender verdicts). Conversations
+            // remembered as moved to or taken out of Spam are kept, so they're never moved again.
+            chrome.storage.local.remove([...keys, 'senderMessageCache', 'geoCache', 'senderDomainCache'], () => {
                 chrome.storage.local.set({ resolutionHistory: [], recentActivity: [] }, () => {
                     reportToLog('info', 'Options page', `Cache, resolution history and activity deleted by the user (${keys.length} cached entries).`);
                     renderCache(); renderHistory();

@@ -295,7 +295,7 @@
                 <p class="card-intro">Who each email is from, at a glance, in your inbox and in opened emails, and automatic protection from known phishing senders. <a href="#" data-help-link="senders">How sender checks work</a></p>
                 <div class="setting-row"><div class="setting-text">Show sender icons and domain labels<div class="setting-desc">Each sender gets its site's icon and a label with its domain, colored by the checks below: ✓ green when checked, amber for caution, ⛔ red when flagged. Point at a label for the details. Icons come from Google's icon service (only the site name is sent); in <em>Offline only</em> a letter is shown instead.</div></div>
                     <label class="switch"><input type="checkbox" data-setting="enableSenderIdentity"><span class="slider"></span></label></div>
-                <div class="setting-row"><div class="setting-text">Show the sender's country<div class="setting-desc">A flag for the country of the server that sent the email, from Gmail's own delivery record (read emails only; unread ones are never opened to look). Otherwise the country the sender's domain ending names (such as .de), or where its website is hosted. Only the server's address is looked up, at country.is, once a month at most; in <em>Offline only</em> only the domain ending is used.</div></div>
+                <div class="setting-row"><div class="setting-text">Show the sender's country<div class="setting-desc">A flag for the country of the server that sent the email, from Gmail's own delivery record (read emails only; unread ones are never opened to look; at most two at a time). Otherwise the country the sender's domain ending names (such as .de), or where its website is hosted. Only the server's address is looked up, at country.is, once a month at most; in <em>Offline only</em> only the domain ending is used.</div></div>
                     <label class="switch"><input type="checkbox" data-setting="enableSenderCountry"><span class="slider"></span></label></div>
                 <div class="setting-row"><div class="setting-text">Check sender domains for threats<div class="setting-desc">The sender's domain is checked with the same security services as links (only its name, for example <code>example.com</code>) and against the phishing lists. Gmail, Outlook.com and other big providers' domains, and your own organization's, are never judged as a whole.</div></div>
                     <label class="switch"><input type="checkbox" data-setting="enableSenderDomainCheck"><span class="slider"></span></label></div>
@@ -520,7 +520,7 @@
                     <label class="switch"><input type="checkbox" data-setting="enableHistoryLog"><span class="slider"></span></label></div>
                 <div class="setting-row"><div class="setting-text">Delete automatically after (days)<div class="setting-desc">Cached results, history, logs and activity older than this are removed daily.</div></div>
                     <input type="number" class="number-input" min="1" max="365" data-setting="retentionDays"></div>
-                <div class="setting-row"><div class="setting-text">Delete everything now<div class="setting-desc">Clears cached results, history and activity. Settings and lists are kept.</div></div>
+                <div class="setting-row"><div class="setting-text">Delete everything now<div class="setting-desc">Clears cached results, history, activity and sender data. Settings and lists are kept, and so is the list of conversations moved to or taken out of Spam (so they're never moved again).</div></div>
                     <button id="clearAllLocalDataBtn" class="btn-warning">Delete now</button></div>
             </div>
 
@@ -775,12 +775,12 @@
 </table>
 <h3>When an email is moved to Spam</h3>
 <ul class="simple-list">
-  <li>Only when its sender is <b>flagged</b>. Unverified, unknown, caution and clean senders are never moved.</li>
-  <li>Only from your <b>inbox</b> (including its category tabs), as a list or opened. Never from Spam, Trash, Sent, labels, searches or All mail.</li>
+  <li>Only when its sender is <b>flagged</b>. Unverified, unknown, caution and clean senders are never moved. A conversation is moved only if <b>every</b> other sender in it is flagged, so one flagged reply never sends your colleagues' messages to Spam.</li>
+  <li>Only from your <b>inbox</b> (including its category tabs), as a list or opened. Never from Spam, Trash, Sent, labels, searches or All mail. With <b>Multiple Inboxes</b> or <b>Priority Inbox</b> sections, or the conversation open beside the list (split view), emails are moved only when you open them in the normal view.</li>
   <li>Gmail's own <b>Report spam</b> is used, exactly as if you clicked it; if Gmail asks “Report spam and unsubscribe?”, only plain <b>Report spam</b> is chosen (unsubscribing would confirm your address to a phisher). Anything unexpected is cancelled.</li>
   <li><b>Never while you're busy:</b> not while you're typing, have a menu or dialog open, or have selected emails yourself (they would be reported too). It waits and tries again.</li>
-  <li><b>Once per conversation.</b> If you take an email back out of Spam (<b>Not spam</b>, or <b>Undo</b> right away), the extension remembers it and never moves it again. To stop a sender being flagged, add its domain to <b>Always allowed</b> (your organization's or your own phishing-sender entries still win).</li>
-  <li><b>Never</b> your organization's phishing-training emails (by their simulation domains, or their header rules: an unread training email whose headers can't be checked is left alone), and never emails from your own organization's domain, unless you or your organization listed that exact address (for example a hacked account).</li>
+  <li><b>Once per conversation.</b> A conversation is remembered just before it's moved. If you take an email out of Spam (<b>Not spam</b> or <b>Move to Inbox</b>, or <b>Undo</b> right away), whether the extension or Gmail put it there, it's never moved again. To stop a sender being flagged, add its domain to <b>Always allowed</b> (your organization's or your own phishing-sender entries still win).</li>
+  <li><b>Never</b> your organization's phishing-training emails. With simulation link domains set, emails are moved only once opened (their links show whether they're training); with header rules, an unread email, whose headers aren't read, is left alone, and never emails from your own organization's domain, unless you or your organization listed that exact address (for example a hacked account).</li>
   <li>Gmail, Outlook.com, Yahoo and other big providers' domains, and big companies' own domains, are never judged as a whole: there, only exact addresses on a list count.</li>
 </ul>
 <h3>Lists of phishing senders</h3>

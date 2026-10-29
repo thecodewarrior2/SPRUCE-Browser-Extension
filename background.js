@@ -275,6 +275,16 @@ async function pruneExpiredData(retentionDays = 30) {
         if (fresh.length !== items[key].length) updates[key] = fresh;
     });
 
+    // Sender data (server addresses per email, their countries) follows the same retention.
+    if (items.senderMessageCache && typeof items.senderMessageCache === 'object') {
+        const fresh = Object.fromEntries(Object.entries(items.senderMessageCache).filter(([, v]) => v && v.t >= cutoffMs && !v.from));
+        if (Object.keys(fresh).length !== Object.keys(items.senderMessageCache).length) updates.senderMessageCache = fresh;
+    }
+    if (items.geoCache && typeof items.geoCache === 'object') {
+        const fresh = Object.fromEntries(Object.entries(items.geoCache).filter(([, v]) => v && v.ts >= cutoffMs));
+        if (Object.keys(fresh).length !== Object.keys(items.geoCache).length) { updates.geoCache = fresh; geoCache = null; senderDomainCache = null; }
+    }
+
     if (keysToRemove.length > 0) {
         await chrome.storage.local.remove(keysToRemove);
         logInfo(`Removed ${keysToRemove.length} cached link result(s) older than ${retentionDays} days.`, 'Storage cleanup');
@@ -1329,7 +1339,7 @@ async function checkSender(s, ownDomain, cfg) {
     // Country: the domain's ending when it names one, else where its website is hosted. (The country
     // of the server that sent a particular email is looked up separately: senderCountry.)
     let country = null, countrySource = null;
-    if (S.enableSenderCountry) {
+    if (S.enableSenderIdentity && S.enableSenderCountry) {          // shown only on the sender icon
         if ((country = countryFromDomain(domain))) countrySource = 'domain';
         else if (online && dns && dns.ip && (country = await countryOfIp(dns.ip))) countrySource = 'host';
     }
@@ -1354,25 +1364,33 @@ async function checkSenders(list, ownDomain) {
     return results;
 }
 
-// Conversations moved to Spam by the extension, remembered (thread id → time) so one the user takes
-// back out of Spam is never moved again. Kept a year, at most SPAM_MEMORY_MAX entries.
-const SPAM_MEMORY_MAX = 5000;
-const SPAM_MEMORY_MS = 365 * 24 * 60 * 60 * 1000;
+// Conversations the extension moved (or was about to move) to Spam, and those the user took out of
+// Spam, remembered (thread id → time) so the extension never moves them (again). The newest
+// SPAM_MEMORY_MAX are kept; there is no time limit. log: false (remember only) | 'moved' | 'rescued'.
+// Resolves to true once saved.
+const SPAM_MEMORY_MAX = 20000;
 let spamMemoryQueue = Promise.resolve();
-function recordSpamMoves(moves) {
-    spamMemoryQueue = spamMemoryQueue.then(async () => {
+function recordSpamMoves(moves, log = 'moved') {
+    const saved = spamMemoryQueue.then(async () => {
         const stored = await storageGet('local', { spamMovedThreads: {} });
         const map = stored.spamMovedThreads && typeof stored.spamMovedThreads === 'object' ? stored.spamMovedThreads : {};
         const now = Date.now();
-        for (const m of moves) map[m.thread] = now;
-        const kept = Object.entries(map).filter(([, t]) => now - t < SPAM_MEMORY_MS).sort((a, b) => b[1] - a[1]).slice(0, SPAM_MEMORY_MAX);
+        for (const m of moves) if (!map[m.thread]) map[m.thread] = now;
+        const kept = Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, SPAM_MEMORY_MAX);
         await chrome.storage.local.set({ spamMovedThreads: Object.fromEntries(kept) });
-    }).catch(e => logError(`Emails moved to Spam could not be remembered (${errorText(e)}); they could be moved again if taken out of Spam.`, 'Sender checks'));
+        return true;
+    }).catch(e => {
+        logError(`Emails moved to Spam could not be remembered (${errorText(e)}), so none were moved.`, 'Sender checks');
+        return false;
+    });
+    spamMemoryQueue = saved;
     for (const m of moves) {
-        logInfo(`Moved an email to Spam: from ${m.address}. ${m.reason}`, 'Sender checks');
-        logActivity('Moved to Spam', `${m.address}: ${m.reason}`);
+        if (log === 'moved') {
+            logInfo(`Moved an email to Spam: from ${m.address}. ${m.reason}`, 'Sender checks');
+            logActivity('Moved to Spam', `${m.address}: ${m.reason}`);
+        } else if (log === 'rescued') logInfo('A conversation was taken out of Spam; the extension will never move it back.', 'Sender checks');
     }
-    return spamMemoryQueue;
+    return saved;
 }
 
 // Crops a drawn grid to its dark modules (the symbol without its quiet zone) and decodes it; tries
@@ -1937,7 +1955,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     // Country of the server that handed an email to Gmail (from the email's own headers).
     if (request.action === 'senderCountry') {
         if (!sender || sender.id !== chrome.runtime.id || typeof request.ip !== 'string') { sendResponse(null); return false; }
-        getConfig().then(cfg => (cfg.values.enableSenderCountry && cfg.values.enableDnsThreatCheck ? countryOfIp(request.ip.trim()) : null))
+        getConfig().then(cfg => (cfg.values.enableSenderIdentity && cfg.values.enableSenderCountry && cfg.values.enableDnsThreatCheck ? countryOfIp(request.ip.trim()) : null))
             .then(c => sendResponse(c || null), () => sendResponse(null));
         return true;
     }
@@ -1945,7 +1963,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         if (!sender || sender.id !== chrome.runtime.id || !Array.isArray(request.moves)) { sendResponse(false); return false; }
         const moves = request.moves.filter(m => m && typeof m.thread === 'string' && /^thread-f:\d{1,25}$/.test(m.thread)).slice(0, 100)
             .map(m => ({ thread: m.thread, address: String(m.address || '').slice(0, 200), reason: String(m.reason || '').slice(0, 300) }));
-        recordSpamMoves(moves).then(() => sendResponse(true), () => sendResponse(false));
+        if (!moves.length) { sendResponse(false); return false; }
+        recordSpamMoves(moves, ['moved', 'rescued'].includes(request.log) ? request.log : false).then(sendResponse, () => sendResponse(false));
         return true;
     }
 
