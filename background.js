@@ -19,7 +19,7 @@ function getConfig() {
 
 // Keys that never affect settings; changes to them don't invalidate the cache.
 const NON_CONFIG_KEYS = new Set(['errorLogs', 'recentActivity', 'resolutionHistory', 'lastSyncTime', 'listState', 'cacheSchema', 'welcomeDismissed', 'uiTheme',
-    'senderDomainCache', 'geoCache', 'spamMovedThreads', 'senderMessageCache', 'senderResultCache', 'faviconCache', 'spamMoveLog']);
+    'senderDomainCache', 'geoCache', 'spamMovedThreads', 'spamRescuedThreads', 'senderMessageCache', 'senderResultCache', 'faviconCache', 'spamMoveLog']);
 function invalidateConfig() {
     configPromise = null;
     domainSafetyCache.clear();      // e.g. a resolver was switched off: don't reuse its verdicts
@@ -48,7 +48,6 @@ function cfgSets(cfg) {
             block: new Set(cfg.blocklist),
             managedBlock: new Set(cfg.managedBlocklist),
             remote: new Set(cfg.remoteShorteners),
-            phishAdmin: new Set(cfg.managedPhishingSenders),
             trusted: new Set(cfg.trustedSenders)
         };
         derivedSets.set(cfg, sets);
@@ -1215,7 +1214,7 @@ async function feedHit(urlString) {
 
 // ---------------------------------------------------------------------------
 // SENDER CHECKS AND SENDER IDENTITY (Gmail inbox and opened emails)
-// For each sender address: the organization's phishing-sender list and the community scam-sender list,
+// For each sender address: the community scam-sender list,
 // the trusted senders list, the phishing lists for its domain, the DNS threat services for its domain
 // (site name only), whether the address itself is malformed, its site icon (Google's icon service) and
 // a country. The country of the server that delivered a particular email comes from Gmail's own
@@ -1351,11 +1350,8 @@ async function senderDomainDns(domain, S) {
     return dns;
 }
 
-// The phishing-sender entry that has this address: { source, entry, name } or null. The
-// organization's list wins over the community list.
+// The sender's exact address on the community scam-sender list (downloaded with the phishing lists).
 async function phishingSenderHit(address, cfg) {
-    const entry = senderListMatch(address, cfgSets(cfg).phishAdmin);
-    if (entry) return { source: 'admin', entry };
     if (!cfg.values.enablePhishingFeeds) return null;
     const feeds = await loadFeedSets();
     const a = String(address || '').toLowerCase();
@@ -1400,7 +1396,7 @@ async function checkSender(s, ownDomain, cfg) {
     }
     const checks = [
         trustedHit ? `trusted senders: ${trustedHit}` : null,
-        S.enableSenderAddressCheck ? `phishing-sender lists: ${listHit ? `listed (${listHit.source === 'admin' ? 'your organization' : listHit.name || 'community list'})` : 'not listed'}` : 'phishing-sender lists: off',
+        S.enableSenderAddressCheck ? `community scam-sender list: ${listHit ? `listed (${listHit.name || 'community list'})` : S.enablePhishingFeeds ? 'not listed' : 'off'}` : 'community scam-sender list: off',
         !domainChecks ? 'domain checks: off' : shared ? 'domain: big provider or your organization, not judged' : !validDomain ? 'domain: invalid'
             : `phishing lists: ${domainFeed ? `listed (${domainFeed})` : S.enablePhishingFeeds ? 'not listed' : 'off'}; threat services: ${dns ? (dns.verdict === 'unsafe' ? `blocked by ${dns.scanner}` : dns.verdict === 'safe' ? 'clean' : (dns.note || 'no answer')) : online ? 'not needed' : 'off (Offline only)'}`,
         parsed.malformed.length ? `address: malformed (${parsed.malformed.length} sign${parsed.malformed.length === 1 ? '' : 's'})` : null
@@ -1441,22 +1437,37 @@ async function checkSenders(list, ownDomain) {
     return results;
 }
 
-// Conversations the extension moved (or was about to move) to Spam, and those the user took out of
-// Spam, remembered (thread id → time) so the extension never moves them (again). The newest
-// SPAM_MEMORY_MAX are kept; there is no time limit. log: false (remember only) | 'moved' | 'failed' |
-// 'rescued': written to the application log, the popup's activity and spamMoveLog (Logging → Moved
-// to Spam). Resolves to true once saved.
+// Conversations the extension moved (or was about to move) to Spam (spamMovedThreads), and those the
+// user took out of Spam (spamRescuedThreads), remembered (thread id → time) so the extension never
+// moves them (again). The two are kept apart so moves can never push out the user's decisions. Each
+// keeps its newest SPAM_MEMORY_MAX; there is no time limit. When the moved list is full, its oldest
+// entries go first: Gmail deletes Spam after 30 days, so those conversations no longer exist unless
+// the user took them out of Spam, and a rescue clicked in Gmail on the web is in the other list.
+// log: false (remember only) | 'moved' | 'failed' | 'rescued': written to the application log, the
+// popup's activity and spamMoveLog (Logging → Moved to Spam). Resolves to true once saved.
 const SPAM_LOG_MAX = 1000;
-const SPAM_MEMORY_MAX = 20000;
+const SPAM_MEMORY_MAX = 50000;
 let spamMemoryQueue = Promise.resolve();
+let spamMemoryFullLogged = false;
 function recordSpamMoves(moves, log = 'moved') {
     const saved = spamMemoryQueue.then(async () => {
-        const stored = await storageGet('local', { spamMovedThreads: {} });
-        const map = stored.spamMovedThreads && typeof stored.spamMovedThreads === 'object' ? stored.spamMovedThreads : {};
+        const key = log === 'rescued' ? 'spamRescuedThreads' : 'spamMovedThreads';
+        const stored = await storageGet('local', { [key]: {} });
+        const map = stored[key] && typeof stored[key] === 'object' ? stored[key] : {};
         const now = Date.now();
         for (const m of moves) if (!map[m.thread]) map[m.thread] = now;
-        const kept = Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, SPAM_MEMORY_MAX);
-        const updates = { spamMovedThreads: Object.fromEntries(kept) };
+        let entries = Object.entries(map);
+        if (entries.length > SPAM_MEMORY_MAX) {
+            entries = entries.sort((a, b) => b[1] - a[1]).slice(0, SPAM_MEMORY_MAX);
+            if (!spamMemoryFullLogged) {
+                spamMemoryFullLogged = true;
+                const oldest = new Date(entries[entries.length - 1][1]).toLocaleDateString();
+                logWarning(log === 'rescued'
+                    ? `The list of conversations you took out of Spam is full (${SPAM_MEMORY_MAX.toLocaleString()}); the oldest are forgotten (now kept from ${oldest}). Add senders you trust to Settings → Senders → Trusted senders.`
+                    : `The list of conversations moved to Spam is full (${SPAM_MEMORY_MAX.toLocaleString()}); the oldest are forgotten (now kept from ${oldest}). Gmail deletes Spam after 30 days, so those no longer exist; conversations you took out of Spam are kept separately.`, 'Sender checks');
+            }
+        }
+        const updates = { [key]: Object.fromEntries(entries) };
         if (log) {
             const old = await storageGet('local', { spamMoveLog: [] });
             const entries = moves.map(m => ({ ts: now, action: log, thread: m.thread, sender: m.address || '', reason: m.reason || '', how: m.how || '' }));

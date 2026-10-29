@@ -144,12 +144,6 @@
       "click.marketing.example"
     ]
   },
-  "managedPhishingSenders": {
-    "Value": [
-      "billing@paypa1-support.example",
-      "paypa1-support.example"
-    ]
-  },
   "managedTrustedSenders": {
     "Value": [
       "office@partner.example",

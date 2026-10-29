@@ -1,5 +1,12 @@
 # Changelog
 
+## 5.43 — No sender block list; rescues kept apart
+
+- **Removed the organization's phishing-sender block list (`managedPhishingSenders`).** Only allow lists remain: Trusted senders (yours and `managedTrustedSenders`) and the allowlist, for phishing-training providers and false positives. Anything the checks miss is reported with Gmail's own Report spam. An existing `managedPhishingSenders` policy is ignored. Senders are still flagged by the community scam-sender list, the phishing lists, the DNS security services, nonexistent domains, malformed addresses and signs of forgery in the email.
+- **Trusted senders and allowlisted domains always win**: nothing can flag or move them any more.
+- **Mail from your own organization's domain is never moved to Spam** (previously it could be, when your organization listed that exact address). It is still flagged and explained when something is wrong.
+- **Conversations you take out of Spam are remembered in their own list** (`spamRescuedThreads`), so emails moved later can never push them out. Each list keeps its newest 50,000 (was 20,000 shared). When the moved list is full, its oldest entries are forgotten first, and the log says so once.
+
 ## 5.42 — Nothing is shown as safe unless it was checked
 
 - **Senders:** mail from Gmail.com, Outlook.com and other big providers, from major companies' domains and from your own organization's domain is now **Not verified** (grey) instead of ✓ Checked (green). Their domains are never judged as a whole (anyone can sign up at gmail.com, and an own-domain From line can be forged), so not being on a phishing list proves nothing. Green now requires a completed threat check that cleared the sender's domain; trusted senders and allowlisted domains show as Trusted. Flagging and moving to Spam are unchanged.

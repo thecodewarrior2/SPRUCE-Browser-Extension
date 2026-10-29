@@ -46,12 +46,12 @@
     },
     "managedEnableSenderAddressCheck": {
       "title": "Check Sender Addresses Against Phishing Lists (Gmail)",
-      "description": "Compare each sender's address, on the device, with managedPhishingSenders and the community scam-sender list (sefinek/Blacklisted-Emails, downloaded with the phishing lists when managedEnablePhishingFeeds is true). Malformed addresses (encoded parts, more than 64 characters before the @, two @, invalid domain) are flagged too.",
+      "description": "Compare each sender's address, on the device, with the community scam-sender list (sefinek/Blacklisted-Emails, downloaded with the phishing lists when managedEnablePhishingFeeds is true). Malformed addresses (encoded parts, more than 64 characters before the @, two @, invalid domain) are flagged too.",
       "type": "boolean"
     },
     "managedEnableAutoSpam": {
       "title": "Move Emails From Flagged Senders to Spam (Gmail)",
-      "description": "Move flagged emails to Spam using Gmail's own Report spam. An email is flagged when its sender is on a phishing-sender list, its domain is on a phishing list, blocked by a security service or doesn't exist, its address is malformed, or the email itself shows enough signs of forgery (forged delivery headers, links or attachments flagged as dangerous…). Never unverified, caution or clean ones; only from the inbox; never while the user is typing or has emails selected; never phishing-simulation emails (managedPhishSimulationDomains / managedPhishSimulationRules), trusted senders, or mail from the user's own organization domain (unless that exact address is listed in managedPhishingSenders, e.g. a compromised account). A conversation is moved at most once: one the user takes back out of Spam stays in the inbox.",
+      "description": "Move flagged emails to Spam using Gmail's own Report spam. An email is flagged when its sender's exact address is on the community scam-sender list, its domain is on a phishing list, blocked by a security service or doesn't exist, its address is malformed, or the email itself shows enough signs of forgery (forged delivery headers, links or attachments flagged as dangerous…). Never unverified, caution or clean ones; only from the inbox; never while the user is typing or has emails selected; never phishing-simulation emails (managedPhishSimulationDomains / managedPhishSimulationRules), trusted senders, or mail from the user's own organization domain. A conversation is moved at most once: one the user takes back out of Spam stays in the inbox.",
       "type": "boolean"
     },
     "managedEnableSpamNotice": {
@@ -287,18 +287,9 @@
         "description": "Domain name (e.g., click.marketing.com)"
       }
     },
-    "managedPhishingSenders": {
-      "title": "Managed Phishing Senders (Gmail)",
-      "description": "Gmail: your organization's known phishing or scam senders: full addresses (billing@paypa1-support.com) or whole domains (paypa1-support.com, which includes its subdomains; \"@domain\" also accepted). Emails from them are flagged and, when managedEnableAutoSpam is true, moved to Spam. Users can't change this list, and it wins over trusted senders and the allowlist.",
-      "type": "array",
-      "items": {
-        "type": "string",
-        "description": "Email address or domain (e.g., billing@paypa1-support.com or paypa1-support.com)"
-      }
-    },
     "managedTrustedSenders": {
       "title": "Managed Trusted Senders (Gmail)",
-      "description": "Senders that are never flagged or moved to Spam: full addresses or whole domains (subdomains included). Merged with the user's own trusted senders (Settings → Senders → Trusted senders); users can't remove these entries. managedPhishingSenders still wins.",
+      "description": "The allow list: senders that are never flagged or moved to Spam, for example your phishing-training provider or false positives. Full addresses or whole domains (subdomains included). Merged with the user's own trusted senders (Settings → Senders → Trusted senders); users can't remove these entries. There is no sender block list.",
       "type": "array",
       "items": {
         "type": "string",

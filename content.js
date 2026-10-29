@@ -2463,7 +2463,10 @@ if (SITE.id === 'gmail') document.addEventListener('mousedown', onRescueClick, t
 
 function movedThreads() {
     return new Promise(resolve => {
-        try { chrome.storage.local.get({ spamMovedThreads: {} }, (r) => resolve(!chrome.runtime.lastError && r && r.spamMovedThreads ? r.spamMovedThreads : null)); }
+        try {
+            chrome.storage.local.get({ spamMovedThreads: {}, spamRescuedThreads: {} }, (r) => resolve(!chrome.runtime.lastError && r && r.spamMovedThreads && r.spamRescuedThreads
+                ? Object.assign({}, r.spamMovedThreads, r.spamRescuedThreads) : null));
+        }
         catch (e) { resolve(null); }
     });
 }

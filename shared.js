@@ -200,19 +200,17 @@ async function loadEffectiveSettings() {
 
     const managedAllowlist = normalizeDomainList(managed.managedAllowlist);
     const managedBlocklist = normalizeDomainList(managed.managedBlocklist);
-    const managedPhishingSenders = normalizeSenderList(managed.managedPhishingSenders);
     const managedTrustedSenders = normalizeSenderList(managed.managedTrustedSenders);
     return {
         values,
         locked,
         managedAllowlist,
         managedBlocklist,
-        managedPhishingSenders,
         managedTrustedSenders,
         allowlist: [...new Set([...normalizeDomainList(local.customAllowlist), ...managedAllowlist])],
         blocklist: [...new Set([...normalizeDomainList(local.customBlocklist), ...managedBlocklist])],
-        // Phishing senders are set by the organization only; trusted senders by the user and the organization.
-        phishingSenders: managedPhishingSenders,
+        // Trusted senders (the allow list) by the user and the organization. There is no sender block
+        // list: Gmail's own Report spam covers that.
         trustedSenders: [...new Set([...normalizeSenderList(local.customTrustedSenders), ...managedTrustedSenders])],
         remoteShorteners: Array.isArray(local.remoteShorteners) ? local.remoteShorteners : [],
         // Administrator-only policies: set by policy alone (no setting in the extension, not in backups).
@@ -1513,8 +1511,8 @@ function splitSimulationDomains(list) {
 
 // ---------------------------------------------------------------------------
 // SENDER IDENTITY AND SENDER THREAT CHECKS (Gmail)
-// Each sender gets a verdict from its address and domain: the phishing-sender lists (administrator,
-// user, community), the phishing lists for its domain, and the DNS threat services. Only a FLAGGED
+// Each sender gets a verdict from its address and domain: the community scam-sender list (there is
+// no sender block list), the phishing lists for its domain, and the DNS threat services. Only a FLAGGED
 // sender's email is ever moved to Spam; unverified, unknown and clean senders are left alone.
 // ---------------------------------------------------------------------------
 
@@ -1560,7 +1558,7 @@ function gmailViewAllowsAutoSpam(hash) {
 //   address, ownDomain            the sender's address; the user's own organization domain
 //   allowlisted                   the sender's domain is on the allowlist (yours or your organization's)
 //   trustedHit                    the address or domain is on the trusted senders list
-//   listHit                       { source: 'admin' | 'user' | 'community', entry, name }
+//   listHit                       { source: 'community', entry, name } (the community scam-sender list)
 //   addressChecked                the address was compared with the phishing-sender lists
 //   domainFeed                    name of the phishing list that has the sender's domain
 //   dns                           the DNS threat verdict for the domain ({ verdict, reason, scanner, note })
@@ -1584,22 +1582,22 @@ function combineSenderVerdictInner({ address, ownDomain, allowlisted, trustedHit
     const domain = domainOfAddress(address);
     const own = isOwnDomain(domain, ownDomain);
     const sharedDomain = senderDomainShared(domain, ownDomain);
-    // Your trusted senders: never flagged or moved, unless your organization lists them as phishing.
-    if (trustedHit && !(listHit && listHit.source === 'admin')) return { status: 'trusted', reasons: [`On your trusted senders list (${trustedHit}).`], move: false };
+    // Your trusted senders (yours and your organization's allow list): never flagged or moved.
+    if (trustedHit) return { status: 'trusted', reasons: [`On your trusted senders list (${trustedHit}).`], move: false };
     const reasons = [];
     if (listHit) {
-        const who = listHit.source === 'admin' ? 'your organization' : listHit.source === 'user' ? 'you' : (listHit.name || 'a community list');
+        const who = listHit.name || 'a community list';
         reasons.push(listHit.entry.includes('@') ? `This address is listed as a phishing or scam sender by ${who}.`
             : `The sender's domain ${listHit.entry} is listed as a phishing or scam sender by ${who}.`);
     }
-    if (allowlisted && !(listHit && listHit.source !== 'community')) return { status: 'trusted', reasons: ['The sender\'s domain is on your trusted sites list.'], move: false };
+    if (allowlisted) return { status: 'trusted', reasons: ['The sender\'s domain is on your trusted sites list.'], move: false };
     if (domainFeed && !sharedDomain) reasons.push(`The sender's domain ${domain} is listed as phishing by ${domainFeed}.`);
     const dnsFlag = !sharedDomain && dns && dns.verdict === 'unsafe';
     const securityFlag = dnsFlag && !SENDER_DNS_NOT_SECURITY.has(dns.scanner);
     if (securityFlag) reasons.push(`The sender's domain ${domain} is flagged by a security service: ${dns.reason || dns.scanner}.`);
-    // Mail from your own organization is moved only for an exact address your organization or you
-    // listed (a compromised account), never for a domain-wide or community finding.
-    if (reasons.length) return { status: 'flagged', reasons, move: !own || !!(listHit && listHit.source !== 'community' && listHit.entry.includes('@')) };
+    // Mail from your own organization is never moved (a domain-wide or community finding there would
+    // hit colleagues); it is still flagged so the warning shows.
+    if (reasons.length) return { status: 'flagged', reasons, move: !own };
     if (dnsFlag) return { status: 'caution', reasons: [`The sender's domain ${domain} is blocked by ${dns.scanner}: ${dns.reason || 'filtered'}.`], move: false };
     // Never green by default: your own domain and big shared providers can't be judged by domain
     // checks (anyone can sign up at gmail.com, and an own-domain From can be forged), so they stay
