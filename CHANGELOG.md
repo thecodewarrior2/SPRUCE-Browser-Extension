@@ -1,5 +1,17 @@
 # Changelog
 
+## 5.45 — Moving to Spam no longer gets stuck (Firefox build, same as Chrome 5.45)
+
+- **Fixed: moving emails to Spam could stop until Gmail was reloaded**, especially with several moves one after another. Causes found and fixed:
+  - emails that had to wait (an email was open, or Gmail briefly hid the list) were dropped from the queue and never picked up again;
+  - after three moves Gmail didn't confirm, moving switched itself off for the rest of the visit;
+  - conversations whose Report spam click Gmail ignored were remembered as moved, so they were never tried again, even after a reload;
+  - a reply the background service never sent could leave moving "busy" forever;
+  - a selection left in a list Gmail had hidden counted as "you have emails selected".
+- **A monitor now keeps moving alive.** It runs in the Gmail page itself (the only place Gmail's buttons can be clicked) and checks every 5 seconds: flagged emails still in the inbox are queued again, a move that stalled is restarted, and waiting moves are retried. After three passes in which Gmail moved nothing, moving pauses (15 seconds, doubling up to 10 minutes) and tries again by itself, never stopping. Every message to the background service has a time limit.
+- A click Gmail ignored is forgotten and tried again; a conversation Gmail skipped while moving others is given up after 3 tries and logged in Logging → Moved to Spam. Nothing is ever left selected.
+- What is moved, and every safety check before a move, is unchanged.
+
 ## 5.44 — Color only where it matters (Firefox build, same as Chrome 5.44)
 
 - **Sender labels are colored only when they need attention:** ⛔ red for flagged, ⚠ yellow for caution, and ✓ green only for trusted senders (your list, your organization's, or an allowlisted domain), the one case a person chose. Every other label (checked, nothing found; not verified) is plain, the same neutral grey as Gmail's own labels.

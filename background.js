@@ -1489,6 +1489,22 @@ function recordSpamMoves(moves, log = 'moved') {
     return saved;
 }
 
+// Conversations Gmail was asked to move but didn't (the click changed nothing): forgotten, so they can
+// be tried again. Only the moved list; the user's rescues are never touched.
+function forgetSpamMoves(threads) {
+    const done = spamMemoryQueue.then(async () => {
+        if (!threads.length) return true;
+        const stored = await storageGet('local', { spamMovedThreads: {} });
+        const map = stored.spamMovedThreads && typeof stored.spamMovedThreads === 'object' ? stored.spamMovedThreads : {};
+        let changed = false;
+        for (const t of threads) if (t in map) { delete map[t]; changed = true; }
+        if (changed) await chrome.storage.local.set({ spamMovedThreads: map });
+        return true;
+    }).catch(() => false);
+    spamMemoryQueue = done;
+    return done;
+}
+
 // Crops a drawn grid to its dark modules (the symbol without its quiet zone) and decodes it; tries
 // the inverted colors too (light-on-dark drawings).
 function decodeDrawnQr(grid) {
@@ -2060,6 +2076,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         if (!sender || sender.id !== chrome.runtime.id || typeof request.site !== 'string') { sendResponse(''); return false; }
         getConfig().then(cfg => (cfg.values.enableSenderIdentity && cfg.values.enableDnsThreatCheck ? senderIcon(request.site) : ''))
             .then(d => sendResponse(d || ''), () => sendResponse(''));
+        return true;
+    }
+    if (request.action === 'forgetSpamMoves') {
+        if (!sender || sender.id !== chrome.runtime.id || !Array.isArray(request.threads)) { sendResponse(false); return false; }
+        const threads = request.threads.filter(t => typeof t === 'string' && /^thread-f:\d{1,25}$/.test(t)).slice(0, 100);
+        forgetSpamMoves(threads).then(sendResponse, () => sendResponse(false));
         return true;
     }
     if (request.action === 'recordSpamMoves') {
