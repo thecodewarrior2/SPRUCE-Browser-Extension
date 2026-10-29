@@ -801,7 +801,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }));
 
     // ---------------- Senders: icons & flags, and Moved to Spam (Gmail sender checks)
-    const SENDER_BADGES = { flagged: ['badge-unsafe', '⛔ Flagged'], caution: ['badge-warning', '⚠ Caution'], clean: ['badge-safe', '✓ Checked'],
+    const SENDER_BADGES = { flagged: ['badge-unsafe', '⛔ Flagged'], caution: ['badge-warning', '⚠ Caution'], clean: ['badge-neutral', 'Checked, nothing found'],
                             trusted: ['badge-safe', '✓ Trusted'], unverified: ['badge-neutral', 'Not verified'], unknown: ['badge-neutral', 'Unknown'] };
     const cell = (text, style) => { const td = document.createElement('td'); if (style) td.style.cssText = style; if (text !== undefined) td.textContent = text; return td; };
     const emptyRow = (tbody, cols, text) => { const tr = document.createElement('tr'); const td = cell(text, 'color: var(--text-muted);'); td.colSpan = cols; tr.appendChild(td); tbody.appendChild(tr); };
