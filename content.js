@@ -269,14 +269,38 @@ function safeSend(message, callback) {
     }
 }
 
-const DANGER_SVG = `<svg width="22" height="22" viewBox="0 0 24 24" style="vertical-align: middle; display: inline-block;"><polygon points="7,2 17,2 22,7 22,17 17,22 7,22 2,17 2,7" fill="#d93025" stroke="#ffffff" stroke-width="1.5"/><path d="M12,6.5 L12,12.5" stroke="#ffd700" stroke-width="2.5" stroke-linecap="round"/><circle cx="12" cy="16.5" r="1.5" fill="#ffd700"/></svg>`;
+// Link marker icons as [size, extra <svg> attributes, [tag, attributes]…]; built with DOM calls, never
+// parsed from markup. Dangerous link: red octagon with a yellow "!".
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const DANGER_SVG = [22, {}, [
+    ['polygon', { points: '7,2 17,2 22,7 22,17 17,22 7,22 2,17 2,7', fill: '#d93025', stroke: '#ffffff', 'stroke-width': '1.5' }],
+    ['path', { d: 'M12,6.5 L12,12.5', stroke: '#ffd700', 'stroke-width': '2.5', 'stroke-linecap': 'round' }],
+    ['circle', { cx: '12', cy: '16.5', r: '1.5', fill: '#ffd700' }]]];
 // Suspicious but not dangerous (text shows another site, raw IP…): amber warning triangle.
-const CAUTION_SVG = `<svg width="20" height="20" viewBox="0 0 24 24" style="vertical-align: middle; display: inline-block;" aria-hidden="true"><path d="M12 2.5 L22.5 21 H1.5 Z" fill="#f9ab00" stroke="#5f3b00" stroke-width="1.2" stroke-linejoin="round"/><rect x="11" y="9" width="2" height="6.5" rx="1" fill="#202124"/><circle cx="12" cy="18" r="1.2" fill="#202124"/></svg>`;
+const CAUTION_SVG = [20, { 'aria-hidden': 'true' }, [
+    ['path', { d: 'M12 2.5 L22.5 21 H1.5 Z', fill: '#f9ab00', stroke: '#5f3b00', 'stroke-width': '1.2', 'stroke-linejoin': 'round' }],
+    ['rect', { x: '11', y: '9', width: '2', height: '6.5', rx: '1', fill: '#202124' }],
+    ['circle', { cx: '12', cy: '18', r: '1.2', fill: '#202124' }]]];
 // Blocklisted link with a hidden destination: magnifier on a red disc. Click = "reveal?" prompt.
-const REVEAL_SVG = `<svg width="22" height="22" viewBox="0 0 24 24" style="vertical-align: middle; display: inline-block;"><circle cx="12" cy="12" r="11" fill="#d93025" stroke="#ffffff" stroke-width="1.5"/><circle cx="10.5" cy="10.5" r="4.2" fill="none" stroke="#ffffff" stroke-width="2"/><path d="M13.6,13.6 L17.5,17.5" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round"/><path d="M10.5,8.6 L10.5,10.9 M10.5,12.4 L10.5,12.5" stroke="#ffd700" stroke-width="1.8" stroke-linecap="round"/></svg>`;
+const REVEAL_SVG = [22, {}, [
+    ['circle', { cx: '12', cy: '12', r: '11', fill: '#d93025', stroke: '#ffffff', 'stroke-width': '1.5' }],
+    ['circle', { cx: '10.5', cy: '10.5', r: '4.2', fill: 'none', stroke: '#ffffff', 'stroke-width': '2' }],
+    ['path', { d: 'M13.6,13.6 L17.5,17.5', stroke: '#ffffff', 'stroke-width': '2.4', 'stroke-linecap': 'round' }],
+    ['path', { d: 'M10.5,8.6 L10.5,10.9 M10.5,12.4 L10.5,12.5', stroke: '#ffd700', 'stroke-width': '1.8', 'stroke-linecap': 'round' }]]];
 
 // Email tracking link: small blue magnifier, shown when the link is hovered (see content.css).
-const TRACKER_REVEAL_SVG = `<svg width="16" height="16" viewBox="0 0 24 24" style="vertical-align: middle; display: inline-block;"><circle cx="12" cy="12" r="11" fill="#1a73e8" stroke="#ffffff" stroke-width="1.5"/><circle cx="10.5" cy="10.5" r="4.2" fill="none" stroke="#ffffff" stroke-width="2"/><path d="M13.6,13.6 L17.5,17.5" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round"/></svg>`;
+const TRACKER_REVEAL_SVG = [16, {}, [
+    ['circle', { cx: '12', cy: '12', r: '11', fill: '#1a73e8', stroke: '#ffffff', 'stroke-width': '1.5' }],
+    ['circle', { cx: '10.5', cy: '10.5', r: '4.2', fill: 'none', stroke: '#ffffff', 'stroke-width': '2' }],
+    ['path', { d: 'M13.6,13.6 L17.5,17.5', stroke: '#ffffff', 'stroke-width': '2.4', 'stroke-linecap': 'round' }]]];
+
+function buildSvg([size, attrs, shapes]) {
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    const set = (el, a) => { for (const [k, v] of Object.entries(a)) el.setAttribute(k, v); };
+    set(svg, Object.assign({ width: String(size), height: String(size), viewBox: '0 0 24 24', style: 'vertical-align: middle; display: inline-block;' }, attrs));
+    for (const [tag, a] of shapes) { const el = document.createElementNS(SVG_NS, tag); set(el, a); svg.appendChild(el); }
+    return svg;
+}
 
 let lastSettings = {};
 let lastPolicy = {};    // administrator-only policies (phishing simulation rules…)   // settings used for the most recent scan (needed when a link is revealed later)
@@ -330,7 +354,7 @@ function setIcon(link, kind, title) {
         icon.style.marginLeft = '4px';
         icon.style.cursor = '';
     } else {
-        icon.innerHTML = kind === 'danger' ? DANGER_SVG : kind === 'caution' ? CAUTION_SVG : kind === 'trackreveal' ? TRACKER_REVEAL_SVG : REVEAL_SVG; // static markup only
+        icon.replaceChildren(buildSvg(kind === 'danger' ? DANGER_SVG : kind === 'caution' ? CAUTION_SVG : kind === 'trackreveal' ? TRACKER_REVEAL_SVG : REVEAL_SVG));
         icon.style.marginLeft = kind === 'trackreveal' ? '3px' : '6px';
         icon.style.cursor = 'pointer';
     }

@@ -7,6 +7,7 @@
 - **Manifest:** Gecko add-on ID `link-unshortener@gmail-link-scanner` and a data-collection declaration replace the Chrome `key`; `managed_schema` and `match_origin_as_fallback` are removed.
 - **Enterprise policy:** settings are locked with Firefox enterprise policy (`policies` → `3rdparty` → `Extensions` → add-on ID). Settings → **Copy policies.json** replaces *Copy as policy JSON* (Google Workspace) and *Copy registry script* (Edge/Chrome). `schema.json` is removed; `policy-example.json`, ADMIN-GUIDE.md and Help → Deploying in organizations describe Firefox deployment.
 - **Microsoft Intune / Group Policy:** Settings → **Copy Intune script** generates PowerShell that writes the policy to `HKLM\SOFTWARE\Policies\Mozilla\Firefox` (install via `ExtensionSettings`, the add-on's settings as one JSON value under `3rdparty\Extensions`). On/off settings also accept registry DWORD 1/0. Help and ADMIN-GUIDE.md cover Intune, Group Policy and macOS profiles.
+- **addons.mozilla.org validation:** no more `innerHTML` with dynamic values: the Link Inspector, the empty cache table and the link marker icons are built with DOM calls (link text can never be parsed as markup). Firefox for Android minimum set to 142, the first version that understands the data-collection declaration.
 - **Clean-up:** removed shims for JavaScript features Firefox 140 already has, the retry for a Chromium storage bug, and a Chromium-only style workaround.
 
 ## 5.38 — Best practices for phishing training; shared platforms refused as training domains

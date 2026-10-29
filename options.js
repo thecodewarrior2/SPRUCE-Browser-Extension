@@ -557,7 +557,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (tbody.children.length === 0) {
                 const total = Object.keys(items).filter(k => k.startsWith('http')).length;
-                tbody.innerHTML = `<tr><td colspan="5" style="color: var(--text-muted);">${total ? 'No cached links match your filter.' : 'No cached links yet. Results appear here as you open emails in Gmail.'}</td></tr>`;
+                const td = node('td', { style: 'color: var(--text-muted);' }, total ? 'No cached links match your filter.' : 'No cached links yet. Results appear here as you open emails in Gmail.');
+                td.colSpan = 5;
+                tbody.replaceChildren(node('tr', null, td));
             }
         });
     }
@@ -1160,29 +1162,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 const directCard = document.createElement('div');
                 directCard.className = 'step-card';
                 directCard.style.borderLeftColor = 'var(--success-solid)';
-                directCard.innerHTML = `
-                    <div class="step-header" style="color: var(--success-text);">
-                        <span>✓ Direct link</span>
-                        <span class="step-label">Nothing to decode</span>
-                    </div>
-                    <div class="url-box">${escapeHtml(urlToInspect)}</div>
-                `;
+                directCard.append(
+                    node('div', { className: 'step-header', style: 'color: var(--success-text);' },
+                        node('span', null, '✓ Direct link'), node('span', { className: 'step-label' }, 'Nothing to decode')),
+                    node('div', { className: 'url-box' }, urlToInspect));
                 stepsContainer.appendChild(directCard);
             } else {
                 steps.forEach((step, idx) => {
                     const stepCard = document.createElement('div');
                     stepCard.className = 'step-card';
-                    stepCard.innerHTML = `
-                        <div class="step-header">
-                            <span>Layer ${step.layer}: ${escapeHtml(step.decoder)}</span>
-                            <span class="step-label">Pass ${idx + 1} of ${steps.length}</span>
-                        </div>
-                        <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;"><strong>Before:</strong></div>
-                        <div class="url-box" style="margin-bottom: 8px;">${escapeHtml(step.inputUrl)}</div>
-                        <div class="step-arrow">⬇ decoded ⬇</div>
-                        <div style="font-size: 11px; color: var(--success-text); margin-bottom: 4px;"><strong>After:</strong></div>
-                        <div class="url-box url-box-good">${escapeHtml(step.outputUrl)}</div>
-                    `;
+                    stepCard.append(
+                        node('div', { className: 'step-header' },
+                            node('span', null, `Layer ${step.layer}: ${step.decoder}`),
+                            node('span', { className: 'step-label' }, `Pass ${idx + 1} of ${steps.length}`)),
+                        node('div', { style: 'font-size: 11px; color: var(--text-muted); margin-bottom: 4px;' }, node('strong', null, 'Before:')),
+                        node('div', { className: 'url-box', style: 'margin-bottom: 8px;' }, step.inputUrl),
+                        node('div', { className: 'step-arrow' }, '⬇ decoded ⬇'),
+                        node('div', { style: 'font-size: 11px; color: var(--success-text); margin-bottom: 4px;' }, node('strong', null, 'After:')),
+                        node('div', { className: 'url-box url-box-good' }, step.outputUrl));
                     stepsContainer.appendChild(stepCard);
                 });
             }
@@ -1198,19 +1195,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 ? `Not verified: ${response.note || 'inconclusive'}`
                 : (isSafe ? 'Checked: nothing found' : `Flagged: ${response.reason || 'dangerous'}`);
 
-            destCard.innerHTML = `
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                    <strong style="font-size: 15px; color: ${!isSafe ? 'var(--danger-text)' : unverified ? 'var(--text-2)' : 'var(--success-text)'};">🎯 Where the link goes</strong>
-                    <span class="badge ${badgeClass}">${escapeHtml(statusLabel)}</span>
-                </div>
-                <div class="url-box" style="margin-bottom: 10px;">${escapeHtml(response.unwrappedUrl)}</div>
-                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--text-muted);">
-                    <div>
-                        <strong>Site address (IP):</strong> <code>${escapeHtml(response.resolvedIp || 'N/A')}</code>
-                        <span style="margin-left: 12px;"><strong>Checked by:</strong> ${escapeHtml(response.scanner === 'Multi-DoH' ? 'several security services' : (response.scanner || 'this device'))}</span>
-                    </div>
-                </div>
-            `;
+            destCard.append(
+                node('div', { style: 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;' },
+                    node('strong', { style: `font-size: 15px; color: ${!isSafe ? 'var(--danger-text)' : unverified ? 'var(--text-2)' : 'var(--success-text)'};` }, '🎯 Where the link goes'),
+                    node('span', { className: `badge ${badgeClass}` }, statusLabel)),
+                node('div', { className: 'url-box', style: 'margin-bottom: 10px;' }, response.unwrappedUrl || ''),
+                node('div', { style: 'display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--text-muted);' },
+                    node('div', null,
+                        node('strong', null, 'Site address (IP):'), ' ', node('code', null, response.resolvedIp || 'N/A'),
+                        node('span', { style: 'margin-left: 12px;' },
+                            node('strong', null, 'Checked by:'), ' ', response.scanner === 'Multi-DoH' ? 'several security services' : (response.scanner || 'this device')))));
 
             if (Array.isArray(response.notes) && response.notes.length) {
                 const hdr = document.createElement('div');
@@ -1238,14 +1232,15 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    function escapeHtml(string) {
-        if (!string) return '';
-        return String(string)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;');
+    // Builds an element; text children become text nodes, so nothing is ever parsed as HTML.
+    function node(tag, props, ...children) {
+        const e = document.createElement(tag);
+        if (props) {
+            if (props.className) e.className = props.className;
+            if (props.style) e.style.cssText = props.style;
+        }
+        e.append(...children.map(c => (c instanceof Node ? c : String(c))));
+        return e;
     }
 
     refreshAllViews();
