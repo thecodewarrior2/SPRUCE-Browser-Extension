@@ -1,141 +1,65 @@
 {
-  "managedEnableLinkUnmasking": {
-    "Value": true
-  },
-  "managedEnableTrackerReveal": {
-    "Value": true
-  },
-  "managedEnablePhishingFeeds": {
-    "Value": true
-  },
-  "managedEnableSenderChecks": {
-    "Value": true
-  },
-  "managedEnableSendCheck": {
-    "Value": true
-  },
-  "managedEnableQrScanning": {
-    "Value": true
-  },
-  "managedEnableAttachmentScanning": {
-    "Value": true
-  },
-  "managedEnableOutlookSupport": {
-    "Value": true
-  },
-  "managedEnableProtonSupport": {
-    "Value": true
-  },
-  "managedEnableYahooSupport": {
-    "Value": true
-  },
-  "managedEnableAolSupport": {
-    "Value": true
-  },
-  "managedEnableZohoSupport": {
-    "Value": true
-  },
-  "managedEnableIcloudSupport": {
-    "Value": true
-  },
-  "managedEnableFastmailSupport": {
-    "Value": true
-  },
-  "managedEnableGmxSupport": {
-    "Value": true
-  },
-  "managedEnableOneTimeLinkProtection": {
-    "Value": true
-  },
-  "managedEnableMismatchWarnings": {
-    "Value": true
-  },
-  "managedEnableHiddenLinkProtection": {
-    "Value": true
-  },
-  "managedEnableClickConfirmation": {
-    "Value": true
-  },
-  "managedVisualOverrides": {
-    "Value": true
-  },
-  "managedEnableTrackingPixelBlocking": {
-    "Value": true
-  },
-  "managedRemoveTrackingPixels": {
-    "Value": true
-  },
-  "managedEnableThirdPartyResolution": {
-    "Value": true
-  },
-  "managedEnableDnsThreatCheck": {
-    "Value": true
-  },
-  "managedDnsQuad9": {
-    "Value": true
-  },
-  "managedDnsCloudflareSecurity": {
-    "Value": true
-  },
-  "managedDnsCloudflareFamily": {
-    "Value": true
-  },
-  "managedDnsControlD": {
-    "Value": true
-  },
-  "managedDnsDns4eu": {
-    "Value": false
-  },
-  "managedDnsAdGuard": {
-    "Value": true
-  },
-  "managedEnableRemoteListSync": {
-    "Value": true
-  },
-  "managedEnableResultCache": {
-    "Value": true
-  },
-  "managedEnableHistoryLog": {
-    "Value": true
-  },
-  "managedRetentionDays": {
-    "Value": 30
-  },
-  "managedDohEndpoint": {
-    "Value": "https://dns.example.com/dns-query?name={hostname}&type=A"
-  },
-  "managedDohMethod": {
-    "Value": "GET"
-  },
-  "managedUnshortenerEndpoint": {
-    "Value": "https://unshorten.example.com/?url={url}"
-  },
-  "managedUnshortenerMethod": {
-    "Value": "GET"
-  },
-  "managedUseUnshortenMeFallback": {
-    "Value": true
-  },
-  "managedAllowlist": {
-    "Value": [
-      "internal.example.com"
-    ]
-  },
-  "managedBlocklist": {
-    "Value": [
-      "click.marketing.example"
-    ]
-  },
-  "managedHidePopupSettingsButton": {
-    "Value": false
-  },
-  "managedHideRecentActivity": {
-    "Value": false
-  },
-  "managedPhishSimulationRules": {
-    "Value": []
-  },
-  "managedPhishSimulationDomains": {
-    "Value": []
+  "policies": {
+    "ExtensionSettings": {
+      "link-unshortener@gmail-link-scanner": {
+        "installation_mode": "force_installed",
+        "install_url": "https://addons.mozilla.org/firefox/downloads/latest/ADDON-SLUG/latest.xpi"
+      }
+    },
+    "3rdparty": {
+      "Extensions": {
+        "link-unshortener@gmail-link-scanner": {
+          "managedEnableLinkUnmasking": true,
+          "managedEnableTrackerReveal": true,
+          "managedEnablePhishingFeeds": true,
+          "managedEnableSenderChecks": true,
+          "managedEnableSendCheck": true,
+          "managedEnableQrScanning": true,
+          "managedEnableAttachmentScanning": true,
+          "managedEnableOutlookSupport": true,
+          "managedEnableProtonSupport": true,
+          "managedEnableYahooSupport": true,
+          "managedEnableAolSupport": true,
+          "managedEnableZohoSupport": true,
+          "managedEnableIcloudSupport": true,
+          "managedEnableFastmailSupport": true,
+          "managedEnableGmxSupport": true,
+          "managedEnableOneTimeLinkProtection": true,
+          "managedEnableMismatchWarnings": true,
+          "managedEnableHiddenLinkProtection": true,
+          "managedEnableClickConfirmation": true,
+          "managedVisualOverrides": true,
+          "managedEnableTrackingPixelBlocking": true,
+          "managedRemoveTrackingPixels": true,
+          "managedEnableThirdPartyResolution": true,
+          "managedEnableDnsThreatCheck": true,
+          "managedDnsQuad9": true,
+          "managedDnsCloudflareSecurity": true,
+          "managedDnsCloudflareFamily": true,
+          "managedDnsControlD": true,
+          "managedDnsDns4eu": false,
+          "managedDnsAdGuard": true,
+          "managedEnableRemoteListSync": true,
+          "managedEnableResultCache": true,
+          "managedEnableHistoryLog": true,
+          "managedRetentionDays": 30,
+          "managedDohEndpoint": "https://dns.example.com/dns-query?name={hostname}&type=A",
+          "managedDohMethod": "GET",
+          "managedUnshortenerEndpoint": "https://unshorten.example.com/?url={url}",
+          "managedUnshortenerMethod": "GET",
+          "managedUseUnshortenMeFallback": true,
+          "managedAllowlist": [
+            "internal.example.com"
+          ],
+          "managedBlocklist": [
+            "click.marketing.example"
+          ],
+          "managedHidePopupSettingsButton": false,
+          "managedHideRecentActivity": false,
+          "managedPhishSimulationRules": [],
+          "managedPhishSimulationDomains": []
+        }
+      }
+    }
   }
 }

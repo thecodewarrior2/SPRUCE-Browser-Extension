@@ -1,4 +1,4 @@
-// decoders.js — every OFFLINE link decoder (no network requests). Loaded by the service worker
+// decoders.js — every OFFLINE link decoder (no network requests). Loaded by the background page
 // after shared.js. Each decoder identifies its format by the PARSED hostname (exact host or real
 // subdomain) plus the path, never by text that merely appears somewhere in the URL.
 //

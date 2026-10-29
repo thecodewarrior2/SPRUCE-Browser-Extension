@@ -1,6 +1,6 @@
 // custom-endpoints.js — talks to the CUSTOM THREAT RESOLVER and CUSTOM UNSHORTENER that a user or
-// administrator configures in Settings → Your own services (or by Workspace policy). Pure functions only, so
-// every format can be tested without a browser. Loaded by the service worker.
+// administrator configures in Settings → Your own services (or by policy). Pure functions only, so
+// every format can be tested without a browser. Loaded by the background page.
 //
 // Placeholders, usable in the endpoint address and in the request body:
 //   {hostname}      the link's host only, e.g. example.com          (threat resolver and unshortener)

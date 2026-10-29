@@ -1,25 +1,51 @@
-# Managing Gmail Link Unshortener with Google Workspace
+# Managing Gmail Link Unshortener with Firefox enterprise policy
 
 Every setting, plus the allowlist, blocklist and custom resolver, can be set and locked by policy.
 Locked settings show 🔒 in the Options page and the toolbar popup and cannot be changed by users.
 Anything you do **not** set stays under the user's control (all features are on by default).
 
 ## Set the policy
-1. Google Admin console → **Devices → Chrome → Apps & extensions → Users & browsers**.
-2. Choose the organizational unit, then add or select this extension.
-3. Open **Policy for extensions** and paste JSON in the form below. Delete every line you do not want to lock.
+Firefox passes an add-on's policy from `policies` → `3rdparty` → `Extensions` → the add-on ID
+(`link-unshortener@gmail-link-scanner`) to the add-on. The same `policies.json` can also install it:
+
+1. Create `policies.json` in the form below. Delete every setting you do not want to lock.
+2. Put it in a `distribution` folder in the Firefox installation folder (for example
+   `C:\Program Files\Mozilla Firefox\distribution\policies.json`,
+   `/Applications/Firefox.app/Contents/Resources/distribution/policies.json` or
+   `/usr/lib/firefox/distribution/policies.json`; on Linux `/etc/firefox/policies/policies.json` also
+   works), with Intune, Group Policy file copy or any device-management tool.
+3. Restart Firefox and check `about:policies`.
 
 ```json
 {
-  "managedEnableThirdPartyResolution": { "Value": false },
-  "managedEnableRemoteListSync":       { "Value": false },
-  "managedRetentionDays":              { "Value": 14 },
-  "managedAllowlist":                  { "Value": ["internal.example.com"] }
+  "policies": {
+    "ExtensionSettings": {
+      "link-unshortener@gmail-link-scanner": {
+        "installation_mode": "force_installed",
+        "install_url": "https://addons.mozilla.org/firefox/downloads/latest/<slug>/latest.xpi"
+      }
+    },
+    "3rdparty": {
+      "Extensions": {
+        "link-unshortener@gmail-link-scanner": {
+          "managedEnableThirdPartyResolution": false,
+          "managedEnableRemoteListSync": false,
+          "managedRetentionDays": 14,
+          "managedAllowlist": ["internal.example.com"]
+        }
+      }
+    }
+  }
 }
 ```
 
-`policy-example.json` lists every key with its default value. Users can also generate a starting point from
-**Options → Settings → Backup & Google Workspace → "Copy as policy JSON"**.
+`<slug>` is the last part of the add-on's addons.mozilla.org address; for a self-hosted signed `.xpi`,
+use its address instead. The examples below show only the add-on's own settings object (the part under
+the add-on ID). `policy-example.json` lists every key with its default value. Users can also generate a
+starting point from **Options → Settings → Backup & enterprise policy → "Copy policies.json"**.
+
+Firefox also reads policies from Windows Group Policy / Intune (Mozilla's ADMX templates) and macOS
+configuration profiles; see <https://mozilla.github.io/policy-templates/>.
 
 ## Keys
 | Key | Type | Default | Purpose |
@@ -28,7 +54,7 @@ Anything you do **not** set stays under the user's control (all features are on 
 | managedEnablePhishingFeeds | boolean | true | Download the OpenPhish community feed and Phishing Army (CC BY-NC 4.0) lists (at most once a day) and match links on the device |
 | managedDnsControlD / managedDnsDns4eu | boolean | true / false | Additional free security resolvers (Control D malware; DNS4EU Protective, EU) |
 | managedEnableSenderChecks | boolean | true | Gmail: read Gmail's sender verification when needed; trust company-only links (c.gle…) only in mail verified as from that company directly to the user; warn about brand impersonation |
-| managedHidePopupSettingsButton | boolean | false | Administrator only (no setting in the extension): remove "Open Settings" from the toolbar popup; Settings stays reachable at chrome-extension://<ID>/options.html |
+| managedHidePopupSettingsButton | boolean | false | Administrator only (no setting in the extension): remove "Open Settings" from the toolbar popup; Settings stays reachable from about:addons → the add-on → Options |
 | managedHideRecentActivity | boolean | false | Administrator only: remove "Recent activity" from the toolbar popup |
 | managedPhishSimulationDomains | array of strings | [] | Administrator only, every webmail: training-vendor link domains; an email whose links ALL go there is left unchecked |
 | managedPhishSimulationRules | array of objects | [] | Administrator only, Gmail: phishing-simulation emails to leave unchecked (see "Administrator-only policies") |
@@ -64,7 +90,7 @@ Anything you do **not** set stays under the user's control (all features are on 
 - **Privacy-strict baseline:** set `managedEnableThirdPartyResolution`, `managedEnableDnsThreatCheck` and
   `managedEnableRemoteListSync` to `false` for a deployment that makes no third-party requests at all (links are still unwrapped offline).
 - **Custom endpoints and API keys:** headers set by policy (for example an API key) are masked in the Options page and never included in user backups. Examples for URLhaus, Google Safe Browsing and Bitly are in Settings → Your own services; check each service's terms of use.
-- **Custom endpoints and host access:** Chrome cannot grant new host access by policy. Either make sure the endpoint sends CORS headers,
+- **Custom endpoints and host access:** Firefox cannot grant new host access by policy. Either make sure the endpoint sends CORS headers,
   or allow users to approve the one-time host prompt when saving it.
 - **Remote shortener lists** update automatically every day and are treated as untrusted:
   - Entries for major sites are ignored, and list-only domains are sent to unshorten.me only for URLs shaped like short links.
@@ -78,37 +104,31 @@ Anything you do **not** set stays under the user's control (all features are on 
 
 ## Deploying
 
-The extension's **Help → Deploying in organizations** section has step-by-step instructions for:
-
-- **Google Workspace (Chrome / ChromeOS):** Admin console → Devices → Chrome → Apps & extensions → Users & browsers. Add the extension by Chrome Web Store ID, set it to **Force install**, and paste the JSON from **Settings → Backup & Google Workspace → Copy as policy JSON** into **Policy for extensions**.
-- **Microsoft Edge with Intune:**
-  - **Install:** Settings catalog → Microsoft Edge → Extensions → **Control which extensions are installed silently**, with an entry of the form `ID;https://edge.microsoft.com/extensionwebstorebase/v1/crx` (Edge Add-ons) or `ID;https://clients2.google.com/service/update2/crx` (Chrome Web Store).
-  - **Settings:** **Copy registry script** generates a PowerShell script that writes `HKLM\SOFTWARE\Policies\Microsoft\Edge\3rdparty\extensions\<ID>\policy` and the Chrome equivalent. Deploy it as an Intune platform script, running as system in 64-bit PowerShell.
-- **Chrome on Windows with Intune:** Settings catalog → Google Chrome → Extensions → force-install list (import Google's ADMX templates if needed). The same registry script covers its settings.
-
-Verify at `chrome://policy` / `edge://policy`. Menu names in admin consoles change over time, so expect small wording differences.
+The extension's **Help → Deploying in organizations** section has step-by-step instructions. In short:
+publish the add-on on addons.mozilla.org (listed or unlisted; Firefox installs only signed add-ons),
+then deploy `policies.json` as above with `installation_mode` set to `force_installed` (users can't
+remove it) or `normal_installed`. Verify at `about:policies` and `about:addons`.
 
 ## Administrator-only policies
 
 These keys exist only in the policy. The extension has no setting for them, users can't see or change
-them, and they're not included in backups. **Copy as policy JSON** doesn't produce them either, so add
+them, and they're not included in backups. **Copy policies.json** doesn't produce them either, so add
 them by hand.
 
 ### Hide the Settings button and recent activity
 
 ```json
 {
-  "managedHidePopupSettingsButton": { "Value": true },
-  "managedHideRecentActivity":      { "Value": true }
+  "managedHidePopupSettingsButton": true,
+  "managedHideRecentActivity":      true
 }
 ```
 
 - `managedHidePopupSettingsButton` removes **Open Settings** from the toolbar popup.
 - `managedHideRecentActivity` removes the **Recent activity** list and its **Clear activity** button from
   the popup. Activity is still recorded and visible in Settings → Logging.
-- **Settings stay reachable** for IT staff and anyone who knows the address: type
-  `chrome-extension://nnbeoijlicodfplamcelmdlkjggddfla/options.html` in the address bar (Edge: the same
-  address with the extension's Edge ID). Hiding the button is a convenience, not a lock: to stop users
+- **Settings stay reachable** for IT staff and anyone who knows where to look: `about:addons` → the
+  add-on → **Options**. Hiding the button is a convenience, not a lock: to stop users
   changing a setting, set that setting by policy.
 
 ### Phishing simulation (training) emails
@@ -184,10 +204,10 @@ Steps:
 
 ```json
 {
-  "managedPhishSimulationDomains": { "Value": ["<root domain 1>", "<root domain 2>", "<…all from Phishing → Domains>"] },
-  "managedPhishSimulationRules":   { "Value": [
+  "managedPhishSimulationDomains": ["<root domain 1>", "<root domain 2>", "<…all from Phishing → Domains>"],
+  "managedPhishSimulationRules":   [
     { "name": "KnowBe4", "header": "X-KB4TOKEN", "value": "<your KSAT token>" }
-  ] }
+  ]
 }
 ```
 
@@ -218,10 +238,10 @@ Steps:
 
 ```json
 {
-  "managedPhishSimulationDomains": { "Value": ["ssuport.com", "the-verification.com", "account-protector.com", "<…the rest of Wizer's list>"] },
-  "managedPhishSimulationRules":   { "Value": [
+  "managedPhishSimulationDomains": ["ssuport.com", "the-verification.com", "account-protector.com", "<…the rest of Wizer's list>"],
+  "managedPhishSimulationRules":   [
     { "name": "Wizer", "header": "X-TestPhish", "ips": ["<Wizer sending addresses>"] }
-  ] }
+  ]
 }
 ```
 
@@ -272,7 +292,7 @@ protection.
 
 #### Verify and troubleshoot
 
-1. Confirm the policy arrived: `chrome://policy` (Edge: `edge://policy`) → this extension.
+1. Confirm the policy arrived: `about:policies` lists `3rdparty` with this add-on's ID and no errors.
 2. Send a test campaign to yourself (or a pilot group) and open it in each webmail you use.
 3. In Settings → Logging, look for *"Phishing simulation email (…): left unchecked"*. The text in
    brackets shows what matched: the rule's name, or *links to <domain>*.
@@ -284,15 +304,10 @@ protection.
 | Warning *"… match a public header name only"* | Add a secret `value` or the vendor's `ips` to that rule. |
 | Works in Gmail but not Outlook | Header rules are Gmail-only; add the vendor's link domains. |
 
-**Intune / registry:** both values are lists. In the registry, write each as a JSON string (REG_SZ),
-for example `["ssuport.com","the-verification.com"]` or
-`[{"name":"KnowBe4","header":"X-KB4TOKEN","value":"…"}]`, and confirm at `chrome://policy` that they
-were read as lists.
-
 ## Resetting settings
 
 **Reset my settings to defaults** (Settings → Data on this device) resets only the user's own choices. It never changes a setting your organization manages, including the user's stored value underneath it. So nothing changes for the user if a policy is later removed.
 
 ## Google Web Risk for threat checks
 
-Google Workspace organizations can use Google's Web Risk API as the custom threat resolver. The steps and the policy JSON are in the extension's Help → Deploying in organizations → "Threat checks with Google Web Risk". Note that Web Risk receives full links, whereas the built-in checks send only site names. Google has no API to expand short links; use your own lookup service for that (Help → Limitations).
+Organizations can use Google's Web Risk API as the custom threat resolver. The steps and the policy JSON are in the extension's Help → Deploying in organizations → "Threat checks with Google Web Risk". Note that Web Risk receives full links, whereas the built-in checks send only site names. Google has no API to expand short links; use your own lookup service for that (Help → Limitations).

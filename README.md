@@ -1,6 +1,6 @@
 # Gmail Link Unshortener & Tracker Blocker
 
-A Chrome (Manifest V3) extension that shows where the links in your email **really** go before you
+A Firefox (Manifest V3) add-on that shows where the links in your email **really** go before you
 click them, flags phishing and look-alike sites, and blocks email tracking pixels. Everything
 sensitive happens on your device: QR codes, attachments and the phishing lists are read locally,
 and nothing about you is sent anywhere unless you choose a lookup service that needs the link.
@@ -41,45 +41,25 @@ Proton Mail, Yahoo Mail, AOL Mail, Zoho Mail, iCloud Mail, Fastmail and GMX.
   go to the DNS threat filters) or *Offline only* (nothing leaves the browser). Every feature can
   be switched off individually.
 
-## Firefox
+## Install
 
-This branch is the **Firefox** build (Firefox 128 or later, including 128 ESR). It shares the
-Chrome code; the differences are:
+Requires **Firefox 140 or later** (desktop). Until it's on addons.mozilla.org, it's loaded from this
+folder. See [INSTALL-FOR-TESTERS.md](INSTALL-FOR-TESTERS.md) for the full walkthrough:
 
-- `manifest.json` uses a background **page** (`background.html`) instead of a service worker, and
-  has a Gecko add-on ID in `browser_specific_settings` instead of the Chrome `key`.
-- Firefox has no offscreen documents, so the QR/PDF scanner (`scanner.js`) runs inside the
-  background page and `background.js` calls it directly. Firefox has no `BarcodeDetector`, so the
-  bundled QR decoder is always used.
-- Managed (policy) settings come from Firefox's enterprise policies (`3rdparty` → `Extensions` →
-  the add-on ID) rather than Chrome policy; `schema.json` is not read by Firefox.
+1. Open `about:debugging#/runtime/this-firefox`.
+2. Click **Load Temporary Add-on…** and choose `manifest.json` in this folder.
+3. Reload your webmail tab.
 
-**Try it:** open `about:debugging#/runtime/this-firefox`, click **Load Temporary Add-on…** and pick
-`manifest.json` in this folder (it stays loaded until Firefox restarts). To check the build, run
-`npx web-ext lint`; to package it for addons.mozilla.org, run `npx web-ext build`.
-
-## Install (load unpacked)
-
-The extension isn't in a web store yet; it's installed from this folder. See
-[INSTALL-FOR-TESTERS.md](INSTALL-FOR-TESTERS.md) for the full walkthrough:
-
-1. Move this folder somewhere permanent (Chrome loads it from there).
-2. Open `chrome://extensions` (Edge: `edge://extensions`) and turn on **Developer mode**.
-3. Click **Load unpacked** and choose this folder (the one containing `manifest.json`).
-4. Reload your webmail tab.
-
-**Updating:** replace the files in the same folder, click ↻ on the extension's card, and reload
-your webmail. Settings are kept.
-
-The `key` in `manifest.json` is the extension's **public** key: it keeps the extension ID the same
-on every computer, so settings and managed policies apply. It's safe to publish. The matching
-private key (`.pem`) signs releases and must never be committed (see `.gitignore`).
+A temporary add-on stays loaded until Firefox restarts. To check the build, run `npx web-ext lint`;
+to package it for addons.mozilla.org, run `npx web-ext build`. The add-on ID
+(`link-unshortener@gmail-link-scanner`, in `manifest.json`) keeps settings and managed policies
+attached to the same add-on on every computer.
 
 ## For administrators
 
-Settings can be forced with Google Workspace, Microsoft Intune or Group Policy. See
-[ADMIN-GUIDE.md](ADMIN-GUIDE.md) and the schema in [`schema.json`](schema.json);
-[`policy-example.json`](policy-example.json) shows a complete policy.
+Settings can be forced with Firefox enterprise policy (`policies.json`, Group Policy / Intune or macOS
+profiles). See [ADMIN-GUIDE.md](ADMIN-GUIDE.md); [`policy-example.json`](policy-example.json) is a
+complete `policies.json` with every key.
 
 Some policies exist for administrators only, with no setting in the extension:
 
@@ -88,21 +68,21 @@ Some policies exist for administrators only, with no setting in the extension:
   link domains in every webmail (`managedPhishSimulationDomains`: all links must go to the vendor's
   domains) or by header in Gmail (`managedPhishSimulationRules`, ideally with a secret value).
 - **A simpler popup** (`managedHidePopupSettingsButton`, `managedHideRecentActivity`): hides the
-  Settings button and recent activity; Settings stays reachable at
-  `chrome-extension://<ID>/options.html`.
+  Settings button and recent activity; Settings stays reachable from `about:addons`.
 
 ## Repository layout
 
 | Path | Role |
 |---|---|
-| `manifest.json` | Manifest V3 declaration, permissions, supported sites |
-| `background.js` | Service worker: link pipeline, threat checks, list sync, badge |
+| `manifest.json` | Manifest V3 declaration, add-on ID, permissions, supported sites |
+| `background.html` | Background event page: loads the background scripts and the scanner |
+| `background.js` | Link pipeline, threat checks, list sync, badge |
 | `content.js` / `content.css` | Injected into webmail: banners, link markings, hover card, sender checks, the Send check |
 | `shared.js` | Settings, constants and helpers shared by all contexts |
 | `decoders.js` | Offline decoders for short links, gateways and trackers |
 | `custom-endpoints.js` | Requests and replies for your own lookup service or threat resolver |
 | `qr-decoder.js` | Self-contained QR decoder (no dependencies) |
-| `scanner.js` / `scanner.html` | Hidden offscreen document for QR/PDF scanning |
+| `scanner.js` / `compat.js` | QR/PDF scanning in the background page; shims pdf.js needs on older Firefox |
 | `options.*`, `help.js`, `popup.*` | Settings, logging, Link Inspector and Help; the toolbar popup |
 | `theme.css` / `theme.js` | Design tokens and light/dark appearance (WCAG 2.1 AA) |
 | `lib/` | Bundled pdf.js (Apache-2.0), used only for PDF attachments |
@@ -124,7 +104,7 @@ Some policies exist for administrators only, with no setting in the extension:
   website you link to, as your reader would by clicking it, and never for one-time links.
 - **Never change an email being written,** only emails being read.
 - **Never trap an email:** if the Send check can't finish, the email is sent.
-- **Managed settings win:** policy values (Workspace, Intune, Group Policy) can't be changed or
+- **Managed settings win:** policy values (Firefox enterprise policy) can't be changed or
   reset by the user.
 
 ## Testing

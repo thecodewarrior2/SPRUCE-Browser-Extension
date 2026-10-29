@@ -1,5 +1,5 @@
 // content.js — runs inside Gmail (isolated world). Watches for opened messages, sends each link to
-// the service worker for analysis, then rewrites or marks it; blocks tracking pixels; handles the 🔍
+// the background page for analysis, then rewrites or marks it; blocks tracking pixels; handles the 🔍
 // reveal; reports its own failures to the application log. Never reports Gmail's own errors.
 // shared.js (loaded first) provides: isGhostAnchorStyle, detectLinkProblem, emailTrackerProvider,
 // BUILTIN_TRACKER_SET, hostInSet and the settings model.
@@ -364,9 +364,6 @@ function restoreLink(link, d) {
         d.textReplaced = false;
     }
     if (d.originalStyle === null || d.originalStyle === undefined) {
-        // Chromium can leave an empty style="" behind when a CSSOM-created style is removed
-        // directly; writing the attribute first makes the removal complete.
-        link.setAttribute('style', '');
         link.removeAttribute('style');
     } else {
         link.setAttribute('style', d.originalStyle);

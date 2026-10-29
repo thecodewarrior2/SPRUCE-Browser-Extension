@@ -364,7 +364,7 @@
                 </details>
                 <details class="more"><summary>Your own services (advanced)</summary>
                     <p class="card-intro">For organizations or tinkerers with their own threat-intelligence API or link-expansion service. Both are optional and off until an address is entered.</p>
-                    <p class="card-intro"><b>Recommended for organizations:</b> the free public lookup service (unshorten.me) can't expand links longer than 100 characters, such as Google's c.gle links, limits how many links it looks up and may be blocked by firewalls. Your own lookup service removes these limits and keeps links inside your organization. For threat checks, Google Workspace organizations can use Google's Web Risk API. <a href="#" data-help-link="limitations">Limitations and recommendations</a></p>
+                    <p class="card-intro"><b>Recommended for organizations:</b> the free public lookup service (unshorten.me) can't expand links longer than 100 characters, such as Google's c.gle links, limits how many links it looks up and may be blocked by firewalls. Your own lookup service removes these limits and keeps links inside your organization. For threat checks, organizations can use Google's Web Risk API. <a href="#" data-help-link="limitations">Limitations and recommendations</a></p>
             <div class="managed-box" id="managedDohNotice" style="display: none;">
                 <strong>🛡️ Managed Policy Active:</strong> Your Custom DoH Endpoint is locked and managed by your administrator.
             </div>
@@ -500,16 +500,14 @@
             </div>
 
             <details class="card more-card">
-                <summary><h3 style="display: inline;">🏢 Backup &amp; Google Workspace</h3></summary>
+                <summary><h3 style="display: inline;">🏢 Backup &amp; enterprise policy</h3></summary>
                 <div class="setting-row"><div class="setting-text">Back up your settings<div class="setting-desc">Saves the settings you changed and your lists to a file. API keys are never included.</div></div>
                     <button id="downloadSettingsBtn" class="btn-primary">Back up</button></div>
                 <div class="setting-row"><div class="setting-text">Restore from a backup<div class="setting-desc">You'll see exactly what will be restored before anything changes.</div></div>
                     <button id="importSettingsBtn" class="btn-secondary">Restore…</button>
                     <input type="file" id="importFileInput" accept=".json" style="display: none;"></div>
-                <div class="setting-row"><div class="setting-text">Manage with Google Workspace<div class="setting-desc">Every setting and list can be set and locked by your administrator (Admin console → Devices → Chrome → Apps &amp; extensions → this extension → Policy for extensions). This button copies your current settings in that format. <a href="#" data-help-link="deploy">Administrator guide</a><div id="copyPolicyResult" style="margin-top: 4px; color: var(--success-text);"></div></div></div>
-                    <button id="copyPolicyJsonBtn" class="btn-action">Copy as policy JSON</button></div>
-                <div class="setting-row"><div class="setting-text">Manage with Microsoft Intune (Edge or Chrome on Windows)<div class="setting-desc">Copies a PowerShell script that writes your current settings as extension policy in the Windows registry, for an Intune platform script (or Group Policy / any device-management tool). <a href="#" data-help-link="deploy">Deployment guide</a><div id="copyRegResult" style="margin-top: 4px; color: var(--success-text);"></div></div></div>
-                    <button id="copyRegScriptBtn" class="btn-action">Copy registry script</button></div>
+                <div class="setting-row"><div class="setting-text">Manage with Firefox enterprise policy<div class="setting-desc">Every setting and list can be set and locked by your administrator with Firefox's <code>policies.json</code> (or the equivalent Windows Group Policy / Intune or macOS profile). This button copies a complete <code>policies.json</code> that installs the add-on and locks your current settings. <a href="#" data-help-link="deploy">Administrator guide</a><div id="copyPolicyResult" style="margin-top: 4px; color: var(--success-text);"></div></div></div>
+                    <button id="copyPolicyJsonBtn" class="btn-action">Copy policies.json</button></div>
             </details>
 
             <div class="reset-row">
@@ -803,65 +801,49 @@
 
 <section id="help-deploy" class="help-section">
 <h2>Deploying in organizations</h2>
-<p class="lead">Install the extension for everyone automatically and set (or lock) its settings centrally: with Google Workspace for Chrome, and with Microsoft Intune for Microsoft Edge (or Chrome on Windows).</p>
-<div class="callout-warn"><b>Before you start.</b> Admin consoles change their menus from time to time; the paths below describe the 2026 consoles and may be worded slightly differently in yours. Always test with a small pilot group first and check the result at <code>chrome://policy</code> or <code>edge://policy</code>.</div>
+<p class="lead">Install the add-on for everyone automatically and set (or lock) its settings centrally with Firefox enterprise policies.</p>
+<div class="callout-warn"><b>Before you start.</b> Always test with a small pilot group first and check the result at <code>about:policies</code>, which lists the active policies and marks errors.</div>
 
-<h3 id="deploy-prepare">1. Choose how the extension is distributed</h3>
+<h3 id="deploy-prepare">1. Publish the add-on</h3>
 <ul class="simple-list">
-  <li><b>Chrome Web Store</b> (recommended for Chrome): publish it as <i>Public</i>, <i>Unlisted</i>, or <i>Private</i> (visible only to your Google Workspace domain). Its <b>extension ID</b> is the 32-letter code in the store address.</li>
-  <li><b>Microsoft Edge Add-ons</b> (recommended for Edge): publish it there (it can be hidden from search). It gets a different extension ID from the Chrome Web Store version.</li>
-  <li><b>Chrome Web Store version in Edge:</b> Edge can also force-install the Chrome Web Store version by its Chrome ID and the Chrome update address below.</li>
-  <li><b>Self-hosting</b> (packed .crx plus an update manifest on your own web server) works only on managed devices; the stores are simpler and update automatically.</li>
+  <li><b>addons.mozilla.org (AMO)</b>, listed or unlisted: Firefox only installs add-ons signed by Mozilla, and both kinds are signed and updated automatically. A listed add-on installs from <code>https://addons.mozilla.org/firefox/downloads/latest/&lt;slug&gt;/latest.xpi</code>, where <code>&lt;slug&gt;</code> is the last part of its AMO address.</li>
+  <li>An unlisted (self-distributed) add-on is a signed <code>.xpi</code> you host yourself; use its address as <code>install_url</code>.</li>
+  <li>The add-on ID is <code>link-unshortener@gmail-link-scanner</code> (in <code>manifest.json</code>); policies refer to the add-on by this ID.</li>
 </ul>
-<p>Update addresses used in install policies:</p>
-<div class="deploy-code">Chrome Web Store:  https://clients2.google.com/service/update2/crx
-Edge Add-ons:      https://edge.microsoft.com/extensionwebstorebase/v1/crx</div>
-<p>The extension's settings are delivered as <b>extension policy</b>: every setting has a policy key (listed in the <a href="#" data-help-link="architecture" data-help-anchor="arch-settings">settings reference</a> and in <code>schema.json</code>). A policy value always wins and appears with 🔒 to the user; anything you don't set stays under the user's control.</p>
+<p>The extension's settings are delivered as <b>extension policy</b>: every setting has a policy key (listed in the <a href="#" data-help-link="architecture" data-help-anchor="arch-settings">settings reference</a>). A policy value always wins and appears with 🔒 to the user; anything you don't set stays under the user's control.</p>
 
-<h3 id="deploy-workspace">2. Google Workspace (Chrome browser and ChromeOS)</h3>
+<h3 id="deploy-policies">2. policies.json (Windows, macOS and Linux)</h3>
 <ol class="simple-list">
-  <li>In the Google Admin console, go to <b>Devices → Chrome → Apps &amp; extensions → Users &amp; browsers</b>. (To manage Chrome on computers where users don't sign in, enroll the browsers with Chrome Enterprise Core and use the <b>Managed browsers</b> tab instead.)</li>
-  <li>Select the <b>organizational unit</b> (or group) to deploy to; start with a pilot group.</li>
-  <li>Click <b>+ (Add)</b> → <b>Add from Chrome Web Store</b> and search for the extension, or <b>Add Chrome app or extension by ID</b> and enter its ID (for a self-hosted package also enter its update address).</li>
-  <li>Set the <b>Installation policy</b> to <b>Force install</b> (or <b>Force install + pin to browser toolbar</b>) so users can't remove it.</li>
-  <li>In the extension's settings panel, paste your settings into <b>Policy for extensions</b> as JSON. Generate it from <b>Settings → Backup &amp; Google Workspace → Copy as policy JSON</b> and delete the lines you don't want to lock. The format is:
+  <li>Generate the file from <b>Settings → Backup &amp; enterprise policy → Copy policies.json</b>, replace <code>ADDON-SLUG</code>, and delete the settings you don't want to lock. The format is:
     <div class="deploy-code">{
-  "managedEnableThirdPartyResolution": { "Value": true },
-  "managedDnsCloudflareFamily":        { "Value": true },
-  "managedBlocklist":                  { "Value": ["tracking.example.com"] }
+  "policies": {
+    "ExtensionSettings": {
+      "link-unshortener@gmail-link-scanner": {
+        "installation_mode": "force_installed",
+        "install_url": "https://addons.mozilla.org/firefox/downloads/latest/&lt;slug&gt;/latest.xpi"
+      }
+    },
+    "3rdparty": {
+      "Extensions": {
+        "link-unshortener@gmail-link-scanner": {
+          "managedEnableThirdPartyResolution": true,
+          "managedDnsCloudflareFamily": true,
+          "managedBlocklist": ["tracking.example.com"]
+        }
+      }
+    }
+  }
 }</div></li>
-  <li><b>Save</b>. Browsers pick up the change at their next policy refresh (usually within a few hours; users can speed it up at <code>chrome://policy</code> → <b>Reload policies</b>).</li>
-  <li><b>Check</b>: <code>chrome://extensions</code> shows "Installed by your administrator", <code>chrome://policy</code> lists the extension's policies, and Settings shows 🔒 on the locked options.</li>
+  <li>Put it in a folder named <code>distribution</code> in the Firefox installation folder (for example <code>C:\Program Files\Mozilla Firefox\distribution\policies.json</code>, <code>/Applications/Firefox.app/Contents/Resources/distribution/policies.json</code>, or <code>/usr/lib/firefox/distribution/policies.json</code>; on Linux <code>/etc/firefox/policies/policies.json</code> also works). Deploy it with any device-management tool, for example an Intune platform script or Win32 app.</li>
+  <li><code>installation_mode</code> <code>force_installed</code> installs the add-on and stops users removing it; <code>normal_installed</code> installs it but lets users disable it.</li>
+  <li>Restart Firefox. <b>Check</b>: <code>about:policies</code> lists the policies, <code>about:addons</code> shows the add-on, and Settings shows 🔒 on the locked options.</li>
 </ol>
+<p>Firefox also reads the same policies from Windows Group Policy / Intune (with Mozilla's ADMX templates) and from macOS configuration profiles; see Mozilla's <a href="https://mozilla.github.io/policy-templates/" target="_blank" rel="noopener noreferrer">policy templates</a>. <code>policies.json</code> is the simplest way to deliver the extension's own settings on every platform.</p>
 
-<h3 id="deploy-intune">3. Microsoft Edge with Microsoft Intune</h3>
-<p><b>A. Install the extension automatically.</b></p>
-<ol class="simple-list">
-  <li>In the Microsoft Intune admin center, go to <b>Devices → Configuration → Create → New policy</b>; platform <b>Windows 10 and later</b>, profile type <b>Settings catalog</b>.</li>
-  <li>Click <b>Add settings</b>, search for <b>Microsoft Edge</b> and open the <b>Extensions</b> category.</li>
-  <li>Enable <b>Control which extensions are installed silently</b> (the <code>ExtensionInstallForcelist</code> policy) and add one entry in the form <code>extension-ID;update-address</code>, for example:
-    <div class="deploy-code">&lt;Edge Add-ons ID&gt;;https://edge.microsoft.com/extensionwebstorebase/v1/crx
-&lt;Chrome Web Store ID&gt;;https://clients2.google.com/service/update2/crx</div>
-    (Use one of the two. Choose the device-level, not user-level, setting so it applies to everyone on the device.)</li>
-  <li>Alternatively, configure <b>Extension management settings</b> (<code>ExtensionSettings</code>) with JSON such as <code>{"&lt;ID&gt;": {"installation_mode": "force_installed", "update_url": "&lt;update address&gt;"}}</code>.</li>
-  <li><b>Assign</b> the profile to a pilot device or user group, then to everyone.</li>
-</ol>
-<p><b>B. Deliver the extension's settings.</b> Edge reads extension policy from the registry under <code>HKLM\SOFTWARE\Policies\Microsoft\Edge\3rdparty\extensions\&lt;ID&gt;\policy</code>. The Settings catalog doesn't cover third-party extension policy, so use a script:</p>
-<ol class="simple-list">
-  <li>In this extension, choose <b>Settings → Backup &amp; Google Workspace → Copy registry script</b>. It produces a PowerShell script with your current settings for both Edge and Chrome; replace the extension ID at the top with the ID you deploy.</li>
-  <li>In Intune, go to <b>Devices → Scripts and remediations → Platform scripts → Add → Windows 10 and later</b>, upload the .ps1 file, and set <b>Run this script using the logged on credentials: No</b> (runs as system) and <b>Run script in 64 bit PowerShell host: Yes</b>.</li>
-  <li><b>Assign</b> it to the same groups. To change settings later, upload a new version of the script (or use a <b>Remediation</b> that re-applies it on a schedule).</li>
-  <li><b>Check</b>: <code>edge://policy</code> lists the extension's policies; <code>edge://extensions</code> shows the extension as managed; Settings shows 🔒 on locked options.</li>
-</ol>
-<p>How values are written (the script does this for you): on/off settings as <code>REG_DWORD</code> 1/0, numbers as <code>REG_DWORD</code>, text as <code>REG_SZ</code>, and the allowed/blocked site lists as a subkey (for example <code>...\policy\managedBlocklist</code>) with values named <code>1</code>, <code>2</code>, <code>3</code>… each holding one site.</p>
-
-<h3 id="deploy-chrome-windows">4. Chrome on Windows with Intune (optional)</h3>
-<p>The same approach works for Google Chrome: in the Settings catalog choose <b>Google Chrome → Extensions → Configure the list of force-installed apps and extensions</b> (<code>ExtensionInstallForcelist</code>, entry <code>&lt;Chrome Web Store ID&gt;;https://clients2.google.com/service/update2/crx</code>). If the Google Chrome settings aren't listed, import Google's Chrome ADMX templates first. The registry script above already writes the settings for Chrome too (<code>HKLM\SOFTWARE\Policies\Google\Chrome\3rdparty\extensions\&lt;ID&gt;\policy</code>).</p>
-
-<h3 id="deploy-webrisk">5. Threat checks with Google Web Risk (Google Workspace)</h3>
+<h3 id="deploy-webrisk">3. Threat checks with Google Web Risk</h3>
 <p>Google's Web Risk API checks full addresses against Google's lists of phishing and malware pages (the data behind Google Safe Browsing). It needs a Google Cloud project with billing enabled; check Google's current Web Risk pricing first. <b>Note:</b> unlike the built-in checks, which only send site names, Web Risk receives the full link (one-time links are never sent).</p>
 <ol class="simple-list">
-  <li>In the Google Cloud console, sign in with your Google Workspace account and create or choose a project.</li>
+  <li>In the Google Cloud console, sign in with your Google account and create or choose a project.</li>
   <li><b>APIs &amp; Services → Library</b>: find <b>Web Risk API</b> and click <b>Enable</b>.</li>
   <li><b>APIs &amp; Services → Credentials → Create credentials → API key</b>. Open the key, choose <b>Restrict key</b>, and under API restrictions allow only the Web Risk API.</li>
   <li>In this extension: <b>Settings → Your own services → Custom threat resolver</b>:
@@ -871,44 +853,44 @@ Request headers: X-Goog-Api-Key: YOUR_API_KEY
 Flag field:      (leave empty: Google's replies are recognized automatically)</div>
     Click <b>Save service</b>, then <b>Test resolver</b>. Matches show as, for example, "Phishing (Google Web Risk)".</li>
   <li>To deploy it to everyone, add it to your policy (the key is hidden from users and never included in backups):
-    <div class="deploy-code">"managedDohEndpoint": { "Value": "https://webrisk.googleapis.com/v1/uris:search?threatTypes=MALWARE&amp;threatTypes=SOCIAL_ENGINEERING&amp;threatTypes=UNWANTED_SOFTWARE&amp;uri={url}" },
-"managedDohMethod":   { "Value": "GET" },
-"managedDohHeaders":  { "Value": "X-Goog-Api-Key: YOUR_API_KEY" }</div></li>
+    <div class="deploy-code">"managedDohEndpoint": "https://webrisk.googleapis.com/v1/uris:search?threatTypes=MALWARE&amp;threatTypes=SOCIAL_ENGINEERING&amp;threatTypes=UNWANTED_SOFTWARE&amp;uri={url}",
+"managedDohMethod":   "GET",
+"managedDohHeaders":  "X-Goog-Api-Key: YOUR_API_KEY"</div></li>
 </ol>
 <p>Google Safe Browsing (v4, <code>threatMatches:find</code>) is also understood, but Google limits it to non-commercial use; organizations should use Web Risk. <b>Short links:</b> Google has no API to expand them; use your own lookup service (<a href="#" data-help-link="limitations">Limitations</a>).</p>
 
-<h3 id="deploy-settings">6. What can be managed</h3>
+<h3 id="deploy-settings">4. What can be managed</h3>
 <p>Every setting, both site lists (allowed and blocked) and both custom services can be set and locked. Anything you don't set stays under the user's control, and <b>Reset my settings to defaults</b> never changes managed settings.</p>
 <ul class="simple-list">
-  <li><b>Settings and lists:</b> all keys are in the <a href="#" data-help-link="architecture" data-help-anchor="arch-settings">settings reference</a> (generated from the code), in <code>schema.json</code> and in <code>ADMIN-GUIDE.md</code> in the extension package.</li>
+  <li><b>Settings and lists:</b> all keys are in the <a href="#" data-help-link="architecture" data-help-anchor="arch-settings">settings reference</a> (generated from the code) and in <code>ADMIN-GUIDE.md</code> in the extension package.</li>
   <li><b>Your own services:</b> <code>managedUnshortenerEndpoint</code> and <code>managedDohEndpoint</code> with their method, body and header keys. Headers (API keys) set by policy are masked from users and never included in backups.</li>
-  <li><b>Host access for your own services:</b> Chrome can't grant access to a custom service by policy, so the service should send CORS headers, or users approve a one-time prompt.</li>
+  <li><b>Host access for your own services:</b> Firefox can't grant access to a custom service by policy, so the service should send CORS headers, or users approve a one-time prompt.</li>
   <li><b>Webmail apps:</b> each supported webmail can be switched on or off (<code>managedEnableOutlookSupport</code>, <code>managedEnableYahooSupport</code> and so on).</li>
   <li><b>Changes</b> to policy apply without reinstalling, from the next message opened.</li>
 </ul>
 
-<h3 id="deploy-admin-only">7. Administrator-only policies</h3>
-<p>These exist only in the policy; there's no setting for them here, and they aren't in backups or in <b>Copy as policy JSON</b>. Full details and examples are in <code>ADMIN-GUIDE.md</code>.</p>
+<h3 id="deploy-admin-only">5. Administrator-only policies</h3>
+<p>These exist only in the policy; there's no setting for them here, and they aren't in backups or in <b>Copy policies.json</b>. Full details and examples are in <code>ADMIN-GUIDE.md</code>.</p>
 <ul class="simple-list">
-  <li><code>managedHidePopupSettingsButton</code> and <code>managedHideRecentActivity</code> remove the <b>Open Settings</b> button and the <b>Recent activity</b> list from the toolbar popup. Settings stays reachable by typing <code>chrome-extension://<span class="ext-id">nnbeoijlicodfplamcelmdlkjggddfla</span>/options.html</code> in the address bar.</li>
+  <li><code>managedHidePopupSettingsButton</code> and <code>managedHideRecentActivity</code> remove the <b>Open Settings</b> button and the <b>Recent activity</b> list from the toolbar popup. Settings stays reachable from <code>about:addons</code> → the add-on → <b>Options</b>.</li>
   <li><code>managedPhishSimulationDomains</code> (every webmail) lists your training vendor's link domains. An email whose links <b>all</b> go to those domains (after unwrapping SafeLinks, Proofpoint and similar) is left completely unchecked; one link anywhere else and it's checked as usual, so real phishing can't hide behind a training link. Shared platforms (such as <code>docs.google.com</code>, <code>sharepoint.com</code>, <code>bit.ly</code> or cloud hosting) are refused, with a warning in the log.</li>
   <li><code>managedPhishSimulationRules</code> (Gmail) lists your phishing-simulation (security training) emails, for example from KnowBe4 or Wizer, by the header the vendor adds, a secret value in it, and/or the vendor's sending addresses. In Gmail, a matching email is left completely unchecked: no link is looked up (which the vendor could record as a click), no tracking pixel is blocked and no warning is shown. Use a secret value or the sending addresses: a public header name alone could be copied by real phishing.</li>
 </ul>
-<div class="deploy-code">"managedPhishSimulationDomains": { "Value": ["ssuport.com", "the-verification.com"] },
-"managedPhishSimulationRules": { "Value": [
+<div class="deploy-code">"managedPhishSimulationDomains": ["ssuport.com", "the-verification.com"],
+"managedPhishSimulationRules": [
   { "name": "KnowBe4", "header": "X-KB4TOKEN", "value": "YOUR-KSAT-TOKEN" },
   { "name": "Wizer", "header": "X-TestPhish", "ips": ["&lt;Wizer's sending addresses&gt;"] }
-] }</div>
+]</div>
 
 <p><b>Best practice:</b> use both identifiers: the vendor's link domains (every webmail) and a header rule with a secret value (Gmail). List only domains the vendor owns, and keep the list current. <code>ADMIN-GUIDE.md</code> has a best-practice checklist and step-by-step setups for KnowBe4 and Wizer, with links to their documentation.</p>
 
-<h3 id="deploy-tips">8. Tips</h3>
+<h3 id="deploy-tips">6. Tips</h3>
 <ul class="simple-list">
   <li><b>Lock only what matters.</b> Settings you leave out of the policy keep their defaults and remain adjustable by users.</li>
   <li><b>API keys</b> for your own resolver or unshortener can be delivered by policy (<code>managedDohHeaders</code>, <code>managedUnshortenerHeaders</code>); users see them masked and they are never included in backups.</li>
   <li><b>No third-party requests at all:</b> set <code>managedEnableThirdPartyResolution</code>, <code>managedEnableDnsThreatCheck</code>, <code>managedEnableRemoteListSync</code> and <code>managedEnablePhishingFeeds</code> to <code>false</code>; nothing then leaves the browser.</li>
   <li><b>Network filters:</b> allow the services listed under <a href="#" data-help-link="architecture" data-help-anchor="arch-network">every network request</a>, or deliver your own resolver and unshortener by policy.</li>
-  <li><b>Troubleshooting:</b> if a setting isn't applied, compare its name with the settings reference (names are case-sensitive) and look at <code>chrome://policy</code> / <code>edge://policy</code>, which marks invalid values.</li>
+  <li><b>Troubleshooting:</b> if a setting isn't applied, compare its name with the settings reference (names are case-sensitive) and look at <code>about:policies</code>, which marks errors in the file.</li>
 </ul>
 </section>
 
@@ -939,7 +921,7 @@ Flag field:      (leave empty: Google's replies are recognized automatically)</d
 </ul>
 <h4>QR codes and attachments</h4>
 <ul class="simple-list">
-  <li><b>QR codes in email images</b> read on your device (Chrome's built-in reader where available, otherwise the bundled decoder) and checked like links; "DO NOT SCAN" when dangerous.</li>
+  <li><b>QR codes in email images</b> read on your device (with the bundled decoder) and checked like links; "DO NOT SCAN" when dangerous.</li>
   <li><b>QR codes drawn without an image</b> (HTML tables or block characters) found and decoded.</li>
   <li><b>Attachments</b> (Gmail, up to 10 MB): QR codes and links in images and PDFs (first 10 pages); scripts, redirects and fake login forms in SVG and HTML files; links in calendar invites; password-protected archives; file names disguised with hidden characters.</li>
 </ul>
@@ -951,7 +933,7 @@ Flag field:      (leave empty: Google's replies are recognized automatically)</d
 <h4>Where it works</h4>
 <ul class="simple-list">
   <li>Gmail (full support), plus Outlook on the web, Proton Mail, Yahoo Mail, AOL Mail, Zoho Mail, iCloud Mail, Fastmail and GMX (experimental, each can be switched off).</li>
-  <li>Chrome and Microsoft Edge.</li>
+  <li>Firefox 140 or later (desktop).</li>
 </ul>
 <h4>Privacy and control</h4>
 <ul class="simple-list">
@@ -962,8 +944,8 @@ Flag field:      (leave empty: Google's replies are recognized automatically)</d
 </ul>
 <h4>For organizations</h4>
 <ul class="simple-list">
-  <li>Every setting, list and custom service can be set and locked by policy (Google Workspace, Microsoft Intune, Group Policy); managed settings show 🔒 and are never changed by a reset.</li>
-  <li>One-click export as Google Workspace policy JSON or as a Windows registry script for Intune.</li>
+  <li>Every setting, list and custom service can be set and locked by Firefox enterprise policy (policies.json, Group Policy / Intune, macOS profiles); managed settings show 🔒 and are never changed by a reset.</li>
+  <li>One-click export of a ready-to-deploy <code>policies.json</code>.</li>
   <li>Your own short-link and threat-check services, with API keys hidden from users.</li>
 </ul>
 <h4>Using it</h4>
@@ -1017,8 +999,8 @@ Flag field:      (leave empty: Google's replies are recognized automatically)</d
   <text x="25" y="322" class="t-body">• settings, Inspector, logs</text>
   <text x="25" y="342" class="t-body">• visual toggle, counts</text>
   <rect x="320" y="20" width="250" height="250" rx="10" class="box-sw"/>
-  <text x="335" y="45" class="t-title">Service worker</text>
-  <text x="335" y="68" class="t-mono">background (MV3)</text>
+  <text x="335" y="45" class="t-title">Background page</text>
+  <text x="335" y="68" class="t-mono">event page (MV3)</text>
   <text x="335" y="90" class="t-body">background.js · decoders.js</text>
   <text x="335" y="110" class="t-body">custom-endpoints.js · shared.js</text>
   <text x="335" y="136" class="t-body">• link pipeline (resolveLink)</text>
@@ -1028,9 +1010,9 @@ Flag field:      (leave empty: Google's replies are recognized automatically)</d
   <text x="335" y="216" class="t-body">• logging, cleanup alarms</text>
   <text x="335" y="236" class="t-body">• badge</text>
   <rect x="320" y="310" width="250" height="78" rx="10" class="box-store"/>
-  <text x="335" y="335" class="t-title">chrome.storage</text>
+  <text x="335" y="335" class="t-title">storage</text>
   <text x="335" y="356" class="t-body">local: settings, cache, logs</text>
-  <text x="335" y="373" class="t-body">managed: Workspace policy</text>
+  <text x="335" y="373" class="t-body">managed: enterprise policy</text>
   <rect x="630" y="20" width="220" height="80" rx="10" class="box-ext"/>
   <text x="645" y="45" class="t-title">Link lookup</text>
   <text x="645" y="68" class="t-body">custom unshortener</text>
@@ -1065,7 +1047,7 @@ Flag field:      (leave empty: Google's replies are recognized automatically)</d
 <p>From the moment a message opens to the moment a link is marked. Function names refer to the source files.</p>
 <ol class="pipeline">
   <li><b>Detect</b> <span class="fn">content.js · MutationObserver</span> A single observer on <code>document.body</code> watches for Gmail inserting a message body (<code>.ii.gt</code>). Bursts of changes are debounced (350 ms), then the scan runs once.</li>
-  <li><b>Prepare</b> <span class="fn">unshortenLinks</span> Settings are fetched from the service worker (<code>getSettings</code>). Hidden links are disabled, tracking pixels handled, then every <code>&lt;a&gt;</code> with an http(s) host other than mail.google.com is sent once per unique address (<code>resolveUrl</code>), together with its visible text, image alt text and aria-label (used for one-time detection).</li>
+  <li><b>Prepare</b> <span class="fn">unshortenLinks</span> Settings are fetched from the background page (<code>getSettings</code>). Hidden links are disabled, tracking pixels handled, then every <code>&lt;a&gt;</code> with an http(s) host other than mail.google.com is sent once per unique address (<code>resolveUrl</code>), together with its visible text, image alt text and aria-label (used for one-time detection).</li>
   <li><b>Blocklist</b> <span class="fn">resolveLink · blocklistHit</span> If the link's own host is blocklisted, the answer is immediate: flagged, destination hidden, nothing decoded, checked or sent. A later reveal re-enters the pipeline with <code>reveal: true</code> (as does revealing an email tracking link).</li>
   <li><b>Allowlist</b> The link is decoded offline; if both it and its destination are allowlisted, it is left untouched.</li>
   <li><b>Cache</b> Ordinary links are answered from the local cache when possible; the blocklist is re-applied to cached destinations.</li>
@@ -1127,7 +1109,7 @@ Flag field:      (leave empty: Google's replies are recognized automatically)</d
 <div id="archNetwork"></div>
 
 <h3 id="arch-messages">Internal messages</h3>
-<p>Components talk over <code>chrome.runtime</code> messaging; the service worker accepts log entries only from this extension's own pages and scripts.</p>
+<p>Components talk over <code>runtime</code> messaging; the background page accepts log entries only from this extension's own pages and scripts.</p>
 <div id="archMessages"></div>
 
 <h3 id="arch-storage">Storage layout</h3>
@@ -1137,7 +1119,7 @@ Flag field:      (leave empty: Google's replies are recognized automatically)</d
 <div id="archLogging"></div>
 
 <h3 id="arch-settings">Settings and policy reference <span class="live-tag">LIVE</span></h3>
-<p>Every setting, its Workspace policy key, type and default. A policy value always wins and locks the setting; an empty policy string counts as "not set".</p>
+<p>Every setting, its policy key, type and default. A policy value always wins and locks the setting; an empty policy string counts as "not set".</p>
 <div id="archSettings"></div>
 
 <h3 id="arch-platform">Platform APIs and resources</h3>
@@ -1149,7 +1131,7 @@ Flag field:      (leave empty: Google's replies are recognized automatically)</d
 
 <section id="help-permissions" class="help-section">
 <h2>Permissions</h2>
-<p>Chrome shows these when the extension is installed or updated. Each one is used only for what is listed here.</p>
+<p>Firefox shows these when the add-on is installed or updated. Each one is used only for what is listed here.</p>
 <table class="help-table">
 <tr><th style="width: 32%;">Permission</th><th>Why it's needed</th></tr>
 <tr><td>Gmail and the supported webmail sites<br><span style="font-size: 11px;">mail.google.com, Outlook, Proton, Yahoo, AOL, Zoho, iCloud, Fastmail, GMX</span></td><td>Read the links, images and attachments of the message you have open, in your browser only.</td></tr>
@@ -1159,7 +1141,6 @@ Flag field:      (leave empty: Google's replies are recognized automatically)</d
 <tr><td><code>storage.googleapis.com</code>, <code>firebasestorage.googleapis.com</code></td><td>Only when you click 🔍 on a cloud-storage link: reads that page's code to see where it redirects.</td></tr>
 <tr><td><code>storage</code> and <code>unlimitedStorage</code></td><td>Settings, cache, history, logs and the phishing lists (several MB), kept in this browser.</td></tr>
 <tr><td><code>alarms</code></td><td>The daily list updates and data cleanup.</td></tr>
-<tr><td><code>offscreen</code></td><td>A hidden page that reads QR codes and PDF attachments on this device; it closes itself when idle.</td></tr>
 <tr><td><code>activeTab</code></td><td>Lets the toolbar popup show the statistics of the tab you're looking at.</td></tr>
 <tr><td>Optional: any https site</td><td>Requested only when you save your own lookup or threat-check service, and only for that one host.</td></tr>
 </table>

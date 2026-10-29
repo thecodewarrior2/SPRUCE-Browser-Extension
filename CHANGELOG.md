@@ -1,5 +1,13 @@
 # Changelog
 
+## Firefox build (branch `firefox`, based on 5.38)
+
+- **The add-on now targets Firefox 140 or later only.** The entries below describe the Chrome versions this build comes from.
+- **Background:** a background event page (`background.html`) replaces the Chrome service worker. The QR/PDF scanner (`scanner.js`) runs in that page, which already has a DOM, so the Chrome offscreen document (`scanner.html`, the `offscreen` permission) is gone. Chrome's built-in `BarcodeDetector` path is removed; the bundled QR decoder reads every code.
+- **Manifest:** Gecko add-on ID `link-unshortener@gmail-link-scanner` and a data-collection declaration replace the Chrome `key`; `managed_schema` and `match_origin_as_fallback` are removed.
+- **Enterprise policy:** settings are locked with Firefox enterprise policy (`policies` → `3rdparty` → `Extensions` → add-on ID). Settings → **Copy policies.json** replaces *Copy as policy JSON* (Google Workspace) and *Copy registry script* (Edge/Chrome). `schema.json` is removed; `policy-example.json`, ADMIN-GUIDE.md and Help → Deploying in organizations describe Firefox deployment.
+- **Clean-up:** removed shims for JavaScript features Firefox 140 already has, the retry for a Chromium storage bug, and a Chromium-only style workaround.
+
 ## 5.38 — Best practices for phishing training; shared platforms refused as training domains
 
 - **ADMIN-GUIDE.md: the phishing-training section is rewritten around best practice.**

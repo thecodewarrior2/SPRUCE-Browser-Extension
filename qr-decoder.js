@@ -1,5 +1,4 @@
 // qr-decoder.js — self-contained QR Code reader (ISO/IEC 18004), no dependencies and no network.
-// Used where Chrome's built-in BarcodeDetector is unavailable (Windows and Linux desktop).
 //
 //   QRDecoder.decode(rgbaData, width, height) → { text, version, ecLevel } | null
 //

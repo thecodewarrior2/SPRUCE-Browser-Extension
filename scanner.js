@@ -1,10 +1,9 @@
-// scanner.js — runs in the hidden scanner document. Decodes QR codes in images and PDF attachments,
-// and lists the links inside PDFs. Everything happens on this device: images come either as bytes
-// from the Gmail tab or from Google's image proxy (never from the sender's own server).
+// scanner.js — runs in the background page (background.html). Decodes QR codes in images and PDF
+// attachments, and lists the links inside PDFs. Everything happens on this device: images come either
+// as bytes from the Gmail tab or from Google's image proxy (never from the sender's own server).
 import * as pdfjsLib from './lib/pdf.min.mjs';
-// This document is already separate from Gmail, so pdf.js runs here directly instead of starting a
-// worker (workers don't start reliably in offscreen documents). Loading pdf.js's worker code into
-// this page makes pdf.js use it in place.
+// The background page is already separate from Gmail, so pdf.js runs here directly instead of
+// starting a worker. Loading pdf.js's worker code into this page makes pdf.js use it in place.
 import './lib/pdf.worker.min.mjs';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('lib/pdf.worker.min.mjs');
@@ -12,16 +11,6 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('lib/pdf.worker.m
 const MAX_SIDE = 2000;          // pixels: larger images and pages are scaled down
 const MAX_PDF_PAGES = 10;
 const MAX_BYTES = 10 * 1024 * 1024;
-
-// Chrome's built-in detector (macOS, ChromeOS); everywhere else the bundled QRDecoder.
-let detectorPromise = (async () => {
-    try {
-        if ('BarcodeDetector' in self && (await BarcodeDetector.getSupportedFormats()).includes('qr_code')) {
-            return new BarcodeDetector({ formats: ['qr_code'] });
-        }
-    } catch (e) { /* not available */ }
-    return null;
-})();
 
 function canvasFor(w, h) {
     const s = Math.min(1, MAX_SIDE / Math.max(w, h));
@@ -31,14 +20,7 @@ function canvasFor(w, h) {
     return c;
 }
 
-async function decodeCanvas(canvas) {
-    const detector = await detectorPromise;
-    if (detector) {
-        try {
-            const found = await detector.detect(canvas);
-            if (found.length) return found.map(f => f.rawValue).filter(Boolean);
-        } catch (e) { /* fall back */ }
-    }
+function decodeCanvas(canvas) {
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const r = QRDecoder.decode(img.data, canvas.width, canvas.height);
@@ -50,13 +32,13 @@ async function scanImage(blob) {
     const c = canvasFor(bmp.width, bmp.height);
     c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
     bmp.close();
-    return { codes: (await decodeCanvas(c)).map(text => ({ text })), links: [] };
+    return { codes: decodeCanvas(c).map(text => ({ text })), links: [] };
 }
 
 async function scanPdf(bytes) {
-    // verbosity ERRORS: pdf.js otherwise prints routine notices as warnings, which Chrome lists under the
-    // extension's Errors: "Setting up fake worker" (by design, see the import above) and "Indexing all
-    // PDF objects" (a PDF with a damaged index, which pdf.js repairs). Real errors still surface.
+    // verbosity ERRORS: pdf.js otherwise prints routine notices as warnings in the extension's console:
+    // "Setting up fake worker" (by design, see the import above) and "Indexing all PDF objects" (a PDF
+    // with a damaged index, which pdf.js repairs). Real errors still surface.
     const pdf = await pdfjsLib.getDocument({
         data: bytes, isEvalSupported: false, disableFontFace: true, useSystemFonts: false,
         verbosity: pdfjsLib.VerbosityLevel.ERRORS
@@ -69,10 +51,10 @@ async function scanPdf(bytes) {
         const viewport = page.getViewport({ scale: Math.min(3, 1600 / Math.max(base.width, base.height)) });
         const c = document.createElement('canvas');
         c.width = Math.ceil(viewport.width); c.height = Math.ceil(viewport.height);
-        // intent 'print': pdf.js then draws without requestAnimationFrame, which never fires in a hidden
-        // (offscreen) document and would leave rendering waiting forever.
+        // intent 'print': pdf.js then draws without requestAnimationFrame, which never fires in the
+        // (hidden) background page and would leave rendering waiting forever.
         await page.render({ canvasContext: c.getContext('2d'), viewport, intent: 'print' }).promise;
-        for (const text of await decodeCanvas(c)) codes.push({ text, page: i });
+        for (const text of decodeCanvas(c)) codes.push({ text, page: i });
         for (const a of await page.getAnnotations()) if (a.subtype === 'Link' && a.url && !links.some(l => l.url === a.url)) links.push({ url: a.url, page: i });
         page.cleanup();
         c.width = c.height = 0;                       // release the page bitmap
@@ -99,15 +81,5 @@ async function scan(msg) {
     return Object.assign({ ok: true, kind: isPdf ? 'pdf' : 'image' }, result);
 }
 
-const scanSafely = (msg) => scan(msg).catch((e) => ({ ok: false, error: String((e && e.message) || e) }));
-
-if (typeof globalThis.registerLocalScanner === 'function') {
-    // Loaded in Firefox's background page: background.js calls the scanner directly.
-    globalThis.registerLocalScanner(scanSafely);
-} else {
-    chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-        if (!msg || msg.target !== 'scanner' || sender.id !== chrome.runtime.id) return;
-        scanSafely(msg).then(sendResponse);
-        return true;
-    });
-}
+// background.js defines registerLocalScanner and calls this for every scan.
+globalThis.registerLocalScanner((msg) => scan(msg).catch((e) => ({ ok: false, error: String((e && e.message) || e) })));

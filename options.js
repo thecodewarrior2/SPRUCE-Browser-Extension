@@ -86,7 +86,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
 
-    // --- SETTINGS BINDING (user values + Google Workspace policy locks) ---
+    // --- SETTINGS BINDING (user values + enterprise policy locks) ---
     async function bindSettings() {
         const cfg = await loadEffectiveSettings();
         let anyLocked = false;
@@ -228,8 +228,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // --- RESET ---
-    // Only the user's own choices are reset. Settings managed by the organization (Google Workspace,
-    // Intune, Group Policy) are left completely alone, including the user's stored value underneath
+    // Only the user's own choices are reset. Settings managed by the organization (Firefox enterprise
+    // policy) are left completely alone, including the user's stored value underneath
     // them, so nothing changes if the organization later stops managing a setting.
     document.getElementById('resetDefaultsBtn').addEventListener('click', async () => {
         const cfg = await loadEffectiveSettings();
@@ -286,21 +286,28 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Produces the JSON an administrator pastes into Admin console > Policy for extensions.
+    // A complete Firefox policies.json: install the add-on and lock the current settings
+    // (policies → 3rdparty → Extensions → add-on ID, read by the extension as storage.managed).
     document.getElementById('copyPolicyJsonBtn').addEventListener('click', async () => {
         const cfg = await loadEffectiveSettings();
-        const policy = {};
-        SETTING_DEFS.forEach(d => { policy[d.managedKey] = { Value: cfg.values[d.key] }; });
+        const settings = {};
+        SETTING_DEFS.forEach(d => { settings[d.managedKey] = cfg.values[d.key]; });
         const local = await new Promise(r => chrome.storage.local.get({ customAllowlist: [], customBlocklist: [] }, r));
-        policy.managedAllowlist = { Value: normalizeDomainList(local.customAllowlist) };
-        policy.managedBlocklist = { Value: normalizeDomainList(local.customBlocklist) };
+        settings.managedAllowlist = normalizeDomainList(local.customAllowlist);
+        settings.managedBlocklist = normalizeDomainList(local.customBlocklist);
+        const id = chrome.runtime.id;
+        const policies = { policies: {
+            ExtensionSettings: { [id]: { installation_mode: 'force_installed', install_url: 'https://addons.mozilla.org/firefox/downloads/latest/ADDON-SLUG/latest.xpi' } },
+            '3rdparty': { Extensions: { [id]: settings } }
+        } };
         const out = document.getElementById('copyPolicyResult');
         try {
-            await navigator.clipboard.writeText(JSON.stringify(policy, null, 2));
-            out.textContent = 'Copied. Delete any lines you do not want to lock before pasting.';
+            await navigator.clipboard.writeText(JSON.stringify(policies, null, 2));
+            out.textContent = 'Copied. Replace ADDON-SLUG with the add-on\'s address on addons.mozilla.org, and delete any settings you do not want to lock.';
         } catch (e) {
             out.style.color = 'var(--danger-text)';
             out.textContent = 'Copy failed.';
-            reportToLog('warning', 'Options page', `Copying the policy JSON to the clipboard failed: ${e.message || e}`);
+            reportToLog('warning', 'Options page', `Copying policies.json to the clipboard failed: ${e.message || e}`);
         }
     });
 
@@ -850,53 +857,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (r && r.skipped) document.getElementById('feedStatus').textContent = '(turned off)';
             else renderFeedStatus();
         });
-    });
-
-    // PowerShell that writes the current settings as extension policy for Edge and Chrome (Intune etc.).
-    // Booleans and numbers → REG_DWORD, text → REG_SZ, lists → a subkey with values named 1, 2, 3…
-    function buildRegistryScript(values, allow, block) {
-        const id = chrome.runtime.id;
-        const q = (v) => `'${String(v).replace(/'/g, "''")}'`;
-        const lines = [
-            '# Gmail Link Unshortener — extension policy for Microsoft Edge and Google Chrome on Windows.',
-            `# Generated ${new Date().toISOString().slice(0, 10)} from the Options page (version ${chrome.runtime.getManifest().version}).`,
-            '# Deploy with Intune (Devices → Scripts and remediations → Platform scripts; run as system, 64-bit),',
-            '# Group Policy or any management tool. Check the result at edge://policy or chrome://policy.',
-            '#',
-            '# IMPORTANT: replace the ID below with the ID of the extension you deploy (store listing or chrome://extensions).',
-            `$ExtensionId = ${q(id)}`,
-            "$Browsers = @('HKLM:\\SOFTWARE\\Policies\\Microsoft\\Edge', 'HKLM:\\SOFTWARE\\Policies\\Google\\Chrome')",
-            '',
-            'foreach ($root in $Browsers) {',
-            '    $key = "$root\\3rdparty\\extensions\\$ExtensionId\\policy"',
-            '    New-Item -Path $key -Force | Out-Null'
-        ];
-        SETTING_DEFS.forEach(d => {
-            const v = values[d.key];
-            if (d.type === 'boolean') lines.push(`    New-ItemProperty -Path $key -Name ${q(d.managedKey)} -PropertyType DWord -Value ${v ? 1 : 0} -Force | Out-Null`);
-            else if (d.type === 'integer') lines.push(`    New-ItemProperty -Path $key -Name ${q(d.managedKey)} -PropertyType DWord -Value ${Number(v) || 0} -Force | Out-Null`);
-            else if (v !== '' && v !== undefined) lines.push(`    New-ItemProperty -Path $key -Name ${q(d.managedKey)} -PropertyType String -Value ${q(v)} -Force | Out-Null`);
-        });
-        for (const [name, list] of [['managedAllowlist', allow], ['managedBlocklist', block]]) {
-            if (!list.length) continue;
-            lines.push(`    Remove-Item -Path "$key\\${name}" -Recurse -Force -ErrorAction SilentlyContinue`);
-            lines.push(`    New-Item -Path "$key\\${name}" -Force | Out-Null`);
-            list.forEach((dom, i) => lines.push(`    New-ItemProperty -Path "$key\\${name}" -Name '${i + 1}' -PropertyType String -Value ${q(dom)} -Force | Out-Null`));
-        }
-        lines.push('}', '');
-        return lines.join('\r\n');
-    }
-
-    document.getElementById('copyRegScriptBtn').addEventListener('click', async () => {
-        const out = document.getElementById('copyRegResult');
-        try {
-            const cfg = await loadEffectiveSettings();
-            await navigator.clipboard.writeText(buildRegistryScript(cfg.values, cfg.allowlist, cfg.blocklist));
-            out.style.color = ''; out.textContent = 'Copied. Paste it into a .ps1 file; replace the extension ID if it differs.';
-        } catch (e) {
-            out.style.color = 'var(--danger-text)'; out.textContent = 'Copy failed.';
-            reportToLog('warning', 'Options page', `Copying the registry script failed: ${e.message || e}`);
-        }
     });
 
     document.getElementById('forceSyncBtn').addEventListener('click', (e) => {

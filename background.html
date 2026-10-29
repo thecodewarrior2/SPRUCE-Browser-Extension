@@ -1,6 +1,6 @@
 <!doctype html>
-<!-- Firefox background page (event page). Firefox has no offscreen documents, so the QR/PDF scanner
-     (scanner.js) runs here too; background.js calls it directly instead of messaging it. -->
+<!-- Background event page: the link pipeline (background.js) and the QR/PDF scanner (scanner.js), which
+     needs this page's DOM for canvases and pdf.js. -->
 <meta charset="utf-8">
 <script src="compat.js"></script>
 <script src="shared.js"></script>

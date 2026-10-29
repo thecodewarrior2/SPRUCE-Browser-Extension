@@ -60,7 +60,7 @@ function initPopup() {
     loadActivity();
     loadEffectiveSettings().then((cfg) => {
         // Administrator policies (no setting in the extension): hide the Settings button and/or the
-        // recent activity. Settings stays reachable at chrome-extension://<id>/options.html.
+        // recent activity. Settings stays reachable from about:addons.
         const pol = cfg.policy || {};
         if (pol.hideSettingsButton) { const b = document.getElementById('openSettingsBtn'); if (b) b.remove(); }
         if (pol.hideRecentActivity) { const a = document.getElementById('activitySection'); if (a) a.remove(); }

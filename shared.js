@@ -1,11 +1,11 @@
-// shared.js — loaded by the service worker (importScripts), the Gmail content script,
+// shared.js — loaded by the background page, the Gmail content script,
 // the popup and the options page, so every part of the extension uses ONE definition of
 // settings, domain lists and link-analysis rules.
 
 // ---------------------------------------------------------------------------
 // SETTINGS
 // Every setting can be changed by the user (stored in chrome.storage.local) and can be
-// locked by a Google Workspace / Chrome policy (chrome.storage.managed, keys = managedKey).
+// locked by a Firefox enterprise policy (storage.managed, keys = managedKey).
 // A managed value always wins and the UI shows the setting as locked.
 // All features are ON by default.
 // ---------------------------------------------------------------------------
@@ -122,15 +122,11 @@ function storageGetOnce(area, keys, timeoutMs) {
     });
 }
 
-// A storage read that can never hang. Some Chromium builds never answer the first
-// chrome.storage.managed.get() made while a page is loading, which used to leave the options page
-// with every switch shown as off. A read that does not answer is retried once; a second
-// non-answer counts as "nothing stored" so the page still renders.
+// A storage read that can never hang: one that does not answer in time counts as "nothing stored",
+// so pages still render.
 async function storageGet(area, keys) {
-    const first = await storageGetOnce(area, keys, 1500);
-    if (first !== null) return first;
-    const second = await storageGetOnce(area, keys, 3000);
-    return second !== null ? second : {};
+    const result = await storageGetOnce(area, keys, 3000);
+    return result !== null ? result : {};
 }
 
 // Returns the effective configuration: user values overridden by managed policy.
