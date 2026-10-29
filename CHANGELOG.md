@@ -1,6 +1,6 @@
 # Changelog
 
-## Firefox build (branch `firefox`, based on 5.38)
+## 5.39 — Firefox build (branch `firefox`, based on 5.38)
 
 - **The add-on now targets Firefox 140 or later only.** The entries below describe the Chrome versions this build comes from.
 - **Background:** a background event page (`background.html`) replaces the Chrome service worker. The QR/PDF scanner (`scanner.js`) runs in that page, which already has a DOM, so the Chrome offscreen document (`scanner.html`, the `offscreen` permission) is gone. Chrome's built-in `BarcodeDetector` path is removed; the bundled QR decoder reads every code.
