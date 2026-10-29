@@ -2336,7 +2336,9 @@ async function runSpamMoves() {
             if (await isPhishSimulation(it)) { drop(); reportEvent('info', `An email from ${it.address} matches your organization's phishing simulation, so it was not moved to Spam.`); continue; }
             if (it.kind === 'thread') open = it; else rows.push(it);
         }
-        const batch = open ? [open] : rows.slice(0, 20);
+        // Looked at again right before acting: the checks above can take a moment (headers).
+        if (document.hidden || !gmailViewAllowsAutoSpam(location.hash) || currentThreadKey() !== current) return;
+        const batch = open ? [open] : rows.filter(it => it.row.isConnected && isShown(it.row) && rowThreadKey(it.row) === it.thread).slice(0, 20);
         if (!batch.length || userBusy()) return;
         const moved = open ? await reportSpamOpenThread(open) : await reportSpamRows(batch);
         if (moved === null) return;                          // the user is busy or has emails selected: later
