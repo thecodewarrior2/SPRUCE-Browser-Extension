@@ -99,12 +99,18 @@ All of this is on by default and every part has its own key above. In short:
   Only from the inbox (and its category tabs), never while the user is typing, has a menu or dialog open, or has
   selected emails. If Gmail's layout no longer matches, moving stops after three attempts and the application
   log says so; icons and warnings keep working.
-- **Taken back out of Spam stays out:** each conversation moved is remembered (`spamMovedThreads`, a year,
-  at most 5,000) and never moved again.
+- **Taken back out of Spam stays out:** each conversation is remembered just before it's moved, and so is
+  each one the user takes out of Spam (Not spam / Move to Inbox), whoever put it there
+  (`spamMovedThreads`, the newest 20,000, no time limit). None is ever moved (again).
+- **Whole conversations:** Report spam acts on a whole conversation, so one is moved only when every
+  other sender in it is flagged.
+- **Layouts:** nothing is moved from the list with Multiple Inboxes or Priority Inbox sections, or in
+  split view; such emails are moved when opened in the normal view.
 - **Phishing training:** an email whose sender's domain is in `managedPhishSimulationDomains`, or that matches
-  `managedPhishSimulationRules`, is never moved. With header rules, an unread email in the inbox list is left
-  alone, because its headers aren't read until it's opened (reading them could change its unread state). To
-  be safe, also list the training vendor's sending domains in `managedAllowlist`.
+  `managedPhishSimulationRules`, is never moved. With simulation link domains set, emails are moved only once
+  opened (their links decide), never from the list. With header rules, an unread email in the inbox list is
+  left alone, because its headers aren't read until it's opened. To be safe, also list the training vendor's
+  sending domains in `managedAllowlist`.
 - **Network:** sender domains go to the same DNS threat services as links' site names; site names to Google's
   icon service (`www.google.com/s2/favicons`); a delivering server's IP address to `api.country.is`. With
   `managedEnableDnsThreatCheck` false, none of these requests are made.

@@ -91,7 +91,7 @@
             ['Sender icons (Gmail)', 'The site name of each sender (e.g. example.com), to get its icon.', 'Google\'s icon service (www.google.com; Google already delivers your Gmail)',
              onOff(S.enableSenderIdentity && S.enableDnsThreatCheck) + lock('enableSenderIdentity')],
             ['Sender country (Gmail)', 'The internet address of the server that delivered an email (from Gmail\'s own record, read emails only), or of the sender\'s website. Once a month at most per address.', 'country.is (open-source service; sees your IP address)',
-             onOff(S.enableSenderCountry && S.enableDnsThreatCheck) + lock('enableSenderCountry')]
+             onOff(S.enableSenderIdentity && S.enableSenderCountry && S.enableDnsThreatCheck) + lock('enableSenderCountry')]
         ]));
     }
 
@@ -156,9 +156,9 @@
             [code('<setting keys>'), 'Only settings you changed; defaults are not stored. See the settings reference.'],
             [code('customAllowlist / customBlocklist'), 'Your site lists (organization lists come from policy and are merged at read time).'],
             [code('customPhishingSenders'), 'Your phishing senders (addresses or domains); the organization\'s list (managedPhishingSenders) is merged at read time.'],
-            [code('spamMovedThreads'), 'Conversations the extension moved to Spam: {thread id: time}, kept a year (at most 5,000). One taken back out of Spam is never moved again.'],
+            [code('spamMovedThreads'), 'Conversations the extension moved (remembered just before moving) or you took out of Spam: {thread id: time}, the newest 20,000, with no time limit. None of them is ever moved (again). Kept by Delete now.'],
             [code('senderDomainCache / geoCache'), 'Sender-domain threat verdicts (' + fmtMs(SAFE_CACHE_MS) + ') and IP-address countries (30 days).'],
-            [code('senderMessageCache'), 'Per email: the delivering server\'s address and the From address, read once from its headers (at most 5,000).'],
+            [code('senderMessageCache'), 'Per email: the delivering server\'s address and a short fingerprint of the From address (never the address), read once from its headers; at most 5,000, deleted after the auto-delete period.'],
             [code('https://… (one key per link)'), 'Cache entry: {finalUrl, resolver, isSafe, reason, resolvedIp, cachedDate, cachedTimestamp}. Never one-time, unverified, blocklisted or revealed links.'],
             [code('resolutionHistory'), 'History entries: {timestamp, shortUrl, finalUrl, verdict, reason, resolvedIp, resolver}.'],
             [code('errorLogs'), 'Application log entries: {time, timestampMs, level, source, message, count}.'],
@@ -260,9 +260,9 @@
             [code('storage.googleapis.com, firebasestorage.googleapis.com'), 'only when you click 🔍 on a cloud-storage link', 'a plain download of the page (without the #fragment)', 'Offer to reveal hidden destinations', onOff(S.enableTrackerReveal)],
             ['the websites you link to', 'when you press Send on an email with links', 'one request per link (no page is read), to see that it answers', 'Check links before sending', onOff(S.enableSendCheck)],
             [code('mail.google.com'), 'only for an email with a company-only link or a sender name claiming a brand', 'nothing new: reads that email\'s original source from Gmail itself (your session)', 'Check who sent the email', onOff(S.enableSenderChecks)],
-            [code('mail.google.com'), 'opened emails, and read emails in the inbox list (once per email)', 'nothing new: reads the email\'s headers from Gmail itself (your session) for the sender\'s country and verification', 'Show sender icons / Show the sender\'s country', onOff(S.enableSenderIdentity)],
+            [code('mail.google.com'), 'opened emails (sender icons on), and read emails in the inbox list (country flags on, not Offline only); once per email, two at a time', 'nothing new: reads the email\'s headers from Gmail itself (your session) for the sender\'s country and verification', 'Show sender icons / Show the sender\'s country', onOff(S.enableSenderIdentity)],
             [code('www.google.com'), 'each sender shown (Gmail), by the browser', 'the sender\'s site name, for its icon', 'Show sender icons and domain labels', onOff(S.enableSenderIdentity && S.enableDnsThreatCheck)],
-            [code('api.country.is'), 'a new sending server or sender website (at most once a month each)', 'that server\'s IP address', 'Show the sender\'s country', onOff(S.enableSenderCountry && S.enableDnsThreatCheck)],
+            [code('api.country.is'), 'a new sending server or sender website (at most once a month each)', 'that server\'s IP address', 'Show sender icons + Show the sender\'s country', onOff(S.enableSenderIdentity && S.enableSenderCountry && S.enableDnsThreatCheck)],
             ['the threat-check services above', 'each new sender domain (Gmail; at most every ' + fmtMs(SAFE_CACHE_MS) + ')', 'the sender\'s domain', 'Check sender domains for threats', onOff(S.enableSenderDomainCheck && S.enableDnsThreatCheck)],
             [code('raw.githubusercontent.com'), 'scam-sender list: once a day', 'nothing (plain download)', 'Check sender addresses against phishing lists', onOff(S.enablePhishingFeeds && S.enableSenderAddressCheck)],
             [code('www.whois.com'), 'only when you click a WHOIS button', 'the IP address shown', 'you', '—']
