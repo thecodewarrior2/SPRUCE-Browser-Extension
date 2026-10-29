@@ -416,8 +416,9 @@ function applyLinkStyles(link, linkData) {
     // Case 2: Safe links: sender styling untouched.
     if (d.isSafe) {
         if (d.isNakedUrl && !hasImage) replaceLinkText(link, d, d.finalUrl);
-        let title = `Clean destination: ${d.finalUrl}\n(Original link: ${d.originalUrl})`;
-        if (d.isUnknown && d.note) title += `\n(Not verified: ${d.note})`;
+        let title = d.isUnknown
+            ? `Not verified: ${d.finalUrl}\n(Original link: ${d.originalUrl})${d.note ? `\n(${d.note})` : ''}`
+            : `Checked, nothing found: ${d.finalUrl}\n(Original link: ${d.originalUrl})`;
         if (d.trackerRevealable && !d.revealed) {
             title = `Email tracking link (${d.trackerProvider}). Its destination is kept by the provider.\nHover and click the 🔍 next to it to reveal where it goes.`;
             setTitle(link, d, title);
@@ -550,7 +551,7 @@ function revealLink(link) {
             d.keepText = response.isSafe && !!problem;
             d.severity = !response.isSafe ? 'danger' : linkProblemSeverity(problem);
             d.reason = !response.isSafe ? response.reason : (problem ? problem.charAt(0).toUpperCase() + problem.slice(1) : null);
-            d.isUnknown = response.verdict === 'unknown';
+            d.isUnknown = response.verdict !== 'safe';   // anything but a definite "safe" is not verified
             d.note = response.note;
             d.needsStyling = true;
             d.notes.push(`Revealed: goes to ${d.finalUrl}`);
@@ -801,7 +802,7 @@ function unshortenLinks() {
                                 reason: reason,
                                 keepText: response.isSafe && !!problem,
                                 severity: !response.isSafe ? 'danger' : linkProblemSeverity(problem),
-                                isUnknown: response.verdict === 'unknown',
+                                isUnknown: response.verdict !== 'safe',   // anything but a definite "safe" is not verified
                                 note: response.note,
                                 destinationHidden: !!response.destinationHidden,
                                 blockedByPolicy: !!response.blockedByPolicy,
@@ -1187,7 +1188,7 @@ function showScanResults(anchor, res, label, img) {
             } else if (!r.isSafe || problem) {
                 render('danger', `${item.kind === 'QR code' ? 'DO NOT SCAN' : 'DO NOT OPEN'}: leads to a flagged site (${!r.isSafe ? r.reason : problem})`, null);
                 if (img) { img.style.outline = '4px solid #c5221f'; img.style.outlineOffset = '2px'; }
-            } else if (r.verdict === 'unknown') {
+            } else if (r.verdict !== 'safe') {
                 render('info', [goes, `not verified${r.note ? ` (${r.note})` : ''}`].filter(Boolean).join(' · '), dest);
             } else {
                 render('ok', [goes, '✓ checked, nothing found'].filter(Boolean).join(' · '), dest);

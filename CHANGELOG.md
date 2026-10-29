@@ -1,5 +1,13 @@
 # Changelog
 
+## 5.42 — Nothing is shown as safe unless it was checked
+
+- **Senders:** mail from Gmail.com, Outlook.com and other big providers, from major companies' domains and from your own organization's domain is now **Not verified** (grey) instead of ✓ Checked (green). Their domains are never judged as a whole (anyone can sign up at gmail.com, and an own-domain From line can be forged), so not being on a phishing list proves nothing. Green now requires a completed threat check that cleared the sender's domain; trusted senders and allowlisted domains show as Trusted. Flagging and moving to Spam are unchanged.
+- **Links:** a link counts as checked only when every host the click can reach was checked. Previously, if the destination checked out but the link's own host couldn't be checked, the link showed ✓ Checked; it is now Not verified, with the reason.
+- **Any answer that isn't a definite "safe"** (a missing or unexpected verdict) is now shown as Not verified everywhere: link tooltips and hover cards, QR code bars, the popup counts and the Settings link checker.
+- **Link tooltips** say "Not verified" for unverified links instead of "Clean destination".
+- **Logs:** history entries from versions before 5.14, and cache entries without a recorded result, show as Not verified instead of Safe.
+
 ## 5.41 — Sender verdicts agree with the email; trusted senders; sender logging; cached icons
 
 - **An email's verdict now includes what's in the email.** Previously a sender could show ✓ Checked while every link in the email was red. The sender label, the email banner and moving to Spam now use one verdict built from the sender's checks plus signs found in the email itself. Each sign has a weight: strong signs flag the email on their own; weaker ones add up (enough of them flag it, fewer make it Caution):

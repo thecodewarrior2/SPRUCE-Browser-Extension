@@ -1601,10 +1601,13 @@ function combineSenderVerdictInner({ address, ownDomain, allowlisted, trustedHit
     // listed (a compromised account), never for a domain-wide or community finding.
     if (reasons.length) return { status: 'flagged', reasons, move: !own || !!(listHit && listHit.source !== 'community' && listHit.entry.includes('@')) };
     if (dnsFlag) return { status: 'caution', reasons: [`The sender's domain ${domain} is blocked by ${dns.scanner}: ${dns.reason || 'filtered'}.`], move: false };
-    if (own) return { status: 'clean', reasons: ['Sent from your own organization\'s domain.'], move: false };
-    if (sharedDomain) return addressChecked
-        ? { status: 'clean', reasons: [`${domain} is a well-known email provider or company; this address is on no phishing-sender list.`], move: false }
-        : { status: 'unverified', reasons: [`${domain} is a well-known email provider or company; the address itself wasn't checked.`], move: false };
+    // Never green by default: your own domain and big shared providers can't be judged by domain
+    // checks (anyone can sign up at gmail.com, and an own-domain From can be forged), so they stay
+    // "not verified" unless something flags them or you trust them.
+    if (own) return { status: 'unverified', reasons: [`Sent from your own organization's domain (${domain}); the sender isn't verified beyond that.`], move: false };
+    if (sharedDomain) return { status: 'unverified', reasons: [addressChecked
+        ? `${domain} is a well-known email provider or company that anyone can send from; this address is on no phishing-sender list, but that doesn't prove who sent it.`
+        : `${domain} is a well-known email provider or company; the address itself wasn't checked.`], move: false };
     if (!dns || dnsChecked === false) return { status: 'unverified', reasons: ['The sender\'s domain wasn\'t checked (threat checks are off or offline).'], move: false };
     if (dns.verdict === 'safe') return { status: 'clean', reasons: ['Checked: no security service or list flags this sender.'], move: false };
     // A domain that doesn't exist can't send genuine mail (and replies can't reach it): forged.
