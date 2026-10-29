@@ -248,6 +248,11 @@ const REDIRECT_RULES = [
     { name: 'Steam link filter',          hosts: ['steamcommunity.com'],      path: /^\/linkfilter\/?$/,    params: ['url', 'u'] },
     { name: 'Tumblr redirect',            hosts: ['t.umblr.com'],             path: /^\/redirect$/,         params: ['z'] },
     { name: 'VK outbound link',           hosts: ['vk.com'],                  path: /^\/away\.php$/,        params: ['to'] },
+    // YouTube share-tracking link: u= is a YouTube path ("/watch?v=…"), not a full address.
+    { name: 'YouTube attribution link',   hosts: ['youtube.com'],             path: /^\/attribution_link$/,
+      extract: (u) => { const p = u.searchParams.get('u') || ''; return /^\/[^/\\]/.test(p) ? 'https://www.youtube.com' + p : null; } },
+    { name: 'Pinterest outbound link',    hosts: ['pinterest.com'],           path: /^\/offsite\/?$/,      params: ['url'] },
+    { name: 'Telegram Instant View',      hosts: ['t.me'],                    path: /^\/iv\/?$/,           params: ['url'] },
     { name: 'Medium redirect',            hosts: ['medium.com'],              path: /^\/r\/?$/,             params: ['url'] },
     { name: 'Disqus outbound link',       hosts: ['disq.us'],                 path: /^\/url$/,
       extract: (u) => {

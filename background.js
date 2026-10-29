@@ -22,9 +22,14 @@ const NON_CONFIG_KEYS = new Set(['errorLogs', 'recentActivity', 'resolutionHisto
 function invalidateConfig() {
     configPromise = null;
     domainSafetyCache.clear();      // e.g. a resolver was switched off: don't reuse its verdicts
+    if (typeof cacheMemo !== 'undefined') cacheMemo.clear();        // nor link results remembered in memory
 }
 chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'managed' || Object.keys(changes).some(k => !k.startsWith('http') && !NON_CONFIG_KEYS.has(k))) invalidateConfig();
+    // Stored link results removed by any path (Clear cache, expiry) leave the in-memory memo too.
+    if (area === 'local' && typeof cacheMemo !== 'undefined') {
+        for (const [k, c] of Object.entries(changes)) if (k.startsWith('http') && c.newValue === undefined) cacheMemo.delete(k);
+    }
 });
 
 const derivedSets = new WeakMap();
@@ -101,9 +106,26 @@ const LOG_FLUSH_MS = 500;
 let logBuffer = [];          // [{ kind: 'log' | 'history', ... }] in the order they happened
 let cacheBuffer = {};        // link results waiting to be written: { url: entry }
 
+// In-memory front for the result cache: the same links recur constantly (signatures, footers,
+// newsletter templates), so a bounded memo of recent hits and misses saves a storage read each time.
+const CACHE_MEMO_MAX = 2000;
+const cacheMemo = new Map();           // url → entry, or null for a known miss
+function memoRemember(url, entry) {
+    if (cacheMemo.size >= CACHE_MEMO_MAX) cacheMemo.delete(cacheMemo.keys().next().value);
+    cacheMemo.set(url, entry);
+}
+async function readCachedResult(url) {
+    if (cacheBuffer[url]) return cacheBuffer[url];
+    if (cacheMemo.has(url)) return cacheMemo.get(url);
+    const entry = (await storageGet('local', [url]))[url] || null;
+    memoRemember(url, entry);
+    return entry;
+}
+
 // Queues a link result for the cache; written with the next batch.
 function cacheResult(url, entry) {
     cacheBuffer[url] = entry;
+    memoRemember(url, entry);
     scheduleLogFlush();
 }
 let logFlushTimer = null;
@@ -126,7 +148,7 @@ const logWarning = (message, source = 'Extension') => writeLog('warning', source
 const logInfo    = (message, source = 'Extension') => writeLog('info', source, message);
 
 // verdict: 'safe' | 'unsafe' | 'unknown' (not verified) | 'blocked' (blocklisted, destination hidden) | 'pixel'
-function logHistory({ shortUrl, finalUrl, verdict, reason, resolvedIp, resolver, dedupeMs = 0 }) {
+function logHistoryEntry({ shortUrl, finalUrl, verdict, reason, resolvedIp, resolver, dedupeMs = 0 }) {
     logBuffer.push({ kind: 'history', shortUrl, finalUrl, verdict, reason, resolvedIp, resolver, dedupeMs, now: Date.now() });
     scheduleLogFlush();
 }
@@ -485,6 +507,7 @@ async function migrateStoredData() {
     const urlKeys = Object.keys(items).filter(k => k.startsWith('http://') || k.startsWith('https://'));
     if (urlKeys.length) {
         await chrome.storage.local.remove(urlKeys);
+        cacheMemo.clear();
         logInfo(`Cleared ${urlKeys.length} cached link result(s) after an update, because results are now computed differently.`, 'Update');
     }
     const updates = { cacheSchema: CACHE_SCHEMA };
@@ -849,8 +872,15 @@ async function runDomainSafety(urlString, customConf, settings, opts = {}) {
     if (flags.length > 0) {
         return verdictResult('unsafe', { reason: flags[0].reason, scanner: flags[0].scanner, resolvedIp: realIp });
     }
-    if (nonexistent) {
-        return verdictResult('unknown', { note: 'Domain does not resolve', resolvedIp: realIp });
+    // A link that can't work is not "Safe": the domain doesn't exist, or exists without any address
+    // (IPv4 or IPv6), so nobody can reach it.
+    if (nonexistent || (ref.ok && ref.status === 3)) {
+        return verdictResult('unknown', { note: 'The domain doesn\'t exist, so this link can\'t work', resolvedIp: realIp });
+    }
+    if (ref.ok && ref.status === 0 && realIp === 'N/A') {
+        let hasIpv6 = true;
+        try { hasIpv6 = (await dnsHasAddress(hostname)) === 'ok'; } catch (e) { /* unknown: leave as is */ }
+        if (!hasIpv6) return verdictResult('unknown', { note: 'The domain has no website address, so this link can\'t work', resolvedIp: realIp });
     }
     if (securityAnswered === 0) {
         if (!backupNote) logWarning('No threat-check resolver could be reached, so links are being shown as "not verified". Check the network or firewall, or Settings → Your own services.', 'DNS checks');
@@ -1314,6 +1344,8 @@ function applyCloudCheck(safety, url, extra) {
 // Only then is a blocklisted link decoded and (if it is a short link and third-party resolution is
 // on) looked up via unshorten.me. One-time-link protection still applies during a reveal.
 async function resolveLink(shortUrl, linkText, opts = {}) {
+    // Links you're sending are checked the same way, but History is for links you received.
+    const logHistory = opts.outgoing ? () => {} : logHistoryEntry;
     if (typeof shortUrl !== 'string') return null;
     const shortHost = hostOf(shortUrl);
     if (!shortHost) return null;
@@ -1369,7 +1401,7 @@ async function resolveLink(shortUrl, linkText, opts = {}) {
 
     // --- CACHE (ordinary links only; never for a reveal; the blocklist is re-applied) ---
     if (!reveal && !oneTime && S.enableResultCache) {
-        const c = cacheBuffer[shortUrl] || (await storageGet('local', [shortUrl]))[shortUrl];
+        const c = await readCachedResult(shortUrl);
         if (c && typeof c.finalUrl === 'string' && /^https?:\/\//i.test(c.finalUrl)) {
             const blocked = blocklistHit([c.finalUrl], cfg);
             if (blocked) {
@@ -1630,29 +1662,51 @@ async function checkOutgoingLink(link, cfg) {
         } catch (e) { out.unverified = true; }
     }
     try {
-        const r = await resolveLink(link.url, link.text || '');
+        const r = await resolveLink(link.url, link.text || '', { outgoing: true });
         if (r && !r.isSafe) problems.push(`is flagged as dangerous: ${r.reason || 'listed by a security service'}`);
     } catch (e) { out.unverified = true; }
     if (!problems.length && !(S.enableOneTimeLinkProtection && isSingleUseToken(link.url, link.text))) {
+        // Browsers try HTTPS first for an http:// link (and "test.com" typed alone becomes http://), so
+        // an http:// address counts as working if either form answers.
+        const probe = (url) => fetchWithTimeout(url, { method: 'HEAD', mode: 'no-cors', credentials: 'omit', cache: 'no-store', redirect: 'follow', referrerPolicy: 'no-referrer' }, 8000);
         try {
-            await fetchWithTimeout(link.url, { method: 'HEAD', mode: 'no-cors', credentials: 'omit', cache: 'no-store', redirect: 'follow', referrerPolicy: 'no-referrer' }, 8000);
+            await probe(link.url);
         } catch (e) {
-            if (e && e.name === 'AbortError') out.unverified = true;      // slow, not necessarily broken
-            else problems.push('couldn\'t be reached (the website didn\'t answer, or its security certificate is invalid)');
+            let ok = false, slow = e && e.name === 'AbortError';
+            if (!slow && u.protocol === 'http:') {
+                try { await probe('https://' + link.url.slice('http://'.length)); ok = true; }
+                catch (e2) { slow = e2 && e2.name === 'AbortError'; }
+            }
+            if (slow) out.unverified = true;                              // slow, not necessarily broken
+            else if (!ok) problems.push('couldn\'t be reached (the website didn\'t answer, or its security certificate is invalid)');
         }
     }
     return out;
 }
 
+// Results are remembered for 10 minutes, so the links in a signature aren't re-checked (and their
+// websites re-contacted) on every email sent.
+const OUTGOING_MEMO_MS = 10 * 60 * 1000;
+const outgoingMemo = new Map();        // url|text → { ts, result }
 async function checkOutgoingLinks(links) {
     const cfg = await getConfig();
     const list = links.slice(0, 40);
     const results = new Array(list.length);
     let next = 0;
-    const worker = async () => { while (next < list.length) { const i = next++; results[i] = await checkOutgoingLink(list[i], cfg); } };
+    const checkOne = async (link) => {
+        const key = `${link.url}|${link.text || ''}`;
+        const m = outgoingMemo.get(key);
+        if (m && Date.now() - m.ts < OUTGOING_MEMO_MS) return m.result;
+        const result = await checkOutgoingLink(link, cfg);
+        if (outgoingMemo.size >= 500) outgoingMemo.delete(outgoingMemo.keys().next().value);
+        if (!result.unverified) outgoingMemo.set(key, { ts: Date.now(), result });
+        return result;
+    };
+    const worker = async () => { while (next < list.length) { const i = next++; results[i] = await checkOne(list[i]); } };
     await Promise.all([worker(), worker(), worker(), worker()]);
-    const bad = results.filter(r => r.problems.length);
-    if (bad.length) logInfo(`Before sending: ${bad.length} of ${results.length} link${results.length === 1 ? '' : 's'} had problems (${bad.map(r => logUrl(r.url)).join(', ')}).`, 'Send check');
+    // One log line per check, listing every link and its result, so it's always clear what was checked.
+    const summary = results.map(r => `${logUrl(r.url)}: ${r.problems.length ? r.problems.join('; ') : r.unverified ? 'not fully checked' : 'OK'}`);
+    logInfo(`Before sending: checked ${results.length} link${results.length === 1 ? '' : 's'}. ${summary.join(' | ')}`, 'Send check');
     return results;
 }
 
@@ -1724,7 +1778,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 
     if (request.action === 'logPixel') {
-        logHistory({ shortUrl: request.url, finalUrl: request.url, verdict: 'pixel', reason: `Tracking pixel ${request.removed ? 'removed' : 'neutralized'}`, resolver: 'Pixel Detector' });
+        logHistoryEntry({ shortUrl: request.url, finalUrl: request.url, verdict: 'pixel', reason: `Tracking pixel ${request.removed ? 'removed' : 'neutralized'}`, resolver: 'Pixel Detector' });
         sendResponse({ status: "Logged" });
         return true;
     }

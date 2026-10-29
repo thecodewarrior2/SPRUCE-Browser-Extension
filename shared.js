@@ -180,7 +180,7 @@ const publicShorteners = [
     'bit.ly', 't.co', 'tinyurl.com', 'ow.ly', 'is.gd', 'buff.ly', 'cutt.ly',
     'rebrand.ly', 'bl.ink', 'rb.gy', 'v.gd', 'j.mp', 'lnkd.in', 'db.tt',
     'qr.ae', 'snip.ly', 'adf.ly', 'shorte.st', 't2m.io', 'kurzelinks.de',
-    'goo.gl', 'wp.me', 'short.io', 'x.co', 'tiny.cc', 'clk.im', 'b.link',
+    'goo.gl', 'share.google', 'search.app', 'wp.me', 'short.io', 'x.co', 'tiny.cc', 'clk.im', 'b.link',
     'flyn.im', 'flyn.to',
     // Big brands' own short-link domains (looked up like any shortener)
     'c.gle', 'g.co', 'goo.gle', 'youtu.be', 'aka.ms', 'msft.it', 'amzn.to', 'amzn.eu', 'a.co', 'fb.me', 'apple.co', 'spoti.fi', 'adobe.ly', 'ebay.to'
@@ -1014,7 +1014,8 @@ const COMPANY_ONLY_SHORTENERS = {
     'c.gle':   { brand: 'Google',    foreignSender: 'danger' },
     'g.co':    { brand: 'Google',    foreignSender: 'danger' },
     'goo.gle': { brand: 'Google',    foreignSender: 'caution' },
-    'aka.ms':  { brand: 'Microsoft', foreignSender: 'caution' }
+    'aka.ms':  { brand: 'Microsoft', foreignSender: 'caution' },
+    'go.microsoft.com': { brand: 'Microsoft', foreignSender: 'caution' }      // /fwlink/?LinkId=… redirector
 };
 function companyOnlyShortener(urlString) {
     const host = urlHostname(urlString);
@@ -1288,4 +1289,24 @@ function outgoingLinkOfflineProblems(url, linkText) {
     const textHost = /^(https?:\/\/)?(www\.)?([a-z0-9-]+\.)+[a-z]{2,}(\/\S*)?$/i.test(shown) ? (urlHostname(/^https?:/i.test(shown) ? shown : 'https://' + shown) || '') : '';
     if (textHost && registrableDomain(textHost) !== registrableDomain(host)) problems.push(`its text shows ${textHost}, but the link goes to ${host}`);
     return problems;
+}
+
+// Domain names typed without "http://" or "www." (Gmail turns "test.com" into a link only when the
+// email is sent, so while composing it is plain text). Only well-known endings count, plus the typo
+// endings above, so ordinary words with dots ("e.g.", "Node.js", "report.zip") are not mistaken
+// for websites; email addresses and file names are left out.
+const BARE_DOMAIN_TLDS = ['com', 'net', 'org', 'edu', 'gov', 'mil', 'int', 'io', 'co', 'us', 'uk', 'ca', 'au', 'nz', 'ie',
+    'de', 'fr', 'it', 'es', 'nl', 'be', 'ch', 'at', 'se', 'no', 'dk', 'fi', 'pl', 'pt', 'cz', 'gr', 'hu', 'ro', 'jp', 'kr',
+    'cn', 'hk', 'tw', 'sg', 'in', 'br', 'mx', 'ar', 'cl', 'ru', 'ua', 'za', 'eu', 'info', 'biz', 'me', 'tv', 'cc', 'ai',
+    'dev', 'xyz', 'online', 'site', 'store', 'shop', 'tech', 'blog', 'cloud', 'news', 'live', 'link', 'club', 'top', 'ly',
+    'gl', 'gle', 'ms', 'to', 'fm', 'gg', 'pro', 'name', 'email', 'page', 'bank', 'website', 'space', 'agency', 'company',
+    ...Object.keys(TLD_TYPOS)].filter(t => !FILE_EXTENSION_TLDS.has(t));
+const BARE_DOMAIN_RE = new RegExp(`(?<![@\\w.\\/:-])((?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+(?:${BARE_DOMAIN_TLDS.join('|')}))(?![\\w@-]|\\.[a-z0-9])(\\/[^\\s<>"']*)?`, 'gi');
+function findBareDomains(text) {
+    const withoutUrls = String(text || '').replace(/\b(?:https?:\/\/|www\.)[^\s<>"']+/gi, ' ');
+    const out = [];
+    for (const m of withoutUrls.matchAll(BARE_DOMAIN_RE)) {
+        out.push(`http://${m[1]}${(m[2] || '').replace(/[.,;:!?)\]]+$/, '')}`);
+    }
+    return [...new Set(out)].slice(0, 40);
 }

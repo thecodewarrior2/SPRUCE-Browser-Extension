@@ -1,5 +1,48 @@
 # Changelog
 
+## 5.35 — Merged the repository's offline changes
+
+The GitHub repository (based on 5.32) had documentation and packaging changes; the code there was unchanged from 5.32, so all 5.33 and 5.34 fixes are kept.
+- **License:** the project is licensed under the Apache License 2.0 (`LICENSE`), shown in Help → About with a link to the source code.
+- **Stable extension ID from source:** `manifest.json` keeps the public `key`, so loading the repository folder gives the same extension ID everywhere. The Chrome Web Store package has it removed, because the store doesn't accept that field.
+- **README:** the repository's README, merged with the 5.34 additions:
+  - the email banner, the Send check details (names typed alone, quoted text, never holding an email), design rules and testing;
+  - three corrections: destinations show in the hover card (not the tooltip), AdGuard is a backup threat filter, and the Private level still sends site names to the DNS threat filters;
+  - an explanation of the public `key`.
+- **`INSTALL-FOR-TESTERS.md`** is now part of the project.
+- **New `.gitignore`** keeps the private signing key (`*.pem`) and build files out of the repository.
+
+## 5.34 — Code review: a draft-safety fix, lighter on resources, more decoders
+
+**Fixes**
+- **An email being written is never changed.** In Outlook on the web, the compose editor carries the same “Message body” label as a message being read. The extension could therefore mark links, insert icons and block images inside a draft, and those changes would have been sent to the recipients. Anything editable is now always left alone, in every webmail. A browser test confirms that a draft stays byte-for-byte as typed, and fails without the fix.
+- **No false “couldn't be reached” for HTTPS-only sites.** A name typed alone, such as “example.dev”, is checked as http://; many sites only answer over HTTPS, as browsers try first. An http:// address now counts as working if either form answers.
+- **Links you send are no longer recorded in History.** History is for links you received.
+- **The Send check works in any Gmail language.** It also recognizes Gmail's Send button by its long-stable class, not only by the English label.
+
+**Resources**
+- **Sender checks read only the message headers.** Gmail's “Show original” contains the whole message, attachments included (possibly megabytes). Reading now stops when the headers end (at most 512 KB).
+- **Repeated links are answered from memory.** A bounded memory of recent results sits in front of the stored cache: in the benchmark, reopening an email with 100 links needs 1 storage read instead of 100.
+- **Send-check results are remembered for 10 minutes,** so signature links aren't re-checked, and their websites re-contacted, on every email.
+
+**Decoders and lists**
+- New offline decoders: YouTube attribution links (a full outside address in them is refused), Pinterest outbound links, Telegram Instant View.
+- Google's share links (share.google, search.app) are recognized as short links.
+- Microsoft's link redirector go.microsoft.com (fwlink) is treated as a Microsoft-only link, like aka.ms.
+
+**Documentation**
+- New README.md: what the extension does, where each kind of documentation is, the file map, design rules, and how it's tested.
+
+## 5.33 — Fix: domain names typed without http:// are checked before sending
+
+- **Reported:** “test.com” in an email wasn't flagged before sending, although it can't be reached. The check worked only for addresses typed with “http://”, “https://” or “www.”. A name typed on its own, like “test.com”, is plain text while you write (Gmail turns it into a link only when the email is sent), so it was never checked.
+  - Names typed on their own are now recognized as Gmail does, including typo endings (“example.con”).
+  - To avoid false alarms, only known endings count, and email addresses, file names (“report.zip”, “setup.py”) and words like “Node.js” or “e.g.” are left out.
+- **test.com, the DNS case:** the domain is registered but has no address at all (DNS answers “no data”, not “no such domain”). The pre-send check already reports this as “exists but has no website address”; it now gets the chance to.
+- **Links that can't work are no longer shown as “Safe”.** An incoming link whose domain doesn't exist, or exists without any IPv4 or IPv6 address, is shown as not verified with the note “can't work”, in the email and in History. IPv6-only sites are not mislabeled.
+- **Every pre-send check is logged** (Settings → Logging), listing each link and its result, not just problems. It's now easy to see exactly what was checked.
+- Help → Troubleshooting explains “can't work”.
+
 ## 5.32 — Check links before sending; Help reorganized
 
 - **Checking links before sending (Gmail).** When you press Send, or Ctrl/⌘+Enter, the links you wrote are checked before the email goes. The quoted original you're replying to is not checked. The checks:

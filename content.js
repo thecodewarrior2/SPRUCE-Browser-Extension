@@ -88,11 +88,16 @@ function scanRoots() {
     return roots;
 }
 // All elements matching `suffix` inside message bodies, across every scanned document.
+// Never anything editable: an email being written (some webmail labels its editor "Message body"
+// too) must not be changed, or the changes would be sent to the recipients.
+function isEditable(el) {
+    return !!(el && (el.isContentEditable || (el.closest && el.closest('[contenteditable="true"], [contenteditable=""], textarea'))));
+}
 function inBodies(suffix) {
     const out = [];
     for (const r of scanRoots()) {
         const sel = r.body.split(',').map(x => x.trim() + (suffix ? ' ' + suffix : '')).join(', ');
-        out.push(...r.doc.querySelectorAll(sel));
+        for (const el of r.doc.querySelectorAll(sel)) if (!isEditable(el)) out.push(el);
     }
     return out;
 }
@@ -1169,6 +1174,29 @@ function gmailIk() {
     return ik;
 }
 
+// "Show original" is the whole raw message, attachments included (possibly megabytes); only the
+// headers at the top are needed, so reading stops once they end (blank line), at most 512 KB.
+async function readUntilHeadersEnd(response) {
+    if (!response.body || !response.body.getReader) return response.text();
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let text = '', bytes = 0;
+    try {
+        while (bytes < 512 * 1024) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            bytes += value.byteLength;
+            text += decoder.decode(value, { stream: true });
+            const start = text.search(/<pre[\s>]/i);
+            const from = start >= 0 ? start : 0;
+            if (/\r?\n\r?\n/.test(text.slice(text.indexOf('>', from) + 1))) break;   // headers complete
+        }
+    } finally {
+        reader.cancel().catch(() => {});
+    }
+    return text;
+}
+
 function getMessageAuth(el) {
     const id = gmailMessageId(el);
     if (!id) return Promise.resolve(null);
@@ -1178,7 +1206,7 @@ function getMessageAuth(el) {
     const ik = gmailIk();
     const url = `${location.origin}/mail/u/${account}/?${ik ? `ik=${ik}&` : ''}view=om&permmsgid=${encodeURIComponent(id)}`;
     const p = fetch(url, { credentials: 'include' })
-        .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.text(); })
+        .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return readUntilHeadersEnd(r); })
         .then(text => {
             let raw = text;
             if (/<pre[\s>]/i.test(text)) {
@@ -1578,7 +1606,9 @@ function gmailSendButtonFrom(target) {
     const b = target && target.closest ? target.closest('[role="button"]') : null;
     if (!b) return null;
     const label = (b.getAttribute('data-tooltip') || b.getAttribute('aria-label') || '').trim();
-    if (!/^send\b/i.test(label) || /schedule|later|more send options/i.test(label)) return null;
+    if (/schedule|later|more send options/i.test(label)) return null;
+    // "Send" in English, or Gmail's own (long-stable) class for the Send button in any language.
+    if (!/^send\b/i.test(label) && !b.classList.contains('aoO')) return null;
     return b;
 }
 function composeOf(el) {
@@ -1608,6 +1638,8 @@ function collectOutgoingLinks(body) {
         if (!/^https?:/i.test(u)) u = 'http://' + u;
         if (!seen.has(u)) seen.set(u, { url: u, text: '' });
     }
+    // Names typed without http:// or www. ("test.com"): Gmail makes them links only when sending.
+    for (const u of findBareDomains(text)) if (!seen.has(u) && !seen.has(u + '/')) seen.set(u, { url: u, text: '' });
     return { links: [...seen.values()].slice(0, 40), malformed: findMalformedUrls(text) };
 }
 
