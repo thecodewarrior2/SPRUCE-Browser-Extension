@@ -23,7 +23,8 @@ Proton Mail, Yahoo Mail, AOL Mail, Zoho Mail, iCloud Mail, Fastmail and GMX.
   original") is read to judge company short links (c.gle, aka.ms, …) and brand-claiming sender
   names.
 - **Sender icons and identity (Gmail).** In the inbox list and in opened emails, every sender gets its
-  site's icon (a blank space when the site has none; icons, verdicts and countries are remembered, so the
+  site's icon (else its parent domain's or one from DuckDuckGo's icon service, replaced by the site's own as
+  soon as it has one; a blank space when none exists; icons, verdicts and countries are remembered, so the
   inbox shows them at once), a country flag (where the server that sent it is, from Gmail's own delivery record, or the
   domain's country) and a domain label. Color only appears when it matters: ⛔ flagged (red),
   ⚠ caution (yellow), and ✓ trusted (green, for senders you or your organization chose). Every other
@@ -79,7 +80,7 @@ PowerShell), or a macOS configuration profile. See [ADMIN-GUIDE.md](ADMIN-GUIDE.
 complete `policies.json` with every key.
 
 The sender features (Gmail) each have their own key (`managedEnableSenderIdentity`,
-`managedEnableSenderCountry`, `managedEnableSenderDomainCheck`, `managedEnableSenderAddressCheck`,
+`managedEnableSenderIconFallback`, `managedEnableSenderCountry`, `managedEnableSenderDomainCheck`, `managedEnableSenderAddressCheck`,
 `managedEnableAutoSpam`, `managedEnableSpamNotice`); `managedTrustedSenders` is the allow list of senders never to flag or move
 (addresses or whole domains), for example your phishing-training provider or a false positive. There is
 no sender block list: users report anything missed with Gmail's own Report spam.

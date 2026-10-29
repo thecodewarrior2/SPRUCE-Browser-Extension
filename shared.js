@@ -23,6 +23,9 @@ const SETTING_DEFS = [
     { key: 'enableSendCheck',             managedKey: 'managedEnableSendCheck',             def: true, type: 'boolean' },
     // Sender identity (Gmail): the sender's site icon and domain label, in the inbox and in opened emails.
     { key: 'enableSenderIdentity',        managedKey: 'managedEnableSenderIdentity',        def: true, type: 'boolean' },
+    // A site without its own icon gets its parent domain's, or DuckDuckGo's icon service's (a second
+    // icon service, asked only for such sites); re-checked weekly so the site's own icon replaces it.
+    { key: 'enableSenderIconFallback',    managedKey: 'managedEnableSenderIconFallback',    def: true, type: 'boolean' },
     // Country flag of the server that sent the email (the domain's ending when it can't be looked up).
     { key: 'enableSenderCountry',         managedKey: 'managedEnableSenderCountry',         def: true, type: 'boolean' },
     // Sender domains checked against the threat services and phishing lists (Gmail).

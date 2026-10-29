@@ -90,6 +90,8 @@
              onOff(S.enableSenderDomainCheck && S.enableDnsThreatCheck) + lock('enableSenderDomainCheck')],
             ['Sender icons (Gmail)', 'The site name of each sender (e.g. example.com), to get its icon.', 'Google\'s icon service (www.google.com; Google already delivers your Gmail)',
              onOff(S.enableSenderIdentity && S.enableDnsThreatCheck) + lock('enableSenderIdentity')],
+            ['Stand-in sender icons (Gmail)', 'The site name of a sender whose site has no icon of its own (and not its parent domain either).', 'DuckDuckGo\'s icon service (icons.duckduckgo.com)',
+             onOff(S.enableSenderIdentity && S.enableDnsThreatCheck && S.enableSenderIconFallback) + lock('enableSenderIconFallback')],
             ['Sender country (Gmail)', 'The internet address of the server that delivered an email (from Gmail\'s own record, read emails only), or of the sender\'s website. Once a month at most per address.', 'country.is (open-source service; sees your IP address)',
              onOff(S.enableSenderIdentity && S.enableSenderCountry && S.enableDnsThreatCheck) + lock('enableSenderCountry')]
         ]));
@@ -268,6 +270,7 @@
             [code('mail.google.com'), 'only for an email with a company-only link or a sender name claiming a brand', 'nothing new: reads that email\'s original source from Gmail itself (your session)', 'Check who sent the email', onOff(S.enableSenderChecks)],
             [code('mail.google.com'), 'opened emails (sender icons on), and read emails in the inbox list (country flags on, not Offline only); once per email, two at a time', 'nothing new: reads the email\'s headers from Gmail itself (your session) for the sender\'s country and verification', 'Show sender icons / Show the sender\'s country', onOff(S.enableSenderIdentity)],
             [code('www.google.com/s2, *.gstatic.com'), 'a new sender site (Gmail; at most once a month per site)', 'the sender\'s site name, for its icon', 'Show sender icons and domain labels', onOff(S.enableSenderIdentity && S.enableDnsThreatCheck)],
+            [code('icons.duckduckgo.com'), 'a sender site without its own icon (Gmail; at most once a week per site)', 'the sender\'s site name, for a stand-in icon', 'Stand-in icon for sites without their own', onOff(S.enableSenderIdentity && S.enableDnsThreatCheck && S.enableSenderIconFallback)],
             [code('api.country.is'), 'a new sending server or sender website (at most once a month each)', 'that server\'s IP address', 'Show sender icons + Show the sender\'s country', onOff(S.enableSenderIdentity && S.enableSenderCountry && S.enableDnsThreatCheck)],
             ['the threat-check services above', 'each new sender domain (Gmail; at most every ' + fmtMs(SAFE_CACHE_MS) + ')', 'the sender\'s domain', 'Check sender domains for threats', onOff(S.enableSenderDomainCheck && S.enableDnsThreatCheck)],
             [code('raw.githubusercontent.com'), 'scam-sender list: once a day', 'nothing (plain download)', 'Check sender addresses against phishing lists', onOff(S.enablePhishingFeeds && S.enableSenderAddressCheck)],

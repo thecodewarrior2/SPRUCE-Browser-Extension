@@ -15,6 +15,7 @@
           "managedEnableSenderChecks": true,
           "managedEnableSendCheck": true,
           "managedEnableSenderIdentity": true,
+          "managedEnableSenderIconFallback": true,
           "managedEnableSenderCountry": true,
           "managedEnableSenderDomainCheck": true,
           "managedEnableSenderAddressCheck": true,
