@@ -25,10 +25,10 @@ Proton Mail, Yahoo Mail, AOL Mail, Zoho Mail, iCloud Mail, Fastmail and GMX.
 - **Sender icons and identity (Gmail).** In the inbox list and in opened emails, every sender gets its
   site's icon (a blank space when the site has none; icons, verdicts and countries are remembered, so the
   inbox shows them at once), a country flag (where the server that sent it is, from Gmail's own delivery record, or the
-  domain's country) and a domain label colored by a check of the sender: ✓ checked, ⚠ caution,
-  ⛔ flagged, grey when not verified. Nothing is green by default: only a sender whose domain the
-  threat checks actually cleared, or one you trust, is green; Gmail.com-style providers and your own
-  domain stay grey, since anyone can send from them. Point at the label for the reasons and Gmail's own verification (DMARC/SPF/DKIM).
+  domain's country) and a domain label. Color only appears when it matters: ⛔ flagged (red),
+  ⚠ caution (yellow), and ✓ trusted (green, for senders you or your organization chose). Every other
+  label is plain, so Gmail.com-style providers don't look suspect and nothing looks safe that wasn't
+  proven safe. Point at the label for the reasons and Gmail's own verification (DMARC/SPF/DKIM).
 - **Phishing senders go to Spam (Gmail).** Sender addresses are compared with a community scam-sender
   list (there is no block list to maintain; Gmail's own Report spam covers anything missed); sender domains with the phishing lists and the DNS threat filters
   (a domain that doesn't exist is flagged too). Each email is also checked for signs of forgery: malformed

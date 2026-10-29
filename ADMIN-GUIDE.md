@@ -155,9 +155,10 @@ All of this is on by default and every part has its own key above. In short:
   (Quad9, Cloudflare Security, Control D, DNS4EU, your own resolver). A block by the Cloudflare Family content
   filter or by the AdGuard backup alone only shows **caution**. Gmail.com, Outlook.com and other personal-mail
   providers, major companies' domains (`PROTECTED_DOMAINS`) and your own organization's domain are never judged
-  by domain lists or DNS, only by exact addresses on the community list, so they are shown as **not verified** (grey), never
-  green. Green (✓ checked) needs a completed threat check that cleared the domain; trusted senders and allowlisted
-  domains show as trusted. Also flagged: a sender domain that doesn't exist;
+  by domain lists or DNS, only by exact addresses on the community list, so they are **not verified**. Labels
+  are colored only when they need attention: ⛔ red (flagged), ⚠ yellow (caution) and ✓ green only for trusted
+  senders and allowlisted domains (a person chose them). Checked and not-verified senders get a plain, neutral
+  label: neither a warning (most mail comes from providers like Gmail) nor a promise of safety. Also flagged: a sender domain that doesn't exist;
   a malformed address (encoded part, more than 64 characters before the @, two @, invalid domain); and an email
   that shows enough signs of forgery itself. Signs are weighted (strong ones flag on their own, weaker ones add
   up): forged Gmail delivery records copied from older emails, headers claiming several unrelated sending services,

@@ -1946,7 +1946,11 @@ let senderMessageCache = null;             // Promise<{ msg id → { fh, ip, an,
 let senderMessageCacheTimer = null;
 const SENDER_MESSAGE_CACHE_MAX = 5000;
 const STATUS_TEXT = { flagged: 'Flagged sender', caution: 'Caution', clean: 'Checked', trusted: 'Trusted', unverified: 'Not verified', unknown: 'Unknown sender', pending: 'Checking…' };
-const STATUS_MARK = { flagged: '⛔', caution: '⚠', clean: '✓', trusted: '✓' };
+// Color and a mark only where they mean something: flagged and caution ask for attention, trusted is
+// the user's or organization's own choice. Everything else (checked, not verified) stays neutral, so
+// big providers don't look suspect and nothing looks safe that wasn't proven safe.
+const STATUS_MARK = { flagged: '⛔', caution: '⚠', trusted: '✓' };
+const STATUS_SHOWN = new Set(['flagged', 'caution', 'trusted']);
 const STATUS_RANK = { flagged: 5, caution: 4, unknown: 3, unverified: 2, trusted: 1, clean: 1, pending: 0 };
 
 function senderFeaturesOn(S) {
@@ -2274,7 +2278,7 @@ function updateOpenedVerdict(body) {
     logEmailVerdict(st.msgId || st.address, st.address, st.base, final);
     if (st.chip) {
         setChipResult(st.chip, final, st.address, st.authLine);
-        st.chip.querySelector('.unshortener-sender-domain').textContent = `${siteOfSender(st.domain)} · ${STATUS_TEXT[final.status] || final.status}`;
+        st.chip.querySelector('.unshortener-sender-domain').textContent = STATUS_SHOWN.has(final.status) ? `${siteOfSender(st.domain)} · ${STATUS_TEXT[final.status]}` : siteOfSender(st.domain);
     }
     const banner = bannerState(body);
     const line = final.status === 'flagged' ? { severity: 'danger', message: `This email is flagged. ${final.reasons.join(' ')} Don't open its links or attachments or reply with personal details.` }

@@ -1,5 +1,11 @@
 # Changelog
 
+## 5.44 — Color only where it matters (Firefox build, same as Chrome 5.44)
+
+- **Sender labels are colored only when they need attention:** ⛔ red for flagged, ⚠ yellow for caution, and ✓ green only for trusted senders (your list, your organization's, or an allowlisted domain), the one case a person chose. Every other label (checked, nothing found; not verified) is plain, the same neutral grey as Gmail's own labels.
+- **Opened emails no longer say "· Not verified" or "· Checked"** after the sender's domain; the words appear only for Flagged, Caution and Trusted. Pointing at the label still shows every check and reason.
+- Why: a "Not verified" on every Gmail, Yahoo and Outlook sender read as a warning, while a green "Checked" (the security services don't know the domain) gave a false sense of safety, since new phishing domains are often not listed yet. Checks, flagging and moving to Spam are unchanged.
+
 ## 5.43 — No sender block list; rescues kept apart (Firefox build, same as Chrome 5.43)
 
 - **Removed the organization's phishing-sender block list (`managedPhishingSenders`).** Only allow lists remain: Trusted senders (yours and `managedTrustedSenders`) and the allowlist, for phishing-training providers and false positives. Anything the checks miss is reported with Gmail's own Report spam. An existing `managedPhishingSenders` policy is ignored. Senders are still flagged by the community scam-sender list, the phishing lists, the DNS security services, nonexistent domains, malformed addresses and signs of forgery in the email.
