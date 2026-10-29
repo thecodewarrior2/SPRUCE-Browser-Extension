@@ -1,5 +1,14 @@
 # Changelog
 
+## 5.48 — Stand-in icons for sites without their own
+
+- **A sender site without its own icon gets a stand-in:** its parent domain's icon (for `alerts.brand.com`, `brand.com`'s, through Google's icon service as before), else one from DuckDuckGo's icon service (`icons.duckduckgo.com`; only the site name is sent, and only for such sites). New setting **Stand-in icon for sites without their own** (on by default; policy `managedEnableSenderIconFallback`). Off: a blank space, as before.
+- **Where each icon came from is recorded** (the site's own, the parent domain's, DuckDuckGo's, or none) and shown in Logging → Senders, with counts.
+- **Stand-ins are temporary:** sites without their own icon are asked about again every week, and the site's own icon replaces the stand-in as soon as it has one. A recheck never replaces an icon with a worse one, and a DuckDuckGo icon stops being shown once the setting is off.
+- DuckDuckGo often sends Windows .ico files holding several sizes (up to 32 KB); those are redrawn once as one 32-pixel PNG (about 1.5 KB). Google's icons are still kept exactly as sent.
+- If DuckDuckGo can't be reached (an outage, or a web filter that blocks it), the result is still remembered and asked about again in a week, so it isn't requested on every page.
+- Gmail's own sender avatars (including verified BIMI logos) are never changed: the extension's icon only sits beside the sender's name. Using BIMI logos directly is not included: anyone can publish one for their own domain (including a look-alike of a real brand), and showing them safely needs the same certificate checks Gmail does.
+
 ## 5.47 — Sender icons in their own database
 
 - **Sender icons are stored as raw images in the extension's own database (IndexedDB)** instead of as text in the settings storage: about a quarter smaller (no base64), and saving a new icon is one small write instead of rewriting every remembered icon. A full set of 1,500 icons is about 1.1 MB instead of 1.5 MB.

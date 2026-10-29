@@ -17,6 +17,9 @@
   "managedEnableSenderIdentity": {
     "Value": true
   },
+  "managedEnableSenderIconFallback": {
+    "Value": true
+  },
   "managedEnableSenderCountry": {
     "Value": true
   },

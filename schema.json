@@ -34,6 +34,11 @@
       "description": "Show each sender's site icon and a label with its domain, colored by the sender checks, in the Gmail inbox list and in opened emails. Icons are fetched once by the extension from Google's icon service (only the site name is sent) and remembered for 30 days; a site without an icon, or managedEnableDnsThreatCheck false, gets a blank space.",
       "type": "boolean"
     },
+    "managedEnableSenderIconFallback": {
+      "title": "Sender Icon Fallback (Gmail)",
+      "description": "When a sender's site has no icon of its own: use its parent domain's icon (alerts.brand.com -> brand.com, through Google's icon service as usual), else ask DuckDuckGo's icon service (icons.duckduckgo.com; only the site name is sent, only for such sites, at most once a week per site). Such icons are re-checked weekly and replaced by the site's own icon as soon as it has one. False: a blank space instead. Requires managedEnableSenderIdentity and managedEnableDnsThreatCheck.",
+      "type": "boolean"
+    },
     "managedEnableSenderCountry": {
       "title": "Sender Country Flags (Gmail)",
       "description": "Show a country flag for each sender: the country of the server that delivered the email (from Gmail's own Received header, read emails only; the server's IP address is looked up at api.country.is, at most once a month per address), else the country named by the domain ending, else where the sender's website is hosted. With managedEnableDnsThreatCheck false only the domain ending is used.",

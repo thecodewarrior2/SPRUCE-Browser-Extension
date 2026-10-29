@@ -820,8 +820,11 @@ document.addEventListener('DOMContentLoaded', () => {
             rows.forEach(v => { counts[v.r.status] = (counts[v.r.status] || 0) + 1; });
             const withIcon = iconRecs.filter(i => i.bytes);
             const iconKB = withIcon.reduce((n, i) => n + i.bytes.byteLength, 0) / 1024;
+            const bySource = (src) => withIcon.filter(i => i.source === src).length;
             document.getElementById('senderStats').replaceChildren(statItem('senders remembered', rows.length), statItem('flagged', counts.flagged || 0),
-                statItem('caution', counts.caution || 0), statItem(`icons remembered (${iconKB < 10 ? iconKB.toFixed(1) : Math.round(iconKB)} KB)`, withIcon.length), statItem('sites without an icon', iconRecs.length - withIcon.length));
+                statItem('caution', counts.caution || 0), statItem(`icons remembered (${iconKB < 10 ? iconKB.toFixed(1) : Math.round(iconKB)} KB)`, withIcon.length),
+                statItem('stand-ins from the parent domain', bySource('parent')), statItem('stand-ins from DuckDuckGo', bySource('duckduckgo')),
+                statItem('sites without an icon', iconRecs.length - withIcon.length));
             for (const v of rows) {
                 const r = v.r;
                 const text = `${r.address} ${r.domain} ${r.status} ${(r.reasons || []).join(' ')} ${r.checks || ''}`.toLowerCase();
@@ -831,8 +834,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 const code = document.createElement('code'); code.textContent = r.address; who.appendChild(code);
                 if (r.move) { const n = document.createElement('div'); n.style.cssText = 'font-size: 11px; color: var(--danger-text);'; n.textContent = 'Its emails are moved to Spam'; who.appendChild(n); }
                 const look = cell();
-                const fav = iconDataUrl(iconBySite.get(siteOfSender(r.domain)));
-                if (fav) { const img = document.createElement('img'); img.src = fav; img.width = 16; img.height = 16; img.alt = ''; img.style.marginRight = '6px'; look.appendChild(img); }
+                const iconRec = iconBySite.get(siteOfSender(r.domain));
+                const fav = iconDataUrl(iconRec);
+                if (fav) { const img = document.createElement('img'); img.src = fav;
+                    img.title = iconRec.source === 'parent' ? `Stand-in: the parent domain's icon (${iconRec.from}); checked again weekly for the site's own`
+                        : iconRec.source === 'duckduckgo' ? 'Stand-in: from DuckDuckGo\'s icon service; checked again weekly for the site\'s own' : 'The site\'s own icon'; img.width = 16; img.height = 16; img.alt = ''; img.style.marginRight = '6px'; look.appendChild(img); }
                 else { const blank = document.createElement('span'); blank.style.cssText = 'display:inline-block;width:16px;margin-right:6px;'; blank.title = 'No icon'; look.appendChild(blank); }
                 if (r.country) {
                     const f = document.createElement('span');

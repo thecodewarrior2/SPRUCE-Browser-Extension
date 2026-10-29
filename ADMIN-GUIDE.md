@@ -34,6 +34,7 @@ Anything you do **not** set stays under the user's control (all features are on 
 | managedPhishSimulationRules | array of objects | [] | Administrator only, Gmail: phishing-simulation emails to leave unchecked (see "Administrator-only policies") |
 | managedEnableSendCheck | boolean | true | Gmail: check the links in an email when Send is pressed, and list problems (typos, unreachable or non-existent sites, look-alike, phishing and malware sites) before it goes |
 | managedEnableSenderIdentity | boolean | true | Gmail: each sender's site icon and a domain label colored by the sender checks, in the inbox list and opened emails (icons fetched once from Google's icon service and remembered 30 days, as raw images in the extension's own IndexedDB database, at most 1,500 sites; a blank space for sites without an icon, and when `managedEnableDnsThreatCheck` is false) |
+| managedEnableSenderIconFallback | boolean | true | Gmail: a stand-in icon for a sender site without its own: its parent domain's (alerts.brand.com → brand.com, through Google's icon service), else DuckDuckGo's icon service (`icons.duckduckgo.com`; only the site name, only for such sites). Stand-ins are re-checked weekly and replaced by the site's own icon once it has one; where each icon came from is shown in Logging → Senders. False: a blank space |
 | managedEnableSenderCountry | boolean | true | Gmail: country flag of the server that delivered the email (Gmail's Received header, read emails only; IP looked up at api.country.is, at most monthly per address), else the domain ending's country, else where the sender's website is hosted |
 | managedEnableSenderDomainCheck | boolean | true | Gmail: check sender domains with the DNS threat services (domain name only) and the phishing lists. Personal-mail providers, major companies' domains and the user's own organization domain are never judged as a whole |
 | managedEnableSenderAddressCheck | boolean | true | Gmail: compare sender addresses with the community scam-sender list (sefinek/Blacklisted-Emails, MIT; downloaded with the phishing lists); malformed addresses are flagged too |
@@ -144,7 +145,9 @@ All of this is on by default and every part has its own key above. In short:
   left alone, because its headers aren't read until it's opened. To be safe, also list the training vendor's
   sending domains in `managedAllowlist`.
 - **Network:** sender domains go to the same DNS threat services as links' site names; site names to Google's
-  icon service (`www.google.com/s2/favicons`); a delivering server's IP address to `api.country.is`. With
+  icon service (`www.google.com/s2/favicons`), and for a site with no icon of its own (nor its parent domain) to
+  DuckDuckGo's (`icons.duckduckgo.com`, off with `managedEnableSenderIconFallback`); a delivering server's IP
+  address to `api.country.is`. With
   `managedEnableDnsThreatCheck` false, none of these requests are made.
 - **Recommended rollout:** start a pilot with `managedEnableAutoSpam` set to `false` (flags only), review what
   is flagged, add any false positives to `managedTrustedSenders`, then enable moving.

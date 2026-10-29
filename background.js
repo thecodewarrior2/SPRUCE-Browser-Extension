@@ -1331,46 +1331,101 @@ async function countryOfIp(ip) {
 // The site icon for a sender's site, as a data: URL, or '' when the site has none. Google's icon
 // service answers 404 (with a generic globe) for sites without an icon: those get no icon at all.
 const SENDER_ICON_MAX_BYTES = 8 * 1024;
-async function senderIcon(site) {
+const SENDER_ICON_RECHECK_MS = 7 * 24 * 60 * 60 * 1000;   // a site without its own icon is asked about again weekly
+const ICON_SOURCE_RANK = { favicon: 3, parent: 2, duckduckgo: 1, none: 0 };
+const ICON_SOURCE_TEXT = { favicon: "the site's own icon", parent: "its parent domain's icon", duckduckgo: "an icon from DuckDuckGo's icon service", none: 'none (left blank)' };
+
+// An icon answer as { found: { type, bytes } | null, status } — found null with status 'none' when the
+// service says there is no icon; throws on anything else (an outage, a filter's block page), which
+// is never remembered.
+async function fetchIconFrom(url, noneStatuses) {
+    const res = await fetchWithTimeout(url, { credentials: 'omit', referrerPolicy: 'no-referrer' }, 6000);
+    const type = (res.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+    if (noneStatuses.includes(res.status)) return null;
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const buf = await res.arrayBuffer();
+    if (!buf.byteLength) return null;                                 // DuckDuckGo: an empty answer means no icon
+    if (!/^image\//.test(type)) throw new Error(`not an image (${type || 'no type'})`);
+    return { type, bytes: buf };
+}
+
+// Icons are kept exactly as sent when they're a small PNG, GIF, JPEG or WebP (Google's are: re-encoding
+// them only made them larger). Anything else (a Windows .ico holding several sizes, which DuckDuckGo
+// often sends, up to 32 KB; or an oversized image) is redrawn once as one 32-pixel PNG (about 1.5 KB).
+// null if it can't be (no image tools here, or an unreadable image): the space is left blank.
+async function normalizeIcon(icon) {
+    if (/^image\/(png|gif|jpeg|webp)$/.test(icon.type) && icon.bytes.byteLength <= SENDER_ICON_MAX_BYTES) return icon;
+    if (/svg/.test(icon.type) || typeof OffscreenCanvas === 'undefined' || typeof createImageBitmap === 'undefined') return null;
+    try {
+        const bmp = await createImageBitmap(new Blob([icon.bytes], { type: icon.type }), { resizeWidth: 32, resizeHeight: 32, resizeQuality: 'high' });
+        const canvas = new OffscreenCanvas(32, 32);
+        canvas.getContext('2d').drawImage(bmp, 0, 0, 32, 32);
+        const png = await canvas.convertToBlob({ type: 'image/png' });
+        if (png.size > SENDER_ICON_MAX_BYTES) return null;
+        return { type: 'image/png', bytes: await png.arrayBuffer() };
+    } catch (e) { return null; }
+}
+
+// The icon for a site, in this order: the site's own (Google's icon service); its parent domain's
+// (alerts.brand.com → brand.com); DuckDuckGo's icon service (opts.fallback). Where it came from is
+// stored with it (Logging → Senders). A site without its own icon is asked about again weekly, and
+// its own icon replaces the stand-in as soon as it has one; a recheck never replaces an icon with a
+// worse one. Resolves to a data: URL, or '' for none.
+async function senderIcon(site, opts = {}) {
     const s = normalizeDomain(site);
     if (!SENDER_DOMAIN_RE.test(s)) return '';
+    const fallback = opts.fallback !== false;
     await moveLegacyIcons();
     const hit = await iconStore.get(s).catch(() => null);
-    if (hit) return iconDataUrl(hit);
-    if (iconInFlight.has(s)) return iconInFlight.get(s);
+    const recheck = hit && hit.source !== 'favicon' && Date.now() - hit.ts > SENDER_ICON_RECHECK_MS
+        // A stand-in from DuckDuckGo is never shown once that service is switched off.
+        || hit && hit.source === 'duckduckgo' && !fallback;
+    if (hit && !recheck) return iconDataUrl(hit);
+    const key = s + (fallback ? '' : '\u0000own');
+    if (iconInFlight.has(key)) return iconInFlight.get(key);
     const p = (async () => {
         try {
-            const res = await fetchWithTimeout(`https://www.google.com/s2/favicons?domain=${encodeURIComponent(s)}&sz=32`, { credentials: 'omit', referrerPolicy: 'no-referrer' }, 6000);
-            const type = res.headers.get('content-type') || '';
-            // Google answers 404 for a site without an icon: remembered as "none". Any other failure (a
-            // server error, a web filter's block page, an answer that isn't an image) is not remembered,
-            // so a short outage or a filter rule never leaves icons blank for a month.
-            if (res.status === 404) {
-                await iconStore.put(s, '', null).catch(e => logWarning(`Saving the icon for ${s} failed (${errorText(e)}).`, 'Sender checks'));
-                logInfo(`Sender icon for ${s}: none (the site has no icon; left blank); remembered for 30 days.`, 'Sender checks');
-                return '';
+            const google = (d) => fetchIconFrom(`https://www.google.com/s2/favicons?domain=${encodeURIComponent(d)}&sz=32`, [404]);
+            let found = null, source = 'none', from = '';
+            const own = await google(s);
+            if (own) { found = own; source = 'favicon'; }
+            const parent = registrableDomain(s);
+            if (!found && fallback && parent && parent !== s) {
+                const p2 = await google(parent);
+                if (p2) { found = p2; source = 'parent'; from = parent; }
             }
-            if (!res.ok || !/^image\//.test(type)) {
-                logWarning(`The icon for ${s} could not be fetched (HTTP ${res.status}${/^image\//.test(type) ? '' : `, ${type.split(';')[0] || 'no type'}`}); left blank for now and asked again later.`, 'Sender checks');
-                return '';
+            let ddgFailed = '';
+            if (!found && fallback) {
+                // Google's answer is definite by now, so a DuckDuckGo failure (an outage, or a web filter
+                // that blocks it) doesn't stop the result being remembered: asked again in a week.
+                try {
+                    const ddg = await fetchIconFrom(`https://icons.duckduckgo.com/ip3/${encodeURIComponent(s)}.ico`, [404]);
+                    if (ddg) { found = ddg; source = 'duckduckgo'; }
+                } catch (e) { ddgFailed = errorText(e); }
             }
-            const buf = await res.arrayBuffer();
-            // Kept exactly as Google sends it (already well compressed; re-encoding made icons larger).
-            // At most SENDER_ICON_MAX_BYTES (a 32-pixel icon is normally under 3 KB); a larger one is left blank.
-            const keep = buf.byteLength > 0 && buf.byteLength <= SENDER_ICON_MAX_BYTES;
-            const rec = { type: type.split(';')[0].trim().toLowerCase(), bytes: keep ? buf : null };
-            await iconStore.put(s, rec.type, rec.bytes).catch(e => logWarning(`Saving the icon for ${s} failed (${errorText(e)}); it is fetched again next time.`, 'Sender checks'));
-            const d = iconDataUrl(rec);
-            logInfo(`Sender icon for ${s}: ${d ? 'found' : `too large (${Math.round(buf.byteLength / 1024)} KB; left blank)`}; remembered for 30 days.`, 'Sender checks');
-            return d;
+            if (found) found = await normalizeIcon(found);
+            if (!found) source = 'none';
+            // A recheck never makes things worse (a stand-in icon isn't replaced by "none"); it only
+            // refreshes the date then.
+            if (hit && !(hit.source === 'duckduckgo' && !fallback) && ICON_SOURCE_RANK[source] < ICON_SOURCE_RANK[hit.source]) {
+                await iconStore.put(s, hit.type, hit.bytes, hit.source, hit.from).catch(() => {});
+                return iconDataUrl(hit);
+            }
+            await iconStore.put(s, found ? found.type : '', found ? found.bytes : null, source, from)
+                .catch(e => logWarning(`Saving the icon for ${s} failed (${errorText(e)}); it is fetched again next time.`, 'Sender checks'));
+            const upgraded = hit && hit.source !== source && source === 'favicon';
+            logInfo(`Sender icon for ${s}: ${ICON_SOURCE_TEXT[source]}${from ? ` (${from})` : ''}${upgraded ? `, replacing ${ICON_SOURCE_TEXT[hit.source]}` : ''}; ` +
+                    `${source === 'favicon' ? 'remembered for 30 days' : 'asked about again in a week'}${ddgFailed ? ` (DuckDuckGo's icon service couldn't be reached: ${ddgFailed})` : ''}.`, 'Sender checks');
+            return iconDataUrl(found ? { type: found.type, bytes: found.bytes } : null);
         } catch (e) {
-            logWarning(`The icon for ${s} could not be fetched (${errorText(e)}); left blank for now.`, 'Sender checks');
-            return '';
+            // An outage or a block page: nothing is remembered; a stand-in already stored stays shown.
+            logWarning(`The icon for ${s} could not be fetched (${errorText(e)}); ${hit && hit.bytes ? 'the stored one is kept' : 'left blank for now'} and asked again later.`, 'Sender checks');
+            return hit ? iconDataUrl(hit) : '';
         } finally {
-            iconInFlight.delete(s);
+            iconInFlight.delete(key);
         }
     })();
-    iconInFlight.set(s, p);
+    iconInFlight.set(key, p);
     return p;
 }
 
@@ -2133,7 +2188,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     // A sender's site icon (data: URL, or '' for none), fetched once and remembered.
     if (request.action === 'senderIcon') {
         if (!sender || sender.id !== chrome.runtime.id || typeof request.site !== 'string') { sendResponse(''); return false; }
-        getConfig().then(cfg => (cfg.values.enableSenderIdentity && cfg.values.enableDnsThreatCheck ? senderIcon(request.site) : ''))
+        getConfig().then(cfg => (cfg.values.enableSenderIdentity && cfg.values.enableDnsThreatCheck ? senderIcon(request.site, { fallback: !!cfg.values.enableSenderIconFallback }) : ''))
             .then(d => sendResponse(d || ''), () => sendResponse(''));
         return true;
     }

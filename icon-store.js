@@ -3,8 +3,9 @@
 // Icons are kept in the extension's own IndexedDB database as the raw image bytes Google sends (about
 // 600 bytes for a 32-pixel icon), one record per site: a quarter smaller than text (base64), and each
 // new icon is one small write instead of rewriting every icon. A site without an icon is kept as a
-// record without bytes. Records older than ICON_STORE_TTL_MS are ignored and pruned; beyond
-// ICON_STORE_MAX the oldest go first.
+// record without bytes. Each record says where its icon came from (source): 'favicon' (the site's own),
+// 'parent' (its parent domain's, see from), 'duckduckgo' (DuckDuckGo's icon service) or 'none'.
+// Records older than ICON_STORE_TTL_MS are ignored and pruned; beyond ICON_STORE_MAX the oldest go first.
 // Never loaded in the Gmail page (it would open Gmail's database, not the extension's).
 // If IndexedDB can't be opened, every call fails quietly: icons are then fetched again when needed.
 // ---------------------------------------------------------------------------
@@ -51,19 +52,22 @@ const iconStore = (() => {
     let putsSincePrune = 0;
 
     return {
-        // { site, type, bytes (ArrayBuffer, or null for "no icon"), ts } or null.
+        // { site, type, bytes (ArrayBuffer, or null for "no icon"), source, from, ts } or null. Records
+        // saved before sources were kept count as 'favicon' (with bytes) or 'none'.
         async get(site) {
             const rec = await run('readonly', s => req(s.get(site)));
-            return fresh(rec) ? rec : null;
+            if (!fresh(rec)) return null;
+            if (!rec.source) rec.source = rec.bytes ? 'favicon' : 'none';
+            return rec;
         },
-        async put(site, type, bytes) {
-            await run('readwrite', s => req(s.put({ site, type: bytes ? type : '', bytes: bytes || null, ts: Date.now() })));
+        async put(site, type, bytes, source = bytes ? 'favicon' : 'none', from = '') {
+            await run('readwrite', s => req(s.put({ site, type: bytes ? type : '', bytes: bytes || null, source: bytes ? source : 'none', from: bytes ? from : '', ts: Date.now() })));
             if (++putsSincePrune >= 50) { putsSincePrune = 0; this.prune().catch(() => {}); }
         },
         // Every fresh record, newest first (Settings → Logging → Senders).
         async all() {
             const recs = await run('readonly', s => req(s.getAll()));
-            return recs.filter(fresh).sort((a, b) => b.ts - a.ts);
+            return recs.filter(fresh).map(r => Object.assign(r, { source: r.source || (r.bytes ? 'favicon' : 'none') })).sort((a, b) => b.ts - a.ts);
         },
         async clear() { await run('readwrite', s => req(s.clear())); },
         // Drops expired records, then the oldest beyond ICON_STORE_MAX. Resolves to the number removed.
