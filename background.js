@@ -961,6 +961,10 @@ async function assessSafety(originalUrl, finalUrl, cfg, opts = {}) {
     ]);
 
     let result = dest;
+    // Both hosts the click can reach must check out before a link counts as safe.
+    if (dest.verdict === 'safe' && outer && outer.verdict !== 'safe' && outer.verdict !== 'unsafe') {
+        result = verdictResult('unknown', { note: `the link itself goes through ${origHost}, which couldn't be checked${outer.note ? ` (${String(outer.note).replace(/\.$/, '')})` : ''}`, resolvedIp: dest.resolvedIp });
+    }
     if (dest.verdict !== 'unsafe' && outer && outer.verdict === 'unsafe') {
         result = verdictResult('unsafe', {
             reason: `The link itself goes through ${origHost}, which is flagged: ${outer.reason}`,

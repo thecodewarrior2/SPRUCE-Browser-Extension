@@ -8,7 +8,8 @@ installPageErrorLogging('Options page');
 // Status shown for a Resolution History entry. Entries written before 5.14 have no "verdict".
 function historyStatus(item) {
     let verdict = item.verdict;
-    if (!verdict) verdict = /^Tracking Pixel/i.test(item.reason || '') ? 'pixel' : (item.isSafe ? 'safe' : 'unsafe');
+    // Older entries can't tell "checked" from "not verified", so they are never shown as Safe.
+    if (!verdict) verdict = /^Tracking Pixel/i.test(item.reason || '') ? 'pixel' : (item.isSafe ? 'unknown' : 'unsafe');
     // Earlier versions logged undecodable email trackers as "Safe"; only the tracker's own domain was checked.
     if (verdict === 'safe' && item.finalUrl === item.shortUrl && emailTrackerProvider(item.shortUrl)) {
         return { cls: 'badge-neutral', text: 'Not verified: email tracking link' };
@@ -501,7 +502,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     const cacheData = items[key];
                     const finalUrl = typeof cacheData === 'object' ? cacheData.finalUrl : cacheData;
                     const resolver = typeof cacheData === 'object' && cacheData.resolver ? cacheData.resolver : 'unshorten.me / Local';
-                    const isSafe = typeof cacheData === 'object' ? cacheData.isSafe : true;
+                    const isSafe = typeof cacheData === 'object' && cacheData.isSafe === true;
+                    const isUnsafe = typeof cacheData === 'object' && cacheData.isSafe === false;
                     const reason = typeof cacheData === 'object' ? cacheData.reason : 'Clean';
                     const cachedDate = typeof cacheData === 'object' ? cacheData.cachedDate : 'N/A';
                     const cachedTimestamp = typeof cacheData === 'object' ? cacheData.cachedTimestamp : null;
@@ -541,8 +543,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
                         const tdStatus = document.createElement('td');
                         const badgeSpan = document.createElement('span');
-                        badgeSpan.className = `badge ${isSafe ? 'badge-safe' : 'badge-unsafe'}`;
-                        badgeSpan.textContent = isSafe ? 'Safe' : `Unsafe: ${reason}`;
+                        badgeSpan.className = `badge ${isSafe ? 'badge-safe' : isUnsafe ? 'badge-unsafe' : 'badge-neutral'}`;
+                        badgeSpan.textContent = isSafe ? 'Safe' : isUnsafe ? `Unsafe: ${reason}` : 'Not verified';
                         tdStatus.appendChild(badgeSpan);
 
                         const tdDate = document.createElement('td');
@@ -1310,7 +1312,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Render Final Destination & Threat Intelligence Card
             const isSafe = response.isSafe;
-            const unverified = response.verdict === 'unknown';
+            const unverified = response.verdict !== 'safe';
             const destCard = document.createElement('div');
             destCard.className = `final-dest-card ${!isSafe ? 'unsafe' : unverified ? 'unverified' : ''}`;
 
