@@ -160,7 +160,8 @@
             [code('customTrustedSenders'), 'Your trusted senders (addresses or domains), never flagged or moved to Spam; the organization\'s list (managedTrustedSenders) is merged at read time.'],
             [code('senderResultCache / faviconCache'), 'Sender verdicts with their reasons and what was checked (6 hours; Logging → Senders) and site icons as data: URLs, empty for sites without one (30 days).'],
             [code('spamMoveLog'), 'Logging → Moved to Spam: each move, failed move and rescue with time, sender and why (newest 1,000; auto-delete period).'],
-            [code('spamMovedThreads'), 'Conversations the extension moved (remembered just before moving) or you took out of Spam: {thread id: time}, the newest 20,000, with no time limit. None of them is ever moved (again). Kept by Delete now.'],
+            [code('spamMovedThreads'), 'Conversations the extension moved to Spam (remembered just before moving): {thread id: time}, the newest 50,000, with no time limit. None of them is ever moved again. Kept by Delete now.'],
+            [code('spamRescuedThreads'), 'Conversations you took out of Spam (Not spam, Move to Inbox): {thread id: time}, the newest 50,000, kept apart so moves never push them out. None of them is ever moved. Kept by Delete now.'],
             [code('senderDomainCache / geoCache'), 'Sender-domain threat verdicts (' + fmtMs(SAFE_CACHE_MS) + ') and IP-address countries (30 days).'],
             [code('senderMessageCache'), 'Per email: the delivering server\'s address, a short fingerprint of the From address (never the address) and the signs of forgery found in its headers, read once; at most 5,000, deleted after the auto-delete period.'],
             [code('https://… (one key per link)'), 'Cache entry: {finalUrl, resolver, isSafe, reason, resolvedIp, cachedDate, cachedTimestamp}. Never one-time, unverified, blocklisted or revealed links.'],
@@ -287,7 +288,7 @@
             code(d.key), code(d.managedKey), typeText(d), d.def === '' ? '(empty)' : String(d.def),
             d.secret ? (S[d.key] ? '•••••• (hidden)' : '(empty)') + (cfg.locked[d.key] ? ' 🔒' : '')
                      : (S[d.key] === '' ? '(empty)' : String(S[d.key])) + (cfg.locked[d.key] ? ' 🔒' : '')
-        ])), el('p', null, 'Also: ', code('managedAllowlist'), ' and ', code('managedBlocklist'), ' (arrays of domains), merged with your own lists; ', code('managedPhishingSenders'), ' (organization only) and ', code('managedTrustedSenders'), ' (merged with your trusted senders), addresses or domains. ',
+        ])), el('p', null, 'Also: ', code('managedAllowlist'), ' and ', code('managedBlocklist'), ' (arrays of domains), merged with your own lists; ', code('managedTrustedSenders'), ' (the allow list, merged with your trusted senders), addresses or domains. ',
                'Settings marked as secret (request headers) are never exported to backups.'));
 
         // This installation

@@ -60,10 +60,6 @@
           "managedBlocklist": [
             "click.marketing.example"
           ],
-          "managedPhishingSenders": [
-            "billing@paypa1-support.example",
-            "paypa1-support.example"
-          ],
           "managedTrustedSenders": [
             "office@partner.example",
             "partner.example"
