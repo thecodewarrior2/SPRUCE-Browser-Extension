@@ -82,23 +82,32 @@ async function scanPdf(bytes) {
     return { codes, links, pagesScanned: pages, pagesTotal: total };
 }
 
-chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-    if (!msg || msg.target !== 'scanner' || sender.id !== chrome.runtime.id) return;
-    (async () => {
-        let bytes, mime = msg.mime || '';
-        if (msg.url) {
-            const res = await fetch(msg.url, { credentials: 'omit' });
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const blob = await res.blob();
-            if (blob.size > MAX_BYTES) throw new Error('file too large');
-            mime = mime || blob.type;
-            bytes = new Uint8Array(await blob.arrayBuffer());
-        } else {
-            bytes = Uint8Array.from(atob(msg.b64 || ''), c => c.charCodeAt(0));
-        }
-        const isPdf = /pdf/i.test(mime) || (bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46);
-        const result = isPdf ? await scanPdf(bytes) : await scanImage(new Blob([bytes], { type: mime || 'image/png' }));
-        return Object.assign({ ok: true, kind: isPdf ? 'pdf' : 'image' }, result);
-    })().then(sendResponse, (e) => sendResponse({ ok: false, error: String((e && e.message) || e) }));
-    return true;
-});
+async function scan(msg) {
+    let bytes, mime = msg.mime || '';
+    if (msg.url) {
+        const res = await fetch(msg.url, { credentials: 'omit' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const blob = await res.blob();
+        if (blob.size > MAX_BYTES) throw new Error('file too large');
+        mime = mime || blob.type;
+        bytes = new Uint8Array(await blob.arrayBuffer());
+    } else {
+        bytes = Uint8Array.from(atob(msg.b64 || ''), c => c.charCodeAt(0));
+    }
+    const isPdf = /pdf/i.test(mime) || (bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46);
+    const result = isPdf ? await scanPdf(bytes) : await scanImage(new Blob([bytes], { type: mime || 'image/png' }));
+    return Object.assign({ ok: true, kind: isPdf ? 'pdf' : 'image' }, result);
+}
+
+const scanSafely = (msg) => scan(msg).catch((e) => ({ ok: false, error: String((e && e.message) || e) }));
+
+if (typeof globalThis.registerLocalScanner === 'function') {
+    // Loaded in Firefox's background page: background.js calls the scanner directly.
+    globalThis.registerLocalScanner(scanSafely);
+} else {
+    chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+        if (!msg || msg.target !== 'scanner' || sender.id !== chrome.runtime.id) return;
+        scanSafely(msg).then(sendResponse);
+        return true;
+    });
+}

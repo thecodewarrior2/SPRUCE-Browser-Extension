@@ -41,6 +41,23 @@ Proton Mail, Yahoo Mail, AOL Mail, Zoho Mail, iCloud Mail, Fastmail and GMX.
   go to the DNS threat filters) or *Offline only* (nothing leaves the browser). Every feature can
   be switched off individually.
 
+## Firefox
+
+This branch is the **Firefox** build (Firefox 128 or later, including 128 ESR). It shares the
+Chrome code; the differences are:
+
+- `manifest.json` uses a background **page** (`background.html`) instead of a service worker, and
+  has a Gecko add-on ID in `browser_specific_settings` instead of the Chrome `key`.
+- Firefox has no offscreen documents, so the QR/PDF scanner (`scanner.js`) runs inside the
+  background page and `background.js` calls it directly. Firefox has no `BarcodeDetector`, so the
+  bundled QR decoder is always used.
+- Managed (policy) settings come from Firefox's enterprise policies (`3rdparty` → `Extensions` →
+  the add-on ID) rather than Chrome policy; `schema.json` is not read by Firefox.
+
+**Try it:** open `about:debugging#/runtime/this-firefox`, click **Load Temporary Add-on…** and pick
+`manifest.json` in this folder (it stays loaded until Firefox restarts). To check the build, run
+`npx web-ext lint`; to package it for addons.mozilla.org, run `npx web-ext build`.
+
 ## Install (load unpacked)
 
 The extension isn't in a web store yet; it's installed from this folder. See

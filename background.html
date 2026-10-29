@@ -1,0 +1,11 @@
+<!doctype html>
+<!-- Firefox background page (event page). Firefox has no offscreen documents, so the QR/PDF scanner
+     (scanner.js) runs here too; background.js calls it directly instead of messaging it. -->
+<meta charset="utf-8">
+<script src="compat.js"></script>
+<script src="shared.js"></script>
+<script src="decoders.js"></script>
+<script src="custom-endpoints.js"></script>
+<script src="qr-decoder.js"></script>
+<script src="background.js"></script>
+<script type="module" src="scanner.js"></script>

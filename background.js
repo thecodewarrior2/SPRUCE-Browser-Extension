@@ -1,9 +1,10 @@
-// background.js — the service worker. Owns the link pipeline (resolveLink), threat checks, short-link
+// background.js — the background script (a page in Firefox, see background.html). Owns the link pipeline (resolveLink), threat checks, short-link
 // lookups, the community-list sync and its safeguards, logging, cleanup alarms, the toolbar badge and
 // the message API used by Gmail, the popup and the Options page. It holds no long-running work: every
 // task is triggered by a message, an alarm or a storage change, and in-memory caches are bounded.
 
-importScripts('shared.js', 'decoders.js', 'custom-endpoints.js', 'qr-decoder.js');
+// Firefox runs this as an event page (background.html), which loads these files itself.
+if (typeof importScripts === 'function') importScripts('shared.js', 'decoders.js', 'custom-endpoints.js', 'qr-decoder.js');
 
 // ---------------------------------------------------------------------------
 // SETTINGS CACHE
@@ -1260,7 +1261,14 @@ let scannerReady = null, scannerIdleTimer = null, scansRunning = 0;
 const scanWaiters = [];
 const qrResults = new Map();      // image URL → result (session memory, bounded)
 
+// Firefox has no offscreen documents, but its background page has a DOM, so scanner.js runs in that
+// page and hands its scan function over here.
+let resolveLocalScanner;
+const localScanner = new Promise(r => { resolveLocalScanner = r; });
+globalThis.registerLocalScanner = (fn) => resolveLocalScanner(fn);
+
 function ensureScanner() {
+    if (!chrome.offscreen) return Promise.resolve();
     if (!scannerReady) {
         scannerReady = (async () => {
             const existing = chrome.runtime.getContexts ? await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] }) : [];
@@ -1277,6 +1285,7 @@ function ensureScanner() {
 
 function scheduleScannerClose() {
     clearTimeout(scannerIdleTimer);
+    if (!chrome.offscreen) return;
     scannerIdleTimer = setTimeout(async () => {
         if (scansRunning) return scheduleScannerClose();
         try { await chrome.offscreen.closeDocument(); } catch (e) { /* already closed */ }
@@ -1291,7 +1300,8 @@ async function scanForQr(req) {
     scansRunning++;
     try {
         await ensureScanner();
-        const res = await chrome.runtime.sendMessage({ target: 'scanner', url: req.url, b64: req.b64, mime: req.mime || '' });
+        const msg = { target: 'scanner', url: req.url, b64: req.b64, mime: req.mime || '' };
+        const res = chrome.offscreen ? await chrome.runtime.sendMessage(msg) : await (await localScanner)(msg);
         if (!res || !res.ok) throw new Error(res && res.error ? res.error : 'no answer from the scanner');
         if (key) {
             if (qrResults.size >= QR_RESULT_CACHE_MAX) qrResults.delete(qrResults.keys().next().value);
