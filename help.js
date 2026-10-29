@@ -144,7 +144,8 @@
             [code('logPixel'), 'Gmail → background', 'Record a blocked tracking pixel in History.'],
             [code('checkSenders'), 'Gmail → background', 'Sender checks for the inbox list and opened emails ({senders, ownDomain}); returns status (flagged, caution, clean, trusted, unverified, unknown), reasons, whether to move to Spam, and the country.'],
             [code('senderCountry'), 'Gmail → background', 'Country of the server that delivered an email (IP from the email\'s headers).'],
-            [code('recordSpamMoves'), 'Gmail → background', 'Remember conversations moved to Spam (never moved again) and log them.'],
+            [code('recordSpamMoves'), 'Gmail → background', 'Remember conversations moved to Spam or taken out of it (never moved again) and log moves, failed moves and rescues.'],
+            [code('senderIcon'), 'Gmail → background', 'A sender site\'s icon as a data: URL, or none; fetched once and remembered.'],
             [code('updateBadge'), 'Gmail → background', 'Per-tab count on the toolbar button.'],
             [code('logEvent'), 'Gmail, pages → background', 'Write an application log entry (accepted only from this extension).'],
             [code('testUnwrap'), 'Options → background', 'Link Inspector: the pipeline without caching or logging, with explanations.'],
@@ -156,10 +157,12 @@
         fill('archStorage', table(['Key (storage.local)', 'Contents'], [
             [code('<setting keys>'), 'Only settings you changed; defaults are not stored. See the settings reference.'],
             [code('customAllowlist / customBlocklist'), 'Your site lists (organization lists come from policy and are merged at read time).'],
-            [code('customPhishingSenders'), 'Your phishing senders (addresses or domains); the organization\'s list (managedPhishingSenders) is merged at read time.'],
+            [code('customTrustedSenders'), 'Your trusted senders (addresses or domains), never flagged or moved to Spam; the organization\'s list (managedTrustedSenders) is merged at read time.'],
+            [code('senderResultCache / faviconCache'), 'Sender verdicts with their reasons and what was checked (6 hours; Logging → Senders) and site icons as data: URLs, empty for sites without one (30 days).'],
+            [code('spamMoveLog'), 'Logging → Moved to Spam: each move, failed move and rescue with time, sender and why (newest 1,000; auto-delete period).'],
             [code('spamMovedThreads'), 'Conversations the extension moved (remembered just before moving) or you took out of Spam: {thread id: time}, the newest 20,000, with no time limit. None of them is ever moved (again). Kept by Delete now.'],
             [code('senderDomainCache / geoCache'), 'Sender-domain threat verdicts (' + fmtMs(SAFE_CACHE_MS) + ') and IP-address countries (30 days).'],
-            [code('senderMessageCache'), 'Per email: the delivering server\'s address and a short fingerprint of the From address (never the address), read once from its headers; at most 5,000, deleted after the auto-delete period.'],
+            [code('senderMessageCache'), 'Per email: the delivering server\'s address, a short fingerprint of the From address (never the address) and the signs of forgery found in its headers, read once; at most 5,000, deleted after the auto-delete period.'],
             [code('https://… (one key per link)'), 'Cache entry: {finalUrl, resolver, isSafe, reason, resolvedIp, cachedDate, cachedTimestamp}. Never one-time, unverified, blocklisted or revealed links.'],
             [code('resolutionHistory'), 'History entries: {timestamp, shortUrl, finalUrl, verdict, reason, resolvedIp, resolver}.'],
             [code('errorLogs'), 'Application log entries: {time, timestampMs, level, source, message, count}.'],
@@ -262,7 +265,7 @@
             ['the websites you link to', 'when you press Send on an email with links', 'one request per link (no page is read), to see that it answers', 'Check links before sending', onOff(S.enableSendCheck)],
             [code('mail.google.com'), 'only for an email with a company-only link or a sender name claiming a brand', 'nothing new: reads that email\'s original source from Gmail itself (your session)', 'Check who sent the email', onOff(S.enableSenderChecks)],
             [code('mail.google.com'), 'opened emails (sender icons on), and read emails in the inbox list (country flags on, not Offline only); once per email, two at a time', 'nothing new: reads the email\'s headers from Gmail itself (your session) for the sender\'s country and verification', 'Show sender icons / Show the sender\'s country', onOff(S.enableSenderIdentity)],
-            [code('www.google.com'), 'each sender shown (Gmail), by the browser', 'the sender\'s site name, for its icon', 'Show sender icons and domain labels', onOff(S.enableSenderIdentity && S.enableDnsThreatCheck)],
+            [code('www.google.com/s2, *.gstatic.com'), 'a new sender site (Gmail; at most once a month per site)', 'the sender\'s site name, for its icon', 'Show sender icons and domain labels', onOff(S.enableSenderIdentity && S.enableDnsThreatCheck)],
             [code('api.country.is'), 'a new sending server or sender website (at most once a month each)', 'that server\'s IP address', 'Show sender icons + Show the sender\'s country', onOff(S.enableSenderIdentity && S.enableSenderCountry && S.enableDnsThreatCheck)],
             ['the threat-check services above', 'each new sender domain (Gmail; at most every ' + fmtMs(SAFE_CACHE_MS) + ')', 'the sender\'s domain', 'Check sender domains for threats', onOff(S.enableSenderDomainCheck && S.enableDnsThreatCheck)],
             [code('raw.githubusercontent.com'), 'scam-sender list: once a day', 'nothing (plain download)', 'Check sender addresses against phishing lists', onOff(S.enablePhishingFeeds && S.enableSenderAddressCheck)],
@@ -284,7 +287,7 @@
             code(d.key), code(d.managedKey), typeText(d), d.def === '' ? '(empty)' : String(d.def),
             d.secret ? (S[d.key] ? '•••••• (hidden)' : '(empty)') + (cfg.locked[d.key] ? ' 🔒' : '')
                      : (S[d.key] === '' ? '(empty)' : String(S[d.key])) + (cfg.locked[d.key] ? ' 🔒' : '')
-        ])), el('p', null, 'Also: ', code('managedAllowlist'), ' and ', code('managedBlocklist'), ' (arrays of domains) and ', code('managedPhishingSenders'), ' (addresses or domains), merged with your own lists. ',
+        ])), el('p', null, 'Also: ', code('managedAllowlist'), ' and ', code('managedBlocklist'), ' (arrays of domains), merged with your own lists; ', code('managedPhishingSenders'), ' (organization only) and ', code('managedTrustedSenders'), ' (merged with your trusted senders), addresses or domains. ',
                'Settings marked as secret (request headers) are never exported to backups.'));
 
         // This installation

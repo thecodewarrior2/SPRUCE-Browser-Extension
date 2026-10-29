@@ -64,6 +64,10 @@
             "billing@paypa1-support.example",
             "paypa1-support.example"
           ],
+          "managedTrustedSenders": [
+            "office@partner.example",
+            "partner.example"
+          ],
           "managedHidePopupSettingsButton": false,
           "managedHideRecentActivity": false,
           "managedPhishSimulationRules": [],

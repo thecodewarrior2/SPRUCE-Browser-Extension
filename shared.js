@@ -178,7 +178,7 @@ async function loadEffectiveSettings() {
     defaults.customAllowlist = [];
     defaults.customBlocklist = [];
     defaults.remoteShorteners = [];
-    defaults.customPhishingSenders = [];
+    defaults.customTrustedSenders = [];
 
     const local = await storageGet('local', defaults);
     const managed = await storageGet('managed', null);
@@ -200,15 +200,19 @@ async function loadEffectiveSettings() {
     const managedAllowlist = normalizeDomainList(managed.managedAllowlist);
     const managedBlocklist = normalizeDomainList(managed.managedBlocklist);
     const managedPhishingSenders = normalizeSenderList(managed.managedPhishingSenders);
+    const managedTrustedSenders = normalizeSenderList(managed.managedTrustedSenders);
     return {
         values,
         locked,
         managedAllowlist,
         managedBlocklist,
         managedPhishingSenders,
+        managedTrustedSenders,
         allowlist: [...new Set([...normalizeDomainList(local.customAllowlist), ...managedAllowlist])],
         blocklist: [...new Set([...normalizeDomainList(local.customBlocklist), ...managedBlocklist])],
-        phishingSenders: [...new Set([...normalizeSenderList(local.customPhishingSenders), ...managedPhishingSenders])],
+        // Phishing senders are set by the organization only; trusted senders by the user and the organization.
+        phishingSenders: managedPhishingSenders,
+        trustedSenders: [...new Set([...normalizeSenderList(local.customTrustedSenders), ...managedTrustedSenders])],
         remoteShorteners: Array.isArray(local.remoteShorteners) ? local.remoteShorteners : [],
         // Administrator-only policies: set by policy alone (no setting in the extension, not in backups).
         policy: {
@@ -456,7 +460,7 @@ function buildBackup(allItems, extensionVersion) {
         exportDate: new Date().toLocaleString(),
         customAllowlist: normalizeDomainList(allItems.customAllowlist),
         customBlocklist: normalizeDomainList(allItems.customBlocklist),
-        customPhishingSenders: normalizeSenderList(allItems.customPhishingSenders),
+        customTrustedSenders: normalizeSenderList(allItems.customTrustedSenders),
         settings: {},
         urlCacheNote: 'Included for your records only. Cached results are not restored on import; they are rebuilt automatically.',
         secretsNote: 'Request headers for custom resolvers (which may contain API keys) are not included. Re-enter them after restoring.',
@@ -476,7 +480,7 @@ function buildBackup(allItems, extensionVersion) {
 
 // Decides what a restore will do, without touching storage.
 //  data    : parsed backup file
-//  current : { customAllowlist, customBlocklist, customPhishingSenders } currently stored
+//  current : { customAllowlist, customBlocklist, customTrustedSenders } currently stored
 //  mode    : 'merge' | 'overwrite'
 // Returns { updates, removeKeys, notes, settingsCount, cacheCount, legacy }.
 function planImport(data, current, mode) {
@@ -490,9 +494,9 @@ function planImport(data, current, mode) {
 
     // Domain lists: normalized and size-limited.
     const lists = [['customAllowlist', 'allowlist', normalizeDomainList], ['customBlocklist', 'blocklist', normalizeDomainList],
-                   ['customPhishingSenders', 'phishing sender', normalizeSenderList]];
+                   ['customTrustedSenders', 'trusted sender', normalizeSenderList]];
     lists.forEach(([key, label, normalize]) => {
-        if (key === 'customPhishingSenders' && !Array.isArray(data[key])) return;   // older backups don't have this list
+        if (key === 'customTrustedSenders' && !Array.isArray(data[key])) return;   // older backups don't have this list
         let incoming = normalize(data[key]);
         if (incoming.length > MAX_IMPORTED_DOMAINS) {
             notes.push(`Only the first ${MAX_IMPORTED_DOMAINS} ${label} entries were restored.`);
@@ -1554,6 +1558,7 @@ function gmailViewAllowsAutoSpam(hash) {
 // Sender verdict from the separate checks. All inputs are optional:
 //   address, ownDomain            the sender's address; the user's own organization domain
 //   allowlisted                   the sender's domain is on the allowlist (yours or your organization's)
+//   trustedHit                    the address or domain is on the trusted senders list
 //   listHit                       { source: 'admin' | 'user' | 'community', entry, name }
 //   addressChecked                the address was compared with the phishing-sender lists
 //   domainFeed                    name of the phishing list that has the sender's domain
@@ -1569,10 +1574,17 @@ function isOwnDomain(domain, ownDomain) { return !!ownDomain && (domain === ownD
 function senderDomainShared(domain, ownDomain) {
     return isPersonalMailDomain(domain) || PROTECTED_DOMAINS.has(registrableDomain(domain)) || isOwnDomain(domain, ownDomain);
 }
-function combineSenderVerdict({ address, ownDomain, allowlisted, listHit, addressChecked, domainFeed, dns, dnsChecked } = {}) {
+function combineSenderVerdict(input = {}) {
+    const v = combineSenderVerdictInner(input);
+    v.own = isOwnDomain(domainOfAddress(input.address), input.ownDomain);
+    return v;
+}
+function combineSenderVerdictInner({ address, ownDomain, allowlisted, trustedHit, listHit, addressChecked, domainFeed, dns, dnsChecked } = {}) {
     const domain = domainOfAddress(address);
     const own = isOwnDomain(domain, ownDomain);
     const sharedDomain = senderDomainShared(domain, ownDomain);
+    // Your trusted senders: never flagged or moved, unless your organization lists them as phishing.
+    if (trustedHit && !(listHit && listHit.source === 'admin')) return { status: 'trusted', reasons: [`On your trusted senders list (${trustedHit}).`], move: false };
     const reasons = [];
     if (listHit) {
         const who = listHit.source === 'admin' ? 'your organization' : listHit.source === 'user' ? 'you' : (listHit.name || 'a community list');
@@ -1594,7 +1606,8 @@ function combineSenderVerdict({ address, ownDomain, allowlisted, listHit, addres
         : { status: 'unverified', reasons: [`${domain} is a well-known email provider or company; the address itself wasn't checked.`], move: false };
     if (!dns || dnsChecked === false) return { status: 'unverified', reasons: ['The sender\'s domain wasn\'t checked (threat checks are off or offline).'], move: false };
     if (dns.verdict === 'safe') return { status: 'clean', reasons: ['Checked: no security service or list flags this sender.'], move: false };
-    if (/doesn't exist/.test(dns.note || '')) return { status: 'unknown', reasons: [`The sender's domain ${domain} doesn't exist, so replies can't reach it.`], move: false };
+    // A domain that doesn't exist can't send genuine mail (and replies can't reach it): forged.
+    if (/doesn't exist/.test(dns.note || '')) return { status: 'flagged', reasons: [`The sender's domain ${domain} doesn't exist, so the address is forged and replies can't reach it.`], move: !own };
     return { status: 'unverified', reasons: [`The sender's domain couldn't be checked${dns.note ? ` (${String(dns.note).replace(/\.$/, '')})` : ''}.`], move: false };
 }
 
@@ -1606,4 +1619,128 @@ function siteOfSender(domain) {
     const labels = String(domain || '').toLowerCase().replace(/\.$/, '').split('.').filter(Boolean);
     while (labels.length > 2 && MAIL_PREFIX_LABEL.test(labels[0]) && registrableDomain(labels.join('.')) !== labels.join('.')) labels.shift();
     return labels.join('.');
+}
+
+// ---------------------------------------------------------------------------
+// SIGNS OF A FORGED OR JUNK EMAIL (Gmail). Each sign has a weight; together with the sender's
+// verdict they decide the email's status (see applyEmailSignals). Weights: 3 = strong (something
+// genuine mail systems never produce), 2 = medium, 1 = weak.
+// ---------------------------------------------------------------------------
+const SIGNAL_FLAG_SCORE = 5;           // at least this much: flagged (moved to Spam if that's on)
+const SIGNAL_CAUTION_SCORE = 3;        // at least this much: caution
+
+// "=?UTF-8?B?cHNzbWZyYW5jZS5mcg==?=" → "pssmfrance.fr" (RFC 2047; best effort, never throws).
+function decodeEncodedWords(s) {
+    return String(s || '').replace(/=\?([^?]+)\?([bq])\?([^?]*)\?=/gi, (m, charset, enc, text) => {
+        try {
+            const bytes = enc.toLowerCase() === 'b'
+                ? Uint8Array.from(atob(text.replace(/[^A-Za-z0-9+/=]/g, '')), c => c.charCodeAt(0))
+                : Uint8Array.from(text.replace(/_/g, ' ').replace(/=([0-9a-f]{2})/gi, (x, h) => String.fromCharCode(parseInt(h, 16))), c => c.charCodeAt(0) & 255);
+            return new TextDecoder(/^utf-?8$/i.test(charset) ? 'utf-8' : 'latin1').decode(bytes);
+        } catch (e) { return m; }
+    });
+}
+
+// A sender address as written, even a broken one: { address, local, domain, malformed: [signs] }, or
+// null when there is no "@" at all. A broken address is impossible in genuine mail (mail systems
+// refuse to send it), so each of these signs is enough on its own to flag the email.
+function parseSenderAddress(raw) {
+    let v = String(raw || '').trim().replace(/^mailto:/i, '').replace(/^<|>$/g, '');
+    if (!v.includes('@')) return null;
+    const malformed = [];
+    if (/=\?[^?]+\?[bq]\?[^?]*\?=/i.test(v)) {
+        malformed.push({ weight: 5, text: 'The sender\'s address contains an encoded (disguised) part, which genuine mail systems never send.' });
+        v = decodeEncodedWords(v);
+    }
+    const at = v.lastIndexOf('@');
+    const local = v.slice(0, at).trim(), domain = v.slice(at + 1).trim().toLowerCase().replace(/\.$/, '').replace(/[>\s"]+$/, '');
+    if (local.includes('@')) malformed.push({ weight: 5, text: 'The sender\'s address has more than one "@".' });
+    if (local.length > 64) malformed.push({ weight: 5, text: `The sender's address has ${local.length} characters before the "@"; real addresses have at most 64.` });
+    if (!SENDER_DOMAIN_RE.test(domain)) malformed.push({ weight: 5, text: `The sender's domain “${domain.slice(0, 60)}” isn't a valid domain name.` });
+    return { address: `${local}@${domain}`.toLowerCase(), local, domain, malformed };
+}
+
+// The display name: decorations and padding that genuine senders don't use.
+function displayNameAnomalies(name) {
+    const n = String(name || '');
+    const out = [];
+    if (/["“”]{3,}|[•°˜º¤∙·◦★☆♥♦✓✔"“”]{3,}|[\t\r\n]|\s{6,}/.test(n) || n.length > 90) {
+        out.push({ weight: 2, text: 'The sender\'s name is padded with symbols, quotes or blank space, a trick to slip past filters.' });
+    }
+    return out;
+}
+
+// When a Received or similar line was written: its date after ";", else a Gmail id like ".2025.11.09.".
+function receivedTime(v) {
+    const d = Date.parse(String(v).split(';').pop().trim());
+    if (Number.isFinite(d)) return d;
+    const m = /\.(20\d\d)\.(\d\d)\.(\d\d)\.\d\d\.\d\d\.\d\d\b/.exec(v);
+    return m ? Date.UTC(+m[1], +m[2] - 1, +m[3]) : NaN;
+}
+
+// Signs of forgery in an email's headers (Gmail "Show original"): [{ weight, text }].
+const ESP_HEADER_MARKERS = [
+    ['Mailgun', /^x-mailgun-/], ['SendGrid', /^x-sg-(id|eid)$/], ['Emarsys', /^x-emarsys-/], ['beehiiv', /^x-beehiiv-/],
+    ['ActiveCampaign', /^x-report-abuse$/], ['250ok', /^x-250ok-/], ['MDaemon', /^x-mdaemon-|^x-md(arrival|helo)/], ['Postmark', /^x-pmmail-/],
+    ['Cisco IronPort', /^x-ironport-/], ['Mailchimp', /^x-mc-user$/], ['Amazon SES', /^x-ses-/]
+];
+function headerAnomalies(raw, accountAddress) {
+    const headers = parseRawHeaders(raw);
+    const out = [];
+    const get = (n) => headers.filter(([h]) => h === n).map(([, v]) => v);
+    // Gmail writes exactly one "Received: … by mx.google.com" line when it accepts an email. Extra
+    // ones dated days earlier were written by the sender to look like other deliveries.
+    const gmailHops = get('received').filter(v => /\bby mx\.google\.com\b/i.test(v));
+    if (gmailHops.length > 1) {
+        const first = receivedTime(gmailHops[0]);
+        const forged = gmailHops.slice(1).filter(v => { const t = receivedTime(v); return Number.isFinite(first) && Number.isFinite(t) && first - t > 2 * 864e5; });
+        if (forged.length) out.push({ weight: 3, text: `Its headers contain ${forged.length} fake Gmail delivery record${forged.length === 1 ? '' : 's'} (copied from other, older emails).` });
+    }
+    if (headers.some(([h]) => /^re(c|s)i?v?ed$/.test(h) && h !== 'received')) out.push({ weight: 2, text: 'Its headers contain a misspelled delivery record (“Recived”), a sign of hand-made headers.' });
+    // From
+    const from = (get('from')[0] || '');
+    const fm = /<([^>]*)>\s*$/.exec(from);
+    const parsed = parseSenderAddress(fm ? fm[1] : (from.match(EMAIL_IN_TEXT_RE) || [''])[0] || from);
+    if (parsed) out.push(...parsed.malformed);
+    if (fm) out.push(...displayNameAnomalies(decodeEncodedWords(from.slice(0, fm.index))));
+    // To: a display name that is an email address other than the real one, or a broken address.
+    for (const to of get('to').slice(0, 3)) {
+        const tm = /^\s*"?([^"<]*?)"?\s*<([^>]*)>/.exec(to);
+        if (tm && /@/.test(tm[1]) && tm[1].trim().toLowerCase() !== tm[2].trim().toLowerCase()) {
+            out.push({ weight: 2, text: 'Its “To” line shows one address but is really addressed to another.' });
+            break;
+        }
+        if (tm && (tm[2].match(/@/g) || []).length > 1) { out.push({ weight: 3, text: 'Its “To” address is broken (two “@”).' }); break; }
+    }
+    // Subject: walls of blank space or long runs of random capitals.
+    const subject = get('subject')[0] || '';
+    if (subject.length > 300 || /\s{60,}/.test(subject) || /[A-Z]{60,}/.test(subject)) out.push({ weight: 2, text: 'Its subject is padded with blank space or random letters to hide from filters.' });
+    // Headers claiming several unrelated sending services at once.
+    const names = new Set(headers.map(([h]) => h));
+    const esps = ESP_HEADER_MARKERS.filter(([, re]) => [...names].some(h => re.test(h))).map(([n]) => n);
+    if (esps.length >= 3) out.push({ weight: 3, text: `Its headers claim it was sent by ${esps.length} unrelated email services at once (${esps.slice(0, 4).join(', ')}), so they were copied together to look legitimate.` });
+    // Unfilled template placeholders such as "(_IE6rxc5)" or "[RANDOM1]".
+    const placeholder = headers.map(([, v]) => v).join('\n').match(/\(_[A-Za-z0-9]{4,12}\)|\[RANDOM\d*\]|__Random_/g);
+    if (placeholder && placeholder.length >= 3) out.push({ weight: 2, text: 'Its headers contain unfilled placeholders from a bulk-mailing tool.' });
+    // Headers that must appear once.
+    const dup = ['from', 'subject', 'date', 'message-id', 'mime-version'].filter(n => get(n).length > 1);
+    if (dup.length) out.push({ weight: 2, text: `Its headers repeat ${dup.map(d => d.replace(/(^|-)([a-z])/g, (m, a, b) => a + b.toUpperCase())).join(', ')}, which a mail program writes only once.` });
+    return out;
+}
+
+// The email's status from the sender's verdict and the signs found in this particular email
+// (headers, name, links, attachments). Returns a new verdict; base is not changed.
+function applyEmailSignals(base, signals) {
+    if (!base) return null;
+    const list = (signals || []).filter(Boolean);
+    if (!list.length) return base;
+    const score = list.reduce((a, x) => a + (x.weight || 0), 0);
+    const texts = [...new Set(list.map(x => x.text))].filter(t => !base.reasons.includes(t));
+    const plain = base.reasons.filter(r => !/^Checked:|well-known email provider|^Sent from your own|wasn't checked|couldn't be checked/.test(r));
+    if (base.status === 'flagged') return Object.assign({}, base, { reasons: [...base.reasons, ...texts], score });
+    if (score >= SIGNAL_FLAG_SCORE) {
+        return Object.assign({}, base, { status: 'flagged', reasons: [...texts, ...plain], move: base.status !== 'trusted' && !base.own, score });
+    }
+    if (score >= SIGNAL_CAUTION_SCORE && base.status !== 'trusted') return Object.assign({}, base, { status: 'caution', reasons: [...texts, ...plain], move: false, score });
+    return Object.assign({}, base, { reasons: [...base.reasons, ...texts], score });
 }

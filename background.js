@@ -17,7 +17,7 @@ function getConfig() {
 
 // Keys that never affect settings; changes to them don't invalidate the cache.
 const NON_CONFIG_KEYS = new Set(['errorLogs', 'recentActivity', 'resolutionHistory', 'lastSyncTime', 'listState', 'cacheSchema', 'welcomeDismissed', 'uiTheme',
-    'senderDomainCache', 'geoCache', 'spamMovedThreads', 'senderMessageCache']);
+    'senderDomainCache', 'geoCache', 'spamMovedThreads', 'senderMessageCache', 'senderResultCache', 'faviconCache', 'spamMoveLog']);
 function invalidateConfig() {
     configPromise = null;
     domainSafetyCache.clear();      // e.g. a resolver was switched off: don't reuse its verdicts
@@ -26,6 +26,11 @@ function invalidateConfig() {
 }
 chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'managed' || Object.keys(changes).some(k => !k.startsWith('http') && !NON_CONFIG_KEYS.has(k))) invalidateConfig();
+    // Sender data cleared in Settings (Logging → Senders, or Delete now) is forgotten in memory too.
+    if (area === 'local' && typeof senderResultCache !== 'undefined') {
+        const caches = { senderResultCache, faviconCache, geoCache, senderDomainCache };
+        for (const [k, c] of Object.entries(changes)) if (caches[k] && c.newValue === undefined) caches[k].forget();
+    }
     // Stored link results removed by any path (Clear cache, expiry) leave the in-memory memo too.
     if (area === 'local' && typeof cacheMemo !== 'undefined') {
         for (const [k, c] of Object.entries(changes)) if (k.startsWith('http') && c.newValue === undefined) cacheMemo.delete(k);
@@ -42,7 +47,7 @@ function cfgSets(cfg) {
             managedBlock: new Set(cfg.managedBlocklist),
             remote: new Set(cfg.remoteShorteners),
             phishAdmin: new Set(cfg.managedPhishingSenders),
-            phishUser: new Set(cfg.phishingSenders.filter(e => !cfg.managedPhishingSenders.includes(e)))
+            trusted: new Set(cfg.trustedSenders)
         };
         derivedSets.set(cfg, sets);
     }
@@ -280,9 +285,10 @@ async function pruneExpiredData(retentionDays = 30) {
         const fresh = Object.fromEntries(Object.entries(items.senderMessageCache).filter(([, v]) => v && v.t >= cutoffMs && !v.from));
         if (Object.keys(fresh).length !== Object.keys(items.senderMessageCache).length) updates.senderMessageCache = fresh;
     }
-    if (items.geoCache && typeof items.geoCache === 'object') {
-        const fresh = Object.fromEntries(Object.entries(items.geoCache).filter(([, v]) => v && v.ts >= cutoffMs));
-        if (Object.keys(fresh).length !== Object.keys(items.geoCache).length) { updates.geoCache = fresh; geoCache = null; senderDomainCache = null; }
+    // The moved-to-Spam log too (the memory of which conversations were moved is kept: spamMovedThreads).
+    if (Array.isArray(items.spamMoveLog)) {
+        const fresh = items.spamMoveLog.filter(e => e && e.ts >= cutoffMs);
+        if (fresh.length !== items.spamMoveLog.length) updates.spamMoveLog = fresh;
     }
 
     if (keysToRemove.length > 0) {
@@ -1203,49 +1209,58 @@ async function feedHit(urlString) {
 
 // ---------------------------------------------------------------------------
 // SENDER CHECKS AND SENDER IDENTITY (Gmail inbox and opened emails)
-// For each sender address: the phishing-sender lists (administrator, user, community), the phishing
-// lists for its domain, the DNS threat services for its domain (site name only), and the country of
-// the server that sent the email (from Gmail's own delivery header, looked up at country.is) or, when
-// that can't be known, of the domain's ending. Verdicts per domain are kept for SAFE_CACHE_MS, also
-// across restarts of the background, so an inbox doesn't trigger new lookups every time it's opened.
+// For each sender address: the organization's phishing-sender list and the community scam-sender list,
+// the trusted senders list, the phishing lists for its domain, the DNS threat services for its domain
+// (site name only), whether the address itself is malformed, its site icon (Google's icon service) and
+// a country. The country of the server that delivered a particular email comes from Gmail's own
+// delivery header and is looked up at country.is (senderCountry). Everything is remembered across
+// restarts of the background, so an inbox doesn't trigger new lookups every time it's opened:
+//   senderResultCache   address → the last verdict        (SAFE_CACHE_MS; shown in Logging → Senders)
+//   senderDomainCache   domain → DNS threat verdict        (SAFE_CACHE_MS)
+//   geoCache            IP address → country               (30 days)
+//   faviconCache        site → icon (data: URL, or none)   (30 days)
 // ---------------------------------------------------------------------------
-const SENDER_DOMAIN_CACHE_MAX = 2000;
-const GEO_CACHE_MAX = 3000;
 const GEO_CACHE_MS = 30 * 24 * 60 * 60 * 1000;
-let senderDomainCache = null;          // Promise of Map domain → { ts, dns }
-let geoCache = null;                   // Promise of Map ip → { ts, c }
-const geoInFlight = new Map();
-let senderCacheWriteTimer = null;
+const FAVICON_CACHE_MS = 30 * 24 * 60 * 60 * 1000;
 
-function loadSenderCaches() {
-    if (!senderDomainCache) {
-        const stored = storageGet('local', { senderDomainCache: {}, geoCache: {} });
-        senderDomainCache = stored.then(r => new Map(Object.entries(r.senderDomainCache || {})));
-        geoCache = stored.then(r => new Map(Object.entries(r.geoCache || {})));
-    }
-    return Promise.all([senderDomainCache, geoCache]);
+// A Map kept in chrome.storage.local under one key: read once, written at most every few seconds,
+// entries older than ttl dropped, the oldest dropped first beyond max.
+function persistentMap(key, max, ttl) {
+    let map = null, timer = null;
+    const load = () => {
+        if (!map) map = storageGet('local', { [key]: {} }).then(r => new Map(Object.entries((r && r[key] && typeof r[key] === 'object') ? r[key] : {})));
+        return map;
+    };
+    const save = () => {
+        if (timer) return;
+        timer = setTimeout(async () => {
+            timer = null;
+            const m = await load();
+            const now = Date.now();
+            for (const [k, v] of m) if (!v || !(now - v.ts < ttl)) m.delete(k);
+            while (m.size > max) m.delete(m.keys().next().value);
+            try { await chrome.storage.local.set({ [key]: Object.fromEntries(m) }); }
+            catch (e) { logWarning(`Saving ${key} failed (${errorText(e)}).`, 'Sender checks'); }
+        }, 3000);
+    };
+    return {
+        async get(k) { const v = (await load()).get(k); return v && Date.now() - v.ts < ttl ? v : null; },
+        async set(k, v) { const m = await load(); m.delete(k); m.set(k, Object.assign({ ts: Date.now() }, v)); save(); },
+        forget() { map = null; },
+        clear() { map = Promise.resolve(new Map()); chrome.storage.local.remove(key, () => void chrome.runtime.lastError); }
+    };
 }
-// Written together, at most every few seconds, oldest entries dropped first.
-function scheduleSenderCacheWrite() {
-    if (senderCacheWriteTimer) return;
-    senderCacheWriteTimer = setTimeout(async () => {
-        senderCacheWriteTimer = null;
-        const [domains, geo] = await loadSenderCaches();
-        const now = Date.now();
-        const trim = (map, max, ttl) => {
-            for (const [k, v] of map) if (!v || now - v.ts > ttl) map.delete(k);
-            while (map.size > max) map.delete(map.keys().next().value);
-            return Object.fromEntries(map);
-        };
-        try {
-            await chrome.storage.local.set({ senderDomainCache: trim(domains, SENDER_DOMAIN_CACHE_MAX, SAFE_CACHE_MS), geoCache: trim(geo, GEO_CACHE_MAX, GEO_CACHE_MS) });
-        } catch (e) { logWarning(`Sender check results could not be saved (${errorText(e)}).`, 'Sender checks'); }
-    }, 3000);
-}
-// A settings change (a resolver switched off…) must not reuse old domain verdicts.
+const senderResultCache = persistentMap('senderResultCache', 3000, SAFE_CACHE_MS);
+const senderDomainCache = persistentMap('senderDomainCache', 2000, SAFE_CACHE_MS);
+const geoCache = persistentMap('geoCache', 3000, GEO_CACHE_MS);
+const faviconCache = persistentMap('faviconCache', 1500, FAVICON_CACHE_MS);
+const geoInFlight = new Map();
+const iconInFlight = new Map();
+
+// A settings change (a resolver switched off, a list changed…) must not reuse old verdicts.
 function clearSenderDomainCache() {
-    if (senderDomainCache) senderDomainCache.then(m => m.clear());
-    chrome.storage.local.remove('senderDomainCache', () => void chrome.runtime.lastError);
+    senderDomainCache.clear();
+    senderResultCache.clear();
 }
 
 // Public addresses only: private, loopback and link-local ones say nothing about a country.
@@ -1260,22 +1275,21 @@ function isPublicIp(ip) {
 // about the email or the user; each address is looked up at most once a month.
 async function countryOfIp(ip) {
     if (!isPublicIp(ip)) return null;
-    const [, geo] = await loadSenderCaches();
-    const hit = geo.get(ip);
-    if (hit && Date.now() - hit.ts < GEO_CACHE_MS) return hit.c || null;
+    const hit = await geoCache.get(ip);
+    if (hit) return hit.c || null;
     if (geoInFlight.has(ip)) return geoInFlight.get(ip);
     const p = (async () => {
         try {
             const res = await fetchWithTimeout(`https://api.country.is/${encodeURIComponent(ip)}`, { credentials: 'omit', referrerPolicy: 'no-referrer' }, 5000);
-            if (res.status === 404 || res.status === 422) { geo.set(ip, { ts: Date.now(), c: '' }); scheduleSenderCacheWrite(); return null; }
+            if (res.status === 404 || res.status === 422) { geoCache.set(ip, { c: '' }); return null; }
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const data = await res.json();
             const c = data && isCountryCode(String(data.country || '').toUpperCase()) ? String(data.country).toUpperCase() : '';
-            geo.set(ip, { ts: Date.now(), c });
-            scheduleSenderCacheWrite();
+            geoCache.set(ip, { c });
+            logInfo(`Country lookup: the server ${ip} is in ${c ? `${countryName(c)} (${c})` : 'an unknown country'} (country.is; remembered for 30 days).`, 'Sender checks');
             return c || null;
         } catch (e) {
-            logWarning(`The country of a sending server could not be looked up (${errorText(e)}); the domain's ending is used instead where it names a country.`, 'Sender checks');
+            logWarning(`The country of the sending server ${ip} could not be looked up (${errorText(e)}); the domain's ending is used instead where it names a country.`, 'Sender checks');
             return null;
         } finally {
             geoInFlight.delete(ip);
@@ -1285,67 +1299,110 @@ async function countryOfIp(ip) {
     return p;
 }
 
+// The site icon for a sender's site, as a data: URL, or '' when the site has none. Google's icon
+// service answers 404 (with a generic globe) for sites without an icon: those get no icon at all.
+async function senderIcon(site) {
+    const s = normalizeDomain(site);
+    if (!SENDER_DOMAIN_RE.test(s)) return '';
+    const hit = await faviconCache.get(s);
+    if (hit) return hit.d || '';
+    if (iconInFlight.has(s)) return iconInFlight.get(s);
+    const p = (async () => {
+        try {
+            const res = await fetchWithTimeout(`https://www.google.com/s2/favicons?domain=${encodeURIComponent(s)}&sz=32`, { credentials: 'omit', referrerPolicy: 'no-referrer' }, 6000);
+            const type = res.headers.get('content-type') || '';
+            let d = '';
+            if (res.ok && /^image\//.test(type)) {
+                const buf = await res.arrayBuffer();
+                if (buf.byteLength > 0 && buf.byteLength < 64 * 1024) {
+                    let bin = '';
+                    const bytes = new Uint8Array(buf);
+                    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+                    d = `data:${type.split(';')[0]};base64,${btoa(bin)}`;
+                }
+            }
+            faviconCache.set(s, { d });
+            logInfo(`Sender icon for ${s}: ${d ? 'found' : 'none (the site has no icon; left blank)'}; remembered for 30 days.`, 'Sender checks');
+            return d;
+        } catch (e) {
+            logWarning(`The icon for ${s} could not be fetched (${errorText(e)}); left blank for now.`, 'Sender checks');
+            return '';
+        } finally {
+            iconInFlight.delete(s);
+        }
+    })();
+    iconInFlight.set(s, p);
+    return p;
+}
+
 // DNS threat verdict for a sender's domain (definite answers cached across restarts).
 async function senderDomainDns(domain, S) {
-    const [domains] = await loadSenderCaches();
-    const hit = domains.get(domain);
-    if (hit && Date.now() - hit.ts < SAFE_CACHE_MS) return hit.dns;
+    const hit = await senderDomainCache.get(domain);
+    if (hit) return hit.dns;
     const r = await checkDomainSafety(`https://${domain}/`, customThreatConf(S), S, { sender: true });
     const dns = { verdict: r.verdict, reason: r.reason || null, scanner: r.scanner || '', note: r.note || null, ip: r.resolvedIp && r.resolvedIp !== 'N/A' ? r.resolvedIp : null };
-    if (r.verdict === 'unsafe' || (r.verdict === 'safe' && r.scanner === 'Multi-DoH')) {
-        domains.delete(domain);
-        domains.set(domain, { ts: Date.now(), dns });
-        scheduleSenderCacheWrite();
-    }
+    if (r.verdict === 'unsafe' || /doesn't exist/.test(r.note || '') || (r.verdict === 'safe' && r.scanner === 'Multi-DoH')) senderDomainCache.set(domain, { dns });
     return dns;
 }
 
-// The list entry that has this address: { source, entry, name } or null. The administrator's list
-// wins over the user's, which wins over the community list.
+// The phishing-sender entry that has this address: { source, entry, name } or null. The
+// organization's list wins over the community list.
 async function phishingSenderHit(address, cfg) {
-    const sets = cfgSets(cfg);
-    let entry = senderListMatch(address, sets.phishAdmin);
+    const entry = senderListMatch(address, cfgSets(cfg).phishAdmin);
     if (entry) return { source: 'admin', entry };
-    entry = senderListMatch(address, sets.phishUser);
-    if (entry) return { source: 'user', entry };
     if (!cfg.values.enablePhishingFeeds) return null;
     const feeds = await loadFeedSets();
     const a = String(address || '').toLowerCase();
     return feeds.address.has(a) ? { source: 'community', entry: a, name: feeds.address.get(a) } : null;
 }
 
-// One sender: { address, domain, status, reasons, move, country, countrySource }.
+// One sender: { address, domain, status, reasons, move, own, country, countrySource, checks }.
+//   s.address    as Gmail shows it, even malformed ("x@=?UTF-8?B?…?=", 100 characters before the @…)
 //   ownDomain    the user's own organization domain (never moved to Spam)
+// checks is a short human-readable account of what was checked, for the log and Logging → Senders.
 async function checkSender(s, ownDomain, cfg) {
     const S = cfg.values;
-    const address = normalizeSenderEntry(s.address);
-    if (!address.includes('@')) return { address: String(s.address || ''), status: 'unknown', reasons: ['Not a valid email address.'], move: false };
-    const domain = address.slice(address.lastIndexOf('@') + 1);
+    const parsed = parseSenderAddress(s.address);
+    if (!parsed) return { address: String(s.address || ''), domain: '', status: 'unknown', reasons: ['Not an email address.'], move: false };
+    const { address, domain } = parsed;
     const online = !!S.enableDnsThreatCheck;
     const domainChecks = !!S.enableSenderDomainCheck;
     const own = normalizeDomain(ownDomain || '');
-    const allowlisted = hostInSet(domain, cfgSets(cfg).allow);
+    const sets = cfgSets(cfg);
+    const allowlisted = hostInSet(domain, sets.allow);
+    const trustedHit = senderListMatch(address, sets.trusted);
     const shared = senderDomainShared(domain, own);
+    const validDomain = SENDER_DOMAIN_RE.test(domain);
     const [listHit, domainFeed] = await Promise.all([
         S.enableSenderAddressCheck ? phishingSenderHit(address, cfg) : null,
-        domainChecks && S.enablePhishingFeeds && !shared ? feedHit(`https://${domain}/`) : null
+        domainChecks && S.enablePhishingFeeds && !shared && validDomain ? feedHit(`https://${domain}/`) : null
     ]);
     // The DNS services are asked only when their answer can still change the verdict.
-    const dns = domainChecks && online && !shared && !allowlisted && !listHit && !domainFeed ? await senderDomainDns(domain, S).catch(() => null) : null;
-    const verdict = combineSenderVerdict({
-        address, ownDomain: own, allowlisted, listHit, addressChecked: !!S.enableSenderAddressCheck, domainFeed, dns,
+    const dns = domainChecks && online && validDomain && !shared && !allowlisted && !trustedHit && !listHit && !domainFeed
+        ? await senderDomainDns(domain, S).catch(() => null) : null;
+    let verdict = combineSenderVerdict({
+        address, ownDomain: own, allowlisted, trustedHit, listHit, addressChecked: !!S.enableSenderAddressCheck, domainFeed, dns,
         dnsChecked: domainChecks && online
     });
+    verdict = applyEmailSignals(verdict, parsed.malformed);
     // Country: the domain's ending when it names one, else where its website is hosted. (The country
     // of the server that sent a particular email is looked up separately: senderCountry.)
     let country = null, countrySource = null;
-    if (S.enableSenderIdentity && S.enableSenderCountry) {          // shown only on the sender icon
+    if (S.enableSenderIdentity && S.enableSenderCountry && validDomain) {          // shown only on the sender icon
         if ((country = countryFromDomain(domain))) countrySource = 'domain';
         else if (online && dns && dns.ip && (country = await countryOfIp(dns.ip))) countrySource = 'host';
     }
-    return Object.assign({ address, domain, country, countrySource }, verdict);
+    const checks = [
+        trustedHit ? `trusted senders: ${trustedHit}` : null,
+        S.enableSenderAddressCheck ? `phishing-sender lists: ${listHit ? `listed (${listHit.source === 'admin' ? 'your organization' : listHit.name || 'community list'})` : 'not listed'}` : 'phishing-sender lists: off',
+        !domainChecks ? 'domain checks: off' : shared ? 'domain: big provider or your organization, not judged' : !validDomain ? 'domain: invalid'
+            : `phishing lists: ${domainFeed ? `listed (${domainFeed})` : S.enablePhishingFeeds ? 'not listed' : 'off'}; threat services: ${dns ? (dns.verdict === 'unsafe' ? `blocked by ${dns.scanner}` : dns.verdict === 'safe' ? 'clean' : (dns.note || 'no answer')) : online ? 'not needed' : 'off (Offline only)'}`,
+        parsed.malformed.length ? `address: malformed (${parsed.malformed.length} sign${parsed.malformed.length === 1 ? '' : 's'})` : null
+    ].filter(Boolean).join('; ');
+    return Object.assign({ address, domain, country, countrySource, checks }, verdict);
 }
 
+const STATUS_WORD = { flagged: 'Flagged', caution: 'Caution', clean: 'Checked, nothing found', trusted: 'Trusted', unverified: 'Not verified', unknown: 'Unknown' };
 async function checkSenders(list, ownDomain) {
     const cfg = await getConfig();
     const S = cfg.values;
@@ -1356,8 +1413,22 @@ async function checkSenders(list, ownDomain) {
     const worker = async () => {
         while (next < items.length) {
             const i = next++;
-            try { results[i] = await checkSender(items[i], ownDomain, cfg); }
-            catch (e) { results[i] = { address: String(items[i].address || ''), status: 'unverified', reasons: ['The check failed.'], move: false }; logWarning(`Checking a sender failed (${errorText(e)}).`, 'Sender checks'); }
+            const parsed = parseSenderAddress(items[i].address);
+            const key = `${parsed ? parsed.address : String(items[i].address || '').trim()}|${parsed && parsed.malformed.length ? 'malformed' : ''}|${normalizeDomain(ownDomain || '')}`;
+            try {
+                const hit = await senderResultCache.get(key);
+                if (hit && !hit.retry) { results[i] = hit.r; continue; }
+                const r = await checkSender(items[i], ownDomain, cfg);
+                results[i] = r;
+                // Every sender is kept for Logging → Senders; a "not verified" one is checked again next time.
+                senderResultCache.set(key, { r, retry: r.status === 'unverified' });
+                const where = r.country ? `; country: ${countryName(r.country)} (${r.countrySource === 'host' ? 'website hosted there' : 'domain ending'})` : '';
+                writeLog(r.status === 'flagged' ? 'warning' : 'info', 'Sender checks',
+                    `Sender ${r.address}: ${STATUS_WORD[r.status] || r.status}${r.move ? ' (its email will be moved to Spam)' : ''}. ${r.reasons.join(' ')} Checked: ${r.checks}${where}.`);
+            } catch (e) {
+                results[i] = { address: String(items[i].address || ''), status: 'unverified', reasons: ['The check failed.'], move: false };
+                logWarning(`Checking the sender ${String(items[i].address || '').slice(0, 120)} failed (${errorText(e)}).`, 'Sender checks');
+            }
         }
     };
     await Promise.all([worker(), worker(), worker(), worker()]);
@@ -1366,8 +1437,10 @@ async function checkSenders(list, ownDomain) {
 
 // Conversations the extension moved (or was about to move) to Spam, and those the user took out of
 // Spam, remembered (thread id → time) so the extension never moves them (again). The newest
-// SPAM_MEMORY_MAX are kept; there is no time limit. log: false (remember only) | 'moved' | 'rescued'.
-// Resolves to true once saved.
+// SPAM_MEMORY_MAX are kept; there is no time limit. log: false (remember only) | 'moved' | 'failed' |
+// 'rescued': written to the application log, the popup's activity and spamMoveLog (Logging → Moved
+// to Spam). Resolves to true once saved.
+const SPAM_LOG_MAX = 1000;
 const SPAM_MEMORY_MAX = 20000;
 let spamMemoryQueue = Promise.resolve();
 function recordSpamMoves(moves, log = 'moved') {
@@ -1377,7 +1450,13 @@ function recordSpamMoves(moves, log = 'moved') {
         const now = Date.now();
         for (const m of moves) if (!map[m.thread]) map[m.thread] = now;
         const kept = Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, SPAM_MEMORY_MAX);
-        await chrome.storage.local.set({ spamMovedThreads: Object.fromEntries(kept) });
+        const updates = { spamMovedThreads: Object.fromEntries(kept) };
+        if (log) {
+            const old = await storageGet('local', { spamMoveLog: [] });
+            const entries = moves.map(m => ({ ts: now, action: log, thread: m.thread, sender: m.address || '', reason: m.reason || '', how: m.how || '' }));
+            updates.spamMoveLog = [...entries, ...(Array.isArray(old.spamMoveLog) ? old.spamMoveLog : [])].slice(0, SPAM_LOG_MAX);
+        }
+        await chrome.storage.local.set(updates);
         return true;
     }).catch(e => {
         logError(`Emails moved to Spam could not be remembered (${errorText(e)}), so none were moved.`, 'Sender checks');
@@ -1386,9 +1465,11 @@ function recordSpamMoves(moves, log = 'moved') {
     spamMemoryQueue = saved;
     for (const m of moves) {
         if (log === 'moved') {
-            logInfo(`Moved an email to Spam: from ${m.address}. ${m.reason}`, 'Sender checks');
+            logInfo(`Moved to Spam: an email from ${m.address} (conversation ${m.thread}), ${m.how || 'automatically'}. Why: ${m.reason} It won't be moved again if you take it out of Spam.`, 'Sender checks');
             logActivity('Moved to Spam', `${m.address}: ${m.reason}`);
-        } else if (log === 'rescued') logInfo('A conversation was taken out of Spam; the extension will never move it back.', 'Sender checks');
+        } else if (log === 'failed') {
+            logWarning(`Not moved to Spam: an email from ${m.address} (conversation ${m.thread}) was flagged, but ${m.how || 'Gmail did not confirm the move'}. It is still marked. Why it was flagged: ${m.reason}`, 'Sender checks');
+        } else if (log === 'rescued') logInfo(`Taken out of Spam by you: conversation ${m.thread}. The extension will never move it back.`, 'Sender checks');
     }
     return saved;
 }
@@ -1959,12 +2040,19 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             .then(c => sendResponse(c || null), () => sendResponse(null));
         return true;
     }
+    // A sender's site icon (data: URL, or '' for none), fetched once and remembered.
+    if (request.action === 'senderIcon') {
+        if (!sender || sender.id !== chrome.runtime.id || typeof request.site !== 'string') { sendResponse(''); return false; }
+        getConfig().then(cfg => (cfg.values.enableSenderIdentity && cfg.values.enableDnsThreatCheck ? senderIcon(request.site) : ''))
+            .then(d => sendResponse(d || ''), () => sendResponse(''));
+        return true;
+    }
     if (request.action === 'recordSpamMoves') {
         if (!sender || sender.id !== chrome.runtime.id || !Array.isArray(request.moves)) { sendResponse(false); return false; }
         const moves = request.moves.filter(m => m && typeof m.thread === 'string' && /^thread-f:\d{1,25}$/.test(m.thread)).slice(0, 100)
-            .map(m => ({ thread: m.thread, address: String(m.address || '').slice(0, 200), reason: String(m.reason || '').slice(0, 300) }));
+            .map(m => ({ thread: m.thread, address: String(m.address || '').slice(0, 200), reason: String(m.reason || '').slice(0, 1000), how: String(m.how || '').slice(0, 200) }));
         if (!moves.length) { sendResponse(false); return false; }
-        recordSpamMoves(moves, ['moved', 'rescued'].includes(request.log) ? request.log : false).then(sendResponse, () => sendResponse(false));
+        recordSpamMoves(moves, ['moved', 'failed', 'rescued'].includes(request.log) ? request.log : false).then(sendResponse, () => sendResponse(false));
         return true;
     }
 

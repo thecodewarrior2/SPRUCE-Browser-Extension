@@ -23,12 +23,16 @@ Proton Mail, Yahoo Mail, AOL Mail, Zoho Mail, iCloud Mail, Fastmail and GMX.
   original") is read to judge company short links (c.gle, aka.ms, …) and brand-claiming sender
   names.
 - **Sender icons and identity (Gmail).** In the inbox list and in opened emails, every sender gets its
-  site's icon, a country flag (where the server that sent it is, from Gmail's own delivery record, or the
+  site's icon (a blank space when the site has none; icons, verdicts and countries are remembered, so the
+  inbox shows them at once), a country flag (where the server that sent it is, from Gmail's own delivery record, or the
   domain's country) and a domain label colored by a check of the sender: ✓ checked, ⚠ caution,
   ⛔ flagged. Point at the label for the reasons and Gmail's own verification (DMARC/SPF/DKIM).
-- **Phishing senders go to Spam (Gmail).** Sender addresses are compared with your organization's list,
-  your own list and a community scam-sender list; sender domains with the phishing lists and the DNS
-  threat filters. Emails from a **flagged** sender (never unverified, unknown or clean ones) are moved
+- **Phishing senders go to Spam (Gmail).** Sender addresses are compared with your organization's list
+  and a community scam-sender list; sender domains with the phishing lists and the DNS threat filters
+  (a domain that doesn't exist is flagged too). Each email is also checked for signs of forgery: malformed
+  addresses, forged delivery headers, padded names and subjects, unnamed or dangerous attachments, and
+  links flagged as dangerous, so an email full of red links never shows a green sender. Trusted senders
+  (yours and your organization's) are never flagged. Emails from a **flagged** sender (never unverified, unknown or clean ones) are moved
   to Spam with Gmail's own Report spam, from the inbox only, never while you're typing or have emails
   selected, and never your organization's phishing-training emails. One you take back out of Spam
   stays out. A short notice says how many were moved, with a **Review** link to Spam.
@@ -74,8 +78,8 @@ complete `policies.json` with every key.
 
 The sender features (Gmail) each have their own key (`managedEnableSenderIdentity`,
 `managedEnableSenderCountry`, `managedEnableSenderDomainCheck`, `managedEnableSenderAddressCheck`,
-`managedEnableAutoSpam`, `managedEnableSpamNotice`), and `managedPhishingSenders` lists your organization's
-known phishing senders (addresses or whole domains), merged with each user's own list.
+`managedEnableAutoSpam`, `managedEnableSpamNotice`); `managedPhishingSenders` lists your organization's
+known phishing senders and `managedTrustedSenders` senders never to flag (addresses or whole domains).
 
 Some policies exist for administrators only, with no setting in the extension:
 

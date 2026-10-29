@@ -1,5 +1,48 @@
 # Changelog
 
+## 5.41 — Sender verdicts agree with the email; trusted senders; sender logging; cached icons (Firefox build, same as Chrome 5.41)
+
+- **An email's verdict now includes what's in the email.** Previously a sender could show ✓ Checked while every link in the email was red. The sender label, the email banner and moving to Spam now use one verdict built from the sender's checks plus signs found in the email itself. Each sign has a weight: strong signs flag the email on their own; weaker ones add up (enough of them flag it, fewer make it Caution):
+  - **links:** all of them, or two or more, flagged as dangerous (for example phishing pages in cloud storage) flag the email; one dangerous link among several makes it Caution;
+  - **attachments:** one flagged as dangerous flags the email; an attachment without a name ("noname") counts;
+  - **headers** (opened emails, and read emails in the list; never unread ones):
+    - fake Gmail delivery records copied from older emails;
+    - a misspelled "Recived" line;
+    - headers claiming several unrelated sending services at once;
+    - unfilled bulk-mail placeholders;
+    - repeated From/Subject/Date/Message-ID/MIME-Version lines;
+    - a "To" line that shows one address but is addressed to another;
+    - a subject padded with blank space or random capitals;
+  - **the sender's name:** padded with symbols, rows of quotes or blank space.
+  The label's tooltip and the banner list every sign found.
+- **Malformed sender addresses are flagged and always get a badge.** Previously an address Gmail showed but the extension couldn't parse got no badge at all. Now each of these flags the email on its own:
+  - a disguised encoded part (`name@=?UTF-8?B?…?=`; the decoded domain is shown and checked);
+  - more than 64 characters before the @;
+  - two @;
+  - an invalid domain.
+- **A sender domain that doesn't exist is now flagged (red)**, no longer "unknown": genuine mail can't come from it.
+- **Trusted senders replace the user's phishing-sender list.** Settings → Senders → **Trusted senders** lists addresses or whole domains that are never flagged or moved to Spam (their links are still checked). Administrators can add `managedTrustedSenders`. The phishing-sender list is now set by the organization only (`managedPhishingSenders`), and it wins over trusted senders. Entries in the earlier user phishing-sender list (5.40) are no longer used.
+- **Sender icons:** fetched once per site by the extension and remembered for 30 days. A site without an icon (Google's service answers 404 with a generic globe) gets a blank space. *Offline only* still requests nothing. New host permissions: `www.google.com/s2/*`, `*.gstatic.com/*`.
+- **Faster inbox, fewer lookups:** sender verdicts are remembered across visits (6 hours), as are domain verdicts (6 hours), countries (30 days) and icons (30 days). Header readings are remembered per email.
+- **Logging:**
+  - **Logging → Senders: icons & flags** lists every sender checked recently, with:
+    - its icon and country;
+    - its verdict and every reason;
+    - what was checked (lists, threat services, malformed address).
+  - **Logging → Moved to Spam** lists each move, each move that didn't work and why, and each conversation taken out of Spam.
+  - The application log has a readable line for each:
+    - sender check (with what was checked);
+    - email whose own content changed the verdict;
+    - country and icon lookup;
+    - move, failed move and rescue.
+  - *Delete now* also clears the sender caches.
+- **Tests:** unit tests for the new rules and two real-world scam samples, whose headers score 10 and 21 against a threshold of 5, while a normal newsletter scores 0. Browser tests reproduce both samples on simulated Gmail pages:
+  - the opened scam whose links point to cloud storage;
+  - the unread row with a 95-character address;
+  - a read row with forged headers.
+
+  They also cover trusted senders, the two new Logging sections, and icons (one found; a missing one left blank).
+
 ## 5.40 — Sender icons, country flags and phishing senders moved to Spam (Gmail; Firefox build, same feature as Chrome 5.40)
 
 - **Sender identity in the inbox and in opened emails.** Every sender gets:

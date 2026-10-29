@@ -293,25 +293,25 @@
             <div class="card">
                 <h3>✉️ Senders (Gmail)</h3>
                 <p class="card-intro">Who each email is from, at a glance, in your inbox and in opened emails, and automatic protection from known phishing senders. <a href="#" data-help-link="senders">How sender checks work</a></p>
-                <div class="setting-row"><div class="setting-text">Show sender icons and domain labels<div class="setting-desc">Each sender gets its site's icon and a label with its domain, colored by the checks below: ✓ green when checked, amber for caution, ⛔ red when flagged. Point at a label for the details. Icons come from Google's icon service (only the site name is sent); in <em>Offline only</em> a letter is shown instead.</div></div>
+                <div class="setting-row"><div class="setting-text">Show sender icons and domain labels<div class="setting-desc">Each sender gets its site's icon and a label with its domain, colored by the checks below: ✓ green when checked, amber for caution, ⛔ red when flagged. Point at a label for the details. Icons are fetched once from Google's icon service (only the site name is sent) and remembered for 30 days; a site without an icon gets a blank space, and in <em>Offline only</em> nothing is requested.</div></div>
                     <label class="switch"><input type="checkbox" data-setting="enableSenderIdentity"><span class="slider"></span></label></div>
                 <div class="setting-row"><div class="setting-text">Show the sender's country<div class="setting-desc">A flag for the country of the server that sent the email, from Gmail's own delivery record (read emails only; unread ones are never opened to look; at most two at a time). Otherwise the country the sender's domain ending names (such as .de), or where its website is hosted. Only the server's address is looked up, at country.is, once a month at most; in <em>Offline only</em> only the domain ending is used.</div></div>
                     <label class="switch"><input type="checkbox" data-setting="enableSenderCountry"><span class="slider"></span></label></div>
                 <div class="setting-row"><div class="setting-text">Check sender domains for threats<div class="setting-desc">The sender's domain is checked with the same security services as links (only its name, for example <code>example.com</code>) and against the phishing lists. Gmail, Outlook.com and other big providers' domains, and your own organization's, are never judged as a whole.</div></div>
                     <label class="switch"><input type="checkbox" data-setting="enableSenderDomainCheck"><span class="slider"></span></label></div>
-                <div class="setting-row"><div class="setting-text">Check sender addresses against phishing lists<div class="setting-desc">The address is compared on this device with your organization's list, your own list below, and a community list of scam and phishing senders (<a href="https://github.com/sefinek/Blacklisted-Emails" target="_blank" rel="noopener noreferrer">sefinek/Blacklisted-Emails</a>, downloaded with the phishing lists, at most once a day).</div></div>
+                <div class="setting-row"><div class="setting-text">Check sender addresses against phishing lists<div class="setting-desc">The address is compared on this device with your organization's list of phishing senders and a community list of scam and phishing senders (<a href="https://github.com/sefinek/Blacklisted-Emails" target="_blank" rel="noopener noreferrer">sefinek/Blacklisted-Emails</a>, downloaded with the phishing lists, at most once a day). A malformed address (a disguised encoded part, more than 64 characters before the @, two @) is flagged too.</div></div>
                     <label class="switch"><input type="checkbox" data-setting="enableSenderAddressCheck"><span class="slider"></span></label></div>
-                <div class="setting-row"><div class="setting-text">Move emails from flagged senders to Spam<div class="setting-desc">Only <strong>flagged</strong> senders (on a phishing list, or their domain blocked by a security service), never ones that are unverified, unknown or clean. Gmail's own Report spam is used, only for emails in your inbox, and never while you're typing or have emails selected. If you take an email back out of Spam, it stays where you put it. Your organization's phishing-training emails are never moved.</div></div>
+                <div class="setting-row"><div class="setting-text">Move emails from flagged senders to Spam<div class="setting-desc">Only <strong>flagged</strong> emails (sender on a phishing list; domain blocked by a security service or nonexistent; malformed address; or enough signs of forgery in the email itself), never ones that are unverified, caution, trusted or clean. Gmail's own Report spam is used, only for emails in your inbox, and never while you're typing or have emails selected. If you take an email back out of Spam, it stays where you put it. Your organization's phishing-training emails are never moved.</div></div>
                     <label class="switch"><input type="checkbox" data-setting="enableAutoSpam"><span class="slider"></span></label></div>
                 <div class="setting-row"><div class="setting-text">Tell me when emails are moved<div class="setting-desc">A short notice at the top of Gmail says how many emails were moved, with a <strong>Review</strong> link to your Spam folder. Moves are also listed in the toolbar popup's recent activity and in Logging.</div></div>
                     <label class="switch"><input type="checkbox" data-setting="enableSpamNotice"><span class="slider"></span></label></div>
-                <details class="more"><summary>Phishing senders</summary>
-                    <p class="card-intro">Emails from these addresses (<code>name@example.com</code>) or whole domains (<code>example.com</code>, which includes its subdomains) are flagged. Entries from your organization are marked and can't be removed here.</p>
+                <details class="more"><summary>Trusted senders</summary>
+                    <p class="card-intro">Emails from these addresses (<code>name@example.com</code>) or whole domains (<code>example.com</code>, which includes its subdomains) are never flagged or moved to Spam, and their label shows ✓ Trusted. Links in them are still checked. Entries from your organization are marked and can't be removed here; your organization's own list of phishing senders still wins.</p>
                     <div class="input-group">
-                        <input type="text" id="phishSenderInput" aria-label="Phishing sender address or domain" placeholder="e.g. billing@paypa1-support.com or paypa1-support.com">
-                        <button id="addPhishSenderBtn">Add</button>
+                        <input type="text" id="trustedSenderInput" aria-label="Trusted sender address or domain" placeholder="e.g. office@myschool.org or myschool.org">
+                        <button id="addTrustedSenderBtn" style="background: var(--success-solid);">Add</button>
                     </div>
-                    <table id="phishSenderTable"><thead><tr><th>Address or domain</th><th style="width: 90px;"></th></tr></thead><tbody></tbody></table>
+                    <table id="trustedSenderTable"><thead><tr><th>Address or domain</th><th style="width: 90px;"></th></tr></thead><tbody></tbody></table>
                 </details>
             </div>
 
@@ -583,6 +583,8 @@
                     <button data-log="applog" class="active">Application log</button>
                     <button data-log="history">History</button>
                     <button data-log="cache">URL cache</button>
+                    <button data-log="senders">Senders: icons &amp; flags</button>
+                    <button data-log="spam">Moved to Spam</button>
                 </nav>
                 <div class="log-body">
                     <section id="log-applog" class="log-section active">
@@ -682,6 +684,36 @@
                 </table>
             </div>
                     </section>
+                    <section id="log-senders" class="log-section">
+            <div class="card">
+                <div class="card-header">
+                    <h3>Senders: icons &amp; flags</h3>
+                    <div><button id="clearSenderCacheBtn" class="btn-action">Clear sender data</button></div>
+                </div>
+                <p class="card-intro">Every sender checked recently (Gmail), with the icon and country shown, the verdict and why. Results are remembered so the inbox shows them at once without new lookups: verdicts for 6 hours, icons and countries for 30 days.</p>
+                <div class="stat-row" id="senderStats"></div>
+                <input type="text" id="senderSearch" aria-label="Search the senders" class="search-bar" placeholder="Search senders, domains, reasons...">
+                <table id="senderTable">
+                    <thead><tr><th style="width: 26%;">Sender</th><th style="width: 13%;">Icon &amp; country</th><th style="width: 12%;">Status</th><th>Why, and what was checked</th><th style="width: 12%; white-space: nowrap;">Checked on</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+                    </section>
+                    <section id="log-spam" class="log-section">
+            <div class="card">
+                <div class="card-header">
+                    <h3>Moved to Spam</h3>
+                    <div><button id="clearSpamLogBtn" class="btn-action">Clear this list</button></div>
+                </div>
+                <p class="card-intro">Emails the extension moved to Spam, moves that didn't work, and conversations you took out of Spam (never moved again). Clearing this list doesn't forget which conversations were moved.</p>
+                <div class="stat-row" id="spamLogStats"></div>
+                <input type="text" id="spamLogSearch" aria-label="Search the moved emails" class="search-bar" placeholder="Search senders and reasons...">
+                <table id="spamLogTable">
+                    <thead><tr><th style="width: 14%; white-space: nowrap;">Time</th><th style="width: 13%;">What happened</th><th style="width: 24%;">Sender</th><th>Why</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+                    </section>
                 </div>
             </div>
         </div>
@@ -765,28 +797,41 @@
 <h3>What you see</h3>
 <table class="help-table">
 <tr><th style="width: 32%;">You see</th><th>Meaning</th></tr>
-<tr><td>The site's icon before the sender's name</td><td>The icon of the sender's website, so a familiar company is easy to spot and an imitation looks wrong. A letter is shown when there's no icon, or at the <b>Offline only</b> privacy level (nothing is requested then).</td></tr>
+<tr><td>The site's icon before the sender's name</td><td>The icon of the sender's website, so a familiar company is easy to spot and an imitation looks wrong. A site without an icon gets a blank space (never a generic globe), as does every sender at the <b>Offline only</b> privacy level (nothing is requested then). Icons are remembered for 30 days.</td></tr>
 <tr><td>A flag 🇩🇪 next to the icon</td><td>Where the email came from. Point at it to see which: <b>Sent from a server in…</b> (from Gmail's own delivery record; read emails and opened emails only), <b>registered under…</b> (the domain ending, such as .de or .uk), or <b>website hosted in…</b>. Generic endings sold worldwide (.io, .co, .tv…) give no country. On some Windows computers flags appear as two letters (DE).</td></tr>
-<tr><td><span style="background:#e6f4ea;color:#0d652d;border:1px solid #81c995;padding:0 6px;border-radius:4px;">✓ example.com</span></td><td><b>Checked:</b> no phishing list or security service flags this sender. (<b>Trusted</b> also shows green: the domain is on your Always allowed list.)</td></tr>
-<tr><td><span style="background:#f1f3f4;color:#3c4043;border:1px solid #dadce0;padding:0 6px;border-radius:4px;">example.com</span></td><td><b>Not verified</b> (the checks are off, offline or couldn't be reached) or <b>Unknown</b> (the sender's domain doesn't exist, so replies can't reach it). Neither is ever moved to Spam.</td></tr>
-<tr><td><span style="background:#fef7e0;color:#5c3c00;border:1px solid #f9ab00;padding:0 6px;border-radius:4px;">⚠ example.com</span></td><td><b>Caution:</b> the domain is blocked only by a content filter (Cloudflare Family) or by the backup service. Shown, never moved.</td></tr>
-<tr><td><span style="background:#fce8e6;color:#a50e0e;border:1px solid #c5221f;padding:0 6px;border-radius:4px;">⛔ example.com</span></td><td><b>Flagged sender:</b> the address or domain is on a phishing-sender list (your organization's, yours or the community list), its domain is on a phishing list, or a security service blocks its domain as malware or phishing. Point at the label for the reason. Opened, the email also gets a red banner.</td></tr>
+<tr><td><span style="background:#e6f4ea;color:#0d652d;border:1px solid #81c995;padding:0 6px;border-radius:4px;">✓ example.com</span></td><td><b>Checked:</b> no phishing list or security service flags this sender, and the email shows no signs of forgery. (<b>Trusted</b> also shows green: the sender is on your trusted senders, or its domain on your Always allowed list.)</td></tr>
+<tr><td><span style="background:#f1f3f4;color:#3c4043;border:1px solid #dadce0;padding:0 6px;border-radius:4px;">example.com</span></td><td><b>Not verified:</b> the checks are off, offline or couldn't be reached. Never moved to Spam.</td></tr>
+<tr><td><span style="background:#fef7e0;color:#5c3c00;border:1px solid #f9ab00;padding:0 6px;border-radius:4px;">⚠ example.com</span></td><td><b>Caution:</b> the domain is blocked only by a content filter (Cloudflare Family) or by the backup service, or the email shows some signs of forgery but not enough to flag it (for example one dangerous link among several). Shown, never moved.</td></tr>
+<tr><td><span style="background:#fce8e6;color:#a50e0e;border:1px solid #c5221f;padding:0 6px;border-radius:4px;">⛔ example.com</span></td><td><b>Flagged:</b> the sender is on a phishing-sender list (your organization's or the community list); its domain is on a phishing list, blocked by a security service as malware or phishing, or doesn't exist at all; its address is malformed; or the email itself shows enough signs of forgery (see below). Point at the label for every reason. Opened, the email also gets a red banner.</td></tr>
 <tr><td>🛡️ “2 emails from flagged senders were moved to Spam.” at the top of Gmail</td><td>The extension moved them. <b>Review</b> opens your Spam folder. The notice goes away by itself after 15 seconds (not while you point at it), or with ×. Moves are also listed in the toolbar popup's recent activity and in Logging.</td></tr>
 </table>
+<h3>Signs of a forged email</h3>
+<p>Besides the sender's lists and domain, each email is looked at for signs that genuine mail systems never produce. Each sign has a weight; strong signs flag an email on their own, weaker ones add up (enough of them flag it, a few make it Caution). The label and banner list every sign found.</p>
+<ul class="simple-list">
+  <li><b>A malformed sender address</b> (strong): a disguised encoded part such as <code>=?UTF-8?B?…?=</code>, more than 64 characters before the @, two @, or an invalid domain.</li>
+  <li><b>A sender domain that doesn't exist</b> (strong): genuine mail can't come from it, and replies can't reach it.</li>
+  <li><b>Its links</b> (opened emails): when all its links, or two or more, are flagged as dangerous (for example phishing pages in cloud storage), the email is flagged; one dangerous link among others makes it Caution. So a red-linked email no longer shows a green ✓ sender.</li>
+  <li><b>Its attachments</b> (opened emails): an attachment flagged as dangerous (strong); an attachment without a name (“noname”).</li>
+  <li><b>Its headers</b> (opened emails, and read emails in the list): fake Gmail delivery records copied from older emails, a misspelled “Recived” line, headers claiming several unrelated sending services at once, unfilled bulk-mail placeholders, repeated From/Subject/Date lines, a “To” line that shows one address but is addressed to another, a subject padded with blank space or random capitals.</li>
+  <li><b>Its sender name</b>: padded with symbols, rows of quotes or blank space.</li>
+</ul>
 <h3>When an email is moved to Spam</h3>
 <ul class="simple-list">
-  <li>Only when its sender is <b>flagged</b>. Unverified, unknown, caution and clean senders are never moved. A conversation is moved only if <b>every</b> other sender in it is flagged, so one flagged reply never sends your colleagues' messages to Spam.</li>
+  <li>Only when it's <b>flagged</b>. Unverified, caution, trusted and clean ones are never moved. A conversation is moved only if <b>every</b> other sender in it is flagged, so one flagged reply never sends your colleagues' messages to Spam.</li>
   <li>Only from your <b>inbox</b> (including its category tabs), as a list or opened. Never from Spam, Trash, Sent, labels, searches or All mail. With <b>Multiple Inboxes</b> or <b>Priority Inbox</b> sections, or the conversation open beside the list (split view), emails are moved only when you open them in the normal view.</li>
   <li>Gmail's own <b>Report spam</b> is used, exactly as if you clicked it; if Gmail asks “Report spam and unsubscribe?”, only plain <b>Report spam</b> is chosen (unsubscribing would confirm your address to a phisher). Anything unexpected is cancelled.</li>
   <li><b>Never while you're busy:</b> not while you're typing, have a menu or dialog open, or have selected emails yourself (they would be reported too). It waits and tries again.</li>
-  <li><b>Once per conversation.</b> A conversation is remembered just before it's moved. If you take an email out of Spam (<b>Not spam</b> or <b>Move to Inbox</b>, or <b>Undo</b> right away), whether the extension or Gmail put it there, it's never moved again. To stop a sender being flagged, add its domain to <b>Always allowed</b> (your organization's or your own phishing-sender entries still win).</li>
+  <li><b>Once per conversation.</b> A conversation is remembered just before it's moved. If you take an email out of Spam (<b>Not spam</b> or <b>Move to Inbox</b>, or <b>Undo</b> right away), whether the extension or Gmail put it there, it's never moved again. To stop a sender being flagged, add it to <b>Settings → Senders → Trusted senders</b> (your organization's phishing-sender list still wins). Every move, failed move and rescue is listed in <b>Logging → Moved to Spam</b>.</li>
   <li><b>Never</b> your organization's phishing-training emails. With simulation link domains set, emails are moved only once opened (their links show whether they're training); with header rules, an unread email, whose headers aren't read, is left alone, and never emails from your own organization's domain, unless you or your organization listed that exact address (for example a hacked account).</li>
   <li>Gmail, Outlook.com, Yahoo and other big providers' domains, and big companies' own domains, are never judged as a whole: there, only exact addresses on a list count.</li>
 </ul>
-<h3>Lists of phishing senders</h3>
-<p>Three lists are compared on this device: your organization's (policy <code>managedPhishingSenders</code>), your own (<b>Settings → Senders → Phishing senders</b>), and the community list <a href="https://github.com/sefinek/Blacklisted-Emails" target="_blank" rel="noopener noreferrer">sefinek/Blacklisted-Emails</a> (MIT license), downloaded with the phishing lists at most once a day. From the community list only exact addresses count, never whole domains, and never addresses at big companies' own domains.</p>
+<h3>Phishing senders and trusted senders</h3>
+<p>Two lists of phishing senders are compared on this device: your organization's (policy <code>managedPhishingSenders</code>) and the community list <a href="https://github.com/sefinek/Blacklisted-Emails" target="_blank" rel="noopener noreferrer">sefinek/Blacklisted-Emails</a> (MIT license), downloaded with the phishing lists at most once a day. From the community list only exact addresses count, never whole domains, and never addresses at big companies' own domains.</p>
+<p><b>Trusted senders</b> (Settings → Senders → Trusted senders, and your organization's <code>managedTrustedSenders</code>) are the opposite: addresses or whole domains that are never flagged or moved to Spam. Their links are still checked, and your organization's phishing-sender list still wins.</p>
+<h3>Logging</h3>
+<p><b>Logging → Senders: icons &amp; flags</b> lists every sender checked recently with its icon, country, verdict, every reason and what was checked. <b>Logging → Moved to Spam</b> lists each email moved, each move that didn't work and why, and each conversation you took out of Spam. The application log has a readable line for each sender check, country and icon lookup, and move.</p>
 <h3>Privacy</h3>
-<p>Nothing about your emails is sent anywhere. The checks send only: each sender's <b>domain</b> to the threat-check services (as for links), its <b>site name</b> to Google's icon service, and a sending server's <b>IP address</b> to country.is. Emails' headers are read from Gmail itself (your own session), and unread emails are never opened to read them, so nothing can change what Gmail shows as unread. At <b>Offline only</b> none of these requests are made. Details: <a href="#" data-help-link="privacy">Your privacy</a>.</p>
+<p>Nothing about your emails is sent anywhere. The checks send only: each sender's <b>domain</b> to the threat-check services (as for links), its <b>site name</b> to Google's icon service, and a sending server's <b>IP address</b> to country.is. Results are remembered (verdicts 6 hours, icons and countries 30 days), so the inbox shows them at once without new requests. Emails' headers are read from Gmail itself (your own session), and unread emails are never opened to read them, so nothing can change what Gmail shows as unread. At <b>Offline only</b> none of these requests are made. Details: <a href="#" data-help-link="privacy">Your privacy</a>.</p>
 </section>
 
 <section id="help-privacy" class="help-section">
@@ -829,7 +874,8 @@
 <tr><td>The toolbar icon is grey</td><td>No email is open in this tab, or protection is switched off. It lights up when you open an email.</td></tr>
 <tr><td>"Update now" says the lists are already up to date</td><td>Third-party lists are downloaded at most once a day, out of respect for the free projects that publish them.</td></tr>
 <tr><td>Nothing happens in Outlook, Yahoo, Zoho, iCloud, Fastmail, GMX or Proton</td><td>Support for these apps is experimental. Check that the app is switched on under Settings → Other webmail, reload the tab, and if links are still not checked please report it with the application log.</td></tr>
-<tr><td>An email you trust was moved to Spam</td><td>Open Spam and click <b>Not spam</b>: it won't be moved again. Point at its sender label to see why it was flagged. To trust the whole domain, add it to <b>Always allowed</b>; if it's on your own phishing-sender list, remove it there.</td></tr>
+<tr><td>An email you trust was moved to Spam</td><td>Open Spam and click <b>Not spam</b>: it won't be moved again. <b>Logging → Moved to Spam</b> (or pointing at its sender label) shows why it was flagged. To trust the sender from now on, add the address or domain to <b>Settings → Senders → Trusted senders</b>.</td></tr>
+<tr><td>A sender has no icon</td><td>Its site has no icon (Google's icon service has none), so a blank space is shown; at <b>Offline only</b> no icon is requested.</td></tr>
 <tr><td>Emails from a flagged sender stay in the inbox</td><td>Moves happen only in the inbox, while you aren't typing and have no emails selected, and only for <b>flagged</b> senders (not unverified or caution). Check that <b>Move emails from flagged senders to Spam</b> is on. If Gmail's layout changed and Report spam can't be found, moving stops after three tries and the application log says so; reload Gmail to try again.</td></tr>
 <tr><td>No flag next to a sender</td><td>The country is known only for read emails (from Gmail's delivery record), for domain endings that name a country, or where the sender's website is hosted. At <b>Offline only</b> only the domain ending is used.</td></tr>
 <tr><td>A setting is greyed out with 🔒</td><td>Your organization manages it.</td></tr>
@@ -1222,6 +1268,7 @@ Flag field:      (leave empty: Google's replies are recognized automatically)</d
 <tr><td><code>*.googleusercontent.com</code></td><td>Read email images through Google's image proxy (which Gmail already uses) to look for QR codes. The sender's server is never contacted.</td></tr>
 <tr><td>unshorten.me, Cloudflare, Quad9, Control D, DNS4EU, AdGuard</td><td>Short-link lookups and threat checks (see <a href="#" data-help-anchor="arch-network" data-help-link="architecture">every network request</a>).</td></tr>
 <tr><td>raw.githubusercontent.com, openphish.com, phishing.army</td><td>The shortener, phishing and scam-sender lists, downloaded at most once a day.</td></tr>
+<tr><td><code>www.google.com/s2</code>, <code>*.gstatic.com</code></td><td>Sender icons: Google's icon service, asked once per site (only the site name is sent) and remembered for 30 days, so sites without an icon get a blank space instead of a generic globe.</td></tr>
 <tr><td><code>api.country.is</code></td><td>The country of a sending server for the sender flag (only its IP address is sent; at most once a month per address).</td></tr>
 <tr><td><code>storage.googleapis.com</code>, <code>firebasestorage.googleapis.com</code></td><td>Only when you click 🔍 on a cloud-storage link: reads that page's code to see where it redirects.</td></tr>
 <tr><td><code>storage</code> and <code>unlimitedStorage</code></td><td>Settings, cache, history, logs and the phishing lists (several MB), kept in this browser.</td></tr>
