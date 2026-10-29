@@ -1,5 +1,31 @@
 # Changelog
 
+## 5.40 — Sender icons, country flags and phishing senders moved to Spam (Gmail)
+
+- **Sender identity in the inbox and in opened emails.** Every sender gets:
+  - its site's icon (from Google's icon service, only the site name is sent; a letter at *Offline only*);
+  - a country flag: where the server that delivered the email is (from Gmail's own `Received` header, read and opened emails only; the IP address is looked up at `api.country.is`, at most once a month per address), else the country of the domain ending (.de, .uk; generic endings such as .io give none), else where the sender's website is hosted;
+  - a domain label colored by the sender check: ✓ green *Checked* or *Trusted*, grey *Not verified* / *Unknown*, ⚠ amber *Caution*, ⛔ red *Flagged sender*. Pointing at it shows the reasons and, for an opened email, Gmail's DMARC/SPF/DKIM verdict. Mail-system prefixes are dropped from the label (`email.notifications.paypal.com` → `paypal.com`), never anything else.
+- **Sender checks.**
+  - **Addresses** are compared on the device with the organization's list (new policy `managedPhishingSenders`), the user's own list (Settings → Senders → Phishing senders) and the community scam-sender list [sefinek/Blacklisted-Emails](https://github.com/sefinek/Blacklisted-Emails) (MIT), downloaded with the phishing lists at most once a day. From the community list only exact addresses count, never at big companies' own domains.
+  - **Domains** are checked with the same DNS threat services as links (domain name only) and against the phishing lists. The DNS services are asked only when their answer can still change the verdict, and verdicts are kept 6 hours, also across restarts of the background.
+  - Gmail, Outlook.com and other personal-mail providers, big companies' domains and the user's own organization domain are never judged as a whole, only by exact listed addresses.
+- **Emails from flagged senders are moved to Spam**, with Gmail's own Report spam:
+  - only **flagged** senders (on a phishing-sender list, domain on a phishing list, or domain blocked by a *security* service). Unverified, unknown, clean and *caution* senders (blocked only by the Cloudflare Family content filter or the AdGuard backup) are never moved;
+  - only from the inbox and its category tabs (list or opened), never from Spam, Trash, Sent, labels, searches or All mail, and not in split view;
+  - never while the user is typing, has a menu or dialog open, or has selected emails (they would be reported too); it waits and tries again. Its own selection is verified before clicking and undone if anything doesn't match;
+  - "Report spam and unsubscribe?" is answered with plain Report spam (unsubscribing confirms an address to a phisher); any other dialog is cancelled;
+  - the button is found by its label (English and several other languages), or by Gmail's action number only when its label still says "spam". After three failures, moving stops for the visit and the log says why;
+  - **taken back out of Spam stays out:** every conversation moved is remembered (a year, at most 5,000) and never moved again;
+  - never the organization's phishing-training emails (sender domain in `managedPhishSimulationDomains`; with `managedPhishSimulationRules`, the headers are checked, and an unread email, whose headers aren't read, is left alone), and never mail from the user's own organization domain unless that exact address is listed (a compromised account).
+- **Notice:** "🛡️ 2 emails from flagged senders were moved to Spam. Review ×" at the top of Gmail for 15 seconds (paused while pointed at or focused). **Review** opens Spam. Moves are also in the popup's recent activity and the application log.
+- **Every part can be switched off** (all on by default) in the new Settings card **✉️ Senders (Gmail)**, and set and locked by policy: `managedEnableSenderIdentity`, `managedEnableSenderCountry`, `managedEnableSenderDomainCheck`, `managedEnableSenderAddressCheck`, `managedEnableAutoSpam`, `managedEnableSpamNotice`, plus the list `managedPhishingSenders`. They're in `schema.json`, `policy-example.json`, *Copy as policy JSON* and *Copy registry script*. The user's list is included in backups.
+- **Privacy:** nothing about an email is sent. Only sender domains (to the threat services), site names (to Google's icon service) and delivering servers' IP addresses (to country.is) leave the browser, and none of them at *Offline only*. Headers are read from Gmail itself, and never for unread emails in the list, so checking can't change what Gmail shows as unread.
+- **Threat checks:** when the 1.1.1.1 reference lookup can't be made, an NXDOMAIN answer from Cloudflare's filtering resolvers (which block with 0.0.0.0) now counts as "the domain doesn't exist" instead of "checked".
+- **New permission:** `https://api.country.is/*` (sender country). Documented in Help → Permissions.
+- **Help:** new topic *Sender icons & Spam*; updates to How it works, Your privacy (what is sent), Troubleshooting, Limitations, Deploying, Permissions and the architecture reference (messages, storage keys, network requests). README.md and ADMIN-GUIDE.md (new section *Sender icons and moving phishing to Spam*) updated.
+- **Tested** with unit tests (verdict rules, list parsing, country and view rules, background checks, backup) and browser tests of the extension on simulated Gmail inbox and conversation pages: moves only flagged emails, never twice; dialogs; the user's own selection, typing and split view; every view; each switch on and off live; trusted domains; policy-locked switches and lists; phishing-training rules; non-English labels; an address in a subject line; real DNS answers (security block moved, adult filter caution, non-existent domain unknown); real country lookups. Gmail's page structure was simulated from public information, so moving to Spam should be checked on the live site after a Gmail layout change.
+
 ## 5.38 — Best practices for phishing training; shared platforms refused as training domains
 
 - **ADMIN-GUIDE.md: the phishing-training section is rewritten around best practice.**

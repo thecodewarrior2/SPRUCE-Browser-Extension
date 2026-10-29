@@ -290,9 +290,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const cfg = await loadEffectiveSettings();
         const policy = {};
         SETTING_DEFS.forEach(d => { policy[d.managedKey] = { Value: cfg.values[d.key] }; });
-        const local = await new Promise(r => chrome.storage.local.get({ customAllowlist: [], customBlocklist: [] }, r));
+        const local = await new Promise(r => chrome.storage.local.get({ customAllowlist: [], customBlocklist: [], customPhishingSenders: [] }, r));
         policy.managedAllowlist = { Value: normalizeDomainList(local.customAllowlist) };
         policy.managedBlocklist = { Value: normalizeDomainList(local.customBlocklist) };
+        policy.managedPhishingSenders = { Value: normalizeSenderList(local.customPhishingSenders) };
         const out = document.getElementById('copyPolicyResult');
         try {
             await navigator.clipboard.writeText(JSON.stringify(policy, null, 2));
@@ -602,10 +603,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function renderPolicies() {
-        chrome.storage.local.get({ customBlocklist: [], customAllowlist: [] }, (localResult) => {
+        chrome.storage.local.get({ customBlocklist: [], customAllowlist: [], customPhishingSenders: [] }, (localResult) => {
+            const renderSenders = (managedSenders) => {
+                const mine = normalizeSenderList(localResult.customPhishingSenders);
+                renderPolicyTable('phishSenderTable', [...new Set([...mine, ...managedSenders])], managedSenders, 'customPhishingSenders', 'No phishing senders added.');
+            };
             if (chrome.storage.managed) {
-                chrome.storage.managed.get(['managedAllowlist', 'managedBlocklist'], (managedResult) => {
-                    if (chrome.runtime.lastError) managedResult = {};
+                chrome.storage.managed.get(['managedAllowlist', 'managedBlocklist', 'managedPhishingSenders'], (managedResult) => {
+                    if (chrome.runtime.lastError || !managedResult) managedResult = {};
                     
                     if (managedResult.managedAllowlist || managedResult.managedBlocklist) {
                         document.getElementById('managedPolicyNotice').style.display = 'block';
@@ -616,15 +621,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     
                     renderPolicyTable('allowTable', combinedAllow, managedResult.managedAllowlist || [], 'customAllowlist');
                     renderPolicyTable('blockTable', combinedBlock, managedResult.managedBlocklist || [], 'customBlocklist');
+                    renderSenders(normalizeSenderList(managedResult.managedPhishingSenders));
                 });
             } else {
                 renderPolicyTable('allowTable', localResult.customAllowlist || [], [], 'customAllowlist');
                 renderPolicyTable('blockTable', localResult.customBlocklist || [], [], 'customBlocklist');
+                renderSenders([]);
             }
         });
     }
 
-    function renderPolicyTable(tableId, allDomains, managedDomains, storageKey) {
+    function renderPolicyTable(tableId, allDomains, managedDomains, storageKey, emptyText = 'No domains in this list.') {
         const tbody = document.querySelector(`#${tableId} tbody`);
         tbody.innerHTML = '';
 
@@ -665,7 +672,13 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         if (tbody.children.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="2" style="color: var(--text-muted);">No domains in this list.</td></tr>';
+            const tr = document.createElement('tr');
+            const td = document.createElement('td');
+            td.colSpan = 2;
+            td.style.color = 'var(--text-muted)';
+            td.textContent = emptyText;
+            tr.appendChild(td);
+            tbody.appendChild(tr);
         }
     }
 
@@ -675,6 +688,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.getElementById('addBlockBtn').addEventListener('click', () => {
         addDomainToPolicy('domainBlockInput', 'customBlocklist');
+    });
+
+    // Phishing senders: an address or a whole domain, normalized ("@example.com" → "example.com").
+    document.getElementById('addPhishSenderBtn').addEventListener('click', () => {
+        const input = document.getElementById('phishSenderInput');
+        const entry = normalizeSenderEntry(input.value);
+        if (!input.value.trim()) return;
+        if (!entry) { alert('Enter an email address (name@example.com) or a domain (example.com).'); return; }
+        chrome.storage.local.get({ customPhishingSenders: [] }, (result) => {
+            const list = normalizeSenderList(result.customPhishingSenders);
+            if (list.includes(entry)) { alert('This sender is already in the list.'); return; }
+            list.push(entry);
+            chrome.storage.local.set({ customPhishingSenders: list }, () => {
+                input.value = '';
+                reportToLog('info', 'Settings', `Phishing sender added: ${entry}.`);
+                renderPolicies();
+            });
+        });
     });
 
     function addDomainToPolicy(inputId, storageKey) {
@@ -854,7 +885,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // PowerShell that writes the current settings as extension policy for Edge and Chrome (Intune etc.).
     // Booleans and numbers → REG_DWORD, text → REG_SZ, lists → a subkey with values named 1, 2, 3…
-    function buildRegistryScript(values, allow, block) {
+    function buildRegistryScript(values, allow, block, senders = []) {
         const id = chrome.runtime.id;
         const q = (v) => `'${String(v).replace(/'/g, "''")}'`;
         const lines = [
@@ -877,7 +908,7 @@ document.addEventListener('DOMContentLoaded', () => {
             else if (d.type === 'integer') lines.push(`    New-ItemProperty -Path $key -Name ${q(d.managedKey)} -PropertyType DWord -Value ${Number(v) || 0} -Force | Out-Null`);
             else if (v !== '' && v !== undefined) lines.push(`    New-ItemProperty -Path $key -Name ${q(d.managedKey)} -PropertyType String -Value ${q(v)} -Force | Out-Null`);
         });
-        for (const [name, list] of [['managedAllowlist', allow], ['managedBlocklist', block]]) {
+        for (const [name, list] of [['managedAllowlist', allow], ['managedBlocklist', block], ['managedPhishingSenders', senders]]) {
             if (!list.length) continue;
             lines.push(`    Remove-Item -Path "$key\\${name}" -Recurse -Force -ErrorAction SilentlyContinue`);
             lines.push(`    New-Item -Path "$key\\${name}" -Force | Out-Null`);
@@ -891,7 +922,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const out = document.getElementById('copyRegResult');
         try {
             const cfg = await loadEffectiveSettings();
-            await navigator.clipboard.writeText(buildRegistryScript(cfg.values, cfg.allowlist, cfg.blocklist));
+            await navigator.clipboard.writeText(buildRegistryScript(cfg.values, cfg.allowlist, cfg.blocklist, cfg.phishingSenders));
             out.style.color = ''; out.textContent = 'Copied. Paste it into a .ps1 file; replace the extension ID if it differs.';
         } catch (e) {
             out.style.color = 'var(--danger-text)'; out.textContent = 'Copy failed.';
@@ -986,7 +1017,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function showImportPreview() {
         if (!pendingImportData) return;
         const mode = document.querySelector('input[name="importMode"]:checked').value;
-        chrome.storage.local.get({ customAllowlist: [], customBlocklist: [] }, (current) => {
+        chrome.storage.local.get({ customAllowlist: [], customBlocklist: [], customPhishingSenders: [] }, (current) => {
             let plan;
             try { plan = planImport(pendingImportData, current, mode); }
             catch (err) {
@@ -1045,7 +1076,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const mode = document.querySelector('input[name="importMode"]:checked').value;
         const data = pendingImportData;
 
-        chrome.storage.local.get({ customAllowlist: [], customBlocklist: [] }, (current) => {
+        chrome.storage.local.get({ customAllowlist: [], customBlocklist: [], customPhishingSenders: [] }, (current) => {
             let plan;
             try { plan = planImport(data, current, mode); }
             catch (err) { alert(err.message); return; }

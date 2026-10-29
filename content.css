@@ -17,3 +17,95 @@ a:focus + .unshortener-icon.unshortener-hover-reveal,
     outline-offset: 1px;
     border-radius: 50%;
 }
+
+/* Sender identity (Gmail): site icon, country flag and domain label in the inbox and opened emails.
+   Colors keep at least 4.5:1 contrast in Gmail's light and dark themes. */
+.unshortener-sender-icon {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    margin-right: 6px;
+    vertical-align: middle;
+    flex: none;
+}
+.unshortener-sender-icon img,
+.unshortener-sender-mono {
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    flex: none;
+}
+.unshortener-sender-mono {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font: bold 10px/1 Arial, sans-serif;
+    color: #ffffff;
+    background: #5f6368;
+}
+.unshortener-sender-flag {
+    font-size: 13px;
+    line-height: 1;
+}
+.unshortener-sender-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 16em;
+    margin-right: 6px;
+    padding: 0 6px;
+    border: 1px solid #dadce0;
+    border-radius: 4px;
+    background: #f1f3f4;
+    color: #3c4043;
+    font: 500 11.5px/18px Arial, sans-serif;
+    vertical-align: middle;
+    white-space: nowrap;
+    flex: none;
+}
+.unshortener-sender-chip .unshortener-sender-domain {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.unshortener-sender-chip[data-status="flagged"] { background: #fce8e6; color: #a50e0e; border-color: #c5221f; }
+.unshortener-sender-chip[data-status="caution"] { background: #fef7e0; color: #5c3c00; border-color: #f9ab00; }
+.unshortener-sender-chip[data-status="clean"],
+.unshortener-sender-chip[data-status="trusted"] { background: #e6f4ea; color: #0d652d; border-color: #81c995; }
+.unshortener-sender-chip.unshortener-dark { background: #303134; color: #e8eaed; border-color: #5f6368; }
+.unshortener-sender-chip.unshortener-dark[data-status="flagged"] { background: #3c1f1f; color: #f6aea9; border-color: #ee675c; }
+.unshortener-sender-chip.unshortener-dark[data-status="caution"] { background: #3a3220; color: #fde293; border-color: #f9ab00; }
+.unshortener-sender-chip.unshortener-dark[data-status="clean"],
+.unshortener-sender-chip.unshortener-dark[data-status="trusted"] { background: #1e3a2a; color: #a8dab5; border-color: #34a853; }
+
+/* Notice shown when emails were moved to Spam: top of the page, above Gmail's own bars. */
+.unshortener-spam-notice {
+    position: fixed;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 2147483000;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    max-width: calc(100vw - 32px);
+    box-sizing: border-box;
+    padding: 8px 10px 8px 14px;
+    border-radius: 8px;
+    border-left: 4px solid #c5221f;
+    background: #fce8e6;
+    color: #5c0b07;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+    font: 13.5px/1.4 Arial, sans-serif;
+}
+.unshortener-spam-notice.unshortener-dark { background: #3c1f1f; color: #f6aea9; border-left-color: #ee675c; }
+.unshortener-spam-notice a { color: inherit; font-weight: bold; text-decoration: underline; }
+.unshortener-spam-notice button {
+    all: unset;
+    cursor: pointer;
+    padding: 0 6px;
+    font-size: 18px;
+    line-height: 1;
+    color: inherit;
+}
+.unshortener-spam-notice a:focus-visible,
+.unshortener-spam-notice button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }

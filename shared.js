@@ -21,7 +21,19 @@ const SETTING_DEFS = [
     { key: 'enableSenderChecks',          managedKey: 'managedEnableSenderChecks',          def: true, type: 'boolean' },
     // Checks the links in an email being sent (Gmail) when Send is pressed.
     { key: 'enableSendCheck',             managedKey: 'managedEnableSendCheck',             def: true, type: 'boolean' },
-    { key: 'enableQrScanning',            managedKey: 'managedEnableQrScanning',            def: true, type: 'boolean' },
+    // Sender identity (Gmail): the sender's site icon and domain label, in the inbox and in opened emails.
+    { key: 'enableSenderIdentity',        managedKey: 'managedEnableSenderIdentity',        def: true, type: 'boolean' },
+    // Country flag of the server that sent the email (the domain's ending when it can't be looked up).
+    { key: 'enableSenderCountry',         managedKey: 'managedEnableSenderCountry',         def: true, type: 'boolean' },
+    // Sender domains checked against the threat services and phishing lists (Gmail).
+    { key: 'enableSenderDomainCheck',     managedKey: 'managedEnableSenderDomainCheck',     def: true, type: 'boolean' },
+    // Sender addresses checked against known phishing senders: the administrator's, the user's and the community list.
+    { key: 'enableSenderAddressCheck',    managedKey: 'managedEnableSenderAddressCheck',    def: true, type: 'boolean' },
+    // Emails from a flagged sender are moved to Spam (never unverified, unknown or clean ones); once only per email.
+    { key: 'enableAutoSpam',              managedKey: 'managedEnableAutoSpam',              def: true, type: 'boolean' },
+    // A short notice at the top of Gmail when emails were moved, with a link to the Spam folder.
+    { key: 'enableSpamNotice',            managedKey: 'managedEnableSpamNotice',            def: true, type: 'boolean' },
+    { key: 'enableQrScanning',           managedKey: 'managedEnableQrScanning',            def: true, type: 'boolean' },
     { key: 'enableAttachmentScanning',    managedKey: 'managedEnableAttachmentScanning',    def: true, type: 'boolean' },
     // Other webmail (experimental): the extension also works on these sites.
     { key: 'enableOutlookSupport',        managedKey: 'managedEnableOutlookSupport',        def: true, type: 'boolean' },
@@ -103,6 +115,33 @@ function normalizeDomainList(list) {
     return [...new Set(list.map(normalizeDomain).filter(Boolean))];
 }
 
+// Phishing-sender entries: a full address ("billing@paypa1.com") or a whole domain ("paypa1.com",
+// "@paypa1.com", "*@paypa1.com"; subdomains included). Anything else is dropped.
+const SENDER_DOMAIN_RE = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,62}$/;
+function normalizeSenderEntry(value) {
+    const v = String(value || '').trim().toLowerCase().replace(/^mailto:/, '').replace(/^<|>$/g, '').replace(/^\*?@/, '').replace(/\.$/, '');
+    const at = v.lastIndexOf('@');
+    if (at < 0) return SENDER_DOMAIN_RE.test(v) ? v : '';
+    const local = v.slice(0, at), domain = v.slice(at + 1);
+    return local && local.length <= 64 && !/[\s@<>()",;:]/.test(local) && SENDER_DOMAIN_RE.test(domain) ? `${local}@${domain}` : '';
+}
+function normalizeSenderList(list) {
+    if (!Array.isArray(list)) return [];
+    return [...new Set(list.map(normalizeSenderEntry).filter(Boolean))].slice(0, 20000);
+}
+// The entry that lists this address (exact address, or its domain or a parent domain), else null.
+function senderListMatch(address, set) {
+    const a = String(address || '').trim().toLowerCase();
+    if (!a || !set || !set.size) return null;
+    if (set.has(a)) return a;
+    const parts = a.slice(a.lastIndexOf('@') + 1).split('.');
+    for (let i = 0; i < parts.length - 1; i++) {
+        const d = parts.slice(i).join('.');
+        if (set.has(d)) return d;
+    }
+    return null;
+}
+
 function storageGetOnce(area, keys, timeoutMs) {
     return new Promise((resolve) => {
         let done = false;
@@ -140,6 +179,7 @@ async function loadEffectiveSettings() {
     defaults.customAllowlist = [];
     defaults.customBlocklist = [];
     defaults.remoteShorteners = [];
+    defaults.customPhishingSenders = [];
 
     const local = await storageGet('local', defaults);
     const managed = await storageGet('managed', null);
@@ -160,13 +200,16 @@ async function loadEffectiveSettings() {
 
     const managedAllowlist = normalizeDomainList(managed.managedAllowlist);
     const managedBlocklist = normalizeDomainList(managed.managedBlocklist);
+    const managedPhishingSenders = normalizeSenderList(managed.managedPhishingSenders);
     return {
         values,
         locked,
         managedAllowlist,
         managedBlocklist,
+        managedPhishingSenders,
         allowlist: [...new Set([...normalizeDomainList(local.customAllowlist), ...managedAllowlist])],
         blocklist: [...new Set([...normalizeDomainList(local.customBlocklist), ...managedBlocklist])],
+        phishingSenders: [...new Set([...normalizeSenderList(local.customPhishingSenders), ...managedPhishingSenders])],
         remoteShorteners: Array.isArray(local.remoteShorteners) ? local.remoteShorteners : [],
         // Administrator-only policies: set by policy alone (no setting in the extension, not in backups).
         policy: {
@@ -414,6 +457,7 @@ function buildBackup(allItems, extensionVersion) {
         exportDate: new Date().toLocaleString(),
         customAllowlist: normalizeDomainList(allItems.customAllowlist),
         customBlocklist: normalizeDomainList(allItems.customBlocklist),
+        customPhishingSenders: normalizeSenderList(allItems.customPhishingSenders),
         settings: {},
         urlCacheNote: 'Included for your records only. Cached results are not restored on import; they are rebuilt automatically.',
         secretsNote: 'Request headers for custom resolvers (which may contain API keys) are not included. Re-enter them after restoring.',
@@ -433,7 +477,7 @@ function buildBackup(allItems, extensionVersion) {
 
 // Decides what a restore will do, without touching storage.
 //  data    : parsed backup file
-//  current : { customAllowlist, customBlocklist } currently stored
+//  current : { customAllowlist, customBlocklist, customPhishingSenders } currently stored
 //  mode    : 'merge' | 'overwrite'
 // Returns { updates, removeKeys, notes, settingsCount, cacheCount, legacy }.
 function planImport(data, current, mode) {
@@ -446,16 +490,18 @@ function planImport(data, current, mode) {
     const removeKeys = [];
 
     // Domain lists: normalized and size-limited.
-    const lists = [['customAllowlist', 'allowlist'], ['customBlocklist', 'blocklist']];
-    lists.forEach(([key, label]) => {
-        let incoming = normalizeDomainList(data[key]);
+    const lists = [['customAllowlist', 'allowlist', normalizeDomainList], ['customBlocklist', 'blocklist', normalizeDomainList],
+                   ['customPhishingSenders', 'phishing sender', normalizeSenderList]];
+    lists.forEach(([key, label, normalize]) => {
+        if (key === 'customPhishingSenders' && !Array.isArray(data[key])) return;   // older backups don't have this list
+        let incoming = normalize(data[key]);
         if (incoming.length > MAX_IMPORTED_DOMAINS) {
             notes.push(`Only the first ${MAX_IMPORTED_DOMAINS} ${label} entries were restored.`);
             incoming = incoming.slice(0, MAX_IMPORTED_DOMAINS);
         }
         updates[key] = mode === 'overwrite'
             ? incoming
-            : [...new Set([...normalizeDomainList(current && current[key]), ...incoming])];
+            : [...new Set([...normalize(current && current[key]), ...incoming])];
     });
 
     // Feature settings: known keys with valid types only.
@@ -767,11 +813,14 @@ const WIRE_DNS_PROVIDERS = [
 
 // ---------------------------------------------------------------------------
 // PHISHING LISTS: downloaded periodically, matched on the device (no lookups, nothing sent).
-// OpenPhish: exact phishing URLs. Phishing Army: phishing hostnames (CC BY-NC 4.0).
+// OpenPhish: exact phishing URLs. Phishing Army: phishing hostnames (CC BY-NC 4.0). Sefinek: scam and
+// phishing sender addresses (MIT).
 // ---------------------------------------------------------------------------
 const PHISH_FEEDS = [
     { id: 'openphish',    name: 'OpenPhish community feed', url: 'https://openphish.com/feed.txt', kind: 'url', license: 'OpenPhish Terms of Use', home: 'https://openphish.com' },
-    { id: 'phishingarmy', name: 'Phishing Army (extended)', url: 'https://phishing.army/download/phishing_army_blocklist_extended.txt', kind: 'domain', license: 'CC BY-NC 4.0', home: 'https://phishing.army' }
+    { id: 'phishingarmy', name: 'Phishing Army (extended)', url: 'https://phishing.army/download/phishing_army_blocklist_extended.txt', kind: 'domain', license: 'CC BY-NC 4.0', home: 'https://phishing.army' },
+    // Sender addresses used for scams and phishing (exact addresses only), for the sender checks (Gmail).
+    { id: 'sefinekemails', name: 'Sefinek scam-sender list', url: 'https://raw.githubusercontent.com/sefinek/Blacklisted-Emails/main/blacklist/LIST.txt', kind: 'address', license: 'MIT', home: 'https://github.com/sefinek/Blacklisted-Emails', requires: 'enableSenderAddressCheck' }
 ];
 // Every third-party list (shortener lists and phishing lists) is downloaded at most once a day, even
 // when "Update now" is clicked, out of respect for the projects that publish them for free.
@@ -1456,4 +1505,106 @@ function splitSimulationDomains(list) {
         if (why) phishSimDomainsRefused.push({ domain: d, why }); else phishSimDomains.push(d);
     }
     return { phishSimDomains, phishSimDomainsRefused };
+}
+
+// ---------------------------------------------------------------------------
+// SENDER IDENTITY AND SENDER THREAT CHECKS (Gmail)
+// Each sender gets a verdict from its address and domain: the phishing-sender lists (administrator,
+// user, community), the phishing lists for its domain, and the DNS threat services. Only a FLAGGED
+// sender's email is ever moved to Spam; unverified, unknown and clean senders are left alone.
+// ---------------------------------------------------------------------------
+
+// Country-code endings sold worldwide as generic names (.io, .co, .tv…): they say nothing about
+// where the sender is, so they never give a country.
+const VANITY_CCTLDS = new Set(['io', 'co', 'me', 'tv', 'ai', 'ly', 'to', 'fm', 'gg', 'cc', 'ws', 'nu', 'tk', 'ml', 'ga', 'cf', 'gq',
+    'sh', 'la', 'is', 'gl', 'vc', 'ms', 'im', 'ac', 'sc', 'st', 'cx', 'pw', 'bz', 'am', 'cd', 'cm', 'je', 'li', 'lc', 'mu', 'ps', 'so',
+    'tc', 'vg', 'ag', 'dj', 'gd', 'gy', 'ht', 'ki', 'md', 'mn', 'nf', 're', 'sx', 'tl', 'vu', 'su', 'tf', 'yt', 'pm', 'wf', 'as', 'ad', 'fo']);
+
+// The country a domain's ending names ("example.de" → "DE"), or null for generic and vanity endings.
+function countryFromDomain(domain) {
+    const tld = String(domain || '').toLowerCase().replace(/\.$/, '').split('.').pop();
+    if (!/^[a-z]{2}$/.test(tld) || VANITY_CCTLDS.has(tld)) return null;
+    return tld === 'uk' ? 'GB' : tld.toUpperCase();
+}
+
+function isCountryCode(cc) { return typeof cc === 'string' && /^[A-Z]{2}$/.test(cc); }
+
+// Flag emoji for a two-letter country code (systems without flag glyphs show the two letters).
+function countryFlag(cc) {
+    if (!isCountryCode(cc)) return '';
+    return String.fromCodePoint(...[...cc].map(c => 0x1F1E6 + c.charCodeAt(0) - 65));
+}
+
+let countryNames = null;
+function countryName(cc) {
+    if (!isCountryCode(cc)) return '';
+    try {
+        if (!countryNames) countryNames = new Intl.DisplayNames(['en'], { type: 'region' });
+        return countryNames.of(cc) || cc;
+    } catch (e) { return cc; }
+}
+
+// Gmail views where a conversation is known to be in the inbox: the inbox itself and its category
+// tabs, list or opened conversation. Emails are only ever moved to Spam from these views, never from
+// Spam, Trash, Sent, Drafts, labels, searches or All mail.
+function gmailViewAllowsAutoSpam(hash) {
+    const h = String(hash || '').replace(/^#/, '');
+    return h === '' || h === 'inbox' || h.startsWith('inbox/') || /^category\/[a-z]+(\/|$)/.test(h);
+}
+
+// Sender verdict from the separate checks. All inputs are optional:
+//   address, ownDomain            the sender's address; the user's own organization domain
+//   allowlisted                   the sender's domain is on the allowlist (yours or your organization's)
+//   listHit                       { source: 'admin' | 'user' | 'community', entry, name }
+//   addressChecked                the address was compared with the phishing-sender lists
+//   domainFeed                    name of the phishing list that has the sender's domain
+//   dns                           the DNS threat verdict for the domain ({ verdict, reason, scanner, note })
+//   dnsChecked                    false when the DNS check is switched off or offline
+// Returns { status, reasons, move } with status 'flagged' | 'caution' | 'clean' | 'unverified' |
+// 'unknown' | 'trusted'. move is true only for flagged senders.
+const SENDER_DNS_NOT_SECURITY = new Set(['Cloudflare Family', 'AdGuard (backup)']);
+function isOwnDomain(domain, ownDomain) { return !!ownDomain && (domain === ownDomain || domain.endsWith('.' + ownDomain)); }
+// Big providers' and brands' own domains, and your own organization's, are never judged by
+// domain-wide lists or DNS filters (a false positive there would hit every sender on gmail.com);
+// their addresses still are.
+function senderDomainShared(domain, ownDomain) {
+    return isPersonalMailDomain(domain) || PROTECTED_DOMAINS.has(registrableDomain(domain)) || isOwnDomain(domain, ownDomain);
+}
+function combineSenderVerdict({ address, ownDomain, allowlisted, listHit, addressChecked, domainFeed, dns, dnsChecked } = {}) {
+    const domain = domainOfAddress(address);
+    const own = isOwnDomain(domain, ownDomain);
+    const sharedDomain = senderDomainShared(domain, ownDomain);
+    const reasons = [];
+    if (listHit) {
+        const who = listHit.source === 'admin' ? 'your organization' : listHit.source === 'user' ? 'you' : (listHit.name || 'a community list');
+        reasons.push(listHit.entry.includes('@') ? `This address is listed as a phishing or scam sender by ${who}.`
+            : `The sender's domain ${listHit.entry} is listed as a phishing or scam sender by ${who}.`);
+    }
+    if (allowlisted && !(listHit && listHit.source !== 'community')) return { status: 'trusted', reasons: ['The sender\'s domain is on your trusted sites list.'], move: false };
+    if (domainFeed && !sharedDomain) reasons.push(`The sender's domain ${domain} is listed as phishing by ${domainFeed}.`);
+    const dnsFlag = !sharedDomain && dns && dns.verdict === 'unsafe';
+    const securityFlag = dnsFlag && !SENDER_DNS_NOT_SECURITY.has(dns.scanner);
+    if (securityFlag) reasons.push(`The sender's domain ${domain} is flagged by a security service: ${dns.reason || dns.scanner}.`);
+    // Mail from your own organization is moved only for an exact address your organization or you
+    // listed (a compromised account), never for a domain-wide or community finding.
+    if (reasons.length) return { status: 'flagged', reasons, move: !own || !!(listHit && listHit.source !== 'community' && listHit.entry.includes('@')) };
+    if (dnsFlag) return { status: 'caution', reasons: [`The sender's domain ${domain} is blocked by ${dns.scanner}: ${dns.reason || 'filtered'}.`], move: false };
+    if (own) return { status: 'clean', reasons: ['Sent from your own organization\'s domain.'], move: false };
+    if (sharedDomain) return addressChecked
+        ? { status: 'clean', reasons: [`${domain} is a well-known email provider or company; this address is on no phishing-sender list.`], move: false }
+        : { status: 'unverified', reasons: [`${domain} is a well-known email provider or company; the address itself wasn't checked.`], move: false };
+    if (!dns || dnsChecked === false) return { status: 'unverified', reasons: ['The sender\'s domain wasn\'t checked (threat checks are off or offline).'], move: false };
+    if (dns.verdict === 'safe') return { status: 'clean', reasons: ['Checked: no security service or list flags this sender.'], move: false };
+    if (/doesn't exist/.test(dns.note || '')) return { status: 'unknown', reasons: [`The sender's domain ${domain} doesn't exist, so replies can't reach it.`], move: false };
+    return { status: 'unverified', reasons: [`The sender's domain couldn't be checked${dns.note ? ` (${String(dns.note).replace(/\.$/, '')})` : ''}.`], move: false };
+}
+
+// The site a sending domain belongs to, for its icon and label: mail-system prefixes are dropped
+// ("email.notifications.paypal.com" → "paypal.com"), never anything else, so the label always ends
+// with the sender's real domain.
+const MAIL_PREFIX_LABEL = /^(e|em|email|emails|mail|mailer|mailing|mg|mgs|m|news|newsletter|newsletters|info|notify|notification|notifications|alert|alerts|bounce|bounces|reply|replies|send|sender|smtp|mta|out|outbound|post|marketing|comms|communications|go|t|link|links|click|mkt|crm|msg|messages|updates|noreply|no-reply)\d*$/;
+function siteOfSender(domain) {
+    const labels = String(domain || '').toLowerCase().replace(/\.$/, '').split('.').filter(Boolean);
+    while (labels.length > 2 && MAIL_PREFIX_LABEL.test(labels[0]) && registrableDomain(labels.join('.')) !== labels.join('.')) labels.shift();
+    return labels.join('.');
 }

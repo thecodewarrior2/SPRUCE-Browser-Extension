@@ -29,6 +29,36 @@
       "description": "When the user presses Send in Gmail, check the links they wrote (typos, websites that do not exist or answer, look-alike, phishing and malware sites) and list any problems before sending.",
       "type": "boolean"
     },
+    "managedEnableSenderIdentity": {
+      "title": "Sender Icons and Domain Labels (Gmail)",
+      "description": "Show each sender's site icon and a label with its domain, colored by the sender checks, in the Gmail inbox list and in opened emails. Icons come from Google's icon service (only the site name is sent); with managedEnableDnsThreatCheck false a letter is shown instead and nothing is requested.",
+      "type": "boolean"
+    },
+    "managedEnableSenderCountry": {
+      "title": "Sender Country Flags (Gmail)",
+      "description": "Show a country flag for each sender: the country of the server that delivered the email (from Gmail's own Received header, read emails only; the server's IP address is looked up at api.country.is, at most once a month per address), else the country named by the domain ending, else where the sender's website is hosted. With managedEnableDnsThreatCheck false only the domain ending is used.",
+      "type": "boolean"
+    },
+    "managedEnableSenderDomainCheck": {
+      "title": "Check Sender Domains for Threats (Gmail)",
+      "description": "Check each sender's domain with the DNS threat-check services (domain name only) and against the phishing lists. Personal-mail providers (gmail.com, outlook.com…), major companies' domains and the user's own organization domain are never judged as a whole.",
+      "type": "boolean"
+    },
+    "managedEnableSenderAddressCheck": {
+      "title": "Check Sender Addresses Against Phishing Lists (Gmail)",
+      "description": "Compare each sender's address, on the device, with managedPhishingSenders, the user's own list and the community scam-sender list (sefinek/Blacklisted-Emails, downloaded with the phishing lists when managedEnablePhishingFeeds is true).",
+      "type": "boolean"
+    },
+    "managedEnableAutoSpam": {
+      "title": "Move Emails From Flagged Senders to Spam (Gmail)",
+      "description": "Move emails whose sender is flagged (on a phishing-sender list, or its domain on a phishing list or blocked by a security service) to Spam using Gmail's own Report spam. Never unverified, unknown, caution or clean senders; only from the inbox; never while the user is typing or has emails selected; never phishing-simulation emails (managedPhishSimulationDomains / managedPhishSimulationRules) or mail from the user's own organization domain (unless that exact address is listed in managedPhishingSenders or by the user, e.g. a compromised account). A conversation is moved at most once: one the user takes back out of Spam stays in the inbox.",
+      "type": "boolean"
+    },
+    "managedEnableSpamNotice": {
+      "title": "Notice When Emails Are Moved to Spam (Gmail)",
+      "description": "Show a short notice at the top of Gmail with the number of emails moved to Spam and a Review link to the Spam folder. It disappears after 15 seconds.",
+      "type": "boolean"
+    },
     "managedEnableQrScanning": {
       "title": "Check QR Codes in Emails",
       "description": "Decode QR codes in email images on the device and check where they lead.",
@@ -255,6 +285,15 @@
       "items": {
         "type": "string",
         "description": "Domain name (e.g., click.marketing.com)"
+      }
+    },
+    "managedPhishingSenders": {
+      "title": "Managed Phishing Senders (Gmail)",
+      "description": "Known phishing or scam senders: full addresses (billing@paypa1-support.com) or whole domains (paypa1-support.com, which includes its subdomains; \"@domain\" also accepted). Emails from them are flagged and, when managedEnableAutoSpam is true, moved to Spam. Merged with the user's own list; entries set here can't be removed by the user and win over the allowlist.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "description": "Email address or domain (e.g., billing@paypa1-support.com or paypa1-support.com)"
       }
     },
     "managedHidePopupSettingsButton": {

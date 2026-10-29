@@ -84,8 +84,14 @@
              onOff(S.enableRemoteListSync) + lock('enableRemoteListSync')],
             ['Checking links before sending', 'When you press Send: the site names of the links you wrote (to the threat-check services above), and one request to each linked website to see that it answers, as when your reader clicks it. Never for one-time links; nothing about your email itself.',
              'Cloudflare 1.1.1.1 and the threat-check services; the websites you link to', onOff(S.enableSendCheck) + lock('enableSendCheck')],
-            ['Phishing list update', 'Plain downloads of two public phishing lists (at most once a day). Links are matched on this computer; nothing about you is sent.', 'openphish.com and phishing.army (they see your IP address)',
-             onOff(S.enablePhishingFeeds) + lock('enablePhishingFeeds')]
+            ['Phishing list update', 'Plain downloads of the public phishing lists (at most once a day), including a list of scam senders\' addresses. Links and senders are matched on this computer; nothing about you is sent.', 'openphish.com, phishing.army and raw.githubusercontent.com (they see your IP address)',
+             onOff(S.enablePhishingFeeds) + lock('enablePhishingFeeds')],
+            ['Sender checks (Gmail)', 'Only the domain of each sender (e.g. example.com), never the address or anything about the email. Gmail, Outlook.com and other big providers\' domains and your own organization\'s are never sent.', 'the threat-check services above',
+             onOff(S.enableSenderDomainCheck && S.enableDnsThreatCheck) + lock('enableSenderDomainCheck')],
+            ['Sender icons (Gmail)', 'The site name of each sender (e.g. example.com), to get its icon.', 'Google\'s icon service (www.google.com; Google already delivers your Gmail)',
+             onOff(S.enableSenderIdentity && S.enableDnsThreatCheck) + lock('enableSenderIdentity')],
+            ['Sender country (Gmail)', 'The internet address of the server that delivered an email (from Gmail\'s own record, read emails only), or of the sender\'s website. Once a month at most per address.', 'country.is (open-source service; sees your IP address)',
+             onOff(S.enableSenderCountry && S.enableDnsThreatCheck) + lock('enableSenderCountry')]
         ]));
     }
 
@@ -117,7 +123,7 @@
             [code('qr-decoder.js'), 'scanner', 'Self-contained QR Code reader (ISO/IEC 18004): finder patterns, perspective correction, Reed-Solomon. Used where Chrome has no built-in BarcodeDetector.'],
             [code('scanner.html / scanner.js'), 'hidden offscreen document', 'Decodes QR codes in images and PDF pages and lists PDF links; created on demand, closed after a minute idle.'],
             [code('lib/pdf.min.mjs, lib/pdf.worker.min.mjs'), 'scanner', 'pdf.js (Mozilla, Apache-2.0) for rendering PDF attachments.'],
-            [code('content.css'), 'Gmail tab', 'Shows the 🔍 on email tracking links only while the link is hovered or focused.'],
+            [code('content.css'), 'Gmail tab', 'Shows the 🔍 on email tracking links only while the link is hovered or focused; styles the sender icons, domain labels and the moved-to-Spam notice.'],
             [code('background.js'), 'service worker', 'Link pipeline, threat checks, lookups, list sync and safeguards, logging, cleanup, message API, badge.'],
             [code('decoders.js'), 'service worker, Options', 'All offline decoders and the unwrapping loop.'],
             [code('custom-endpoints.js'), 'service worker', 'Request building and reply parsing for your own threat resolver and unshortener.'],
@@ -135,6 +141,9 @@
             [code('getSettings'), 'Gmail → worker', 'Effective settings (user values merged with policy) and lists.'],
             [code('resolveUrl'), 'Gmail → worker', 'Analyze one link ({url, linkText, reveal}); returns destination, verdict, notes, and whether a 🔍 reveal can be offered.'],
             [code('logPixel'), 'Gmail → worker', 'Record a blocked tracking pixel in History.'],
+            [code('checkSenders'), 'Gmail → worker', 'Sender checks for the inbox list and opened emails ({senders, ownDomain}); returns status (flagged, caution, clean, trusted, unverified, unknown), reasons, whether to move to Spam, and the country.'],
+            [code('senderCountry'), 'Gmail → worker', 'Country of the server that delivered an email (IP from the email\'s headers).'],
+            [code('recordSpamMoves'), 'Gmail → worker', 'Remember conversations moved to Spam (never moved again) and log them.'],
             [code('updateBadge'), 'Gmail → worker', 'Per-tab count on the toolbar button.'],
             [code('logEvent'), 'Gmail, pages → worker', 'Write an application log entry (accepted only from this extension).'],
             [code('testUnwrap'), 'Options → worker', 'Link Inspector: the pipeline without caching or logging, with explanations.'],
@@ -146,6 +155,10 @@
         fill('archStorage', table(['Key (chrome.storage.local)', 'Contents'], [
             [code('<setting keys>'), 'Only settings you changed; defaults are not stored. See the settings reference.'],
             [code('customAllowlist / customBlocklist'), 'Your site lists (organization lists come from policy and are merged at read time).'],
+            [code('customPhishingSenders'), 'Your phishing senders (addresses or domains); the organization\'s list (managedPhishingSenders) is merged at read time.'],
+            [code('spamMovedThreads'), 'Conversations the extension moved to Spam: {thread id: time}, kept a year (at most 5,000). One taken back out of Spam is never moved again.'],
+            [code('senderDomainCache / geoCache'), 'Sender-domain threat verdicts (' + fmtMs(SAFE_CACHE_MS) + ') and IP-address countries (30 days).'],
+            [code('senderMessageCache'), 'Per email: the delivering server\'s address and the From address, read once from its headers (at most 5,000).'],
             [code('https://… (one key per link)'), 'Cache entry: {finalUrl, resolver, isSafe, reason, resolvedIp, cachedDate, cachedTimestamp}. Never one-time, unverified, blocklisted or revealed links.'],
             [code('resolutionHistory'), 'History entries: {timestamp, shortUrl, finalUrl, verdict, reason, resolvedIp, resolver}.'],
             [code('errorLogs'), 'Application log entries: {time, timestampMs, level, source, message, count}.'],
@@ -247,6 +260,11 @@
             [code('storage.googleapis.com, firebasestorage.googleapis.com'), 'only when you click 🔍 on a cloud-storage link', 'a plain download of the page (without the #fragment)', 'Offer to reveal hidden destinations', onOff(S.enableTrackerReveal)],
             ['the websites you link to', 'when you press Send on an email with links', 'one request per link (no page is read), to see that it answers', 'Check links before sending', onOff(S.enableSendCheck)],
             [code('mail.google.com'), 'only for an email with a company-only link or a sender name claiming a brand', 'nothing new: reads that email\'s original source from Gmail itself (your session)', 'Check who sent the email', onOff(S.enableSenderChecks)],
+            [code('mail.google.com'), 'opened emails, and read emails in the inbox list (once per email)', 'nothing new: reads the email\'s headers from Gmail itself (your session) for the sender\'s country and verification', 'Show sender icons / Show the sender\'s country', onOff(S.enableSenderIdentity)],
+            [code('www.google.com'), 'each sender shown (Gmail), by the browser', 'the sender\'s site name, for its icon', 'Show sender icons and domain labels', onOff(S.enableSenderIdentity && S.enableDnsThreatCheck)],
+            [code('api.country.is'), 'a new sending server or sender website (at most once a month each)', 'that server\'s IP address', 'Show the sender\'s country', onOff(S.enableSenderCountry && S.enableDnsThreatCheck)],
+            ['the threat-check services above', 'each new sender domain (Gmail; at most every ' + fmtMs(SAFE_CACHE_MS) + ')', 'the sender\'s domain', 'Check sender domains for threats', onOff(S.enableSenderDomainCheck && S.enableDnsThreatCheck)],
+            [code('raw.githubusercontent.com'), 'scam-sender list: once a day', 'nothing (plain download)', 'Check sender addresses against phishing lists', onOff(S.enablePhishingFeeds && S.enableSenderAddressCheck)],
             [code('www.whois.com'), 'only when you click a WHOIS button', 'the IP address shown', 'you', '—']
         ]));
 
@@ -265,7 +283,7 @@
             code(d.key), code(d.managedKey), typeText(d), d.def === '' ? '(empty)' : String(d.def),
             d.secret ? (S[d.key] ? '•••••• (hidden)' : '(empty)') + (cfg.locked[d.key] ? ' 🔒' : '')
                      : (S[d.key] === '' ? '(empty)' : String(S[d.key])) + (cfg.locked[d.key] ? ' 🔒' : '')
-        ])), el('p', null, 'Also: ', code('managedAllowlist'), ' and ', code('managedBlocklist'), ' (arrays of domains), merged with your own lists. ',
+        ])), el('p', null, 'Also: ', code('managedAllowlist'), ' and ', code('managedBlocklist'), ' (arrays of domains) and ', code('managedPhishingSenders'), ' (addresses or domains), merged with your own lists. ',
                'Settings marked as secret (request headers) are never exported to backups.'));
 
         // This installation

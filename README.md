@@ -22,6 +22,16 @@ Proton Mail, Yahoo Mail, AOL Mail, Zoho Mail, iCloud Mail, Fastmail and GMX.
 - **Sender checks (Gmail).** The sender's verification (DMARC/DKIM/SPF via Gmail's "Show
   original") is read to judge company short links (c.gle, aka.ms, …) and brand-claiming sender
   names.
+- **Sender icons and identity (Gmail).** In the inbox list and in opened emails, every sender gets its
+  site's icon, a country flag (where the server that sent it is, from Gmail's own delivery record, or the
+  domain's country) and a domain label colored by a check of the sender: ✓ checked, ⚠ caution,
+  ⛔ flagged. Point at the label for the reasons and Gmail's own verification (DMARC/SPF/DKIM).
+- **Phishing senders go to Spam (Gmail).** Sender addresses are compared with your organization's list,
+  your own list and a community scam-sender list; sender domains with the phishing lists and the DNS
+  threat filters. Emails from a **flagged** sender (never unverified, unknown or clean ones) are moved
+  to Spam with Gmail's own Report spam, from the inbox only, never while you're typing or have emails
+  selected, and never your organization's phishing-training emails. One you take back out of Spam
+  stays out. A short notice says how many were moved, with a **Review** link to Spam.
 - **Threat checks.** DNS-over-HTTPS threat filters (Cloudflare Security and Family, Quad9,
   Control D; AdGuard as a backup), community shortener lists, and local phishing lists (OpenPhish,
   Phishing Army), downloaded at most once a day.
@@ -39,7 +49,7 @@ Proton Mail, Yahoo Mail, AOL Mail, Zoho Mail, iCloud Mail, Fastmail and GMX.
   if the check can't finish.
 - **Privacy levels.** *Standard*, *Private* (no link sent to any lookup service; site names still
   go to the DNS threat filters) or *Offline only* (nothing leaves the browser). Every feature can
-  be switched off individually.
+  be switched off individually, and every one can be set and locked by your administrator.
 
 ## Install (load unpacked)
 
@@ -64,6 +74,11 @@ Settings can be forced with Google Workspace, Microsoft Intune or Group Policy. 
 [ADMIN-GUIDE.md](ADMIN-GUIDE.md) and the schema in [`schema.json`](schema.json);
 [`policy-example.json`](policy-example.json) shows a complete policy.
 
+The sender features (Gmail) each have their own key (`managedEnableSenderIdentity`,
+`managedEnableSenderCountry`, `managedEnableSenderDomainCheck`, `managedEnableSenderAddressCheck`,
+`managedEnableAutoSpam`, `managedEnableSpamNotice`), and `managedPhishingSenders` lists your organization's
+known phishing senders (addresses or whole domains), merged with each user's own list.
+
 Some policies exist for administrators only, with no setting in the extension:
 
 - **Phishing simulations:** training emails from KnowBe4, Wizer and others are left completely
@@ -80,7 +95,7 @@ Some policies exist for administrators only, with no setting in the extension:
 |---|---|
 | `manifest.json` | Manifest V3 declaration, permissions, supported sites |
 | `background.js` | Service worker: link pipeline, threat checks, list sync, badge |
-| `content.js` / `content.css` | Injected into webmail: banners, link markings, hover card, sender checks, the Send check |
+| `content.js` / `content.css` | Injected into webmail: banners, link markings, hover card, sender checks, sender icons and moving phishing to Spam (Gmail), the Send check |
 | `shared.js` | Settings, constants and helpers shared by all contexts |
 | `decoders.js` | Offline decoders for short links, gateways and trackers |
 | `custom-endpoints.js` | Requests and replies for your own lookup service or threat resolver |
@@ -106,6 +121,8 @@ Some policies exist for administrators only, with no setting in the extension:
   you can switch off are used. The one exception is the Send check, which makes one request to each
   website you link to, as your reader would by clicking it, and never for one-time links.
 - **Never change an email being written,** only emails being read.
+- **Only flagged senders are moved to Spam,** only once, and only with Gmail's own Report spam; what the
+  user takes back out of Spam stays out.
 - **Never trap an email:** if the Send check can't finish, the email is sent.
 - **Managed settings win:** policy values (Workspace, Intune, Group Policy) can't be changed or
   reset by the user.
