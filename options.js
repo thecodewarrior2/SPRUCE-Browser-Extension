@@ -278,7 +278,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const keys = Object.keys(items).filter(k => k.startsWith('http://') || k.startsWith('https://'));
             // Sender data too (servers' addresses per email, countries, sender verdicts). Conversations
             // remembered as moved to or taken out of Spam are kept, so they're never moved again.
-            chrome.storage.local.remove([...keys, 'senderMessageCache', 'geoCache', 'senderDomainCache'], () => {
+            chrome.storage.local.remove([...keys, 'senderMessageCache', 'geoCache', 'senderDomainCache', 'senderResultCache', 'faviconCache'], () => {
                 chrome.storage.local.set({ resolutionHistory: [], recentActivity: [] }, () => {
                     reportToLog('info', 'Options page', `Cache, resolution history and activity deleted by the user (${keys.length} cached entries).`);
                     renderCache(); renderHistory();
@@ -292,10 +292,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const cfg = await loadEffectiveSettings();
         const policy = {};
         SETTING_DEFS.forEach(d => { policy[d.managedKey] = { Value: cfg.values[d.key] }; });
-        const local = await new Promise(r => chrome.storage.local.get({ customAllowlist: [], customBlocklist: [], customPhishingSenders: [] }, r));
+        const local = await new Promise(r => chrome.storage.local.get({ customAllowlist: [], customBlocklist: [], customTrustedSenders: [] }, r));
         policy.managedAllowlist = { Value: normalizeDomainList(local.customAllowlist) };
         policy.managedBlocklist = { Value: normalizeDomainList(local.customBlocklist) };
-        policy.managedPhishingSenders = { Value: normalizeSenderList(local.customPhishingSenders) };
+        policy.managedTrustedSenders = { Value: normalizeSenderList(local.customTrustedSenders) };
         const out = document.getElementById('copyPolicyResult');
         try {
             await navigator.clipboard.writeText(JSON.stringify(policy, null, 2));
@@ -605,13 +605,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function renderPolicies() {
-        chrome.storage.local.get({ customBlocklist: [], customAllowlist: [], customPhishingSenders: [] }, (localResult) => {
+        chrome.storage.local.get({ customBlocklist: [], customAllowlist: [], customTrustedSenders: [] }, (localResult) => {
             const renderSenders = (managedSenders) => {
-                const mine = normalizeSenderList(localResult.customPhishingSenders);
-                renderPolicyTable('phishSenderTable', [...new Set([...mine, ...managedSenders])], managedSenders, 'customPhishingSenders', 'No phishing senders added.');
+                const mine = normalizeSenderList(localResult.customTrustedSenders);
+                renderPolicyTable('trustedSenderTable', [...new Set([...mine, ...managedSenders])], managedSenders, 'customTrustedSenders', 'No trusted senders added.');
             };
             if (chrome.storage.managed) {
-                chrome.storage.managed.get(['managedAllowlist', 'managedBlocklist', 'managedPhishingSenders'], (managedResult) => {
+                chrome.storage.managed.get(['managedAllowlist', 'managedBlocklist', 'managedTrustedSenders'], (managedResult) => {
                     if (chrome.runtime.lastError || !managedResult) managedResult = {};
                     
                     if (managedResult.managedAllowlist || managedResult.managedBlocklist) {
@@ -623,7 +623,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     
                     renderPolicyTable('allowTable', combinedAllow, managedResult.managedAllowlist || [], 'customAllowlist');
                     renderPolicyTable('blockTable', combinedBlock, managedResult.managedBlocklist || [], 'customBlocklist');
-                    renderSenders(normalizeSenderList(managedResult.managedPhishingSenders));
+                    renderSenders(normalizeSenderList(managedResult.managedTrustedSenders));
                 });
             } else {
                 renderPolicyTable('allowTable', localResult.customAllowlist || [], [], 'customAllowlist');
@@ -692,19 +692,19 @@ document.addEventListener('DOMContentLoaded', () => {
         addDomainToPolicy('domainBlockInput', 'customBlocklist');
     });
 
-    // Phishing senders: an address or a whole domain, normalized ("@example.com" → "example.com").
-    document.getElementById('addPhishSenderBtn').addEventListener('click', () => {
-        const input = document.getElementById('phishSenderInput');
+    // Trusted senders: an address or a whole domain, normalized ("@example.com" → "example.com").
+    document.getElementById('addTrustedSenderBtn').addEventListener('click', () => {
+        const input = document.getElementById('trustedSenderInput');
         const entry = normalizeSenderEntry(input.value);
         if (!input.value.trim()) return;
         if (!entry) { alert('Enter an email address (name@example.com) or a domain (example.com).'); return; }
-        chrome.storage.local.get({ customPhishingSenders: [] }, (result) => {
-            const list = normalizeSenderList(result.customPhishingSenders);
+        chrome.storage.local.get({ customTrustedSenders: [] }, (result) => {
+            const list = normalizeSenderList(result.customTrustedSenders);
             if (list.includes(entry)) { alert('This sender is already in the list.'); return; }
             list.push(entry);
-            chrome.storage.local.set({ customPhishingSenders: list }, () => {
+            chrome.storage.local.set({ customTrustedSenders: list }, () => {
                 input.value = '';
-                reportToLog('info', 'Settings', `Phishing sender added: ${entry}.`);
+                reportToLog('info', 'Settings', `Trusted sender added: ${entry}. Its emails will never be flagged or moved to Spam.`);
                 renderPolicies();
             });
         });
@@ -795,8 +795,99 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('#logNav button').forEach(btn => btn.addEventListener('click', () => {
         document.querySelectorAll('#logNav button').forEach(b => b.classList.toggle('active', b === btn));
         document.querySelectorAll('.log-section').forEach(sec => sec.classList.toggle('active', sec.id === `log-${btn.dataset.log}`));
-        ({ applog: renderErrors, history: renderHistory, cache: renderCache })[btn.dataset.log]();
+        ({ applog: renderErrors, history: renderHistory, cache: renderCache, senders: renderSenderLog, spam: renderSpamLog })[btn.dataset.log]();
     }));
+
+    // ---------------- Senders: icons & flags, and Moved to Spam (Gmail sender checks)
+    const SENDER_BADGES = { flagged: ['badge-unsafe', '⛔ Flagged'], caution: ['badge-warning', '⚠ Caution'], clean: ['badge-safe', '✓ Checked'],
+                            trusted: ['badge-safe', '✓ Trusted'], unverified: ['badge-neutral', 'Not verified'], unknown: ['badge-neutral', 'Unknown'] };
+    const cell = (text, style) => { const td = document.createElement('td'); if (style) td.style.cssText = style; if (text !== undefined) td.textContent = text; return td; };
+    const emptyRow = (tbody, cols, text) => { const tr = document.createElement('tr'); const td = cell(text, 'color: var(--text-muted);'); td.colSpan = cols; tr.appendChild(td); tbody.appendChild(tr); };
+    const statItem = (label, value) => { const d = document.createElement('div'); d.className = 'stat'; const b = document.createElement('b'); b.textContent = value; d.append(b, ` ${label}`); return d; };
+
+    function renderSenderLog() {
+        chrome.storage.local.get({ senderResultCache: {}, faviconCache: {} }, (items) => {
+            const tbody = document.querySelector('#senderTable tbody');
+            if (!tbody) return;
+            tbody.replaceChildren();
+            const q = (document.getElementById('senderSearch').value || '').toLowerCase().trim();
+            const rows = Object.values(items.senderResultCache || {}).filter(v => v && v.r).sort((a, b) => b.ts - a.ts);
+            const counts = {};
+            rows.forEach(v => { counts[v.r.status] = (counts[v.r.status] || 0) + 1; });
+            const icons = Object.values(items.faviconCache || {});
+            document.getElementById('senderStats').replaceChildren(statItem('senders remembered', rows.length), statItem('flagged', counts.flagged || 0),
+                statItem('caution', counts.caution || 0), statItem('icons remembered', icons.filter(i => i.d).length), statItem('sites without an icon', icons.filter(i => !i.d).length));
+            for (const v of rows) {
+                const r = v.r;
+                const text = `${r.address} ${r.domain} ${r.status} ${(r.reasons || []).join(' ')} ${r.checks || ''}`.toLowerCase();
+                if (q && !text.includes(q)) continue;
+                const tr = document.createElement('tr');
+                const who = cell();
+                const code = document.createElement('code'); code.textContent = r.address; who.appendChild(code);
+                if (r.move) { const n = document.createElement('div'); n.style.cssText = 'font-size: 11px; color: var(--danger-text);'; n.textContent = 'Its emails are moved to Spam'; who.appendChild(n); }
+                const look = cell();
+                const fav = items.faviconCache[siteOfSender(r.domain)];
+                if (fav && fav.d && /^data:image\//.test(fav.d)) { const img = document.createElement('img'); img.src = fav.d; img.width = 16; img.height = 16; img.alt = ''; img.style.marginRight = '6px'; look.appendChild(img); }
+                else { const blank = document.createElement('span'); blank.style.cssText = 'display:inline-block;width:16px;margin-right:6px;'; blank.title = 'No icon'; look.appendChild(blank); }
+                if (r.country) {
+                    const f = document.createElement('span');
+                    f.textContent = `${countryFlag(r.country)} ${countryName(r.country)}`;
+                    f.title = r.countrySource === 'host' ? 'Where the sender\'s website is hosted' : 'The country the domain ending names';
+                    look.appendChild(f);
+                }
+                const st = cell();
+                const [cls, label] = SENDER_BADGES[r.status] || ['badge-neutral', r.status];
+                const badge = document.createElement('span'); badge.className = `badge ${cls}`; badge.textContent = label; st.appendChild(badge);
+                const why = cell();
+                (r.reasons || []).forEach(t => { const d = document.createElement('div'); d.textContent = t; why.appendChild(d); });
+                if (r.checks) { const d = document.createElement('div'); d.style.cssText = 'font-size: 11px; color: var(--text-muted); margin-top: 4px;'; d.textContent = `Checked: ${r.checks}`; why.appendChild(d); }
+                tr.append(who, look, st, why, cell(new Date(v.ts).toLocaleString(), 'white-space: nowrap; font-size: 12px;'));
+                tbody.appendChild(tr);
+            }
+            if (!tbody.children.length) emptyRow(tbody, 5, rows.length ? 'No sender matches your search.' : 'No senders checked yet. Open Gmail with sender checks on.');
+        });
+    }
+
+    const SPAM_ACTIONS = { moved: ['badge-unsafe', 'Moved to Spam'], failed: ['badge-warning', 'Not moved (failed)'], rescued: ['badge-safe', 'Taken out of Spam by you'] };
+    function renderSpamLog() {
+        chrome.storage.local.get({ spamMoveLog: [] }, (items) => {
+            const tbody = document.querySelector('#spamLogTable tbody');
+            if (!tbody) return;
+            tbody.replaceChildren();
+            const log = Array.isArray(items.spamMoveLog) ? items.spamMoveLog : [];
+            const q = (document.getElementById('spamLogSearch').value || '').toLowerCase().trim();
+            const n = (a) => log.filter(e => e.action === a).length;
+            document.getElementById('spamLogStats').replaceChildren(statItem('moved', n('moved')), statItem('not moved', n('failed')), statItem('taken out of Spam by you', n('rescued')));
+            for (const e of log) {
+                if (q && !`${e.sender} ${e.reason} ${e.how}`.toLowerCase().includes(q)) continue;
+                const tr = document.createElement('tr');
+                const act = cell();
+                const [cls, label] = SPAM_ACTIONS[e.action] || ['badge-neutral', e.action];
+                const badge = document.createElement('span'); badge.className = `badge ${cls}`; badge.textContent = label; act.appendChild(badge);
+                const who = cell();
+                if (e.sender) { const c = document.createElement('code'); c.textContent = e.sender; who.appendChild(c); } else who.textContent = '—';
+                const why = cell();
+                const r = document.createElement('div'); r.textContent = e.reason || (e.action === 'rescued' ? 'You took this conversation out of Spam; it will never be moved back.' : ''); why.appendChild(r);
+                if (e.how) { const h = document.createElement('div'); h.style.cssText = 'font-size: 11px; color: var(--text-muted); margin-top: 4px;'; h.textContent = e.action === 'failed' ? `Why it wasn't moved: ${e.how}` : `How: ${e.how}`; why.appendChild(h); }
+                tr.append(cell(new Date(e.ts).toLocaleString(), 'white-space: nowrap; font-size: 12px;'), act, who, why);
+                tbody.appendChild(tr);
+            }
+            if (!tbody.children.length) emptyRow(tbody, 4, log.length ? 'Nothing matches your search.' : 'No emails have been moved to Spam.');
+        });
+    }
+    document.getElementById('senderSearch').addEventListener('input', renderSenderLog);
+    document.getElementById('spamLogSearch').addEventListener('input', renderSpamLog);
+    document.getElementById('clearSenderCacheBtn').addEventListener('click', () => {
+        if (!confirm('Forget the remembered sender checks, icons and countries? They are looked up again as you open Gmail.')) return;
+        chrome.storage.local.remove(['senderResultCache', 'faviconCache', 'geoCache', 'senderDomainCache', 'senderMessageCache'], () => {
+            reportToLog('info', 'Options page', 'Sender data (checks, icons, countries) cleared by the user.');
+            renderSenderLog();
+        });
+    });
+    document.getElementById('clearSpamLogBtn').addEventListener('click', () => {
+        if (!confirm('Clear the list of emails moved to Spam? Conversations already moved are still never moved again.')) return;
+        chrome.storage.local.set({ spamMoveLog: [] }, () => { reportToLog('info', 'Options page', 'Moved-to-Spam list cleared by the user.'); renderSpamLog(); });
+    });
 
     const LEVEL_BADGES = { error: ['badge-unsafe', 'Error'], warning: ['badge-warning', 'Warning'], info: ['badge-info', 'Info'] };
 
@@ -910,7 +1001,7 @@ document.addEventListener('DOMContentLoaded', () => {
             else if (d.type === 'integer') lines.push(`    New-ItemProperty -Path $key -Name ${q(d.managedKey)} -PropertyType DWord -Value ${Number(v) || 0} -Force | Out-Null`);
             else if (v !== '' && v !== undefined) lines.push(`    New-ItemProperty -Path $key -Name ${q(d.managedKey)} -PropertyType String -Value ${q(v)} -Force | Out-Null`);
         });
-        for (const [name, list] of [['managedAllowlist', allow], ['managedBlocklist', block], ['managedPhishingSenders', senders]]) {
+        for (const [name, list] of [['managedAllowlist', allow], ['managedBlocklist', block], ['managedTrustedSenders', senders]]) {
             if (!list.length) continue;
             lines.push(`    Remove-Item -Path "$key\\${name}" -Recurse -Force -ErrorAction SilentlyContinue`);
             lines.push(`    New-Item -Path "$key\\${name}" -Force | Out-Null`);
@@ -924,7 +1015,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const out = document.getElementById('copyRegResult');
         try {
             const cfg = await loadEffectiveSettings();
-            await navigator.clipboard.writeText(buildRegistryScript(cfg.values, cfg.allowlist, cfg.blocklist, cfg.phishingSenders));
+            await navigator.clipboard.writeText(buildRegistryScript(cfg.values, cfg.allowlist, cfg.blocklist, cfg.trustedSenders));
             out.style.color = ''; out.textContent = 'Copied. Paste it into a .ps1 file; replace the extension ID if it differs.';
         } catch (e) {
             out.style.color = 'var(--danger-text)'; out.textContent = 'Copy failed.';
@@ -1019,7 +1110,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function showImportPreview() {
         if (!pendingImportData) return;
         const mode = document.querySelector('input[name="importMode"]:checked').value;
-        chrome.storage.local.get({ customAllowlist: [], customBlocklist: [], customPhishingSenders: [] }, (current) => {
+        chrome.storage.local.get({ customAllowlist: [], customBlocklist: [], customTrustedSenders: [] }, (current) => {
             let plan;
             try { plan = planImport(pendingImportData, current, mode); }
             catch (err) {
@@ -1078,7 +1169,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const mode = document.querySelector('input[name="importMode"]:checked').value;
         const data = pendingImportData;
 
-        chrome.storage.local.get({ customAllowlist: [], customBlocklist: [], customPhishingSenders: [] }, (current) => {
+        chrome.storage.local.get({ customAllowlist: [], customBlocklist: [], customTrustedSenders: [] }, (current) => {
             let plan;
             try { plan = planImport(data, current, mode); }
             catch (err) { alert(err.message); return; }
@@ -1145,9 +1236,9 @@ document.addEventListener('DOMContentLoaded', () => {
     chrome.storage.onChanged.addListener((changes, area) => {
         if (area !== 'local') return;
         const cacheChanged = Object.keys(changes).some(k => k.startsWith('http://') || k.startsWith('https://'));
-        if (!(changes.errorLogs || changes.resolutionHistory || cacheChanged)) return;
+        if (!(changes.errorLogs || changes.resolutionHistory || cacheChanged || changes.senderResultCache || changes.faviconCache || changes.geoCache || changes.spamMoveLog)) return;
         clearTimeout(logRenderTimer);
-        logRenderTimer = setTimeout(() => { renderErrors(); renderHistory(); renderCache(); }, 250);
+        logRenderTimer = setTimeout(() => { renderErrors(); renderHistory(); renderCache(); renderSenderLog(); renderSpamLog(); }, 250);
     });
 
     

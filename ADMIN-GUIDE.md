@@ -33,10 +33,10 @@ Anything you do **not** set stays under the user's control (all features are on 
 | managedPhishSimulationDomains | array of strings | [] | Administrator only, every webmail: training-vendor link domains; an email whose links ALL go there is left unchecked |
 | managedPhishSimulationRules | array of objects | [] | Administrator only, Gmail: phishing-simulation emails to leave unchecked (see "Administrator-only policies") |
 | managedEnableSendCheck | boolean | true | Gmail: check the links in an email when Send is pressed, and list problems (typos, unreachable or non-existent sites, look-alike, phishing and malware sites) before it goes |
-| managedEnableSenderIdentity | boolean | true | Gmail: each sender's site icon and a domain label colored by the sender checks, in the inbox list and opened emails (icons from Google's icon service; a letter instead when `managedEnableDnsThreatCheck` is false) |
+| managedEnableSenderIdentity | boolean | true | Gmail: each sender's site icon and a domain label colored by the sender checks, in the inbox list and opened emails (icons fetched once from Google's icon service and remembered 30 days; a blank space for sites without an icon, and when `managedEnableDnsThreatCheck` is false) |
 | managedEnableSenderCountry | boolean | true | Gmail: country flag of the server that delivered the email (Gmail's Received header, read emails only; IP looked up at api.country.is, at most monthly per address), else the domain ending's country, else where the sender's website is hosted |
 | managedEnableSenderDomainCheck | boolean | true | Gmail: check sender domains with the DNS threat services (domain name only) and the phishing lists. Personal-mail providers, major companies' domains and the user's own organization domain are never judged as a whole |
-| managedEnableSenderAddressCheck | boolean | true | Gmail: compare sender addresses with `managedPhishingSenders`, the user's own list and the community scam-sender list (sefinek/Blacklisted-Emails, MIT; downloaded with the phishing lists) |
+| managedEnableSenderAddressCheck | boolean | true | Gmail: compare sender addresses with `managedPhishingSenders` and the community scam-sender list (sefinek/Blacklisted-Emails, MIT; downloaded with the phishing lists); malformed addresses are flagged too |
 | managedEnableAutoSpam | boolean | true | Gmail: move emails from **flagged** senders to Spam with Gmail's own Report spam (never unverified, unknown, caution or clean ones). Inbox only; never while the user types or has emails selected; never training emails, nor mail from the user's own organization domain unless that exact address is on `managedPhishingSenders` or the user's list (a compromised account); at most once per conversation (one taken back out of Spam stays) |
 | managedEnableSpamNotice | boolean | true | Gmail: a 15-second notice at the top of Gmail with the number moved and a **Review** link to Spam |
 | managedEnableQrScanning | boolean | true | Decode QR codes in email images on the device and check their destinations |
@@ -65,11 +65,12 @@ Anything you do **not** set stays under the user's control (all features are on 
 | managedUnshortenerMethod / managedUnshortenerBody / managedUnshortenerHeaders / managedUnshortenerField | string | GET / empty | Request method, body template, headers and optional destination field for the custom unshortener |
 | managedUseUnshortenMeFallback | boolean | true | Try unshorten.me when the custom unshortener gives no answer |
 | managedAllowlist / managedBlocklist | string array | empty | Merged with the user's own lists. Blocklisted links are flagged with their destination hidden; users can reveal it with the 🔍 icon (sends the link to unshorten.me only if third-party resolution is on). The blocklist wins over the allowlist. A sender whose domain is on the allowlist is shown as trusted and never moved to Spam, unless it's on a phishing-sender list set by you or the user |
-| managedPhishingSenders | string array | empty | Gmail: your organization's known phishing senders, as full addresses (`billing@paypa1-support.com`) or whole domains (`paypa1-support.com`, subdomains included). Merged with the user's own list; users can't remove these entries. Emails from them are flagged and, with `managedEnableAutoSpam`, moved to Spam |
+| managedPhishingSenders | string array | empty | Gmail: your organization's known phishing senders, as full addresses (`billing@paypa1-support.com`) or whole domains (`paypa1-support.com`, subdomains included). Organization only (users have no such list); wins over trusted senders and the allowlist. Emails from them are flagged and, with `managedEnableAutoSpam`, moved to Spam |
+| managedTrustedSenders | string array | empty | Gmail: senders never flagged or moved to Spam (addresses or whole domains). Merged with each user's own trusted senders (Settings → Senders → Trusted senders); users can't remove these entries |
 
 ## Notes
 - **Privacy-strict baseline:** set `managedEnableThirdPartyResolution`, `managedEnableDnsThreatCheck`,
-  `managedEnableRemoteListSync` and `managedEnablePhishingFeeds` to `false` for a deployment that makes no third-party requests at all (links are still unwrapped offline; sender icons show a letter, and senders are checked only against `managedPhishingSenders` and the user's list).
+  `managedEnableRemoteListSync` and `managedEnablePhishingFeeds` to `false` for a deployment that makes no third-party requests at all (links are still unwrapped offline; sender icons are left blank, and senders are checked only against `managedPhishingSenders` and the user's list).
 - **Custom endpoints and API keys:** headers set by policy (for example an API key) are masked in the Options page and never included in user backups. Examples for URLhaus, Google Safe Browsing and Bitly are in Settings → Your own services; check each service's terms of use.
 - **Custom endpoints and host access:** Chrome cannot grant new host access by policy. Either make sure the endpoint sends CORS headers,
   or allow users to approve the one-time host prompt when saving it.
@@ -87,13 +88,25 @@ Anything you do **not** set stays under the user's control (all features are on 
 
 All of this is on by default and every part has its own key above. In short:
 
-- **What decides "flagged":** the address or domain is on `managedPhishingSenders`, the user's own list or
+- **What decides "flagged":** the address or domain is on `managedPhishingSenders` or
   the community scam-sender list (exact addresses only, never addresses at major companies' own domains); or
   the sender's domain is on a phishing list (OpenPhish, Phishing Army) or blocked by a **security** resolver
   (Quad9, Cloudflare Security, Control D, DNS4EU, your own resolver). A block by the Cloudflare Family content
   filter or by the AdGuard backup alone only shows **caution**. Gmail.com, Outlook.com and other personal-mail
   providers, major companies' domains (`PROTECTED_DOMAINS`) and your own organization's domain are never judged
-  by domain lists or DNS, only by exact addresses on a list.
+  by domain lists or DNS, only by exact addresses on a list. Also flagged: a sender domain that doesn't exist;
+  a malformed address (encoded part, more than 64 characters before the @, two @, invalid domain); and an email
+  that shows enough signs of forgery itself. Signs are weighted (strong ones flag on their own, weaker ones add
+  up): forged Gmail delivery records copied from older emails, headers claiming several unrelated sending services,
+  bulk-mail placeholders, repeated From/Subject/Date lines, a "To" line hiding the real recipient, a padded subject
+  or sender name, an unnamed ("noname") or dangerous attachment, and links flagged as dangerous (all of them, or
+  two or more, flag the email; one among several only makes it Caution). Headers are read for opened emails and
+  read emails in the list, never for unread ones.
+- **Trusted senders:** users add their own in Settings → Senders → Trusted senders; `managedTrustedSenders` adds
+  yours. They are never flagged or moved; `managedPhishingSenders` still wins.
+- **Logging:** Settings → Logging → *Senders: icons & flags* lists every sender checked recently with its icon,
+  country, verdict, reasons and what was checked; *Moved to Spam* lists each move, failed move and rescue. The
+  application log has a readable line for each of these.
 - **How emails are moved:** with Gmail's own **Report spam** button, which also reports the sender to Google, as
   if the user had clicked it. If Gmail asks "Report spam and unsubscribe?", only plain Report spam is chosen.
   Only from the inbox (and its category tabs), never while the user is typing, has a menu or dialog open, or has

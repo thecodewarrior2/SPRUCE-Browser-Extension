@@ -150,6 +150,12 @@
       "paypa1-support.example"
     ]
   },
+  "managedTrustedSenders": {
+    "Value": [
+      "office@partner.example",
+      "partner.example"
+    ]
+  },
   "managedHidePopupSettingsButton": {
     "Value": false
   },

@@ -31,7 +31,7 @@
     },
     "managedEnableSenderIdentity": {
       "title": "Sender Icons and Domain Labels (Gmail)",
-      "description": "Show each sender's site icon and a label with its domain, colored by the sender checks, in the Gmail inbox list and in opened emails. Icons come from Google's icon service (only the site name is sent); with managedEnableDnsThreatCheck false a letter is shown instead and nothing is requested.",
+      "description": "Show each sender's site icon and a label with its domain, colored by the sender checks, in the Gmail inbox list and in opened emails. Icons are fetched once by the extension from Google's icon service (only the site name is sent) and remembered for 30 days; a site without an icon, or managedEnableDnsThreatCheck false, gets a blank space.",
       "type": "boolean"
     },
     "managedEnableSenderCountry": {
@@ -46,12 +46,12 @@
     },
     "managedEnableSenderAddressCheck": {
       "title": "Check Sender Addresses Against Phishing Lists (Gmail)",
-      "description": "Compare each sender's address, on the device, with managedPhishingSenders, the user's own list and the community scam-sender list (sefinek/Blacklisted-Emails, downloaded with the phishing lists when managedEnablePhishingFeeds is true).",
+      "description": "Compare each sender's address, on the device, with managedPhishingSenders and the community scam-sender list (sefinek/Blacklisted-Emails, downloaded with the phishing lists when managedEnablePhishingFeeds is true). Malformed addresses (encoded parts, more than 64 characters before the @, two @, invalid domain) are flagged too.",
       "type": "boolean"
     },
     "managedEnableAutoSpam": {
       "title": "Move Emails From Flagged Senders to Spam (Gmail)",
-      "description": "Move emails whose sender is flagged (on a phishing-sender list, or its domain on a phishing list or blocked by a security service) to Spam using Gmail's own Report spam. Never unverified, unknown, caution or clean senders; only from the inbox; never while the user is typing or has emails selected; never phishing-simulation emails (managedPhishSimulationDomains / managedPhishSimulationRules) or mail from the user's own organization domain (unless that exact address is listed in managedPhishingSenders or by the user, e.g. a compromised account). A conversation is moved at most once: one the user takes back out of Spam stays in the inbox.",
+      "description": "Move flagged emails to Spam using Gmail's own Report spam. An email is flagged when its sender is on a phishing-sender list, its domain is on a phishing list, blocked by a security service or doesn't exist, its address is malformed, or the email itself shows enough signs of forgery (forged delivery headers, links or attachments flagged as dangerous…). Never unverified, caution or clean ones; only from the inbox; never while the user is typing or has emails selected; never phishing-simulation emails (managedPhishSimulationDomains / managedPhishSimulationRules), trusted senders, or mail from the user's own organization domain (unless that exact address is listed in managedPhishingSenders, e.g. a compromised account). A conversation is moved at most once: one the user takes back out of Spam stays in the inbox.",
       "type": "boolean"
     },
     "managedEnableSpamNotice": {
@@ -289,11 +289,20 @@
     },
     "managedPhishingSenders": {
       "title": "Managed Phishing Senders (Gmail)",
-      "description": "Known phishing or scam senders: full addresses (billing@paypa1-support.com) or whole domains (paypa1-support.com, which includes its subdomains; \"@domain\" also accepted). Emails from them are flagged and, when managedEnableAutoSpam is true, moved to Spam. Merged with the user's own list; entries set here can't be removed by the user and win over the allowlist.",
+      "description": "Gmail: your organization's known phishing or scam senders: full addresses (billing@paypa1-support.com) or whole domains (paypa1-support.com, which includes its subdomains; \"@domain\" also accepted). Emails from them are flagged and, when managedEnableAutoSpam is true, moved to Spam. Users can't change this list, and it wins over trusted senders and the allowlist.",
       "type": "array",
       "items": {
         "type": "string",
         "description": "Email address or domain (e.g., billing@paypa1-support.com or paypa1-support.com)"
+      }
+    },
+    "managedTrustedSenders": {
+      "title": "Managed Trusted Senders (Gmail)",
+      "description": "Senders that are never flagged or moved to Spam: full addresses or whole domains (subdomains included). Merged with the user's own trusted senders (Settings → Senders → Trusted senders); users can't remove these entries. managedPhishingSenders still wins.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "description": "Email address or domain (e.g., office@partner.org or partner.org)"
       }
     },
     "managedHidePopupSettingsButton": {

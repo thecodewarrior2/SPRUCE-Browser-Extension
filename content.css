@@ -29,19 +29,15 @@ a:focus + .unshortener-icon.unshortener-hover-reveal,
     flex: none;
 }
 .unshortener-sender-icon img,
-.unshortener-sender-mono {
+.unshortener-sender-blank {
     width: 16px;
     height: 16px;
     border-radius: 3px;
     flex: none;
 }
-.unshortener-sender-mono {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font: bold 10px/1 Arial, sans-serif;
-    color: #ffffff;
-    background: #5f6368;
+/* A site without an icon gets an empty space of the same size (never a generic globe). */
+.unshortener-sender-blank {
+    display: inline-block;
 }
 .unshortener-sender-flag {
     font-size: 13px;
