@@ -1,5 +1,15 @@
 # Changelog
 
+## 5.46 — Lighter on memory, battery and the user's own actions (Firefox build, same as Chrome 5.46)
+
+- **Large lists use about a third of the memory.** The downloaded phishing lists, the scam-sender list, the shortener lists and the remembered Spam moves are kept as one sorted block of text with a small index and searched by halving, instead of a table with an entry per item: for Phishing Army (about 153,000 domains), 4.9 MB instead of 15.7 MB, built in about 36 ms instead of 95 ms each time the background starts (measured). Each lookup still takes about a microsecond. Lists are now stored sorted. Results are unchanged.
+- **Moving to Spam waits until you've been idle in Gmail for 10 seconds** (no click, key, scrolling or mouse movement over the list), so rows never disappear under the pointer and Gmail's Undo for your own action isn't replaced by one for the move.
+- **The monitor runs only while the Gmail tab is shown**; it stops completely while the tab is in the background.
+- **Waiting moves no longer re-read the whole move memory**: the checks that can't change (an email open, Multiple Inboxes, split view) come first, and the memory is kept in the page and read again only when it changes.
+- **Sender icons:** a site is remembered as having no icon only when Google says so (HTTP 404). A server error, a web filter's block page or anything that isn't an image is no longer saved for 30 days; the icon is asked for again later. Icons larger than 8 KB (normally 1–3 KB) are left blank instead of stored.
+- The list of emails already logged on a page is capped at 2,000.
+- Admin guide: what Report spam teaches Gmail, and how Not spam undoes it.
+
 ## 5.45 — Moving to Spam no longer gets stuck (Firefox build, same as Chrome 5.45)
 
 - **Fixed: moving emails to Spam could stop until Gmail was reloaded**, especially with several moves one after another. Causes found and fixed:

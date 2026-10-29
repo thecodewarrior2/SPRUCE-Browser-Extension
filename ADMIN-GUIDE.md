@@ -177,11 +177,18 @@ All of this is on by default and every part has its own key above. In short:
 - **How emails are moved:** with Gmail's own **Report spam** button, which also reports the sender to Google, as
   if the user had clicked it. If Gmail asks "Report spam and unsubscribe?", only plain Report spam is chosen.
   Only from the inbox (and its category tabs), never while the user is typing, has a menu or dialog open, or has
-  selected emails. Moving never switches itself off: a monitor in the Gmail page re-checks
-  every 5 seconds for flagged emails still in the inbox, restarts a move that stalled, and after three passes in
+  selected emails, and only after 10 seconds without any click, key press, scrolling or mouse movement over
+  the list, so rows never disappear under the pointer and Gmail's **Undo** for the user's own action isn't
+  replaced by one for the move. Moving never switches itself off: while the Gmail tab is shown (never while
+  it's in the background), a monitor in the Gmail page re-checks every 5 seconds for flagged emails still in the inbox, restarts a move that stalled, and after three passes in
   which Gmail moved nothing it pauses (15 seconds, doubling up to 10 minutes) and tries again; the application
   log says so. A click Gmail ignored is forgotten and retried; nothing is left selected. Icons and warnings keep
   working throughout.
+- **What Report spam teaches Gmail:** exactly what a user's own click does. Gmail learns to send that sender's
+  future mail to the user's Spam, and Google counts the report against the sender. For a false positive, the
+  user (or you) clicks **Not spam** in the Spam folder: that reverses Gmail's learning, and the extension never
+  moves the conversation again. Add the sender to `managedTrustedSenders` so it's never flagged. Gmail has no
+  quieter way to move an email to Spam.
 - **Taken back out of Spam stays out:** each conversation is remembered just before it's moved, and so is
   each one the user takes out of Spam (Not spam / Move to Inbox), whoever put it there
   (`spamMovedThreads` and `spamRescuedThreads`, two separate lists of the newest 50,000 each, no time limit).

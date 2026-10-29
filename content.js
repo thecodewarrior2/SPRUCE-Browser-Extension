@@ -1932,7 +1932,7 @@ const SENDER_RESULTS_MAX = 1000;
 const messageInfos = new Map();            // Gmail message id → Promise<{ fh, ip, an } | null>
 const senderIcons = new Map();             // site → Promise<data: URL | ''>
 const openedStates = new WeakMap();        // message body → what's known about its sender (opened emails)
-const loggedVerdicts = new Set();          // emails whose own verdict was already logged on this page
+const loggedVerdicts = new Set();          // emails whose own verdict was already logged on this page (newest 2,000)
 const spamQueue = new Map();               // conversation → { kind: 'row' | 'thread', address, reason, msgId, since }
 const spamAttempted = new Set();           // conversations Gmail was asked to move on this page: never asked twice
 const spamTries = new Map();               // conversation → clicks Gmail ignored (tried again up to SPAM_MAX_TRIES)
@@ -2178,6 +2178,7 @@ function removeSenderDecorations(root = document) {
 function logEmailVerdict(id, address, base, final) {
     if (!final || final.status === base.status || loggedVerdicts.has(`${id}|${final.status}`)) return;
     loggedVerdicts.add(`${id}|${final.status}`);
+    if (loggedVerdicts.size > 2000) loggedVerdicts.delete(loggedVerdicts.values().next().value);   // oldest first
     reportEvent(final.status === 'flagged' ? 'warning' : 'info', `Email from ${address}: ${STATUS_TEXT[final.status] || final.status} (the sender alone was ${STATUS_TEXT[base.status] || base.status}). Why: ${final.reasons.join(' ')}`);
 }
 
@@ -2378,7 +2379,29 @@ function spamMonitor() {
     }
     if (spamQueue.size && !spamMoveRunning && !spamMoveTimer) scheduleSpamMoves();
 }
-if (SITE.id === 'gmail') setInterval(() => guarded('Watching moves to Spam', spamMonitor), 5000);
+// Runs only while the Gmail tab is shown: stopped while it's in the background, so it never wakes the
+// computer for nothing (a background tab can't move emails anyway).
+let spamMonitorTimer = null;
+function setSpamMonitor() {
+    const on = SITE.id === 'gmail' && !document.hidden;
+    if (on && !spamMonitorTimer) spamMonitorTimer = setInterval(() => guarded('Watching moves to Spam', spamMonitor), 5000);
+    else if (!on && spamMonitorTimer) { clearInterval(spamMonitorTimer); spamMonitorTimer = null; }
+}
+setSpamMonitor();
+document.addEventListener('visibilitychange', setSpamMonitor);
+
+// The user's own activity in Gmail (a click, a key, the wheel, the mouse moving over the list).
+// Moving waits until there has been none for SPAM_QUIET_MS: rows never disappear under the pointer,
+// and Gmail's Undo for the user's own action isn't replaced by one for ours.
+const SPAM_QUIET_MS = 10000;
+let lastUserActivity = 0;
+function noteUserActivity(e) {
+    if (!e.isTrusted) return;                       // our own clicks on Gmail's buttons don't count
+    if (e.type === 'pointermove' && !(e.target && e.target.closest && e.target.closest('[role="main"], tr.zA'))) return;
+    lastUserActivity = Date.now();
+}
+if (SITE.id === 'gmail') for (const t of ['pointerdown', 'keydown', 'wheel', 'pointermove']) document.addEventListener(t, noteUserActivity, { capture: true, passive: true });
+function quietRemaining() { return Math.max(0, lastUserActivity + SPAM_QUIET_MS - Date.now()); }
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 async function waitFor(test, ms) {
@@ -2445,7 +2468,7 @@ async function confirmSpamDialog(before) {
 
 // Still allowed to act, right now: the setting, the view and the user (checked before every click).
 function mayActNow() {
-    return !!lastSettings.enableAutoSpam && !document.hidden && gmailViewAllowsAutoSpam(location.hash) && !userBusy();
+    return !!lastSettings.enableAutoSpam && !document.hidden && gmailViewAllowsAutoSpam(location.hash) && !userBusy() && !quietRemaining();
 }
 // Each row still shows the conversation it was checked for (Gmail can redraw a row for another one).
 function rowsStillMatch(items) {
@@ -2543,15 +2566,22 @@ function onRescueClick(e) {
 }
 if (SITE.id === 'gmail') document.addEventListener('mousedown', onRescueClick, true);
 
+// The conversations moved or rescued (see recordSpamMoves), kept in the page as one compact list (see
+// compactSet) and read again only when they change, not on every try. Resolves to { has(thread) },
+// or null if they can't be read (then nothing is moved).
+let spamMemory = null;
 function movedThreads() {
-    return new Promise(resolve => {
-        setTimeout(() => resolve(null), 8000);
-        try {
-            chrome.storage.local.get({ spamMovedThreads: {}, spamRescuedThreads: {} }, (r) => resolve(!chrome.runtime.lastError && r && r.spamMovedThreads && r.spamRescuedThreads
-                ? Object.assign({}, r.spamMovedThreads, r.spamRescuedThreads) : null));
-        }
-        catch (e) { resolve(null); }
-    });
+    if (!spamMemory) {
+        spamMemory = new Promise(resolve => {
+            setTimeout(() => resolve(null), 8000);
+            try {
+                chrome.storage.local.get({ spamMovedThreads: {}, spamRescuedThreads: {} }, (r) => resolve(!chrome.runtime.lastError && r && r.spamMovedThreads && r.spamRescuedThreads
+                    ? compactSet([...Object.keys(r.spamMovedThreads), ...Object.keys(r.spamRescuedThreads)]) : null));
+            }
+            catch (e) { resolve(null); }
+        }).then(m => { if (!m) spamMemory = null; return m; });
+    }
+    return spamMemory;
 }
 
 // The shown inbox row of a queued conversation, with its verdict; false when the row is shown without
@@ -2573,9 +2603,7 @@ async function runSpamMoves() {
     try {
         // Paused after repeated failures, hidden tab, not the inbox or the user is busy: wait (every
         // exit below looks again later while anything is queued).
-        if (Date.now() < spamPausedUntil || document.hidden || !gmailViewAllowsAutoSpam(location.hash) || userBusy()) return;
-        const memory = await movedThreads();
-        if (!memory) return;                                  // can't tell what was moved before: wait
+        if (Date.now() < spamPausedUntil || document.hidden || !gmailViewAllowsAutoSpam(location.hash) || userBusy() || quietRemaining()) return;
         const current = currentThreadKey();
         // Several lists on the inbox page (Multiple Inboxes, Priority Inbox sections): some can show
         // conversations that aren't in the inbox, so nothing is moved from the list there.
@@ -2589,11 +2617,14 @@ async function runSpamMoves() {
             if (!splitViewLogged) { splitViewLogged = true; reportEvent('info', 'Emails from flagged senders are not moved to Spam while Gmail shows a conversation beside the list (split view); they are still marked.'); }
             return;
         }
+        // Only now the memory (after the cheap checks above, so a wait never reads it).
+        const memory = await movedThreads();
+        if (!memory) return;                                  // can't tell what was moved before: wait
         const rows = [];
         let open = null;
         for (const [thread, it] of [...spamQueue]) {
             const drop = () => { spamQueue.delete(thread); spamAttempted.add(thread); };
-            if (memory[thread]) { drop(); continue; }        // moved before, or the user took it back out of Spam
+            if (memory.has(thread)) { drop(); continue; }        // moved before, or the user took it back out of Spam
             // Not shown for a long time: leaves the queue (the monitor queues it again if it comes back).
             if (Date.now() - it.since > SPAM_WAIT_MAX_MS) { spamQueue.delete(thread); continue; }
             it.thread = thread;
@@ -2663,8 +2694,12 @@ async function runSpamMoves() {
     } finally {
         spamMoveRunning = 0;
         if (spamQueue.size) {                                 // waiting (user busy, list hidden, paused): look again
-            scheduleSpamMoves(spamRetryDelay);
-            spamRetryDelay = Math.min(spamRetryDelay * 2, 30000);
+            const quiet = quietRemaining();
+            if (quiet) scheduleSpamMoves(quiet + 300);        // right when the user's quiet period ends
+            else {
+                scheduleSpamMoves(spamRetryDelay);
+                spamRetryDelay = Math.min(spamRetryDelay * 2, 30000);
+            }
         }
     }
 }
@@ -2776,6 +2811,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'managed' && SITE.id === 'gmail') { spamQueue.clear(); senderResults.clear(); removeSenderDecorations(); scheduleScan(); return; }
     if (area !== 'local') return;
     if (changes.senderMessageCache && changes.senderMessageCache.newValue === undefined) senderMessageCache = null;   // cleared in Settings
+    if (changes.spamMovedThreads || changes.spamRescuedThreads) spamMemory = null;   // read again when next needed
     let relevant = false;
     for (const key of ['enableLinkUnmasking', 'enableTrackingPixelBlocking', SITE.settingKey]) {
         if (key && changes[key]) { lastSettings[key] = changes[key].newValue; relevant = true; }
