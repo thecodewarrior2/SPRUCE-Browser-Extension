@@ -4,6 +4,21 @@ Every setting, plus the allowlist, blocklist and custom resolver, can be set and
 Locked settings show 🔒 in the Options page and the toolbar popup and cannot be changed by users.
 Anything you do **not** set stays under the user's control (all features are on by default).
 
+## Contents
+
+- [Set the policy](#set-the-policy)
+- [Windows: Microsoft Intune and Group Policy](#windows-microsoft-intune-and-group-policy)
+- [macOS](#macos)
+- [Keys](#keys)
+- [Notes](#notes)
+- [Feature compatibility by webmail](#feature-compatibility-by-webmail)
+- [Sender icons and moving phishing to Spam (Gmail)](#sender-icons-and-moving-phishing-to-spam-gmail)
+- [Deploying](#deploying)
+- [Organization lists](#organization-lists)
+- [Administrator-only policies](#administrator-only-policies)
+- [Resetting settings](#resetting-settings)
+- [Google Web Risk for threat checks](#google-web-risk-for-threat-checks)
+
 ## Set the policy
 Firefox passes an add-on's policy from `policies` → `3rdparty` → `Extensions` → the add-on ID
 (`spruce@spruce-browser-extension`) to the add-on. The same `policies.json` can also install it:
@@ -285,13 +300,22 @@ publish the add-on on addons.mozilla.org (listed or unlisted; Firefox installs o
 then deploy `policies.json` as above with `installation_mode` set to `force_installed` (users can't
 remove it) or `normal_installed`. Verify at `about:policies` and `about:addons`.
 
+## Organization lists
+
+Added to each user's own lists (users can add to them, not remove from them):
+
+- `managedTrustedSenders`: senders never flagged or moved to Spam (addresses or whole domains), for
+  example your phishing-training provider or a false positive.
+- `managedAllowlist`: sites whose links are never checked or changed.
+- `managedBlocklist`: sites whose links are always flagged, their destination hidden.
+
 ## Administrator-only policies
 
 These keys exist only in the policy. The extension has no setting for them, users can't see or change
 them, and they're not included in backups. **Copy policies.json** doesn't produce them either, so add
 them by hand.
 
-### Hide the Settings button and recent activity
+### Hide the Settings button, recent activity and the Donate button
 
 ```json
 {

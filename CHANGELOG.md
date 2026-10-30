@@ -1,5 +1,10 @@
 # Changelog
 
+## 5.78 — Documentation (Firefox build, same as Chrome 5.78)
+
+- **Every administrator-only policy has its own clear entry** in the admin guide and Help: hiding the popup's Settings button (`managedHidePopupSettingsButton`, a convenience, not a lock: Settings stay reachable from `about:addons`, and locked settings can't be changed there), hiding recent activity (`managedHideRecentActivity`), hiding the Donate button in Help → About (`managedHideDonateButton`), and the phishing-simulation rules. The organization lists (`managedTrustedSenders`, `managedAllowlist`, `managedBlocklist`) are described too.
+- **A short README; the full documentation is in `docs/`.** The README now says what the extension is, in a few lines, and links the documents: `docs/FEATURES.md` (every feature, the toolbar button, Settings, Link Inspector, Logging, Help, and which webmail supports what), the admin guide (now with a contents list and its own section for the organization lists), the privacy policy, the architecture and development guides, and `docs/README.md`, an index of the folder.
+
 ## 5.77 — A helper, not a guarantee (Firefox build, same as Chrome 5.77)
 
 - **Wording that promises nothing.** S.P.R.U.C.E+ is a best-effort helper and one small layer of protection, and the text now says so: Help (How it works, About), the README, the privacy policy and the architecture guide carry a short note that it can miss dangerous emails and flag genuine ones, and doesn't replace the webmail's and the organization's own email security or the reader's judgment.
