@@ -478,7 +478,7 @@
                         Address: https://urlhaus-api.abuse.ch/v1/host/<br>Method: POST<br>Body: host={hostname}<br>Headers: Auth-Key: YOUR_KEY</div>
                     <div class="code-example"><strong>Google Safe Browsing v4</strong> (API key from Google Cloud; check the API's terms of use, as the free API is for non-commercial use and Google's commercial equivalent is Web Risk)<br>
                         Address: https://safebrowsing.googleapis.com/v4/threatMatches:find?key=YOUR_KEY<br>Method: POST<br>
-                        Body: {"client":{"clientId":"gmail-link-unshortener","clientVersion":"1"},"threatInfo":{"threatTypes":["MALWARE","SOCIAL_ENGINEERING","UNWANTED_SOFTWARE"],"platformTypes":["ANY_PLATFORM"],"threatEntryTypes":["URL"],"threatEntries":[{"url":"{url}"}]}}</div>
+                        Body: {"client":{"clientId":"spruce","clientVersion":"1"},"threatInfo":{"threatTypes":["MALWARE","SOCIAL_ENGINEERING","UNWANTED_SOFTWARE"],"platformTypes":["ANY_PLATFORM"],"threatEntryTypes":["URL"],"threatEntries":[{"url":"{url}"}]}}</div>
                     <p style="color: var(--text-muted);">Replies are understood automatically for DNS-over-HTTPS (<code>Answer</code>), Safe Browsing (<code>matches</code>), URLhaus (<code>query_status</code>) and simple APIs returning <code>malicious</code>, <code>blocked</code> or similar. For anything else, set <strong>Flag field</strong> to the reply field that indicates a threat. A reply that is not understood (for example an invalid-key error) counts as "no answer", never as "safe".</p>
                 </details>
             </div>

@@ -1,5 +1,10 @@
 # Changelog
 
+## 5.75 — First public release
+
+- **First public release** of S.P.R.U.C.E+, and its first publication in the Chrome Web Store.
+- The logo (`branding/logo.png`, `logo.svg`) has a transparent background, with a light-lettered version for dark backgrounds (`logo-dark-background`); the README shows the one that suits the reader's theme.
+
 ## 5.74 — Store listing material; two fixes found while making it
 
 - **Fixed: an opened email was amber where the inbox showed it red.** A sender using a brand's name on another address ("PayPal Service" from an address that isn't PayPal's) was red in the inbox list but only "be careful" once opened, because the opened email's verdict didn't count the name. It now counts the same signs as the list (a brand's name, or a colleague's, on another address), and the warning appears once, in the verdict.
@@ -16,10 +21,9 @@
 - **New: `tools/build-webstore.sh`** builds the zip to upload to the Chrome Web Store or Edge Add-ons: the release files without the manifest's `key`, which the stores refuse on a new item's first upload. The key stays in the project, so the test version keeps its ID.
 - The private signing key (`*.pem`) and built packages are now left out of the project by `.gitignore`.
 
-## 5.71 — New name: S.P.R.U.C.E+
+## 5.71 — Name and icon: S.P.R.U.C.E+
 
-- **Renamed to S.P.R.U.C.E+** (Spam & Phishing Risk URL Checker Extension+), with a new icon: a shield with a magnifying glass. The toolbar icon, the Settings page, the popup and the extension's notices use the new name and icon; while the extension isn't checking an email, the toolbar shows the same icon in gray.
-- **Nothing else changes:** the extension ID, settings and every policy name stay the same, so installs update in place and existing policies keep working.
+- **Name: S.P.R.U.C.E+** (Spam & Phishing Risk URL Checker Extension+), with its icon: a shield with a magnifying glass. The toolbar icon, the Settings page, the popup and the extension's notices use them; while the extension isn't checking an email, the toolbar shows the same icon in gray.
 - Logos and icons for documents and announcements (PNG and SVG, for light and dark backgrounds) are in the `branding` folder of the project.
 
 ## 5.70 — "Call this number" scams caught; OneDrive no longer flagged
