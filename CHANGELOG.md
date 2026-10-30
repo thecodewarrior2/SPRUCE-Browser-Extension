@@ -1,5 +1,12 @@
 # Changelog
 
+## 5.52 — Sender photos and verified logos
+
+- **Sender photos and verified brand logos in the inbox and in opened emails** (Gmail), in place of the site icon, round like Gmail's own. When you open an email, the photo or logo Gmail shows beside its sender is remembered for that address, so the inbox list shows it from then on. Inspired by Simplify Gmail's sender avatars.
+- **Your own organization's people come first:** profile photos are used only for senders on your own organization's domain (its directory). For outside senders only a brand logo Gmail displayed for an email that passed Gmail's sender verification (DMARC) is used: Gmail shows a brand's BIMI logo only after checking it. Personal photos of outside senders are never used, since anyone can make their profile photo look like a bank's logo.
+- **Cached and kept current:** each photo is fetched once from Gmail's own image host and kept in the icon store (raw image, per address). When Gmail shows a different photo for the same sender (a changed photo), the new one replaces it at once and every icon of that sender on the page is redrawn; the same photo is checked again weekly. Delete now and Logging → Senders → Clear remove them.
+- New setting **Sender photos and verified logos** (on by default; policy `managedEnableSenderAvatars`). The compatibility chart has a new row for it.
+
 ## 5.51 — Sender features on every webmail (basic), and the webmail's own warnings
 
 - **Sender labels and checks now reach every supported webmail.** On a site without an entry of its own (Outlook, Proton, Yahoo, AOL, Zoho, iCloud, Fastmail, GMX), a generic profile finds inbox rows and senders through the page's accessibility labels, the markup screen readers use: rows by their roles, the sender's address in a tooltip, a mail link or a data attribute, the sender of an opened email as the address shown just above its body, and unread state from the row's label. Those sites get the sender icon, country flag, label and checks in the inbox list and in opened emails, marked **Basic** in the compatibility chart (◐ in the README). A row that doesn't show the sender's address gets no label.

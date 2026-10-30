@@ -39,6 +39,11 @@
       "description": "When a sender's site has no icon of its own: use its parent domain's icon (alerts.brand.com -> brand.com, through Google's icon service as usual), else ask DuckDuckGo's icon service (icons.duckduckgo.com; only the site name is sent, only for such sites, at most once a week per site). Such icons are re-checked weekly and replaced by the site's own icon as soon as it has one. False: a blank space instead. Requires managedEnableSenderIdentity and managedEnableDnsThreatCheck.",
       "type": "boolean"
     },
+    "managedEnableSenderAvatars": {
+      "title": "Sender Photos and Verified Logos (Gmail)",
+      "description": "Show, in place of the site icon, the photo or logo Gmail itself shows beside a sender in an opened email, remembered per address so the inbox list shows it too: profile photos of people in the user's own organization (its domain), and brand logos Gmail showed for an email that passed its sender verification (BIMI, DMARC pass). Personal photos of outside senders are never used. Fetched once from Gmail's own image host and checked again weekly; a changed photo replaces the old one. Requires managedEnableSenderIdentity and managedEnableDnsThreatCheck.",
+      "type": "boolean"
+    },
     "managedEnableSenderCountry": {
       "title": "Sender Country Flags (Gmail)",
       "description": "Show a country flag for each sender: the country of the server that delivered the email (from Gmail's own Received header, read emails only; the server's IP address is looked up at api.country.is, at most once a month per address), else the country named by the domain ending, else where the sender's website is hosted. With managedEnableDnsThreatCheck false only the domain ending is used.",

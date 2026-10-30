@@ -20,6 +20,9 @@
   "managedEnableSenderIconFallback": {
     "Value": true
   },
+  "managedEnableSenderAvatars": {
+    "Value": true
+  },
   "managedEnableSenderCountry": {
     "Value": true
   },
