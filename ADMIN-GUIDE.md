@@ -1,9 +1,5 @@
 # Deploying S.P.R.U.C.E+ in Safari
 
-S.P.R.U.C.E+ (Spam & Phishing Risk URL Checker Extension+) was called Gmail Link Unshortener before
-version 5.71. Only the name changed: the app's bundle identifier and the extension's settings stay the
-same. The Mac app is now called SPRUCE.app.
-
 Safari has **no extension policies**: unlike Chrome and Firefox, an administrator can't set or lock an
 extension's settings. What device management can do in Safari is install the app that carries the
 extension, keep the extension turned on, and allow it on your webmail sites. Everything inside the
@@ -16,7 +12,7 @@ A Safari extension comes inside a small app (Mac, and iPhone/iPad). Build it onc
 - **On a Mac with Xcode:** run `tools/build-safari.sh`. It uses Apple's converter
   (`xcrun safari-web-extension-converter`) to make an Xcode project in `build/safari/`, with the
   extension copied inside, and builds the Mac app (signed "to run locally"). Set `BUNDLE_ID` to an
-  identifier under your own domain (for example `org.yourdistrict.LinkUnshortener`), and `TEAM_ID` to
+  identifier under your own domain (for example `org.yourdistrict.SPRUCE`), and `TEAM_ID` to
   your Apple Developer team to sign with it.
 - **On GitHub:** the **Safari build** workflow (`.github/workflows/safari.yml`) runs the same script on a
   GitHub Mac for every push to the `safari` branch, or when started by hand, and offers the app and the

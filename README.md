@@ -1,8 +1,11 @@
-<p align="center"><img src="branding/logo.png" alt="S.P.R.U.C.E+ — Spam &amp; Phishing Risk URL Checker Extension+" width="640"></p>
+<p align="center"><picture>
+  <source media="(prefers-color-scheme: dark)" srcset="branding/logo-dark-background.png">
+  <img src="branding/logo.png" alt="S.P.R.U.C.E+ — Spam &amp; Phishing Risk URL Checker Extension+" width="640">
+</picture></p>
 
 # S.P.R.U.C.E+
 
-**Spam & Phishing Risk URL Checker Extension+**, formerly *Gmail Link Unshortener & Tracker Blocker*.
+**Spam & Phishing Risk URL Checker Extension+**.
 Logos and icons (PNG and SVG, for light and dark backgrounds) are in [`branding/`](branding).
 
 A Safari (Manifest V3) web extension that shows where the links in your email **really** go before you

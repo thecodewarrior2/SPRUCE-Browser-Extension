@@ -10,7 +10,7 @@
 # Extensions. To give it to others, sign it with your team (see Help → Deploying in organizations).
 #
 # Optional settings (environment variables):
-#     BUNDLE_ID   the app's bundle identifier (default org.example.LinkUnshortener; use your own domain)
+#     BUNDLE_ID   the app's bundle identifier (default org.example.SPRUCE; use your own domain)
 #     APP_NAME    the app's name (default "SPRUCE"; Safari shows the extension as S.P.R.U.C.E+)
 #     PLATFORMS   "all" (Mac and iPhone/iPad project, the default) or "macos"
 #     TEAM_ID     your Apple Developer team: the Mac app is then signed with it instead of ad hoc
@@ -19,7 +19,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="$ROOT/build/safari"
 APP_NAME="${APP_NAME:-SPRUCE}"
-BUNDLE_ID="${BUNDLE_ID:-org.example.LinkUnshortener}"
+BUNDLE_ID="${BUNDLE_ID:-org.example.SPRUCE}"
 PLATFORMS="${PLATFORMS:-all}"
 TEAM_ID="${TEAM_ID:-}"
 

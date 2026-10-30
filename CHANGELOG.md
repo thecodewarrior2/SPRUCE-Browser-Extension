@@ -1,5 +1,10 @@
 # Changelog
 
+## 5.75 — First public release (Safari build, same as Chrome 5.75)
+
+- **First public release** of S.P.R.U.C.E+, and its first publication in the App Store (the app's default bundle identifier is `org.example.SPRUCE`; use your own domain).
+- The logo (`branding/logo.png`, `logo.svg`) has a transparent background, with a light-lettered version for dark backgrounds (`logo-dark-background`); the README shows the one that suits the reader's theme.
+
 ## 5.74 — Store listing material; two fixes found while making it (Safari build, same as Chrome 5.74)
 
 - **Fixed: an opened email was amber where the inbox showed it red.** A sender using a brand's name on another address ("PayPal Service" from an address that isn't PayPal's) was red in the inbox list but only "be careful" once opened, because the opened email's verdict didn't count the name. It now counts the same signs as the list (a brand's name, or a colleague's, on another address), and the warning appears once, in the verdict.
@@ -15,11 +20,11 @@
 - **Shorter description** (111 characters), the same in every build: Safari shows at most 112, and the Chrome Web Store refuses one over 132.
 - The private signing key (`*.pem`) is now left out of the project by `.gitignore`.
 
-## 5.71 — New name: S.P.R.U.C.E+ (Safari build, same as Chrome 5.71)
+## 5.71 — Name and icon: S.P.R.U.C.E+ (Safari build, same as Chrome 5.71)
 
-- **Renamed to S.P.R.U.C.E+** (Spam & Phishing Risk URL Checker Extension+), with a new icon: a shield with a magnifying glass. The toolbar icon, the Settings page, the popup and the extension's notices use the new name and icon; while the extension isn't checking an email, the toolbar shows the same icon in gray.
-- **Nothing else changes:** settings and the app's bundle identifier stay the same, so the app updates in place. The Mac app built by `tools/build-safari.sh` is now called **SPRUCE.app** (letters only, which Xcode needs); Safari shows the extension as S.P.R.U.C.E+.
+- **Name: S.P.R.U.C.E+** (Spam & Phishing Risk URL Checker Extension+), with its icon: a shield with a magnifying glass. The toolbar icon, the Settings page, the popup and the extension's notices use them; while the extension isn't checking an email, the toolbar shows the same icon in gray.
 - Logos and icons for documents and announcements (PNG and SVG, for light and dark backgrounds) are in the `branding` folder of the project.
+- The Mac app built by `tools/build-safari.sh` is called **SPRUCE.app** (letters only, which Xcode needs); Safari shows the extension as S.P.R.U.C.E+.
 
 ## 5.70 — "Call this number" scams caught; OneDrive no longer flagged (Safari build, same as Chrome 5.70)
 
@@ -323,7 +328,7 @@ From a phishing sample that wasn't caught (a fake "AHS Warranty" email): it now 
 
 - **The add-on now targets Firefox 140 or later only.** The entries below describe the Chrome versions this build comes from.
 - **Background:** a background event page (`background.html`) replaces the Chrome service worker. The QR/PDF scanner (`scanner.js`) runs in that page, which already has a DOM, so the Chrome offscreen document (`scanner.html`, the `offscreen` permission) is gone. Chrome's built-in `BarcodeDetector` path is removed; the bundled QR decoder reads every code.
-- **Manifest:** Gecko add-on ID `link-unshortener@gmail-link-scanner` and a data-collection declaration replace the Chrome `key`; `managed_schema` and `match_origin_as_fallback` are removed.
+- **Manifest:** a Gecko add-on ID and a data-collection declaration replace the Chrome `key`; `managed_schema` and `match_origin_as_fallback` are removed.
 - **Enterprise policy:** settings are locked with Firefox enterprise policy (`policies` → `3rdparty` → `Extensions` → add-on ID). Settings → **Copy policies.json** replaces *Copy as policy JSON* (Google Workspace) and *Copy registry script* (Edge/Chrome). `schema.json` is removed; `policy-example.json`, ADMIN-GUIDE.md and Help → Deploying in organizations describe Firefox deployment.
 - **Microsoft Intune / Group Policy:** Settings → **Copy Intune script** generates PowerShell that writes the policy to `HKLM\SOFTWARE\Policies\Mozilla\Firefox` (install via `ExtensionSettings`, the add-on's settings as one JSON value under `3rdparty\Extensions`). On/off settings also accept registry DWORD 1/0. Help and ADMIN-GUIDE.md cover Intune, Group Policy and macOS profiles.
 - **addons.mozilla.org validation:** no more `innerHTML` with dynamic values: the Link Inspector, the empty cache table and the link marker icons are built with DOM calls (link text can never be parsed as markup). Firefox for Android minimum set to 142, the first version that understands the data-collection declaration.
