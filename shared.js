@@ -30,6 +30,15 @@ const SETTING_DEFS = [
     // place of the site icon: colleagues' profile photos (the user's own organization), and logos the
     // webmail displayed only after the email passed its sender verification (BIMI).
     { key: 'enableSenderAvatars',         managedKey: 'managedEnableSenderAvatars',         def: true, type: 'boolean' },
+    // Row highlighter: the inbox row under the mouse (and selected rows) is highlighted, so it's clear
+    // which email a click opens. A see-through color, so text stays readable in light and dark themes.
+    { key: 'enableRowHighlighter',        managedKey: 'managedEnableRowHighlighter',        def: true, type: 'boolean' },
+    { key: 'rowHighlightColor',           managedKey: 'managedRowHighlightColor',           def: 'yellow', type: 'enum', values: ['yellow', 'blue', 'green', 'pink', 'purple', 'gray'] },
+    { key: 'rowHighlightStyle',           managedKey: 'managedRowHighlightStyle',           def: 'both', type: 'enum', values: ['both', 'fill', 'outline'] },
+    { key: 'rowHighlightSelected',        managedKey: 'managedRowHighlightSelected',        def: true, type: 'boolean' },
+    // Warn when another installed extension does the same job in the webmail (two sender-icon or
+    // row-highlight extensions can conflict), with one-click fixes. Administrators can switch it off.
+    { key: 'enableConflictWarnings',      managedKey: 'managedEnableConflictWarnings',      def: true, type: 'boolean' },
     // Country flag of the server that sent the email (the domain's ending when it can't be looked up).
     { key: 'enableSenderCountry',         managedKey: 'managedEnableSenderCountry',         def: true, type: 'boolean' },
     // Sender domains checked against the threat services and phishing lists (Gmail).
@@ -102,8 +111,9 @@ function coerceSetting(def, value) {
     if (def.type === 'string') return typeof value === 'string' ? value.trim() : undefined;
     if (def.type === 'enum') {
         if (typeof value !== 'string') return undefined;
-        const v = value.trim().toUpperCase();
-        return def.values.includes(v) ? v : undefined;
+        // Any spelling ("post", "Blue") becomes the allowed value as defined ("POST", "blue").
+        const v = value.trim().toLowerCase();
+        return def.values.find(x => x.toLowerCase() === v);
     }
     if (def.type === 'integer') {
         if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
@@ -1244,6 +1254,34 @@ function serviceWarningSigns(text, siteName) {
     return out;
 }
 
+// Row highlighter colors: a see-through fill (one for light and one for dark themes, so text keeps
+// its contrast) and a solid accent for the outline.
+const ROW_HIGHLIGHT_COLORS = {
+    yellow: { light: 'rgba(255, 213, 0, 0.30)',   dark: 'rgba(255, 213, 0, 0.20)',   accent: '#e3a700', accentDark: '#fdd663' },
+    blue:   { light: 'rgba(26, 115, 232, 0.16)',  dark: 'rgba(138, 180, 248, 0.22)', accent: '#1a73e8', accentDark: '#8ab4f8' },
+    green:  { light: 'rgba(52, 168, 83, 0.18)',   dark: 'rgba(129, 201, 149, 0.22)', accent: '#188038', accentDark: '#81c995' },
+    pink:   { light: 'rgba(233, 30, 99, 0.14)',   dark: 'rgba(244, 143, 177, 0.22)', accent: '#c2185b', accentDark: '#f48fb1' },
+    purple: { light: 'rgba(103, 58, 183, 0.15)',  dark: 'rgba(179, 157, 219, 0.24)', accent: '#673ab7', accentDark: '#b39ddb' },
+    gray:   { light: 'rgba(0, 0, 0, 0.08)',       dark: 'rgba(255, 255, 255, 0.12)', accent: '#5f6368', accentDark: '#bdc1c6' }
+};
+
+// OTHER EXTENSIONS THAT DO THE SAME JOB. Two extensions changing the same part of the webmail (both
+// drawing sender icons, both highlighting rows) can conflict: doubled icons, rows redrawn by both,
+// a slower page. Known ones are recognized by their Chrome Web Store id: in the page (resources they
+// add, "chrome-extension://<id>/…") or, once the user allows it, in the list of installed extensions.
+//   features   our settings that do the same job (turning ours off is one way to end the conflict)
+const OVERLAPPING_EXTENSIONS = [
+    { name: 'Gmail Sender Icons', ids: ['jniljaamodclkmphgkgkooplflhkadpg'], features: ['enableSenderIdentity'], does: 'sender icons in the inbox' },
+    { name: 'Simplify Gmail', ids: ['pbmlfaiicoikhdbjagjbglnbfcbcojpj'], features: ['enableSenderAvatars', 'enableTrackingPixelBlocking'], does: 'sender photos and blocking tracking pixels' },
+    { name: 'Contact Avatars for Gmail', ids: ['pkljbdckinbcelpeipbnniamlhenoeon'], features: ['enableSenderAvatars'], does: 'sender photos in the inbox' },
+    { name: 'Row Highlighter for Gmail', ids: ['ijfolchflbmnfopmpmodilcelmdakbfl'], features: ['enableRowHighlighter'], does: 'highlighting the row under the mouse' }
+];
+// The names of our features, as the conflict warnings say them.
+const FEATURE_NAMES = {
+    enableSenderIdentity: 'sender icons and labels', enableSenderAvatars: 'sender photos and verified logos',
+    enableTrackingPixelBlocking: 'tracking-pixel blocking', enableRowHighlighter: 'the row highlighter'
+};
+
 // Every feature, and what a site needs for it (null: works on every supported site). Shown as the
 // compatibility chart in Help → Which features work where.
 const FEATURE_SUPPORT = [
@@ -1261,7 +1299,9 @@ const FEATURE_SUPPORT = [
     { name: 'Signs of forgery in the headers (DMARC, forged delivery records…)', needs: 'headers' },
     { name: 'Phishing-simulation emails recognized by their headers', needs: 'headers' },
     { name: 'Flagged emails moved to Spam', needs: 'move' },
-    { name: 'Links checked before sending', needs: 'compose' }
+    { name: 'Links checked before sending', needs: 'compose' },
+    { name: 'Row highlighter (the email under the mouse, and selected ones)', needs: 'list' },
+    { name: 'Warnings about other extensions that do the same job', needs: null }
 ];
 
 // The supported webmail entry for a page address, or null.

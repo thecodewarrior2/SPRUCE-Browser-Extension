@@ -2368,6 +2368,7 @@ function logEmailVerdict(id, address, base, final) {
     reportEvent(final.status === 'flagged' ? 'warning' : 'info', `Email from ${address}: ${STATUS_TEXT[final.status] || final.status} (the sender alone was ${STATUS_TEXT[base.status] || base.status}). Why: ${final.reasons.join(' ')}`);
 }
 
+let lastLocked = {};                       // settings set by the organization (from getSettings)
 // --- Inbox list ------------------------------------------------------------------------------------
 function scanSenderRows(S) {
     const rows = listRows().filter(isShown);
@@ -2545,6 +2546,120 @@ function scanOpenedSenders(S) {
             updateOpenedVerdict(body);
         }));
     }
+}
+
+// --- Row highlighter ------------------------------------------------------------------------------
+// The inbox row under the mouse, and selected rows, get a see-through color (light or dark theme
+// variant, so text keeps its contrast) and/or an outline, so it's clear which email a click opens.
+// One style element, rebuilt only when the settings or the theme change. Works on every site whose
+// profile describes its inbox list (the generic one included).
+let rowHighlightKey = '';
+function applyRowHighlighter(S) {
+    const id = 'unshortener-row-highlight';
+    let el = document.getElementById(id);
+    const on = MAIL_CAN.list && S.enableRowHighlighter !== false && !(SITE.settingKey && S[SITE.settingKey] === false);
+    if (!on) { if (el) el.remove(); rowHighlightKey = ''; return; }
+    const sample = listRows().find(isShown);
+    if (!sample) return;                                            // no list on screen yet
+    const dark = isDarkSurface(sample);
+    const c = ROW_HIGHLIGHT_COLORS[S.rowHighlightColor] || ROW_HIGHLIGHT_COLORS.yellow;
+    const style = ['both', 'fill', 'outline'].includes(S.rowHighlightStyle) ? S.rowHighlightStyle : 'both';
+    const key = [MAIL.list.row, dark, S.rowHighlightColor, style, S.rowHighlightSelected !== false].join('|');
+    if (el && rowHighlightKey === key) return;
+    const fill = dark ? c.dark : c.light, accent = dark ? c.accentDark : c.accent;
+    const rows = MAIL.list.row.split(',').map(r => r.trim());
+    const selectedMark = MAIL.list.selected || '[aria-selected="true"]';
+    const states = rows.map(r => `${r}:hover`).concat(S.rowHighlightSelected !== false ? rows.map(r => `${r}${selectedMark}`) : []);
+    const css = [];
+    if (style !== 'outline') {
+        // An overlay (background-image) over the row's own background, on the row and its cells.
+        css.push(`${states.join(', ')}, ${states.map(st => `${st} > td`).join(', ')} { background-image: linear-gradient(${fill}, ${fill}) !important; }`);
+    }
+    if (style !== 'fill') {
+        css.push(`${states.join(', ')} { outline: 2px solid ${accent} !important; outline-offset: -2px !important; }`);
+        css.push(`${states.map(st => `${st} > td:first-child`).join(', ')} { box-shadow: inset 4px 0 0 ${accent} !important; }`);
+    }
+    if (!el) { el = document.createElement('style'); el.id = id; (document.head || document.documentElement).appendChild(el); }
+    el.textContent = css.join('\n');
+    rowHighlightKey = key;
+}
+
+// --- Other extensions that do the same job ---------------------------------------------------------
+// Found from what they add to the page: their own resources (a "chrome-extension://<id>/…" image or
+// stylesheet, which names the extension; matched against OVERLAPPING_EXTENSIONS) and their effects
+// (sender icons or photos in inbox rows that aren't ours). Each one found is reported to the
+// background (shown in Settings → Other extensions), and a notice offers the fixes: turn the other
+// one off (recommended: ours also checks senders for phishing), turn our matching feature off, or
+// ignore it. Never when an administrator switched these warnings off, for features already off, for
+// ones the user ignored, or more than once per page.
+const FAVICON_SERVICES = /\/\/(www\.google\.com\/s2\/favicons|t\d\.gstatic\.com\/faviconV2|icons\.duckduckgo\.com|logo\.clearbit\.com|favicone\.com|icon\.horse)/i;
+const PHOTO_SERVICES = /\/\/([^/]*\.googleusercontent\.com|(www\.|secure\.)?gravatar\.com)\//i;
+let conflictsCheckedAt = 0;
+const conflictsShown = new Set();
+function detectConflicts(S) {
+    if (!S.enableConflictWarnings || Date.now() - conflictsCheckedAt < 20000) return;
+    conflictsCheckedAt = Date.now();
+    const found = new Map();                                          // key → { key, name, does, features, via }
+    const ownId = chrome.runtime.id;
+    // 1. Resources another extension added to the page.
+    const urls = [...document.querySelectorAll('[src*="-extension://"], [href*="-extension://"]')].map(e => e.getAttribute('src') || e.getAttribute('href') || '');
+    for (const sh of document.styleSheets) { try { if (sh.href) urls.push(sh.href); } catch (e) { /* ignore */ } }
+    for (const u of urls) {
+        const m = /^(?:chrome|moz)-extension:\/\/([^/]+)\//i.exec(u);
+        if (!m || m[1] === ownId) continue;
+        const known = OVERLAPPING_EXTENSIONS.find(x => x.ids.includes(m[1]));
+        if (known) found.set(known.ids[0], { key: known.ids[0], name: known.name, does: known.does, features: known.features, via: 'page' });
+    }
+    // 2. Effects in the inbox list: sender icons or photos that aren't ours.
+    if (MAIL_CAN.list) {
+        // Only the sender's cell: the webmail's own pictures elsewhere in a row (attachment
+        // thumbnails) aren't an extension's.
+        const rows = listRows().filter(isShown).slice(0, 30);
+        const cellSel = MAIL.list.nameCell ? MAIL.list.nameCell.split(',').map(c => `${c.trim()} img`).join(', ') : null;
+        const foreign = (re) => !!cellSel && rows.some(r => [...r.querySelectorAll(cellSel)].some(i => !i.closest('[class*="unshortener-"]') && re.test(i.getAttribute('src') || '')));
+        if (S.enableSenderIdentity && foreign(FAVICON_SERVICES) && ![...found.values()].some(f => f.features.includes('enableSenderIdentity')))
+            found.set('effect:icons', { key: 'effect:icons', name: 'Another extension', does: 'sender icons in the inbox', features: ['enableSenderIdentity'], via: 'effect' });
+        if (S.enableSenderAvatars && foreign(PHOTO_SERVICES) && ![...found.values()].some(f => f.features.includes('enableSenderAvatars')))
+            found.set('effect:photos', { key: 'effect:photos', name: 'Another extension', does: 'sender photos in the inbox', features: ['enableSenderAvatars'], via: 'effect' });
+    }
+    if (!found.size) return;
+    // Only conflicts with features of ours that are on.
+    const live = [...found.values()].map(f => Object.assign({}, f, { features: f.features.filter(k => S[k] !== false) })).filter(f => f.features.length);
+    if (!live.length) return;
+    safeSend({ action: 'reportConflicts', site: SITE.name, conflicts: live }, (ignored) => guarded('Warning about other extensions', () => {
+        const skip = new Set(Array.isArray(ignored) ? ignored : []);
+        const next = live.find(f => !skip.has(f.key) && !conflictsShown.has(f.key));
+        if (next) showConflictNotice(next);
+    }));
+}
+
+function showConflictNotice(c) {
+    conflictsShown.add(c.key);
+    document.querySelectorAll('.unshortener-conflict-notice').forEach(e => e.remove());
+    const el = document.createElement('div');
+    el.className = 'unshortener-conflict-notice' + (isDarkSurface(document.body) ? ' unshortener-dark' : '');
+    el.setAttribute('role', 'alertdialog');
+    el.setAttribute('aria-label', 'Another extension does the same job');
+    const ours = c.features.map(k => FEATURE_NAMES[k] || k);
+    const text = document.createElement('div');
+    const lead = document.createElement('b');
+    lead.textContent = c.via === 'effect' ? `Another extension also shows ${c.does}.` : `${c.name} also does ${c.does}.`;
+    text.append(lead, ` Two extensions doing the same job in ${SITE.name} can conflict (doubled icons, flicker, a slower page). We recommend keeping Gmail Link Unshortener on, since it also checks these senders for phishing, and turning the other one off.`);
+    const buttons = document.createElement('div');
+    buttons.className = 'unshortener-conflict-buttons';
+    const btn = (label, primary, fn) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = label; if (primary) b.className = 'primary'; b.addEventListener('click', () => guarded('Resolving an extension conflict', fn)); buttons.appendChild(b); return b; };
+    btn(c.via === 'effect' ? 'Turn the other one off…' : `Turn off ${c.name}…`, true, () => { safeSend({ action: 'openConflicts' }); el.remove(); });
+    const lockedOurs = c.features.filter(k => lastLocked[k]);
+    const b2 = btn(`Turn off ours (${ours.join(', ')})`, false, () => {
+        const changes = {};
+        c.features.filter(k => !lastLocked[k]).forEach(k => { changes[k] = false; });
+        chrome.storage.local.set(changes, () => { reportEvent('info', `Turned off our ${ours.join(' and ')} because ${c.name === 'Another extension' ? 'another extension' : c.name} does the same job.`); });
+        el.remove();
+    });
+    if (lockedOurs.length === c.features.length) { b2.disabled = true; b2.title = 'Set by your organization'; }
+    btn('Ignore', false, () => { safeSend({ action: 'ignoreConflict', key: c.key }); el.remove(); });
+    el.append(text, buttons);
+    document.body.appendChild(el);
 }
 
 // --- Moving to Spam --------------------------------------------------------------------------------
@@ -2964,7 +3079,10 @@ function scanSenderIdentity() {
         if (!cfg || !cfg.values) return;
         lastSettings = cfg.values;
         lastPolicy = cfg.policy || {};
+        lastLocked = cfg.locked || {};
         const S = cfg.values;
+        applyRowHighlighter(S);
+        detectConflicts(S);
         if (!senderFeaturesOn(S)) {
             if (document.querySelector('[data-unshortener-sender]')) removeSenderDecorations();
             spamQueue.clear();
@@ -3029,7 +3147,8 @@ window.addEventListener('hashchange', () => { scheduleBadgeUpdate(); if (MAIL) s
 window.addEventListener('popstate', scheduleBadgeUpdate);
 // Coming back to the tab: the webmail may have refreshed the list while it was hidden.
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { lastReported = ''; scheduleBadgeUpdate(); if (MAIL) scheduleScan(); if (spamQueue.size) scheduleSpamMoves(); } });
-const SENDER_SETTING_KEYS = ['enableSenderIdentity', 'enableSenderAvatars', 'enableSenderIconFallback', 'enableSenderCountry', 'enableSenderDomainCheck', 'enableSenderAddressCheck', 'enableAutoSpam', 'customTrustedSenders', 'customAllowlist', 'enableDnsThreatCheck'];
+const SENDER_SETTING_KEYS = ['enableRowHighlighter', 'rowHighlightColor', 'rowHighlightStyle', 'rowHighlightSelected', 'enableConflictWarnings',
+    'enableSenderIdentity', 'enableSenderAvatars', 'enableSenderIconFallback', 'enableSenderCountry', 'enableSenderDomainCheck', 'enableSenderAddressCheck', 'enableAutoSpam', 'customTrustedSenders', 'customAllowlist', 'enableDnsThreatCheck'];
 // Turning protection on or off in Settings or the popup takes effect on the icon immediately.
 chrome.storage.onChanged.addListener((changes, area) => {
     // A policy change (for example sender features locked off) applies at once.
