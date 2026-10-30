@@ -2263,19 +2263,24 @@ function fillSenderIcon(wrap, S) {
     });
 }
 
-// Photos and logos (the profile's message.avatar): the one the webmail shows beside the sender of an
-// opened email is remembered for the address, so the inbox list shows it too. Two kinds:
-//   - a brand logo the webmail embedded in the page (Gmail writes verified BIMI logos in as data:
-//     images): used only when the webmail's own sender verification passed for this email (DMARC);
-//     stored directly, nothing downloaded; a changed logo is spotted by its fingerprint;
-//   - a person's photo, loaded from the webmail's photo host in any address format: used only for
-//     people in the user's own organization (its directory), downloaded by the background part
-//     (which the page's own image-loading rules don't affect); a changed photo has a new address.
-// Personal photos of outside senders are never used: anyone can make their profile photo look like a
-// bank's logo. The webmail fills the image in late, so it's looked for again after 0.5, 1.5 and 3 s.
-// A changed photo or logo replaces the old one, and every icon of that sender on the page is redrawn.
-// Why a photo or logo wasn't used is logged once per sender on the page (Logging → application log),
-// with the image's host and kind but never its full address.
+// Photos and logos (the profile's message.avatar): the picture the webmail shows beside the sender of
+// an opened email is remembered, so the inbox list shows it too. Whose picture is used:
+//   - your own organization: each colleague's own photo (kept per address); never the company logo;
+//   - another company: one logo for the whole company (kept per site), shown for every address there,
+//     people included. It is learned only from an email that passed the webmail's sender verification
+//     (DMARC) and was sent either from one of the company's shared mailboxes (contact@, info@,
+//     support@, news@… whose picture the company itself chose) or with a logo the webmail embedded
+//     in the page (Gmail writes verified BIMI logos in as data: images). A person's own photo there
+//     (bob@company) is never used: the company's logo is shown for them instead;
+//   - personal email services (gmail.com, outlook.com…): nothing; the site icon is shown.
+// So a company's logo needs one opened email from it, not one per sender. Embedded logos are stored
+// directly (a change is spotted by a fingerprint); pictures from the webmail's photo host are
+// downloaded by the background part (which the page's own image-loading rules don't affect).
+// The picture sits beside the message body, not inside it, so it is looked for in the whole message
+// (message.avatar.scope). The webmail fills it in late, so it's looked for again after 0.5, 1.5 and
+// 3 s. A changed picture replaces the old one and every icon it belongs to on the page is redrawn.
+// Why a picture wasn't used is logged once per sender on the page (Logging → application log), with
+// the image's host and kind but never its full address.
 const avatarSkipLogged = new Set();
 function logAvatarSkip(address, why) {
     if (avatarSkipLogged.has(address)) return;
@@ -2283,15 +2288,30 @@ function logAvatarSkip(address, why) {
     if (avatarSkipLogged.size > 500) avatarSkipLogged.delete(avatarSkipLogged.values().next().value);
     reportEvent('info', `Sender photo or logo for ${address} not used: ${why}`);
 }
+// The sender's picture in the message the body belongs to: the message itself (scope), else up to four
+// levels out from the body's own box until one shows a picture for that address.
+function avatarImagesFor(body, A, address) {
+    const scope = A.scope ? body.closest(A.scope) : null;
+    let box = scope || messageContainerOf(body), all = [];
+    for (let i = 0; box && i < (scope ? 1 : 5); i++, box = box.parentElement) {
+        all = [...box.querySelectorAll(A.img)];
+        const img = all.find(el => (el.getAttribute(A.addressAttr) || '').trim().toLowerCase() === address);
+        if (img) return { img, count: all.length };
+        if (box === document.body) break;
+    }
+    return { img: null, count: all.length };
+}
 function harvestAvatar(body, who, auth) {
     const A = MAIL_CAN.avatars ? MAIL.message.avatar : null;
     if (!A || !lastSettings.enableSenderAvatars || !who || !who.address) return;
     const org = ownOrgDomain();
     const own = !!org && (who.domain === org || who.domain.endsWith('.' + org));
+    if (!own && isPersonalMailDomain(registrableDomain(who.domain) || who.domain)) {
+        logAvatarSkip(who.address, 'it\'s a personal email service; its site icon is shown.');
+        return;
+    }
     const attempt = (n) => {
-        const container = messageContainerOf(body);
-        const imgs = container ? [...container.querySelectorAll(A.img)] : [];
-        const img = imgs.find(i => (i.getAttribute(A.addressAttr) || '').trim().toLowerCase() === who.address);
+        const { img, count } = avatarImagesFor(body, A, who.address);
         const url = img ? (img.getAttribute('src') || img.currentSrc || '') : '';
         const embedded = !!url && !!A.embeddedLogo && A.embeddedLogo.test(url);
         const photo = !!url && !!A.photoHost && A.photoHost.test(url);
@@ -2299,20 +2319,30 @@ function harvestAvatar(body, who, auth) {
             if (n < 3) { setTimeout(() => guarded('Reading a sender photo', () => attempt(n + 1)), [500, 1500, 3000][n]); return; }
             let host = '';
             try { host = url && !url.startsWith('data:') ? new URL(url, location.href).hostname : ''; } catch (e) { /* ignore */ }
-            logAvatarSkip(who.address, !img ? (imgs.length ? `${SITE.name} showed ${imgs.length} photo${imgs.length === 1 ? '' : 's'} in the email, none marked as this sender's.` : `${SITE.name} showed no photo or logo beside the sender.`)
+            logAvatarSkip(who.address, !img ? (count ? `${SITE.name} showed ${count} photo${count === 1 ? '' : 's'} in the email, none marked as this sender's.` : `${SITE.name} showed no photo or logo beside the sender.`)
                 : !url ? 'the image had no address yet.'
                 : A.placeholder.test(url) ? `${SITE.name} showed its generic placeholder (no photo).`
                 : url.startsWith('data:') ? 'it\'s an image embedded in the page, of a type that isn\'t used.'
                 : `the image comes from ${host || 'an unknown host'}, not ${SITE.name}'s own image host.`);
             return;
         }
-        const kind = embedded ? 'logo' : 'personal';
-        if (kind === 'personal' && !own) { logAvatarSkip(who.address, `it's a personal profile photo of someone outside ${org || 'your organization'} (never used: anyone can make their photo look like a company's logo).`); return; }
-        if (kind === 'logo' && !(auth && auth.dmarc === 'pass')) { logAvatarSkip(who.address, `it's a logo, and ${SITE.name}'s sender verification for this email was ${auth ? `DMARC ${auth.dmarc}` : 'not available'} (a logo is used only after DMARC pass).`); return; }
-        safeSend({ action: 'senderAvatar', address: who.address, url, kind }, (r) => guarded('Showing a sender photo', () => {
+        const site = registrableDomain(who.domain) || who.domain;
+        let request;
+        if (own) {
+            if (!photo) { logAvatarSkip(who.address, `it's ${org}'s logo; colleagues are shown with their own photos.`); return; }
+            request = { action: 'senderAvatar', address: who.address, url, kind: 'personal' };
+        } else {
+            if (!(auth && auth.dmarc === 'pass')) { logAvatarSkip(who.address, `${SITE.name}'s sender verification for this email was ${auth ? `DMARC ${auth.dmarc}` : 'not available'}; a company's logo is learned only from an email that passed (DMARC).`); return; }
+            if (!embedded && !isSharedMailbox(who.address)) { logAvatarSkip(who.address, `it's a person's own photo; ${site}'s logo is shown for them instead once one of its shared mailboxes (contact@, info@, support@…) has been seen.`); return; }
+            request = { action: 'senderAvatar', address: who.address, domain: site, url, kind: 'logo' };
+        }
+        safeSend(request, (r) => guarded('Showing a sender photo', () => {
             if (r !== 'saved' && r !== 'updated') return;
-            for (const k of [...senderIcons.keys()]) if (k.endsWith('|' + who.address)) senderIcons.delete(k);
-            document.querySelectorAll('.unshortener-sender-icon').forEach(w => { if (w.dataset.address === who.address) fillSenderIcon(w, lastSettings); });
+            const mine = (k) => request.kind === 'logo' ? k.startsWith(site + '|') || registrableDomain(k.split('|')[0]) === site : k.endsWith('|' + who.address);
+            for (const k of [...senderIcons.keys()]) if (mine(k)) senderIcons.delete(k);
+            document.querySelectorAll('.unshortener-sender-icon').forEach(w => {
+                if (request.kind === 'logo' ? (registrableDomain(w.dataset.site || '') || w.dataset.site) === site : w.dataset.address === who.address) fillSenderIcon(w, lastSettings);
+            });
         }));
     };
     attempt(0);
@@ -2562,23 +2592,28 @@ function applyRowHighlighter(S) {
     const sample = listRows().find(isShown);
     if (!sample) return;                                            // no list on screen yet
     const dark = isDarkSurface(sample);
-    const c = ROW_HIGHLIGHT_COLORS[S.rowHighlightColor] || ROW_HIGHLIGHT_COLORS.yellow;
     const style = ['both', 'fill', 'outline'].includes(S.rowHighlightStyle) ? S.rowHighlightStyle : 'both';
-    const key = [MAIL.list.row, dark, S.rowHighlightColor, style, S.rowHighlightSelected !== false].join('|');
+    const key = [MAIL.list.row, dark, S.rowHighlightColor, S.rowHighlightSelectedColor, style, S.rowHighlightSelected !== false].join('|');
     if (el && rowHighlightKey === key) return;
-    const fill = dark ? c.dark : c.light, accent = dark ? c.accentDark : c.accent;
     const rows = MAIL.list.row.split(',').map(r => r.trim());
     const selectedMark = MAIL.list.selected || '[aria-selected="true"]';
-    const states = rows.map(r => `${r}:hover`).concat(S.rowHighlightSelected !== false ? rows.map(r => `${r}${selectedMark}`) : []);
     const css = [];
-    if (style !== 'outline') {
-        // An overlay (background-image) over the row's own background, on the row and its cells.
-        css.push(`${states.join(', ')}, ${states.map(st => `${st} > td`).join(', ')} { background-image: linear-gradient(${fill}, ${fill}) !important; }`);
-    }
-    if (style !== 'fill') {
-        css.push(`${states.join(', ')} { outline: 2px solid ${accent} !important; outline-offset: -2px !important; }`);
-        css.push(`${states.map(st => `${st} > td:first-child`).join(', ')} { box-shadow: inset 4px 0 0 ${accent} !important; }`);
-    }
+    // Ticked rows first, in their own color; then the row under the mouse, which wins when it is
+    // ticked too (same specificity, later rule).
+    const paint = (states, color) => {
+        const c = ROW_HIGHLIGHT_COLORS[color] || ROW_HIGHLIGHT_COLORS.yellow;
+        const fill = dark ? c.dark : c.light, accent = dark ? c.accentDark : c.accent;
+        if (style !== 'outline') {
+            // An overlay (background-image) over the row's own background, on the row and its cells.
+            css.push(`${states.join(', ')}, ${states.map(st => `${st} > td`).join(', ')} { background-image: linear-gradient(${fill}, ${fill}) !important; }`);
+        }
+        if (style !== 'fill') {
+            css.push(`${states.join(', ')} { outline: 2px solid ${accent} !important; outline-offset: -2px !important; }`);
+            css.push(`${states.map(st => `${st} > td:first-child`).join(', ')} { box-shadow: inset 4px 0 0 ${accent} !important; }`);
+        }
+    };
+    if (S.rowHighlightSelected !== false) paint(rows.map(r => `${r}${selectedMark}`), S.rowHighlightSelectedColor || 'blue');
+    paint(rows.map(r => `${r}:hover`), S.rowHighlightColor);
     if (!el) { el = document.createElement('style'); el.id = id; (document.head || document.documentElement).appendChild(el); }
     el.textContent = css.join('\n');
     rowHighlightKey = key;
@@ -2649,14 +2684,20 @@ function showConflictNotice(c) {
     buttons.className = 'unshortener-conflict-buttons';
     const btn = (label, primary, fn) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = label; if (primary) b.className = 'primary'; b.addEventListener('click', () => guarded('Resolving an extension conflict', fn)); buttons.appendChild(b); return b; };
     btn(c.via === 'effect' ? 'Turn the other one off…' : `Turn off ${c.name}…`, true, () => { safeSend({ action: 'openConflicts' }); el.remove(); });
-    const lockedOurs = c.features.filter(k => lastLocked[k]);
-    const b2 = btn(`Turn off ours (${ours.join(', ')})`, false, () => {
-        const changes = {};
-        c.features.filter(k => !lastLocked[k]).forEach(k => { changes[k] = false; });
-        chrome.storage.local.set(changes, () => { reportEvent('info', `Turned off our ${ours.join(' and ')} because ${c.name === 'Another extension' ? 'another extension' : c.name} does the same job.`); });
-        el.remove();
-    });
-    if (lockedOurs.length === c.features.length) { b2.disabled = true; b2.title = 'Set by your organization'; }
+    // Only the overlapping settings of ours, one at a time or all; the ones left on are remembered as
+    // kept, so this warning comes back only if one turned off here is turned back on.
+    const other = c.name === 'Another extension' ? 'another extension' : c.name;
+    const offButton = (keys, label) => {
+        const b = btn(label, false, () => {
+            turnOffForConflict(c.key, c.features, keys, lastLocked, (done) => {
+                if (done.length) reportEvent('info', `Turned off our ${done.map(k => FEATURE_NAMES[k] || k).join(' and ')} because ${other} does the same job.`);
+            });
+            el.remove();
+        });
+        if (keys.every(k => lastLocked[k])) { b.disabled = true; b.title = 'Set by your organization'; }
+    };
+    if (c.features.length > 1) c.features.forEach(k => offButton([k], `Turn off only our ${FEATURE_NAMES[k] || k}`));
+    offButton(c.features, c.features.length > 1 ? 'Turn off all of ours' : `Turn off ours (${ours.join(', ')})`);
     btn('Ignore', false, () => { safeSend({ action: 'ignoreConflict', key: c.key }); el.remove(); });
     el.append(text, buttons);
     document.body.appendChild(el);
@@ -3147,7 +3188,7 @@ window.addEventListener('hashchange', () => { scheduleBadgeUpdate(); if (MAIL) s
 window.addEventListener('popstate', scheduleBadgeUpdate);
 // Coming back to the tab: the webmail may have refreshed the list while it was hidden.
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { lastReported = ''; scheduleBadgeUpdate(); if (MAIL) scheduleScan(); if (spamQueue.size) scheduleSpamMoves(); } });
-const SENDER_SETTING_KEYS = ['enableRowHighlighter', 'rowHighlightColor', 'rowHighlightStyle', 'rowHighlightSelected', 'enableConflictWarnings',
+const SENDER_SETTING_KEYS = ['enableRowHighlighter', 'rowHighlightColor', 'rowHighlightStyle', 'rowHighlightSelected', 'rowHighlightSelectedColor', 'enableConflictWarnings',
     'enableSenderIdentity', 'enableSenderAvatars', 'enableSenderIconFallback', 'enableSenderCountry', 'enableSenderDomainCheck', 'enableSenderAddressCheck', 'enableAutoSpam', 'customTrustedSenders', 'customAllowlist', 'enableDnsThreatCheck'];
 // Turning protection on or off in Settings or the popup takes effect on the icon immediately.
 chrome.storage.onChanged.addListener((changes, area) => {

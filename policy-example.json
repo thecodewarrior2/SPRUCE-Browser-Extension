@@ -21,6 +21,7 @@
           "managedRowHighlightColor": "yellow",
           "managedRowHighlightStyle": "both",
           "managedRowHighlightSelected": true,
+          "managedRowHighlightSelectedColor": "blue",
           "managedEnableConflictWarnings": true,
           "managedEnableSenderCountry": true,
           "managedEnableSenderDomainCheck": true,
