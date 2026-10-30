@@ -1,13 +1,13 @@
 {
   "manifest_version": 3,
   "name": "S.P.R.U.C.E+",
-  "version": "5.76",
+  "version": "5.77",
   "browser_specific_settings": {
     "safari": {
       "strict_min_version": "18.2"
     }
   },
-  "description": "Finds phishing and scams in Gmail and other webmail: links, senders, QR codes and attachments. Blocks trackers.",
+  "description": "Helps you spot phishing and scams in Gmail and other webmail: links, senders, QR codes and attachments.",
   "permissions": [
     "activeTab",
     "alarms",

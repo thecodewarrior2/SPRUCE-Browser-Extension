@@ -10,6 +10,12 @@ Logos and icons (PNG and SVG, for light and dark backgrounds) are in [`branding/
 
 <p><a href="https://www.paypal.com/donate/?hosted_button_id=NA8SK5RBLWGW6"><img src="https://img.shields.io/badge/Donate-PayPal-0070ba?logo=paypal&amp;logoColor=white" alt="Donate with PayPal"></a></p>
 
+> **A helper, not a guarantee.** S.P.R.U.C.E+ makes a best effort to point out warning signs, but it
+> can miss dangerous emails and links, and it can flag genuine ones. It is one small layer of
+> protection: keep your webmail's own spam filtering, your organization's email security, your
+> browser's protections and your own judgment. When in doubt, don't click: contact the sender
+> another way.
+
 A Safari (Manifest V3) web extension that shows where the links in your email **really** go before you
 click them, flags phishing and look-alike sites, and blocks email tracking pixels. Everything
 sensitive happens on your device: QR codes, attachments and the phishing lists are read locally,
@@ -121,19 +127,7 @@ In Safari the two phishing-simulation rows don't apply: their rules are set by p
 
 ## Install
 
-Requires **Safari 18.2 or later** (macOS; iOS and iPadOS with a build signed by your organization). In
-Safari an extension comes inside a small app, built from this folder with Apple's converter. See
-[docs/INSTALL-FOR-TESTERS.md](docs/INSTALL-FOR-TESTERS.md) for the full walkthrough:
-
-1. On a Mac with Xcode, run `tools/build-safari.sh` (or download the app from the **Safari build**
-   GitHub workflow, `.github/workflows/safari.yml`).
-2. In Safari, turn on **Settings → Advanced → Show features for web developers**, then
-   **Develop → Allow Unsigned Extensions**.
-3. Open the app once, tick the extension in **Safari → Settings → Extensions**, and choose
-   **Always Allow on This Website** on your webmail.
-
-The script leaves an Xcode project in `build/safari/` to sign with your team and archive for the App
-Store, TestFlight or Developer ID distribution.
+To try the Safari version, follow [docs/INSTALL-FOR-TESTERS.md](docs/INSTALL-FOR-TESTERS.md).
 
 ## For administrators
 
@@ -143,67 +137,14 @@ and allow it on your webmail sites; the same settings for everyone come from a b
 restores. The policy-only options of the Chrome and Firefox builds (a simpler popup, phishing-simulation
 rules) aren't available. See [docs/ADMIN-GUIDE.md](docs/ADMIN-GUIDE.md).
 
-## Repository layout
-
-| Path | Role |
-|---|---|
-| `manifest.json` | Manifest V3 declaration, permissions, supported sites (minimum Safari version) |
-| `background.html` | Non-persistent background page: loads the background scripts and the scanner |
-| `background.js` | Link pipeline, threat checks, list sync, badge |
-| `content.js` / `content.css` | Injected into webmail: banners, link markings, hover card, sender checks, sender icons and moving phishing to Spam, the Send check. One mail engine for every site, driven by the site's entry in `WEBMAIL_SITES` (`shared.js`); today only Gmail's entry describes its inbox list, toolbar and compose window |
-| `shared.js` | Settings, constants and helpers shared by all contexts |
-| `decoders.js` | Offline decoders for short links, gateways and trackers |
-| `custom-endpoints.js` | Requests and replies for your own lookup service or threat resolver |
-| `qr-decoder.js` | Self-contained QR decoder (no dependencies) |
-| `scanner.js` / `compat.js` | QR/PDF scanning in the background page; shims pdf.js needs in Safari |
-| `options.*`, `help.js`, `popup.*` | Settings, logging, Link Inspector and Help; the toolbar popup |
-| `theme.css` / `theme.js` | Design tokens and light/dark appearance (WCAG 2.1 AA) |
-| `lib/` | Bundled pdf.js (Apache-2.0), used only for PDF attachments |
-| `tools/refresh-snapshot.js` | Refreshes the bundled shortener-domain snapshot |
-| `tools/build-safari.sh` | Wraps the extension in a Mac/iPhone/iPad app with Apple's converter and builds it (macOS, Xcode) |
-| `.github/workflows/safari.yml` | Builds the app on a GitHub Mac and offers it for download |
-| `icons/` | Toolbar and store icons |
-| `docs/` | Architecture guide, admin guide, tester instructions |
-| `branding/` | Logos, icons and the donation QR code (PNG and SVG) |
-| `tests/` | Unit and end-to-end tests, with sanitized sample emails |
-| `CHANGELOG.md` · `PRIVACY.md` · `LICENSE` | Release history · privacy policy · Apache 2.0 license |
-
-Everything at the top level besides those three files and the README is part of the extension; `docs/`, `branding/`, `tests/`, `tools/` and `.github/` never go into the app.
-
 ## Documentation
 
+- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — building, testing and publishing, repository layout, design rules.
 - [CHANGELOG.md](CHANGELOG.md) — every version, what changed and why.
 - [docs/INSTALL-FOR-TESTERS.md](docs/INSTALL-FOR-TESTERS.md) — install and update steps.
 - [docs/ADMIN-GUIDE.md](docs/ADMIN-GUIDE.md) — building, signing and deploying the Safari app.
 - The extension's own **Help** tab explains how each warning works, the privacy details and
   troubleshooting.
-
-## Design rules
-
-- **Never contact a link's destination on your behalf** when reading mail; only lookup services
-  you can switch off are used. The one exception is the Send check, which makes one request to each
-  website you link to, as your reader would by clicking it, and never for one-time links.
-- **Never change an email being written,** only emails being read.
-- **Only flagged senders are moved to Spam,** only once, and only with Gmail's own Report spam; what the
-  user takes back out of Spam stays out.
-- **Never trap an email:** if the Send check can't finish, the email is sent.
-- **Managed settings win** in the Chrome and Firefox builds (Safari has no extension policies).
-
-## Testing
-
-Unit tests (Node) cover the link pipeline, decoders and shared logic; browser tests (Playwright)
-run the extension on simulated webmail pages; accessibility audits check contrast in light and dark
-mode and names and roles. Webmail page structure is mapped from public information and simulated
-pages, so changes to a webmail's layout need checking on the live site. The tests are in `tests/`
-(see `tests/README.md`; not part of the extension package):
-
-```bash
-cd tests && npm install && node run-all.js
-```
-
-The browser tests drive Chromium, which can't load a Safari build; on this branch they check the
-shared code, and the unit tests run against it directly (`EXT=. node --test tests/unit/unit.test.js`).
-Try each change in Safari itself before release.
 
 ## Privacy
 
@@ -219,8 +160,8 @@ Try each change in Safari itself before release.
 
 ## Support the project
 
-S.P.R.U.C.E+ is free, with no ads and no tracking. If it keeps phishing out of your inbox, you can
-support its development with a donation:
+S.P.R.U.C.E+ is free, with no ads and no tracking. If you find it useful, you can support its
+development with a donation:
 [**Donate with PayPal**](https://www.paypal.com/donate/?hosted_button_id=NA8SK5RBLWGW6), or scan the code below.
 
 <img src="branding/donate-qr.png" alt="QR code for the PayPal donation page" width="128" height="128">
