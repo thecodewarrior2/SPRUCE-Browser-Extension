@@ -3341,8 +3341,19 @@ function showSpamNotice(n) {
 // A button beside the sender of each opened email (after their address) that copies the address, with
 // a brief "Copied" confirmation (announced to screen readers too). Works on its own, whatever the
 // sender checks are set to. Inspired by Copy Button for Gmail.
-const COPY_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>';
-const COPIED_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/></svg>';
+const COPY_PATH = 'M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z';
+const COPIED_PATH = 'M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z';
+// The button's 16-pixel icon (copy, or a check mark once copied), built as elements.
+function setCopyIcon(btn, done) {
+    const NS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(NS, 'svg');
+    for (const [k, v] of [['viewBox', '0 0 24 24'], ['width', '16'], ['height', '16'], ['aria-hidden', 'true'], ['focusable', 'false']]) svg.setAttribute(k, v);
+    const path = document.createElementNS(NS, 'path');
+    path.setAttribute('fill', 'currentColor');
+    path.setAttribute('d', done ? COPIED_PATH : COPY_PATH);
+    svg.appendChild(path);
+    btn.replaceChildren(svg);
+}
 function copyText(text) {
     if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(text).then(() => true, () => copyTextFallback(text));
     return Promise.resolve(copyTextFallback(text));
@@ -3371,7 +3382,7 @@ function addCopyButtons(S) {
         btn.className = 'unshortener-copy-address' + (isDarkSurface(nameEl) ? ' unshortener-dark' : '');
         btn.title = `Copy ${who.address}`;
         btn.setAttribute('aria-label', `Copy the sender's address, ${who.address}`);
-        btn.innerHTML = COPY_ICON;
+        setCopyIcon(btn, false);
         const status = document.createElement('span');
         status.className = 'unshortener-copy-status';
         status.setAttribute('role', 'status');
@@ -3379,11 +3390,11 @@ function addCopyButtons(S) {
             e.preventDefault();
             e.stopPropagation();                         // not a click on the email header (it would collapse it)
             guarded('Copying an address', () => copyText(who.address).then(ok => {
-                btn.innerHTML = ok ? COPIED_ICON : COPY_ICON;
+                setCopyIcon(btn, ok);
                 btn.classList.toggle('unshortener-copied', ok);
                 status.textContent = ok ? 'Copied' : 'Couldn\'t copy';
                 clearTimeout(btn.unshortenerTimer);
-                btn.unshortenerTimer = setTimeout(() => { btn.innerHTML = COPY_ICON; btn.classList.remove('unshortener-copied'); status.textContent = ''; }, 1500);
+                btn.unshortenerTimer = setTimeout(() => { setCopyIcon(btn, false); btn.classList.remove('unshortener-copied'); status.textContent = ''; }, 1500);
             }));
         });
         const after = (MAIL.message.senderAfter && holder.querySelector(MAIL.message.senderAfter)) || holder.querySelector('.unshortener-sender-chip') || nameEl;
