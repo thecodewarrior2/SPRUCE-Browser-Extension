@@ -1,0 +1,37 @@
+Delivered-To: sampleuser@example.org
+Received: by 2002:a05:6500:2542:b0:345:212:701e with SMTP id n2csp324400lqb; Fri, 23 Oct 2026 17:25:41 -0700 (PDT)
+X-Received: by 2002:a05:6000:200f:b0:48e:f8d:8cab with SMTP id ffacd0b85a97d-48e3eb455bdmr871288f8f.4.1792801541001; Fri, 23 Oct 2026 17:25:41 -0700 (PDT)
+ARC-Authentication-Results: i=1; mx.google.com; dkim=pass header.i=@pjbaabrn.actr.spamdomain.example header.s=smtp header.b=PoIpSU2e; spf=pass (google.com: domain of return-ojsdwxk@actr.spamdomain.example designates 203.0.113.84 as permitted sender) smtp.mailfrom=return-ojsdwxk@actr.spamdomain.example
+Return-Path: <return-ojsdwxk@actr.spamdomain.example>
+Received: from actr.spamdomain.example (www.adserver.example. [203.0.113.84]) by mx.google.com with ESMTPS id ffacd0b85a97d-48e3ece84e0si1033863f8f.155.2026.10.23.17.25.40 for <sampleuser@example.org> (version=TLS1 cipher=ECDHE-ECDSA-AES128-SHA bits=128/128); Fri, 23 Oct 2026 17:25:40 -0700 (PDT)
+Received-SPF: pass (google.com: domain of return-ojsdwxk@actr.spamdomain.example designates 203.0.113.84 as permitted sender) client-ip=203.0.113.84;
+Authentication-Results: mx.google.com; dkim=pass header.i=@pjbaabrn.actr.spamdomain.example header.s=smtp header.b=PoIpSU2e; spf=pass (google.com: domain of return-ojsdwxk@actr.spamdomain.example designates 203.0.113.84 as permitted sender) smtp.mailfrom=return-ojsdwxk@actr.spamdomain.example
+DKIM-Signature: v=1; a=rsa-sha1; c=relaxed/relaxed; s=smtp; d=pjbaabrn.actr.spamdomain.example; h=Subject:From:To:MIME-Version:Message-Id:List-Unsubscribe:Content-Type:Content-Transfer-Encoding:Date:Sender; bh=6ajm; b=PoIp
+DomainKey-Signature: a=rsa-sha1; c=nofws; q=dns; s=smtp; d=pjbaabrn.actr.spamdomain.example; b=nf8i;
+Delivered-To: other@example.net
+Received: from analytics.example (analytics.example. 198.51.100.116)
+Subject: We've blocked your account! 🚫 Your photos and videos will be deleted on 10-24-2026 ⚠️ Renew your subscription for free now!
+From: sampleuser <teomnrd@pjbaabrn.actr.spamdomain.example>
+To: other@example.com
+MIME-Version: 1.0
+Precedence: bulk
+Envelope-To: <sampleuser@example.org>
+X-Originating-IP: 203.0.113.84
+X-Original-Sender: <sampleuser@example.org>
+Content-Length: 41
+Content-Length: 8330354
+X-Google-Sender-Delegation: sampleuser@example.org Trusted Sender
+X-Google-Original-Message-ID: <-@hosting.example>
+Message-Id: <hunnxhfrqmuybvpahgwbazkorlujqu@o8bf37ld7gbthwk4qa>
+List-Unsubscribe: <http://actr.spamdomain.example/LEAVE=To>
+Content-Type: multipart/digest; boundary="----=_Part_kdEHX_21805.21805"
+Content-Transfer-Encoding: 8bit
+Date: Sat, 24 Oct 2026 00:25:30 +0000
+Sender: loqrdrjvlhtarrjxpxtpa@pjbaabrn.actr.spamdomain.example
+
+------=_Part_kdEHX_21805.21805
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: amazonses
+
+x
+------=_Part_kdEHX_21805.21805--

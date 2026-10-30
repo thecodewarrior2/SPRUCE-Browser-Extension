@@ -36,6 +36,9 @@ const SETTING_DEFS = [
     // Look-alike senders (inbox rows, nothing opened): domains imitating a popular site, a well-known
     // brand, your organization or a domain your mail has verified; and names that don't match the address.
     { key: 'enableLookalikeCheck',        managedKey: 'managedEnableLookalikeCheck',        def: true, type: 'boolean' },
+    // A sender's name that is the user's own email address or mailbox name, on someone else's address
+    // (inbox rows, nothing opened): a scam trick to look like a notice about the user's own account.
+    { key: 'enableOwnNameCheck',          managedKey: 'managedEnableOwnNameCheck',          def: true, type: 'boolean' },
     // BIMI logos: the company logo a domain publishes in DNS, shown without opening any email.
     { key: 'enableSenderBimi',            managedKey: 'managedEnableSenderBimi',            def: true, type: 'boolean' },
     // Row highlighter: the inbox row under the mouse (and selected rows) is highlighted, so it's clear
@@ -1256,6 +1259,7 @@ function mailCapabilities(site) {
         move: !!(M && !M.generic && M.list && M.toolbar && M.views),   // moving flagged emails to Spam
         compose: !!(M && !M.generic && M.compose),            // checking links before sending
         avatars: !!(M && !M.generic && M.message && M.message.avatar),   // sender photos and company logos
+        account: !!(M && !M.generic && M.account && M.account.fromTitle),   // the signed-in address (own-name check)
         attachments: !!(site && site.attachments)             // attachment checks
     };
 }
@@ -1435,6 +1439,7 @@ const FEATURE_SUPPORT = [
     { name: 'Sender icon, country flag and label in opened emails', needs: 'opened' },
     { name: 'Copy button for the sender\'s address', needs: 'avatars' },
     { name: 'Look-alike senders caught in the inbox list (nothing opened)', needs: 'list' },
+    { name: 'Senders using your own name or address as theirs, caught in the inbox list', needs: 'account' },
     { name: 'Sender icon, country flag and label in the inbox list', needs: 'list' },
     { name: 'Sender pictures over the checkbox: colleagues\' photos, BIMI and company logos, site icons', needs: 'avatars' },
     { name: 'The webmail\'s own warnings about a sender counted in the email\'s verdict', needs: 'opened' },
@@ -1618,6 +1623,27 @@ function nameAddressSigns(name, address, own, colleagues) {
         out.push({ weight: 3, text: `The sender uses the name of someone in your organization, but writes from an outside address (${address}).` });
     }
     return out;
+}
+
+// Signs that a sender borrows the reader's own name: a display name that is the reader's own email
+// address, or its mailbox name (the part before the @) written exactly as in the address, on someone
+// else's address, so the email looks like a notice about the reader's own account ("patdoe"
+// <random@spam.example> to patdoe@example.com). Red: moved to Spam. Not for shared mailbox names
+// (info, office…), senders in the reader's own organization, or a sender whose own mailbox name
+// contains the reader's (likely their other account). account: the signed-in address.
+const SHARED_MAILBOX_NAMES = new Set(['admin', 'office', 'info', 'contact', 'support', 'help', 'hello', 'mail', 'email', 'team', 'sales', 'billing', 'accounts', 'service', 'news', 'noreply', 'webmaster', 'postmaster', 'user', 'test']);
+function ownNameSigns(name, address, account) {
+    const n = String(name || '').trim().replace(/^["'“”‘’]+|["'“”‘’]+$/g, '').trim();
+    const me = String(account || '').trim().toLowerCase(), addr = String(address || '').trim().toLowerCase();
+    const at = me.lastIndexOf('@'), domain = domainOfAddress(addr), own = domainOfAddress(me);
+    if (!n || at < 1 || !domain || addr === me) return [];
+    if (own && !isPersonalMailDomain(own) && (domain === own || domain.endsWith('.' + own))) return [];
+    const mine = me.slice(0, at);
+    if (addr.slice(0, addr.lastIndexOf('@')).includes(mine)) return [];
+    const isAddress = n.toLowerCase() === me;
+    if (!isAddress && !(n === mine && mine.length >= 4 && !SHARED_MAILBOX_NAMES.has(mine))) return [];
+    // The user's own name isn't repeated in the text (it ends up in the log).
+    return [{ weight: 5, text: `The sender's name is your own ${isAddress ? 'email address' : 'mailbox name'}, but the email comes from someone else's address (${address}), a trick to look like a notice about your own account.` }];
 }
 
 // Parses the header block of a raw message: [[lower-case name, value], …] in order (unfolded).
@@ -2147,7 +2173,7 @@ const ESP_HEADER_MARKERS = [
 ];
 // Bumped whenever headerAnomalies learns new signs, so results saved by an older version are worked
 // out again (see messageInfo in content.js).
-const HEADER_SIGNS_VERSION = 3;
+const HEADER_SIGNS_VERSION = 4;
 // receiver: the webmail's receiving mail system, whose own records can be trusted:
 // { host: 'mx.google.com', name: 'Gmail' } (see the `mail.headers` entry of WEBMAIL_SITES).
 function headerAnomalies(raw, accountAddress, receiver = {}) {
@@ -2239,6 +2265,7 @@ function headerAnomalies(raw, accountAddress, receiver = {}) {
     if (placeholder && placeholder.length >= 3) out.push({ weight: 2, text: 'Its headers contain unfilled placeholders from a bulk-mailing tool.' });
     // Headers that must appear once.
     const dup = ['from', 'subject', 'date', 'message-id', 'mime-version'].filter(n => get(n).length > 1);
+    if (new Set(get('content-length').map(v => v.trim())).size > 1) dup.push('content-length');   // two different sizes
     if (dup.length) out.push({ weight: 2, text: `Its headers repeat ${dup.map(d => d.replace(/(^|-)([a-z])/g, (m, a, b) => a + b.toUpperCase())).join(', ')}, which a mail program writes only once.` });
     return out;
 }

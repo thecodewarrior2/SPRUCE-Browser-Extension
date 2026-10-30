@@ -452,7 +452,7 @@ test('mail profiles: header lines are trusted only from the receiving system the
 test('generic profile and the webmail\'s own warnings', () => {
   const caps = S('mailCapabilities');
   const W = S('WEBMAIL_SITES');
-  assert.deepEqual({ ...caps(W.find(w => w.id === 'outlook')) }, { list: 'generic', opened: 'generic', headers: false, move: false, compose: false, avatars: false, attachments: false });
+  assert.deepEqual({ ...caps(W.find(w => w.id === 'outlook')) }, { list: 'generic', opened: 'generic', headers: false, move: false, compose: false, avatars: false, account: false, attachments: false });
   assert.equal(caps(W.find(w => w.id === 'gmail')).move, true);
   assert.equal(caps({ mail: null }).opened, false);
   const warn = S('serviceWarningSigns');
@@ -753,6 +753,37 @@ test('name and address: a brand\'s name elsewhere is red; a colleague\'s name ou
   assert.deepEqual(signs('Pat Colleague', 'pat.personal@gmail.com'), [3], 'a colleague\'s name outside: amber');
   assert.deepEqual(signs('Pat Colleague', 'pat.colleague@school.org'), [], 'the colleague themself');
   assert.deepEqual(signs('Someone Else', 'someone@gmail.com'), []);
+});
+
+test('own name: a sender named as your own address or mailbox name, on someone else\'s address, is red (sample 5)', () => {
+  const own = (name, addr, me = 'sampleuser@example.org') => S('ownNameSigns')(name, addr, me).map(x => x.weight);
+  // The cloud-storage scam found in Spam: "sampleuser" <random@…> to sampleuser@example.org.
+  const raw = fs.readFileSync(FX + 'scam5.eml', 'utf8');
+  const from = /^From: (.*) <([^>]+)>/m.exec(raw);
+  assert.deepEqual(own(from[1], from[2]), [5], 'the sample: red without opening');
+  assert.ok(/your own mailbox name/.test(S('ownNameSigns')(from[1], from[2], 'sampleuser@example.org')[0].text));
+  assert.deepEqual(own('sampleuser@example.org', 'alerts@random.example'), [5], 'the whole address as the name');
+  assert.deepEqual(own('"SampleUser@Example.org"', 'alerts@random.example'), [5], 'the address in any case, in quotes');
+  // Left alone: a real person's name, written their own way; a name that only contains it; the user's
+  // own address; an address containing the mailbox name (their other account); the organization's own
+  // senders; shared mailbox names; very short ones.
+  assert.deepEqual(own('Sampleuser', 'someone@random.example'), [], 'a name written as a name');
+  assert.deepEqual(own('sampleuser via Forms', 'forms@random.example'), [], 'only contains it');
+  assert.deepEqual(own('sampleuser', 'sampleuser@example.org'), [], 'the user');
+  assert.deepEqual(own('sampleuser', 'sampleuser@other-mail.example'), [], 'same mailbox elsewhere');
+  assert.deepEqual(own('sampleuser', 'sampleuser.work@other-mail.example'), [], 'contains it');
+  assert.deepEqual(own('sampleuser', 'helpdesk@example.org', 'sampleuser@example.org'), [], 'own organization');
+  assert.deepEqual(own('sampleuser', 'helpdesk@it.example.org', 'sampleuser@example.org'), [], 'own organization\'s subdomain');
+  assert.deepEqual(own('sampleuser', 'x@gmail.com', 'sample_user@gmail.com'), [5], 'a personal domain is no organization');
+  assert.deepEqual(own('office', 'noreply@vendor.example', 'office@example.org'), [], 'shared mailbox name');
+  assert.deepEqual(own('pat', 'noreply@vendor.example', 'pat@example.org'), [], 'too short');
+  assert.deepEqual(own('sampleuser', 'x@random.example', ''), [], 'account unknown');
+  // Its headers: two different Content-Length sizes.
+  const RX = S('WEBMAIL_SITES').find(w => w.id === 'gmail').mail.headers.receiver;
+  const signs = S('headerAnomalies')(raw, 'sampleuser@example.org', RX);
+  assert.ok(signs.some(x => /repeat Content-Length/.test(x.text) && x.weight === 2), JSON.stringify(signs));
+  const same = 'From: A <a@example.com>\nContent-Length: 41\nContent-Length: 41\nMIME-Version: 1.0\n\nx';
+  assert.ok(!S('headerAnomalies')(same, '', RX).some(x => /Content-Length/.test(x.text)), 'the same size twice is left alone');
 });
 
 test('list storage: compressed, each entry once; old plain copies still read; a failed list keeps its domains', async () => {
