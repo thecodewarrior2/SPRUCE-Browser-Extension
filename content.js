@@ -2955,11 +2955,19 @@ const WATCH_SELECTOR = MAIL_CAN.list ? `${SITE.body}, ${MAIL.list.row}` : SITE.b
 // Watches for Gmail inserting a message body. Gmail changes the page constantly, so the callback
 // does as little as possible: text nodes and leaf elements (which cannot contain a message body)
 // are skipped before any search, and bursts of changes are debounced into a single scan.
+// A list row we decorated whose contents the webmail rewrote (it refreshes rows in place, for
+// example when the tab is shown again), losing our icon or label: it's drawn again.
+function rowLostDecorations(target) {
+    if (!MAIL_CAN.list || !lastSettings.enableSenderIdentity || !target || target.nodeType !== Node.ELEMENT_NODE) return false;
+    const row = target.closest(MAIL.list.row);
+    return !!(row && row.dataset.unshortenerSender && !row.querySelector('.unshortener-sender-icon, .unshortener-sender-chip'));
+}
 const observer = new MutationObserver((mutations) => {
     scheduleBadgeUpdate();                     // opening, closing or switching views can change the state
     let emailOpened = false;
     outer:
     for (const mutation of mutations) {
+        if ((mutation.addedNodes.length || mutation.removedNodes.length) && rowLostDecorations(mutation.target)) { emailOpened = true; break; }
         for (const node of mutation.addedNodes) {
             if (node.nodeType !== Node.ELEMENT_NODE) continue;
             if (node.matches(WATCH_SELECTOR) || (node.firstElementChild && node.querySelector(WATCH_SELECTOR)) ||
@@ -2991,7 +2999,8 @@ if (MAIL) setTimeout(scheduleScan, 500);
 // Going back to the inbox shows the list Gmail kept, without inserting anything: scan it again.
 window.addEventListener('hashchange', () => { scheduleBadgeUpdate(); if (MAIL) scheduleScan(); });
 window.addEventListener('popstate', scheduleBadgeUpdate);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) { lastReported = ''; scheduleBadgeUpdate(); if (spamQueue.size) scheduleSpamMoves(); } });
+// Coming back to the tab: the webmail may have refreshed the list while it was hidden.
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { lastReported = ''; scheduleBadgeUpdate(); if (MAIL) scheduleScan(); if (spamQueue.size) scheduleSpamMoves(); } });
 const SENDER_SETTING_KEYS = ['enableSenderIdentity', 'enableSenderAvatars', 'enableSenderIconFallback', 'enableSenderCountry', 'enableSenderDomainCheck', 'enableSenderAddressCheck', 'enableAutoSpam', 'customTrustedSenders', 'customAllowlist', 'enableDnsThreatCheck'];
 // Turning protection on or off in Settings or the popup takes effect on the icon immediately.
 chrome.storage.onChanged.addListener((changes, area) => {
