@@ -32,6 +32,7 @@
           "managedEnableSenderDomainCheck": true,
           "managedEnableSenderAddressCheck": true,
           "managedEnableAutoSpam": true,
+          "managedEnableAutoSpamInSearch": true,
           "managedEnableSpamNotice": true,
           "managedEnableSpamFolderFlags": true,
           "managedEnableQrScanning": true,

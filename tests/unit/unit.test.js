@@ -765,23 +765,68 @@ test('own name: a sender named as your own address or mailbox name, on someone e
   // Left alone: a real person's name, written their own way; a name that only contains it; the user's
   // own address; an address containing the mailbox name (their other account); the organization's own
   // senders; shared mailbox names; very short ones.
-  assert.deepEqual(own('Sampleuser', 'someone@random.example'), [], 'a name written as a name');
+  assert.deepEqual(own('Sampleuser', 'someone@random.example'), [], 'at an organization, a name written as a name');
   assert.deepEqual(own('sampleuser via Forms', 'forms@random.example'), [], 'only contains it');
   assert.deepEqual(own('sampleuser', 'sampleuser@example.org'), [], 'the user');
   assert.deepEqual(own('sampleuser', 'sampleuser@other-mail.example'), [], 'same mailbox elsewhere');
   assert.deepEqual(own('sampleuser', 'sampleuser.work@other-mail.example'), [], 'contains it');
   assert.deepEqual(own('sampleuser', 'helpdesk@example.org', 'sampleuser@example.org'), [], 'own organization');
   assert.deepEqual(own('sampleuser', 'helpdesk@it.example.org', 'sampleuser@example.org'), [], 'own organization\'s subdomain');
-  assert.deepEqual(own('sampleuser', 'x@gmail.com', 'sample_user@gmail.com'), [5], 'a personal domain is no organization');
+  assert.deepEqual(own('sample_user', 'x@gmail.com', 'sample_user@gmail.com'), [5], 'a personal domain is no organization');
   assert.deepEqual(own('office', 'noreply@vendor.example', 'office@example.org'), [], 'shared mailbox name');
   assert.deepEqual(own('pat', 'noreply@vendor.example', 'pat@example.org'), [], 'too short');
   assert.deepEqual(own('sampleuser', 'x@random.example', ''), [], 'account unknown');
+  // On a big provider the mailbox name is nobody's real name, so it counts in any case (sample 8).
+  const raw8 = fs.readFileSync(FX + 'scam8.eml', 'utf8');
+  const from8 = /^from: (.*) <([^>]+)>/mi.exec(raw8);
+  assert.deepEqual(own(from8[1], from8[2], 'sample_user@gmail.com'), [5], 'sample 8: "Sample_user" to sample_user@gmail.com');
+  assert.deepEqual(own('SAMPLE_USER', 'x@random.example', 'sample_user@gmail.com'), [5], 'any case');
   // Its headers: two different Content-Length sizes.
   const RX = S('WEBMAIL_SITES').find(w => w.id === 'gmail').mail.headers.receiver;
   const signs = S('headerAnomalies')(raw, 'sampleuser@example.org', RX);
   assert.ok(signs.some(x => /repeat Content-Length/.test(x.text) && x.weight === 2), JSON.stringify(signs));
   const same = 'From: A <a@example.com>\nContent-Length: 41\nContent-Length: 41\nMIME-Version: 1.0\n\nx';
   assert.ok(!S('headerAnomalies')(same, '', RX).some(x => /Content-Length/.test(x.text)), 'the same size twice is left alone');
+});
+
+test('header signs: four scams Gmail put in Spam are flagged (samples 6-9); genuine shapes are left alone', () => {
+  const RX = S('WEBMAIL_SITES').find(w => w.id === 'gmail').mail.headers.receiver;
+  const H = (raw) => S('headerAnomalies')(raw, 'sample_user@gmail.com', RX);
+  const sum = (signs) => signs.reduce((a, x) => a + x.weight, 0);
+  const has = (signs, re, w) => signs.some(x => re.test(x.text) && x.weight === w);
+  // 6: a "Fidelity Life" offer: invisible padding in the name, page code in the Bcc line, a reply to an address.
+  const s6 = H(fs.readFileSync(FX + 'scam6.eml', 'utf8'));
+  assert.ok(has(s6, /padded with invisible characters/, 3) && has(s6, /address lines contain web-page code/, 3) && has(s6, /In-Reply-To/, 2), JSON.stringify(s6));
+  assert.ok(has(s6, /3 unrelated email services.*cPanel/, 3) && sum(s6) >= 5);
+  // 7: a casino ad: a fake gmail.com signature, DMARC failed, a random tail on the subject.
+  const s7 = H(fs.readFileSync(FX + 'scam7.eml', 'utf8'));
+  assert.ok(has(s7, /fake gmail\.com signature/, 3) && has(s7, /subject ends in filler and random letters/, 2) && sum(s7) >= 5, JSON.stringify(s7));
+  // 9: an IPTV ad: already marked as spam by the sender's own provider; unsubscribe link on 127.0.0.1.
+  const s9 = H(fs.readFileSync(FX + 'scam9.eml', 'utf8'));
+  assert.ok(has(s9, /already marked it as spam/, 3) && has(s9, /127\.0\.0\.1/, 3) && sum(s9) >= 5, JSON.stringify(s9));
+  // Genuine shapes: a developer's mail quoting localhost links, ellipses in a subject, RTL marks and
+  // one zero-width space in a name, a reply with a real Message-ID, a missing key for a company's own signature.
+  const top = 'Delivered-To: user@example.org\nReceived: from a.example by mx.google.com with ESMTPS id q for <user@example.org>; Thu, 07 Nov 2024 11:52:24 -0800 (PST)\n';
+  const g = (hdrs, body = 'x') => sum(H(top + hdrs + 'MIME-Version: 1.0\n\n' + body));
+  assert.equal(g('From: Dev <dev@example.com>\nSubject: Bug in login\n', 'Steps: open http://localhost:3000/login and <a href="http://127.0.0.1:8080/">this</a>'), 0, 'localhost links quoted in a bug report');
+  assert.equal(g('From: Shop <news@shop.example>\nSubject: Wait for it.... tomorrow\n'), 0, 'ellipsis');
+  assert.equal(g('From: Shop <news@shop.example>\nSubject: Sale ---- weekend\n'), 0, 'dashes');
+  assert.equal(g('From: =?UTF-8?B?4oCP16nXqNeUIOKAjw==?= <s@example.co.il>\nSubject: hi\n'), 0, 'RTL marks');
+  assert.equal(g('From: Pat​ Doe <pat@example.com>\nSubject: hi\nIn-Reply-To: <abc@mail.example.com>\n'), 0, 'one zero-width space; a real reply');
+  assert.equal(g('From: A <a@example.com>\nSubject: hi\nAuthentication-Results: mx.google.com; dkim=permerror (no key for signature) header.i=@example.com header.s=old; spf=pass\n'), 0, 'a company\'s own missing key');
+  assert.equal(g('From: A <a@example.com>\nSubject: hi\nX-Spam-Flag: NO\nList-Unsubscribe: <https://example.com/unsub>\n'), 0, 'X-Spam-Flag: NO');
+});
+
+test('moving: search results (not in Spam, Trash, Sent, Drafts or everywhere) only when allowed', () => {
+  const views = S('WEBMAIL_SITES').find(w => w.id === 'gmail').mail.views;
+  const f = (h, search = true) => S('viewAllowsAutoSpam')(h, views, search);
+  for (const ok of ['#search/invoice', '#search/from%3Abilling+invoice', '#search/invoice/FMfcgz', '#search/in%3Aall+offer', '#advanced-search/from=a&subset=all&query=x'])
+    assert.equal(f(ok), true, ok);
+  for (const no of ['#search/in%3Aspam+x', '#search/in:trash x', '#search/in%3Aanywhere+x', '#search/in%3Asent', '#search/is%3Adrafts', '#search/in%3Achats+x',
+                    '#advanced-search/subset=spam&query=x', '#search/', '#label/x', '#all', '#trash'])
+    assert.equal(f(no), false, no);
+  assert.equal(f('#search/invoice', false), false, 'switched off');
+  assert.equal(f('#inbox', false), true, 'the inbox either way');
 });
 
 test('list storage: compressed, each entry once; old plain copies still read; a failed list keeps its domains', async () => {

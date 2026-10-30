@@ -62,6 +62,8 @@ const SETTING_DEFS = [
     { key: 'enableSenderAddressCheck',    managedKey: 'managedEnableSenderAddressCheck',    def: true, type: 'boolean' },
     // Emails from a flagged sender are moved to Spam (never unverified, unknown or clean ones); once only per email.
     { key: 'enableAutoSpam',              managedKey: 'managedEnableAutoSpam',              def: true, type: 'boolean' },
+    // Flagged emails found by a search are moved too (not a search in Spam, Trash, Sent, Drafts or everywhere).
+    { key: 'enableAutoSpamInSearch',      managedKey: 'managedEnableAutoSpamInSearch',      def: true, type: 'boolean' },
     // A short notice at the top of Gmail when emails were moved, with a link to the Spam folder.
     { key: 'enableSpamNotice',            managedKey: 'managedEnableSpamNotice',            def: true, type: 'boolean' },
     { key: 'enableSpamFolderFlags',       managedKey: 'managedEnableSpamFolderFlags',       def: true, type: 'boolean' },
@@ -1139,7 +1141,9 @@ function riskyScheme(href) {
 //   toolbar       the toolbar that acts on selected or open conversations; spamAction: an attribute
 //                 that marks the Report spam button whatever its language
 //   views         inbox: views (address after "#") where emails may be moved to Spam; spam: the Spam
-//                 folder's views; spamHref: link to the Spam folder
+//                 folder's views; spamHref: link to the Spam folder; search: search results, where
+//                 flagged emails may be moved too, unless the search matches searchExcludes (a search
+//                 in Spam, Trash, Sent…)
 //   account       where the signed-in address is shown (fromTitle: the page title)
 //   headers       the email's original source, fetched with the user's own session: url (template with
 //                 {origin}, {account}, {ik}, {id}), the values filled in, the element holding the text,
@@ -1187,7 +1191,9 @@ const WEBMAIL_SITES = [
                                placeholder: /default-user|\/ic_|anonymous/i } },
           toolbar: '[gh="mtb"], [gh="tm"]',
           spamAction: { attr: 'act', value: '9' },
-          views: { inbox: /^(inbox(\/.*)?|category\/[a-z]+(\/.*)?)?$/, spam: /^(spam(\/|$)|search\/.*in(:|%3A)spam)/i, spamHref: '#spam' },
+          views: { inbox: /^(inbox(\/.*)?|category\/[a-z]+(\/.*)?)?$/, spam: /^(spam(\/|$)|search\/.*in(:|%3A)spam)/i, spamHref: '#spam',
+                   search: /^(search|advanced-search)\/./i,
+                   searchExcludes: /\b(in|is|label):(spam|trash|anywhere|sent|drafts?|chats?|scheduled)\b|\bsubset=(spam|trash|anywhere|sent|drafts?|chats?)\b/i },
           account: { fromTitle: true },
           headers: {
               url: '{origin}/mail/u/{account}/?{ik}view=om&permmsgid={id}',
@@ -1628,7 +1634,9 @@ function nameAddressSigns(name, address, own, colleagues) {
 // Signs that a sender borrows the reader's own name: a display name that is the reader's own email
 // address, or its mailbox name (the part before the @) written exactly as in the address, on someone
 // else's address, so the email looks like a notice about the reader's own account ("patdoe"
-// <random@spam.example> to patdoe@example.com). Red: moved to Spam. Not for shared mailbox names
+// <random@spam.example> to patdoe@example.com). On Gmail, Outlook.com and other big providers the
+// mailbox name is unique to its owner, so there it counts written in any case ("Patdoe"); at an
+// organization it can be a plain first name ("john@"), so only as written. Red: moved to Spam. Not for shared mailbox names
 // (info, office…), senders in the reader's own organization, or a sender whose own mailbox name
 // contains the reader's (likely their other account). account: the signed-in address.
 const SHARED_MAILBOX_NAMES = new Set(['admin', 'office', 'info', 'contact', 'support', 'help', 'hello', 'mail', 'email', 'team', 'sales', 'billing', 'accounts', 'service', 'news', 'noreply', 'webmaster', 'postmaster', 'user', 'test']);
@@ -1641,7 +1649,8 @@ function ownNameSigns(name, address, account) {
     const mine = me.slice(0, at);
     if (addr.slice(0, addr.lastIndexOf('@')).includes(mine)) return [];
     const isAddress = n.toLowerCase() === me;
-    if (!isAddress && !(n === mine && mine.length >= 4 && !SHARED_MAILBOX_NAMES.has(mine))) return [];
+    const same = n === mine || (isPersonalMailDomain(own) && n.toLowerCase() === mine);
+    if (!isAddress && !(same && mine.length >= 4 && !SHARED_MAILBOX_NAMES.has(mine))) return [];
     // The user's own name isn't repeated in the text (it ends up in the log).
     return [{ weight: 5, text: `The sender's name is your own ${isAddress ? 'email address' : 'mailbox name'}, but the email comes from someone else's address (${address}), a trick to look like a notice about your own account.` }];
 }
@@ -2030,13 +2039,24 @@ function countryName(cc) {
     } catch (e) { return cc; }
 }
 
-// Views where a conversation is known to be in the inbox (the webmail's `mail.views.inbox`, matched
-// against the address after "#"; for Gmail the inbox itself and its category tabs, list or opened
-// conversation). Emails are only ever moved to Spam from these views, never from Spam, Trash, Sent,
-// Drafts, labels, searches or All mail. No such views known: never.
-function viewAllowsAutoSpam(hash, views) {
+// Views where emails may be moved to Spam (the webmail's `mail.views`, matched against the address
+// after "#"): the inbox itself and its category tabs, list or opened conversation; with search
+// true, also search results (`views.search`), unless the search looks in Spam, Trash, Sent, Drafts,
+// chats or everywhere (`views.searchExcludes`), whose conversations a search in your mail doesn't
+// show. Never from Spam, Trash, Sent, Drafts, labels or All mail. No such views known: never.
+function viewAllowsAutoSpam(hash, views, search = false) {
     const h = String(hash || '').replace(/^#/, '');
-    return !!(views && views.inbox && views.inbox.test(h));
+    if (!views) return false;
+    if (views.inbox && views.inbox.test(h)) return true;
+    return !!search && isSearchView(h, views) && !(views.spam && views.spam.test(h));
+}
+// Search results (or a conversation opened from them) that moving may act on.
+function isSearchView(hash, views) {
+    const h = String(hash || '').replace(/^#/, '');
+    if (!views || !views.search || !views.search.test(h)) return false;
+    let q = h;
+    try { q = decodeURIComponent(h.replace(/\+/g, ' ')); } catch (e) { /* malformed: kept as written */ }
+    return !(views.searchExcludes && views.searchExcludes.test(q));
 }
 
 // Sender verdict from the separate checks. All inputs are optional:
@@ -2148,11 +2168,17 @@ function parseSenderAddress(raw) {
 }
 
 // The display name: decorations and padding that genuine senders don't use.
+const INVISIBLE_CHARS_RE = /[\u115F\u1160\u3164\uFFA0\u2800\u200B\u200C\u2060-\u2064\uFEFF\u180E\u034F\u17B4\u17B5\u00AD]/g;
 function displayNameAnomalies(name) {
     const n = String(name || '');
     const out = [];
     if (/["“”]{3,}|[•°˜º¤∙·◦★☆♥♦✓✔"“”]{3,}|[\t\r\n]|\s{6,}/.test(n) || n.length > 90) {
         out.push({ weight: 2, text: 'The sender\'s name is padded with symbols, quotes or blank space, a trick to slip past filters.' });
+    }
+    // Characters that print as nothing (the Hangul and braille "fillers", zero-width spaces): no one
+    // types them into a name; they hide words or make a name look like a different one.
+    if ((n.match(INVISIBLE_CHARS_RE) || []).length >= 3) {
+        out.push({ weight: 3, text: 'The sender\'s name is padded with invisible characters, a trick to disguise it.' });
     }
     return out;
 }
@@ -2169,11 +2195,11 @@ function receivedTime(v) {
 const ESP_HEADER_MARKERS = [
     ['Mailgun', /^x-mailgun-/], ['SendGrid', /^x-sg-(id|eid)$/], ['Emarsys', /^x-emarsys-/], ['beehiiv', /^x-beehiiv-/],
     ['ActiveCampaign', /^x-report-abuse$/], ['250ok', /^x-250ok-/], ['MDaemon', /^x-mdaemon-|^x-md(arrival|helo)/], ['Postmark', /^x-pmmail-/],
-    ['Cisco IronPort', /^x-ironport-/], ['Mailchimp', /^x-mc-user$/], ['Amazon SES', /^x-ses-/]
+    ['Cisco IronPort', /^x-ironport-/], ['Mailchimp', /^x-mc-user$/], ['Amazon SES', /^x-ses-/], ['cPanel', /^x-antiabuse$/]
 ];
 // Bumped whenever headerAnomalies learns new signs, so results saved by an older version are worked
 // out again (see messageInfo in content.js).
-const HEADER_SIGNS_VERSION = 4;
+const HEADER_SIGNS_VERSION = 5;
 // receiver: the webmail's receiving mail system, whose own records can be trusted:
 // { host: 'mx.google.com', name: 'Gmail' } (see the `mail.headers` entry of WEBMAIL_SITES).
 function headerAnomalies(raw, accountAddress, receiver = {}) {
@@ -2253,9 +2279,33 @@ function headerAnomalies(raw, accountAddress, receiver = {}) {
         }
         if (tm && (tm[2].match(/@/g) || []).length > 1) { out.push({ weight: 3, text: 'Its “To” address is broken (two “@”).' }); break; }
     }
-    // Subject: walls of blank space or long runs of random capitals.
+    // Subject: walls of blank space or long runs of random capitals; or filler and a random tail that
+    // makes each copy unique ("125$ FOR YOU!_______kvksrphdly").
     const subject = get('subject')[0] || '';
     if (subject.length > 300 || /\s{60,}/.test(subject) || /[A-Z]{60,}/.test(subject)) out.push({ weight: 2, text: 'Its subject is padded with blank space or random letters to hide from filters.' });
+    else if (/[_~=*]{4,}\s*[A-Za-z0-9]{6,}\s*$/.test(decodeEncodedWords(subject))) out.push({ weight: 2, text: 'Its subject ends in filler and random letters, which make each copy unique to slip past filters.' });
+    // Address lines holding web-page code (<strong>, <br/>…): pasted text, never written by a mail program.
+    const markup = /<\/?(strong|em|br|div|span|p|b|i|u|font|table|td|tr|img|html|body|head)(\s[^<>]*)?\/?>/i;
+    if (['to', 'cc', 'bcc', 'reply-to', 'from'].some(n => get(n).some(v => markup.test(v)))) out.push({ weight: 3, text: 'Its address lines contain web-page code, which no mail program writes there.' });
+    // A reply names the email it answers by its Message-ID (<id@host>), never by an address.
+    const irt = (get('in-reply-to')[0] || '').trim();
+    if (irt && !/</.test(irt) && /@/.test(irt)) out.push({ weight: 2, text: 'Its “In-Reply-To” line holds an address instead of a message ID: a made-up reply.' });
+    // A signature in the name of a big mail provider (gmail.com…) whose key the provider doesn't have,
+    // as the receiver recorded it: the providers publish every key they sign with, so it was made up.
+    const results = headers.find(([n, v]) => n === 'authentication-results' && receiver.host && v.split(';')[0].trim().toLowerCase() === receiver.host);
+    const fakeSig = results && [...results[1].matchAll(/dkim=permerror\s*\(no key[^)]*\)\s*header\.(?:i=@?|d=)([^\s;]+)/gi)].map(m => domainOfAddress(m[1])).find(isPersonalMailDomain);
+    if (fakeSig) out.push({ weight: 3, text: `It carries a fake ${fakeSig} signature (with a key ${fakeSig} doesn't have).` });
+    // A mail system it passed through (often the sender's own provider) already found it was spam.
+    if (get('x-spam-flag').some(v => /^\s*yes\b/i.test(v)) || get('x-spam-status').some(v => /^\s*yes\b/i.test(v))) out.push({ weight: 3, text: 'A mail system it passed through had already marked it as spam.' });
+    // An unsubscribe link or tracking image on the sender's own computer (127.0.0.1, localhost) or a
+    // private network: a home-made bulk-mail tool. (Only those: other links to localhost are normal in
+    // developers' mail, such as quoted bug reports.)
+    const local = String.raw`(?:https?:)?//(?:127\.\d{1,3}\.\d{1,3}\.\d{1,3}|localhost|0\.0\.0\.0|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})(?::\d+)?(?=[/?#"'>\s]|$)`;
+    const body = String(raw || '').replace(/\r\n/g, '\n').split(/\n\n/).slice(1).join('\n\n').slice(0, 200000).replace(/=\n/g, '').replace(/=3D/gi, '=');
+    if (get('list-unsubscribe').some(v => new RegExp(local, 'i').test(v)) || new RegExp(`${local}[^\\s"'<>]*(unsub|opt-?out)`, 'i').test(body)
+        || new RegExp(`<img\\b[^>]*\\bsrc=["']?${local}`, 'i').test(body)) {
+        out.push({ weight: 3, text: 'Its unsubscribe link or tracking image points to the sender\'s own computer (such as 127.0.0.1), a sign of a home-made bulk-mail tool.' });
+    }
     // Headers claiming several unrelated sending services at once.
     const names = new Set(headers.map(([h]) => h));
     const esps = ESP_HEADER_MARKERS.filter(([, re]) => [...names].some(h => re.test(h))).map(([n]) => n);

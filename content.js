@@ -2728,7 +2728,7 @@ function scanSenderRows(S) {
             // must not send everyone's messages to Spam.
             // The verdict stays on the row, so the monitor can queue it again if it had to wait.
             row.unshortenerSpam = finals.length && finals.every(x => x && x.move) && thread
-                ? { kind: 'row', address: senders[0].address, reason: finals[0].reasons.join(' '), msgId, unread, how: 'automatically, from the inbox list' } : null;
+                ? { kind: 'row', address: senders[0].address, reason: finals[0].reasons.join(' '), msgId, unread, how: isSearchView(location.hash, MAIL.views) ? 'automatically, from search results' : 'automatically, from the inbox list' } : null;
             if (row.unshortenerSpam && S.enableAutoSpam) queueSpamMove(thread, row.unshortenerSpam);
         });
         Promise.all([senderResultsFor(senders.map(s => s.raw)), spamFolder ? spamMovedReasons() : null]).then(([results, moved]) => {
@@ -3169,7 +3169,7 @@ async function confirmSpamDialog(before) {
 
 // Still allowed to act, right now: the setting, the view and the user (checked before every click).
 function mayActNow() {
-    return !!lastSettings.enableAutoSpam && !document.hidden && viewAllowsAutoSpam(location.hash, MAIL.views) && !userBusy() && !quietRemaining();
+    return !!lastSettings.enableAutoSpam && !document.hidden && viewAllowsAutoSpam(location.hash, MAIL.views, lastSettings.enableAutoSpamInSearch !== false) && !userBusy() && !quietRemaining();
 }
 // Each row still shows the conversation it was checked for (Gmail can redraw a row for another one).
 function rowsStillMatch(items) {
@@ -3304,11 +3304,12 @@ async function runSpamMoves() {
     try {
         // Paused after repeated failures, hidden tab, not the inbox or the user is busy: wait (every
         // exit below looks again later while anything is queued).
-        if (Date.now() < spamPausedUntil || document.hidden || !viewAllowsAutoSpam(location.hash, MAIL.views) || userBusy() || quietRemaining()) return;
+        if (Date.now() < spamPausedUntil || document.hidden || !viewAllowsAutoSpam(location.hash, MAIL.views, lastSettings.enableAutoSpamInSearch !== false) || userBusy() || quietRemaining()) return;
         const current = currentThreadKey();
         // Several lists on the inbox page (Multiple Inboxes, Priority Inbox sections): some can show
-        // conversations that aren't in the inbox, so nothing is moved from the list there.
-        if (!current && new Set(shownAll(MAIL.list.row).map(r => r.closest(MAIL.list.container || 'table'))).size > 1) {
+        // conversations that aren't in the inbox, so nothing is moved from the list there. (Search
+        // results may be split into sections too; any of them may be moved.)
+        if (!current && !isSearchView(location.hash, MAIL.views) && new Set(shownAll(MAIL.list.row).map(r => r.closest(MAIL.list.container || 'table'))).size > 1) {
             if (!multiListLogged) { multiListLogged = true; reportEvent('info', 'Emails from flagged senders are not moved to Spam from an inbox with several sections (Multiple Inboxes or Priority Inbox); they are still marked, and are moved when opened.'); }
             return;
         }
@@ -3586,7 +3587,7 @@ window.addEventListener('hashchange', () => { scheduleBadgeUpdate(); if (MAIL) s
 window.addEventListener('popstate', scheduleBadgeUpdate);
 // Coming back to the tab: the webmail may have refreshed the list while it was hidden.
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { lastReported = ''; scheduleBadgeUpdate(); if (MAIL) scheduleScan(); if (spamQueue.size) scheduleSpamMoves(); } });
-const SENDER_SETTING_KEYS = ['enableLookalikeCheck', 'enableOwnNameCheck', 'enableSpamFolderFlags', 'enableCopyAddress', 'senderPictureSize', 'enableSenderBimi', 'enableRowHighlighter', 'rowHighlightColor', 'rowHighlightStyle', 'rowHighlightSelected', 'rowHighlightSelectedColor', 'enableConflictWarnings',
+const SENDER_SETTING_KEYS = ['enableLookalikeCheck', 'enableOwnNameCheck', 'enableAutoSpamInSearch', 'enableSpamFolderFlags', 'enableCopyAddress', 'senderPictureSize', 'enableSenderBimi', 'enableRowHighlighter', 'rowHighlightColor', 'rowHighlightStyle', 'rowHighlightSelected', 'rowHighlightSelectedColor', 'enableConflictWarnings',
     'enableSenderIdentity', 'enableSenderAvatars', 'enableSenderIconFallback', 'enableSenderCountry', 'enableSenderDomainCheck', 'enableSenderAddressCheck', 'enableAutoSpam', 'customTrustedSenders', 'customAllowlist', 'enableDnsThreatCheck'];
 // Turning protection on or off in Settings or the popup takes effect on the icon immediately.
 chrome.storage.onChanged.addListener((changes, area) => {
