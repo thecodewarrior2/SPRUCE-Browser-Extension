@@ -82,6 +82,20 @@ const { launch, servePage, sleep, waitFor, check, done } = require('./harness');
   await p.mouse.move(5, 5); await sleep(200);
   const ticked = await p.evaluate((sel) => ({ checked: document.querySelector(sel + ' [role=checkbox]').getAttribute('aria-checked'), shown: getComputedStyle(document.querySelector(sel + ' .unshortener-row-avatar')).display }), rowSel);
   check('inbox list: the checkbox works, and a ticked row shows its checkbox, not the picture', ticked.checked === 'true' && ticked.shown === 'none', ticked);
+  // Colleagues' photos from anywhere Gmail shows them (a hover card here), without opening their
+  // emails; never a picture inside an email, an outsider's, or one from Gmail's image proxy.
+  await p.evaluate(() => {
+    const add = (html) => { const d = document.createElement('div'); d.innerHTML = html; document.body.appendChild(d); };
+    add('<div role="dialog" class="hovercard"><img data-hovercard-id="kim.colleague@school.org" src="https://lh3.googleusercontent.com/a/ACg8ocHOVERCARD-not-real=s64-p"></div>');
+    add('<div class="ii gt"><img data-hovercard-id="ceo.colleague@school.org" src="https://lh3.googleusercontent.com/a/ACg8ocINBODY-not-real=s64-p"></div>');
+    add('<div class="chat"><img data-hovercard-id="outsider@example.org" src="https://lh3.googleusercontent.com/a/ACg8ocOUTSIDE-not-real=s64-p"></div>');
+    add('<div class="chat"><img data-hovercard-id="lee2.colleague@school.org" src="https://ci3.googleusercontent.com/meips/proxy-not-real"></div>');
+  });
+  const harvested = await waitFor(async () => (await logs()).some(m => /kim\.colleague@school\.org/.test(m)), 10000);
+  await sleep(3500);                                   // one more 3-second check, for the others
+  const hl = await logs();
+  check('a colleague\'s photo shown anywhere in Gmail (a hover card) is learned without opening an email', harvested && hl.some(m => /photo for kim\.colleague@school\.org/.test(m)), hl.filter(m => /kim\./.test(m)));
+  check('never a picture inside an email, an outsider\'s, or one from Gmail\'s image proxy', !hl.some(m => /ceo\.colleague|outsider@example\.org|lee2\.colleague/.test(m)), hl.filter(m => /ceo\.|outsider|lee2/.test(m)));
   await p.close();
   await ctx.unroute('https://mail.google.com/**');
   await servePage(ctx, 'fake-gmail-thread.html');

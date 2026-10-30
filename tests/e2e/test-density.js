@@ -10,7 +10,8 @@ async function start(density, settings = {}) {
   await servePage(ctx, 'fake-gmail-list.html');
   await sw.evaluate(async ([png, settings]) => {
     await chrome.storage.local.clear();
-    await chrome.storage.local.set(Object.assign({ enableDnsThreatCheck: true, enableAutoSpam: false }, settings));
+    // Made-up domains don't exist (so they'd be flagged, and flagged rows get no picture): trusted here.
+    await chrome.storage.local.set(Object.assign({ enableDnsThreatCheck: true, enableAutoSpam: false, customTrustedSenders: ['iconsite.example', 'noicon.example'] }, settings));
     const bytes = Uint8Array.from(atob(png), c => c.charCodeAt(0)).buffer;
     await iconStore.put('iconsite.example', 'image/png', bytes, 'favicon');
     await iconStore.put('noicon.example', '', null, 'none');
@@ -40,7 +41,7 @@ const rowLook = (page, t) => page.evaluate((t) => {
 part('default', async () => {
   const { ctx, page } = await start('default');
   const a = await until(() => rowLook(page, 8201), l => l.circle && l.circle.kind === 'icon');
-  check('Default density: 36 px circles over the checkbox, the site icon 20 px inside', a.mode === 'large' && a.circle.w === 36 && a.circle.h === 36 && a.circle.inner === 20 && !a.inline, a);
+  check('Default density: 36 px circles over the checkbox, the site icon 24 px inside', a.mode === 'large' && a.circle.w === 36 && a.circle.h === 36 && a.circle.inner === 24 && !a.inline, a);
   const b = await until(() => rowLook(page, 8202), l => l.circle && l.circle.kind === 'initial');
   check('no picture and no icon: a colored circle with the sender\'s initial (white letter)', b.circle && b.circle.kind === 'initial' && b.circle.letter === 'O' && b.circle.color === 'rgb(255, 255, 255)' && b.circle.w === 36, b);
   const c = await until(() => rowLook(page, 8203), l => l.circle && l.circle.kind === 'initial');
@@ -51,7 +52,7 @@ part('default', async () => {
 part('comfortable', async () => {
   const { ctx, page } = await start('comfortable');
   const a = await until(() => rowLook(page, 8201), l => l.mode === 'medium' && l.circle && l.circle.kind === 'icon' && l.circle.w === 32);
-  check('Comfortable density: 32 px circles, the site icon 18 px inside', a.mode === 'medium' && a.circle && a.circle.w === 32 && a.circle.inner === 18, a);
+  check('Comfortable density: 32 px circles, the site icon 22 px inside', a.mode === 'medium' && a.circle && a.circle.w === 32 && a.circle.inner === 22, a);
   const b = await until(() => rowLook(page, 8202), l => l.circle && l.circle.kind === 'initial' && l.circle.w === 32);
   check('Comfortable: initials in 32 px circles too', b.circle && b.circle.kind === 'initial' && b.circle.w === 32, b);
   await ctx.close();

@@ -46,6 +46,8 @@ const SETTING_DEFS = [
     // Warn when another installed extension does the same job in the webmail (two sender-icon or
     // row-highlight extensions can conflict), with one-click fixes. Administrators can switch it off.
     { key: 'enableConflictWarnings',      managedKey: 'managedEnableConflictWarnings',      def: true, type: 'boolean' },
+    // A button beside the sender of an opened email that copies their address.
+    { key: 'enableCopyAddress',           managedKey: 'managedEnableCopyAddress',           def: true, type: 'boolean' },
     // Country flag of the server that sent the email (the domain's ending when it can't be looked up).
     { key: 'enableSenderCountry',         managedKey: 'managedEnableSenderCountry',         def: true, type: 'boolean' },
     // Sender domains checked against the threat services and phishing lists (Gmail).
@@ -1156,7 +1158,9 @@ const WEBMAIL_SITES = [
                      // it loads the picture of a Google account from googleusercontent.com, in any
                      // address format (the "/a/…" kind and the older "/-xxxx/AAAAAAAAAAI/…/photo.jpg").
                      avatar: { scope: '.adn, [data-message-id]', img: 'img[data-hovercard-id]', addressAttr: 'data-hovercard-id',
-                               photoHost: /^https:\/\/[^/]*\.googleusercontent\.com\//,
+                               // Google's profile-photo hosts only (lh3…lh6), never the image proxy
+                               // (ci3.googleusercontent.com…) that pictures inside emails go through.
+                               photoHost: /^https:\/\/lh\d+\.googleusercontent\.com\//,
                                embeddedLogo: /^data:image\/(png|gif|jpeg|webp|svg\+xml)[;,]/i,
                                placeholder: /default-user|\/ic_|anonymous/i } },
           toolbar: '[gh="mtb"], [gh="tm"]',
@@ -1288,7 +1292,8 @@ const OVERLAPPING_EXTENSIONS = [
     { name: 'Gmail Sender Icons', ids: ['jniljaamodclkmphgkgkooplflhkadpg'], features: ['enableSenderIdentity'], does: 'sender icons in the inbox' },
     { name: 'Simplify Gmail', ids: ['pbmlfaiicoikhdbjagjbglnbfcbcojpj'], features: ['enableSenderAvatars', 'enableTrackingPixelBlocking'], does: 'sender photos and blocking tracking pixels' },
     { name: 'Contact Avatars for Gmail', ids: ['pkljbdckinbcelpeipbnniamlhenoeon'], features: ['enableSenderAvatars'], does: 'sender photos in the inbox' },
-    { name: 'Row Highlighter for Gmail', ids: ['ijfolchflbmnfopmpmodilcelmdakbfl'], features: ['enableRowHighlighter'], does: 'highlighting the row under the mouse' }
+    { name: 'Row Highlighter for Gmail', ids: ['ijfolchflbmnfopmpmodilcelmdakbfl'], features: ['enableRowHighlighter'], does: 'highlighting the row under the mouse' },
+    { name: 'Copy Button for Gmail', ids: ['djkkdiclffdbkgndofebmejnanhdeegj'], features: ['enableCopyAddress'], does: 'a button that copies the sender\'s address' }
 ];
 // Colors of the initial shown for a sender with no picture (white letter; each at least 5:1 contrast).
 // No red, yellow or green: those mean flagged, caution and trusted elsewhere in the extension.
@@ -1312,7 +1317,7 @@ function senderInitial(name, address) {
 // The names of our features, as the conflict warnings say them.
 const FEATURE_NAMES = {
     enableSenderIdentity: 'sender icons and labels', enableSenderAvatars: 'sender photos and company logos',
-    enableTrackingPixelBlocking: 'tracking-pixel blocking', enableRowHighlighter: 'the row highlighter'
+    enableTrackingPixelBlocking: 'tracking-pixel blocking', enableRowHighlighter: 'the row highlighter', enableCopyAddress: 'the copy-address button'
 };
 
 // Turning off only some of our features that overlap with another extension settles that conflict:
@@ -1345,6 +1350,7 @@ const FEATURE_SUPPORT = [
     { name: 'Attachment checks (QR codes, scripts, fake logins, encrypted archives)', needs: 'attachments' },
     { name: 'Sender checks in opened emails (brand names, look-alike domains, company links)', needs: 'opened' },
     { name: 'Sender icon, country flag and label in opened emails', needs: 'opened' },
+    { name: 'Copy button for the sender\'s address', needs: 'avatars' },
     { name: 'Sender icon, country flag and label in the inbox list', needs: 'list' },
     { name: 'Sender pictures over the checkbox: colleagues\' photos, BIMI and company logos, site icons', needs: 'avatars' },
     { name: 'The webmail\'s own warnings about a sender counted in the email\'s verdict', needs: 'opened' },
@@ -2061,7 +2067,9 @@ function headerAnomalies(raw, accountAddress, receiver = {}) {
             out.push({ weight: auth.arc === 'pass' || realList ? 3 : 5,
                 text: `It failed its sender's verification (DMARC): it wasn't sent by ${d}, whose owner asks for such mail to be ${auth.dmarcPolicy === 'reject' ? 'rejected' : 'treated as spam'}.` });
         } else {
-            out.push({ weight: 2, text: `It failed its sender's verification (DMARC), so it may not have been sent by ${d}.` });
+            // Even where the owner only watches (p=none), a failure is worth a caution (amber); for a
+            // real mailing list or a trusted forwarding chain, which often break DMARC, it stays a weak sign.
+            out.push({ weight: auth.arc === 'pass' || realList ? 2 : 3, text: `It failed its sender's verification (DMARC), so it may not have been sent by ${d}.` });
         }
     }
     if (listId && !realList) out.push({ weight: 1, text: 'Its mailing-list ID is malformed (made up to look like a newsletter).' });

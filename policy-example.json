@@ -19,6 +19,7 @@
           "managedEnableSenderAvatars": true,
           "managedEnableSenderBimi": true,
           "managedSenderPictureSize": "auto",
+          "managedEnableCopyAddress": true,
           "managedEnableRowHighlighter": true,
           "managedRowHighlightColor": "yellow",
           "managedRowHighlightStyle": "both",

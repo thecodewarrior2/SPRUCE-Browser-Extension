@@ -17,6 +17,9 @@ const SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect w
     await iconStore.put('bimi:brandlogo.example', 'text/uri-list', link('https://logos.brandlogo.example/logo.svg'), 'bimi', 'https://logos.brandlogo.example/logo.svg');
     await iconStore.put('bimi:forgedbrand.example', 'text/uri-list', link('https://logos.brandlogo.example/logo.svg'), 'bimi', 'https://logos.brandlogo.example/logo.svg');
     await iconStore.put('bimi:broken.example', 'text/uri-list', link('https://logos.broken.example/logo.svg'), 'bimi', 'https://logos.broken.example/logo.svg');
+    // These made-up companies enforce DMARC (as if looked up): logos may be shown for them.
+    const reject = new TextEncoder().encode(JSON.stringify({ p: 'reject', sp: '', pct: 100 })).buffer;
+    for (const d of ['brandlogo.example', 'broken.example', 'plainsite.example', 'forgedbrand.example']) await iconStore.put('dmarc:' + d, 'application/json', reject, 'dmarc');
     for (const d of ['brandlogo.example', 'broken.example', 'plainsite.example']) {
       await iconStore.put(d, 'image/png', bytes, 'favicon');
       if (d !== 'brandlogo.example' && d !== 'broken.example') await iconStore.put('bimi:' + d, '', null, 'none');
@@ -40,8 +43,14 @@ const SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect w
   check('a BIMI logo that won\'t load: the site\'s icon instead', r[8102] && r[8102].kind === 'icon' && r[8102].src.startsWith('data:image/png'), r[8102]);
   check('no photo or logo: the site\'s icon in the circle', r[8103] && r[8103].kind === 'icon' && r[8103].src.startsWith('data:image/png') && r[8103].overCheckbox, r[8103]);
   const forged = await until(() => page.evaluate(() => { const row = document.querySelector('[data-thread-id="#thread-f:8104"]').closest('tr'); const c = row.querySelector('.unshortener-row-avatar'), chip = row.querySelector('.unshortener-sender-chip');
-    return { status: chip && chip.dataset.status, logo: !!c && c.dataset.kind === 'logo', shown: !!c && getComputedStyle(c).display !== 'none' }; }), f => f.status === 'flagged' && f.logo, 10000);
-  check('a flagged sender never shows the company logo (its checkbox shows instead)', forged.status === 'flagged' && forged.logo && !forged.shown, forged);
+    return { status: chip && chip.dataset.status, placed: !!c, shown: !!c && getComputedStyle(c).display !== 'none' }; }), f => f.status === 'flagged' && f.placed, 10000);
+  check('a flagged sender gets no circle at all (no logo, icon or initial): its checkbox and red label show', forged.status === 'flagged' && !forged.shown, forged);
+  // Coming back from an email (Back), Gmail focuses that email's row: its picture stays.
+  const focused = await page.evaluate(() => { const row = document.querySelector('[data-thread-id="#thread-f:8101"]').closest('tr'); row.tabIndex = -1; row.focus(); return getComputedStyle(row.querySelector('.unshortener-row-avatar')).display; });
+  check('the row of the email you came back from keeps its picture (focus doesn\'t hide it)', focused !== 'none', focused);
+  // A site icon sits on a soft tint of its own color, with no border.
+  const tint = await page.evaluate(() => { const c = document.querySelector('[data-thread-id="#thread-f:8103"]').closest('tr').querySelector('.unshortener-row-avatar'); const cs = getComputedStyle(c); return { bg: cs.backgroundColor, border: cs.borderTopWidth }; });
+  check('a site icon\'s circle: tinted from the icon, not white, no border', tint.bg !== 'rgb(255, 255, 255)' && tint.border === '0px', tint);
   check('nothing beside the sender in inbox rows (the circle replaces the icon)', [8101, 8102, 8103].every(t => r[t] && !r[t].inline), r);
   await ctx.close();
   done();

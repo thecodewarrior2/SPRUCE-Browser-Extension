@@ -1566,9 +1566,36 @@ async function bimiRecordFor(org) {
     const rec = (await dnsTxt(`default._bimi.${org}`)).map(recordTags).find(t => /^bimi1$/i.test(t.v || ''));
     return rec ? { domain: org, logo: rec.l || '' } : null;
 }
-async function dmarcEnforced(org) {
-    const rec = (await dnsTxt(`_dmarc.${org}`)).map(recordTags).find(t => /^dmarc1$/i.test(t.v || ''));
-    return !!rec && /^(quarantine|reject)$/i.test(rec.p || '');
+// A domain's DMARC policy ({ p, sp, pct } of its organization domain, or null for none), remembered
+// for a week in the icon store under "dmarc:<org>".
+const dmarcInFlight = new Map();
+async function dmarcPolicy(org) {
+    const key = 'dmarc:' + org;
+    const hit = await iconStore.get(key).catch(() => null);
+    if (hit && Date.now() - hit.ts < BIMI_RECHECK_MS) {
+        try { return hit.bytes ? JSON.parse(new TextDecoder().decode(hit.bytes)) : null; } catch (e) { /* asked again */ }
+    }
+    if (dmarcInFlight.has(key)) return dmarcInFlight.get(key);
+    const p = (async () => {
+        try {
+            const rec = (await dnsTxt(`_dmarc.${org}`)).map(recordTags).find(t => /^dmarc1$/i.test(t.v || ''));
+            const pol = rec ? { p: String(rec.p || '').toLowerCase(), sp: String(rec.sp || '').toLowerCase(), pct: rec.pct === undefined ? 100 : Number(rec.pct) } : null;
+            await iconStore.put(key, pol ? 'application/json' : '', pol ? new TextEncoder().encode(JSON.stringify(pol)).buffer : null, pol ? 'dmarc' : 'none').catch(() => {});
+            return pol;
+        } finally { dmarcInFlight.delete(key); }
+    })();
+    dmarcInFlight.set(key, p);
+    return p;
+}
+// Whether mail claiming to be from this domain and failing DMARC is rejected or sent to spam: the
+// organization's policy (its subdomain policy sp= for a subdomain), applied to all of it (pct=100).
+// Only then can a picture shown for its senders not be borrowed by a forger.
+async function dmarcEnforced(domain) {
+    const d = normalizeDomain(domain);
+    const org = registrableDomain(d) || d;
+    const pol = await dmarcPolicy(org);
+    if (!pol || !(pol.pct >= 100)) return false;
+    return /^(quarantine|reject)$/.test(d !== org ? pol.sp || pol.p : pol.p);
 }
 // A logo kept only by its address (its server didn't allow a download): stored as text.
 const BIMI_LINK_TYPE = 'text/uri-list';
@@ -1589,6 +1616,8 @@ async function bimiLogo(domain) {
     const d = normalizeDomain(domain);
     const org = registrableDomain(d) || d;
     if (!SENDER_DOMAIN_RE.test(org) || isPersonalMailDomain(org)) return '';
+    // A subdomain sender gets the logo only when the subdomain policy is enforced too.
+    if (d !== org && !await dmarcEnforced(d).catch(() => false)) return '';
     const key = 'bimi:' + org;
     const hit = await iconStore.get(key).catch(() => null);
     if (hit && Date.now() - hit.ts < BIMI_RECHECK_MS) return bimiResult(hit);
@@ -2363,11 +2392,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             // opened email, then the site's icon (its own, its parent domain's, or DuckDuckGo's).
             const domain = typeof request.domain === 'string' ? request.domain.toLowerCase().slice(0, 253) : request.site;
             const icon = V.enableDnsThreatCheck ? senderIcon(request.site, { fallback: !!V.enableSenderIconFallback }) : Promise.resolve('');
-            const photo = V.enableSenderAvatars && address ? await avatarFor(address, '') : '';
+            // A photo or logo is shown only for a domain that enforces DMARC (forged mail claiming it is
+            // rejected or sent to spam), so a forger can't borrow a colleague's photo or a company's logo.
+            // That needs a DNS lookup: with network checks off, no photos or logos are shown.
+            const enforced = V.enableDnsThreatCheck ? await dmarcEnforced(domain).catch(() => false) : false;
+            const photo = enforced && V.enableSenderAvatars && address ? await avatarFor(address, '') : '';
             if (photo) return { d: await icon, a: photo, k: 'photo' };
-            const bimi = V.enableSenderBimi && V.enableDnsThreatCheck ? await bimiLogo(domain).catch(() => '') : '';
+            const bimi = enforced && V.enableSenderBimi ? await bimiLogo(domain).catch(() => '') : '';
             if (bimi) return { d: await icon, a: bimi, k: 'logo' };
-            const learned = V.enableSenderAvatars ? await avatarFor('', request.site) : '';
+            const learned = enforced && V.enableSenderAvatars ? await avatarFor('', request.site) : '';
             if (learned) return { d: await icon, a: learned, k: 'logo' };
             return { d: await icon, a: '', k: '' };
         }).then(r => sendResponse(r), () => sendResponse({ d: '' }));
