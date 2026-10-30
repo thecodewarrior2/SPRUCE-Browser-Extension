@@ -1,5 +1,11 @@
 # Changelog
 
+## 5.64 — Fewer false look-alike warnings (Safari build, same as Chrome 5.64)
+
+- **Fixed: real companies flagged as look-alikes.** A sender such as `simple-help.com` was flagged red (and its email moved to Spam) because "simple" is the name of a popular site (simple.life) and "help" is one of the words phishing domains add (billing, login, support…). Many popular sites' names are ordinary words, so for them this rule now works like "one letter off": red only when the sender's domain was registered less than 90 days ago, which is when phishing domains are used; nothing for an older domain. A built-in brand plus such a word (paypal-billing.com) is still red at any age.
+- **Fixed: an update now re-checks senders.** Sender verdicts are kept for a few hours; they were kept across an update too, so a sender wrongly flagged by the previous version stayed flagged until they expired. Updating now clears them.
+- If an email was moved to Spam by this mistake: open Spam and click **Not spam**. That puts it back, tells Gmail it isn't spam, and the extension never moves that conversation again.
+
 ## 5.63 — Sender icons readable in the dark and light themes (Safari build, same as Chrome 5.63)
 
 - **Fixed: dark icons vanished in Gmail's dark theme.** A site icon drawn in black with a see-through background (a logo with nothing behind it) was put on a dark tint of its own color, so it nearly disappeared (1.2:1). Each icon is now measured before its circle is chosen: its outline (what touches the circle) and its inside. If neither stands out from the theme's tint, the circle takes the other one (light in the dark theme, dark in the light theme) or a mid grey, whichever gives the icon's outline the most 3:1 contrast (WCAG 2.1 non-text contrast). White and pale-yellow icons in the light theme get a dark circle the same way.
