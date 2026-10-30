@@ -17,7 +17,7 @@ const sname = P.get('name') || 'IT Support';
 const cloud = P.get('links') === 'cloud';
 const linkHtml = cloud ? [1,2,3,4].map(i => `<a href="https://oyl6s96s2xyr5tq6mj36.blob.core.windows.net/oyl6s96s2xyr5tq6mj36/link.html#qs=r-${i}ageikagdefbjkd">Message ${i}</a>`).join(' ') : 'Please sign in at <a href="https://example.com/login">example.com</a> today.';
 setTimeout(() => {
-  document.getElementById('main').innerHTML = `<h2 class="hP" data-thread-perm-id="thread-f:${tid}" data-legacy-thread-id="${Number(tid).toString(16)}">Your password expires</h2>
+  document.getElementById('main').innerHTML = `<h2 class="hP" data-thread-perm-id="thread-f:${tid}" data-legacy-thread-id="${Number(tid).toString(16)}">${P.get('subj') || 'Your password expires'}</h2>
   <div class="nH"><div class="adn ads" data-message-id="#msg-f:3001" data-legacy-message-id="${(3001).toString(16)}">
     <div class="aju"><div class="aCi">${P.get('avatar') ? `<img class="ajn" data-hovercard-id="${sender}" src="${P.get('avatar')}" width="40" height="40">` : ''}</div></div>
     <div class="gs">

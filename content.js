@@ -2690,6 +2690,7 @@ function scanSenderRows(S) {
         const readHeaders = !!msgId && (!unread || (spamFolder && !unreadHeadersOff));
         const infoP = readHeaders ? messageInfo(msgId) : Promise.resolve(null);
         if (readHeaders && unread && thread) infoP.then(info => { if (info && headersFetched.has(msgId)) unreadHeaderReads.set(thread, Date.now()); });
+        const subjectText = MAIL.list.subject ? ((firstMatch(row, MAIL.list.subject) || {}).textContent || '') : '';
         const show = (results, info, ours) => guarded('Showing who sent an email', () => {
             if (!row.isConnected || row.dataset.unshortenerSender !== key) return;
             // Signs in this email: the names shown, and the headers when they belong to the last sender.
@@ -2700,6 +2701,8 @@ function scanSenderRows(S) {
                 if (S.enableLookalikeCheck && r && r.status !== 'trusted') signals.push(...nameAddressSigns(senders[k].name, senders[k].address, org, loadColleagueHashes()));
                 // The name is the user's own address or mailbox name, on someone else's address.
                 if (S.enableOwnNameCheck && r && r.status !== 'trusted') signals.push(...ownNameSigns(senders[k].name, senders[k].address, accountAddress()));
+                // A "call this number" subject (whoever sent it).
+                if (S.enableCallbackScamCheck && r && r.status !== 'trusted') signals.push(...subjectScamSigns(subjectText));
                 if (info && info.fh === addressFingerprint(senders[k].address)) signals.push(...info.an);
                 const f = applyEmailSignals(r, signals);
                 if (r && f) logEmailVerdict(`${thread}|${senders[k].address}`, senders[k].address, r, f);
@@ -2832,7 +2835,8 @@ function updateOpenedVerdict(body) {
     if (!st || !st.base || !st.nameEl.isConnected) return;
     const signals = [...displayNameAnomalies(st.name), ...(st.info && st.info.fh === addressFingerprint(st.address) ? st.info.an : []), ...emailContentSignals(body),
                      ...serviceWarningSigns(webmailTextAround(body), SITE.name),
-                     ...(lastSettings.enableOwnNameCheck !== false && st.base.status !== 'trusted' ? ownNameSigns(st.name, st.address, accountAddress()) : [])];
+                     ...(lastSettings.enableOwnNameCheck !== false && st.base.status !== 'trusted' ? ownNameSigns(st.name, st.address, accountAddress()) : []),
+                     ...(lastSettings.enableCallbackScamCheck !== false && st.base.status !== 'trusted' ? [...subjectScamSigns(openedSubject()), ...bodyScamSigns(body.innerText)] : [])];
     const final = applyEmailSignals(st.base, signals);
     st.final = final;
     logEmailVerdict(st.msgId || st.address, st.address, st.base, final);
@@ -2851,6 +2855,12 @@ function updateOpenedVerdict(body) {
         scheduleBannerRefresh(body);
     }
     if (final.move && st.thread && lastSettings.enableAutoSpam) queueSpamMove(st.thread, { kind: 'thread', address: st.address, reason: final.reasons.join(' '), msgId: st.msgId, how: 'automatically, when the email was opened' });
+}
+
+// The opened conversation's subject, where the webmail's entry says where it is.
+function openedSubject() {
+    const el = MAIL.message && MAIL.message.subject ? [...document.querySelectorAll(MAIL.message.subject)].find(isShown) : null;
+    return el ? el.textContent : '';
 }
 
 function scanOpenedSenders(S) {
@@ -3587,7 +3597,7 @@ window.addEventListener('hashchange', () => { scheduleBadgeUpdate(); if (MAIL) s
 window.addEventListener('popstate', scheduleBadgeUpdate);
 // Coming back to the tab: the webmail may have refreshed the list while it was hidden.
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { lastReported = ''; scheduleBadgeUpdate(); if (MAIL) scheduleScan(); if (spamQueue.size) scheduleSpamMoves(); } });
-const SENDER_SETTING_KEYS = ['enableLookalikeCheck', 'enableOwnNameCheck', 'enableAutoSpamInSearch', 'enableSpamFolderFlags', 'enableCopyAddress', 'senderPictureSize', 'enableSenderBimi', 'enableRowHighlighter', 'rowHighlightColor', 'rowHighlightStyle', 'rowHighlightSelected', 'rowHighlightSelectedColor', 'enableConflictWarnings',
+const SENDER_SETTING_KEYS = ['enableLookalikeCheck', 'enableOwnNameCheck', 'enableCallbackScamCheck', 'enableAutoSpamInSearch', 'enableSpamFolderFlags', 'enableCopyAddress', 'senderPictureSize', 'enableSenderBimi', 'enableRowHighlighter', 'rowHighlightColor', 'rowHighlightStyle', 'rowHighlightSelected', 'rowHighlightSelectedColor', 'enableConflictWarnings',
     'enableSenderIdentity', 'enableSenderAvatars', 'enableSenderIconFallback', 'enableSenderCountry', 'enableSenderDomainCheck', 'enableSenderAddressCheck', 'enableAutoSpam', 'customTrustedSenders', 'customAllowlist', 'enableDnsThreatCheck'];
 // Turning protection on or off in Settings or the popup takes effect on the icon immediately.
 chrome.storage.onChanged.addListener((changes, area) => {

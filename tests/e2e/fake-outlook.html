@@ -37,5 +37,11 @@ document.querySelectorAll('[role=checkbox]').forEach(b => b.addEventListener('cl
 const P = new URLSearchParams(location.search);
 if (P.get('warn')) document.getElementById('warnbox').textContent = 'This sender failed our fraud detection checks and may not be who they appear to be. Learn about spoofing';
 if (P.get('nopane')) document.getElementById('pane').remove();
+// A genuine company notification carrying "call this number" scam text (a fictional 555 number).
+if (P.get('callback')) {
+  const f = document.querySelector('#pane .from');
+  f.title = 'msonlineservicesteam@microsoftonline.com'; f.textContent = 'msonlineservicesteam@microsoftonline.com';
+  document.querySelector('[aria-label="Message body"]').innerHTML = '<p>Thanks for verifying your account!</p><p>Your order of Windows Defender for (555.68\u{1D414}\u{1D412}\u{1D403}) was successfully purchased. If this purchase was not made by you, please contact Microsoft Customer Support Immediately at 1(555)010-0188.</p>';
+}
 </script>
 </body></html>

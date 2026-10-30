@@ -46,6 +46,10 @@ Proton Mail, Yahoo Mail, AOL Mail, Zoho Mail, iCloud Mail, Fastmail and GMX.
   your mailbox name (the part before the @, written as in your address, or in any case at Gmail and other big providers), but which comes from someone
   else's address is flagged red from the inbox list, without opening it, and moved to Spam: a common
   trick in fake "your storage is full" and "your account is blocked" emails.
+- **"Call this number" scams.** A subject with a phone number to call about a purchase you didn't
+  make is flagged red and moved to Spam, even when the email really comes from a company's own system
+  (attackers type the text into names that Microsoft's, PayPal's or Apple's systems mail out). In an
+  opened email, on every webmail, such text is a caution.
 - **Threat checks.** DNS-over-HTTPS threat filters (Cloudflare Security and Family, Quad9,
   Control D; AdGuard as a backup), community shortener lists, and local phishing lists (OpenPhish,
   Phishing Army), downloaded at most once a day.
@@ -89,6 +93,7 @@ sign-in, an app registration or an administrator-approved API.
 | Copy button for the sender's address | ✓ | — | — | — | — | — | — | — | — |
 | Look-alike senders caught in the inbox list (nothing opened) | ✓ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
 | Senders using your own name or address as theirs, caught in the inbox list | ✓ | — | — | — | — | — | — | — | — |
+| "Call this number" scams caught, even in emails genuinely sent by a company | ✓ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
 | Sender icon, country flag and label in the inbox list | ✓ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
 | Sender pictures over the checkbox: colleagues' photos, BIMI and company logos, site icons | ✓ | — | — | — | — | — | — | — | — |
 | The webmail's own warnings about a sender counted in the email's verdict | ✓ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
@@ -124,7 +129,7 @@ PowerShell), or a macOS configuration profile. See [ADMIN-GUIDE.md](ADMIN-GUIDE.
 complete `policies.json` with every key.
 
 The sender features (Gmail) each have their own key (`managedEnableSenderIdentity`,
-`managedEnableSenderIconFallback`, `managedEnableSenderAvatars`, `managedEnableSenderBimi`, `managedSenderPictureSize`, `managedEnableCopyAddress`, `managedEnableLookalikeCheck`, `managedEnableOwnNameCheck`, `managedEnableSenderCountry`, the row highlighter (`managedEnableRowHighlighter`, `managedRowHighlightColor`, `managedRowHighlightStyle`, `managedRowHighlightSelected`, `managedRowHighlightSelectedColor`) and warnings about overlapping extensions (`managedEnableConflictWarnings`), `managedEnableSenderDomainCheck`, `managedEnableSenderAddressCheck`,
+`managedEnableSenderIconFallback`, `managedEnableSenderAvatars`, `managedEnableSenderBimi`, `managedSenderPictureSize`, `managedEnableCopyAddress`, `managedEnableLookalikeCheck`, `managedEnableOwnNameCheck`, `managedEnableCallbackScamCheck`, `managedEnableSenderCountry`, the row highlighter (`managedEnableRowHighlighter`, `managedRowHighlightColor`, `managedRowHighlightStyle`, `managedRowHighlightSelected`, `managedRowHighlightSelectedColor`) and warnings about overlapping extensions (`managedEnableConflictWarnings`), `managedEnableSenderDomainCheck`, `managedEnableSenderAddressCheck`,
 `managedEnableAutoSpam`, `managedEnableAutoSpamInSearch`, `managedEnableSpamNotice`, `managedEnableSpamFolderFlags`); `managedTrustedSenders` is the allow list of senders never to flag or move
 (addresses or whole domains), for example your phishing-training provider or a false positive. There is
 no sender block list: users report anything missed with Gmail's own Report spam.
