@@ -1,5 +1,17 @@
 # Changelog
 
+## 5.62 — Look-alike senders caught in the inbox list, without opening anything (Firefox build, same as Chrome 5.62)
+
+- **New: Catch look-alike senders** (on by default; policy `managedEnableLookalikeCheck`). Every inbox row's sender domain is compared with about 14,000 protected domains: the top 10,000 of two public popular-site lists (the Chrome UX Report top list, via a research copy on GitHub by Zakir Durumeric, data CC BY 4.0; and Tranco, tranco-list.eu, which adds the services that send a lot of email but are rarely visited, such as sendgrid.net and docusign.net), refreshed monthly; the built-in brands; your own organization; and domains whose mail passed DMARC in your mailbox.
+  - **Red, moved to Spam:** look-alike characters (a Cyrillic "а" in pаypal), a brand domain worn at the start of another (paypal.com.verify-acct.net), a brand plus a scare word (paypal-billing.com, sendgrid-billing.net), an imitation of your own organization (your-district-k12.org), and one letter off a protected domain **registered less than 90 days ago** (its public registration date, RDAP, looked up only for such near matches).
+  - **Amber:** one letter off a well-known built-in brand when the domain is older. Older near matches of other domains aren't flagged: real companies with similar names exist (Channel 4 / Channel 5).
+  - A popular domain is protected only if it enforces DMARC itself, as email-sending brands do, which keeps piracy mirrors and similar sites out. In a test on 66,690 real sites, this and the age rule removed the false matches a plain "one letter off" rule would have made (1.7%).
+  - **Names:** a well-known brand's name on an address that isn't the brand's is red; a colleague's name on an outside address is amber (colleagues sometimes write from home). Colleague names are learned from your organization's senders and kept only as one-way hashes, never as names.
+  - These checks come on top of the security DNS services and phishing lists, which already catch look-alikes once they're reported; these catch the new ones nobody has reported yet. Trusted senders are never judged.
+- **Fixed: US school and local-government domains** such as `yourdistrict.k12.fl.us` were treated as part of `fl.us`: the district's own BIMI logo wasn't found, its DMARC policy was looked up in the wrong place (so colleagues' photos were refused), and learned logos were shared across all such domains. UK school domains (`sch.uk`) and other two-level endings are fixed too.
+- **Lists stored compressed and without duplicates:** the downloaded phishing lists and the popular-sites lists are kept compressed, each entry once: Phishing Army's 150,000 domains take about 1.4 MB instead of 3.2 MB, the popular sites about 100 KB. Domains your mail verified aren't stored again when already protected.
+- New host permission `tranco-list.eu` (for the Tranco list). Installs managed by policy get it automatically; others are asked once on update.
+
 ## 5.61 — Safer pictures, colleague photos without opening emails, address labels, and a copy button (Firefox build, same as Chrome 5.61)
 
 - **Colleagues' photos without opening their emails:** a colleague's photo is now learned from anywhere Gmail shows it (hover cards, the chat panel, recipient chips, opened emails), so the inbox fills with your organization's photos much sooner. Never from a picture inside an email, never an outsider's, and only from Google's profile-photo servers (not its image proxy, which pictures inside emails use).

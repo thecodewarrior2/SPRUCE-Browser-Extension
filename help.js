@@ -307,6 +307,8 @@
             [code('api.country.is'), 'a new sending server or sender website (at most once a month each)', 'that server\'s IP address', 'Show sender icons + Show the sender\'s country', onOff(S.enableSenderIdentity && S.enableSenderCountry && S.enableDnsThreatCheck)],
             ['the threat-check services above', 'each new sender domain (Gmail; at most every ' + fmtMs(SAFE_CACHE_MS) + ')', 'the sender\'s domain', 'Check sender domains for threats', onOff(S.enableSenderDomainCheck && S.enableDnsThreatCheck)],
             [code('raw.githubusercontent.com'), 'scam-sender list: once a day', 'nothing (plain download)', 'Check sender addresses against phishing lists', onOff(S.enablePhishingFeeds && S.enableSenderAddressCheck)],
+            [code('raw.githubusercontent.com') + ' · ' + code('tranco-list.eu'), 'popular-sites lists: once a month', 'nothing (plain download)', 'Catch look-alike senders', onOff(S.enableLookalikeCheck && S.enableRemoteListSync)],
+            [code('data.iana.org') + ' · the domain\'s registry', 'a sender domain one letter away from a protected one (at most once a month each)', 'the sender\'s domain, for its registration date', 'Catch look-alike senders', onOff(S.enableLookalikeCheck && S.enableDnsThreatCheck)],
             [code('www.whois.com'), 'only when you click a WHOIS button', 'the IP address shown', 'you', '—']
         ]));
 

@@ -33,6 +33,9 @@ const SETTING_DEFS = [
     // Size of sender pictures in the inbox list: auto follows Gmail's display density (Default: large
     // 36-pixel circles; Comfortable: medium 32; Compact: small icons in line with the country flag).
     { key: 'senderPictureSize',           managedKey: 'managedSenderPictureSize',           def: 'auto', type: 'enum', values: ['auto', 'large', 'medium', 'inline'] },
+    // Look-alike senders (inbox rows, nothing opened): domains imitating a popular site, a well-known
+    // brand, your organization or a domain your mail has verified; and names that don't match the address.
+    { key: 'enableLookalikeCheck',        managedKey: 'managedEnableLookalikeCheck',        def: true, type: 'boolean' },
     // BIMI logos: the company logo a domain publishes in DNS, shown without opening any email.
     { key: 'enableSenderBimi',            managedKey: 'managedEnableSenderBimi',            def: true, type: 'boolean' },
     // Row highlighter: the inbox row under the mouse (and selected rows) is highlighted, so it's clear
@@ -341,14 +344,29 @@ function hostInSet(hostname, set) {
     return false;
 }
 
-// Approximation of the registrable domain (no full public-suffix list).
-const SECOND_LEVEL_LABELS = new Set(['co', 'com', 'org', 'net', 'gov', 'edu', 'ac', 'or', 'ne', 'go']);
+// Approximation of the registrable domain (no full public-suffix list): two-level country endings
+// (co.uk, com.au, sch.uk…) and the US locality domains (state.us; k12, cc, lib… under a state, as
+// school districts use: "example.k12.fl.us" is its own domain, not part of "fl.us").
+const SECOND_LEVEL_LABELS = new Set(['co', 'com', 'org', 'net', 'gov', 'edu', 'ac', 'or', 'ne', 'go', 'sch', 'ltd', 'plc', 'me',
+    'nhs', 'police', 'mod', 'mil', 'gob', 'gouv', 'nom', 'biz', 'info', 'int', 'gv', 'k12', 'res', 'web', 'firm', 'gen', 'ind']);
+const US_STATES = new Set(['al', 'ak', 'az', 'ar', 'ca', 'co', 'ct', 'de', 'dc', 'fl', 'ga', 'hi', 'id', 'il', 'in', 'ia', 'ks', 'ky', 'la',
+    'me', 'md', 'ma', 'mi', 'mn', 'ms', 'mo', 'mt', 'ne', 'nv', 'nh', 'nj', 'nm', 'ny', 'nc', 'nd', 'oh', 'ok', 'or', 'pa', 'ri', 'sc',
+    'sd', 'tn', 'tx', 'ut', 'vt', 'va', 'wa', 'wv', 'wi', 'wy', 'as', 'gu', 'mp', 'pr', 'vi']);
+const US_STATE_SUBS = new Set(['k12', 'cc', 'lib', 'tec', 'gen', 'mus', 'state', 'dst', 'cog']);
+const US_K12_SUBS = new Set(['pvt', 'chtr', 'paroch']);
 function registrableDomain(hostname) {
     const host = String(hostname || '').toLowerCase().replace(/\.$/, '');
     const parts = host.split('.');
     if (parts.length <= 2) return host;
     const tld = parts[parts.length - 1];
     const sld = parts[parts.length - 2];
+    if (tld === 'us' && US_STATES.has(sld)) {
+        // <st>.us, k12.<st>.us (and pvt.k12.<st>.us…), cc/lib/… .<st>.us are endings, like co.uk.
+        let suffix = 2;
+        if (US_STATE_SUBS.has(parts[parts.length - 3])) suffix = 3;
+        if (suffix === 3 && parts[parts.length - 3] === 'k12' && US_K12_SUBS.has(parts[parts.length - 4])) suffix = 4;
+        return parts.length > suffix ? parts.slice(-(suffix + 1)).join('.') : host;
+    }
     if (tld.length === 2 && SECOND_LEVEL_LABELS.has(sld)) return parts.slice(-3).join('.');
     return parts.slice(-2).join('.');
 }
@@ -1351,6 +1369,7 @@ const FEATURE_SUPPORT = [
     { name: 'Sender checks in opened emails (brand names, look-alike domains, company links)', needs: 'opened' },
     { name: 'Sender icon, country flag and label in opened emails', needs: 'opened' },
     { name: 'Copy button for the sender\'s address', needs: 'avatars' },
+    { name: 'Look-alike senders caught in the inbox list (nothing opened)', needs: 'list' },
     { name: 'Sender icon, country flag and label in the inbox list', needs: 'list' },
     { name: 'Sender pictures over the checkbox: colleagues\' photos, BIMI and company logos, site icons', needs: 'avatars' },
     { name: 'The webmail\'s own warnings about a sender counted in the email\'s verdict', needs: 'opened' },
@@ -1497,6 +1516,42 @@ function senderDomainOwnedBy(brand, domain) {
     if (brandOfSender(d) === brand.name) return true;
     const reg = registrableDomain(d);
     return (brand.domains || []).some(x => reg === x || d === x || d.endsWith('.' + x));
+}
+
+// --- Name and address don't match (checked on every inbox row; nothing has to be opened) ---------
+// A display name is reduced to its words, in order of the alphabet (so "Smith, John" = "John Smith"),
+// without anything in brackets; kept only as a hash (colleagueNameHash), never as the name itself.
+function colleagueNameKey(name) {
+    const words = String(name || '').normalize('NFKC').toLowerCase().replace(/[([{].*?[)\]}]/g, ' ')
+        .replace(/[^\p{L}\p{N}\s]+/gu, ' ').split(/\s+/).filter(Boolean);
+    return words.length >= 2 ? words.sort().join(' ') : '';
+}
+// A short one-way fingerprint of a name key (two FNV-1a passes, 64 bits): enough to recognize the
+// name again, not to read it back.
+function colleagueNameHash(name) {
+    const key = colleagueNameKey(name);
+    if (!key) return '';
+    let a = 0x811c9dc5, b = 0x01000193 ^ key.length;
+    for (const ch of key) { const c = ch.codePointAt(0); a ^= c; a = Math.imul(a, 0x01000193) >>> 0; b = Math.imul(b ^ c, 0x5bd1e995) >>> 0; }
+    return a.toString(36) + b.toString(36);
+}
+// Signs that a sender's name and address don't belong together: a well-known brand's name on an
+// address that isn't the brand's (red: moved to Spam), or the name of someone in the user's own
+// organization on an outside address (amber: colleagues sometimes write from a personal address).
+// own: the user's organization domain; colleagues: Set of colleagueNameHash values.
+function nameAddressSigns(name, address, own, colleagues) {
+    const out = [];
+    const domain = domainOfAddress(address);
+    if (!name || !domain || (own && isOwnDomain(domain, own))) return out;
+    const claimed = displayNameBrand(name);
+    if (claimed && !senderDomainOwnedBy(claimed, domain)) {
+        out.push({ weight: 5, text: `The sender's name says “${String(name).trim().slice(0, 60)}”, but ${address} isn't ${claimed.name}'s address.` });
+    }
+    const h = colleagues && colleagues.size ? colleagueNameHash(name) : '';
+    if (h && colleagues.has(h)) {
+        out.push({ weight: 3, text: `The sender uses the name of someone in your organization, but writes from an outside address (${address}).` });
+    }
+    return out;
 }
 
 // Parses the header block of a raw message: [[lower-case name, value], …] in order (unfolded).
