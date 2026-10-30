@@ -14,7 +14,7 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
 git archive --format=tar HEAD | tar -x -C "$TMP"
-rm -rf "$TMP/tools" "$TMP/INSTALL-FOR-TESTERS.md"
+rm -rf "$TMP/tools"
 python3 - "$TMP/manifest.json" <<'PY'
 import json, sys
 path = sys.argv[1]

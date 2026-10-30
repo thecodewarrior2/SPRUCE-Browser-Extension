@@ -18,7 +18,7 @@ Anything you do **not** set stays under the user's control (all features are on 
 }
 ```
 
-`policy-example.json` lists every key with its default value. Users can also generate a starting point from
+`docs/policy-example.json` lists every key with its default value. Users can also generate a starting point from
 **Options → Settings → Backup & Google Workspace → "Copy as policy JSON"**.
 
 ## Keys

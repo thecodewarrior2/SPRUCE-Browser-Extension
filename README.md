@@ -120,7 +120,7 @@ sign-in, an app registration or an administrator-approved API.
 ## Install (load unpacked)
 
 The extension isn't in a web store yet; it's installed from this folder. See
-[INSTALL-FOR-TESTERS.md](INSTALL-FOR-TESTERS.md) for the full walkthrough:
+[docs/INSTALL-FOR-TESTERS.md](docs/INSTALL-FOR-TESTERS.md) for the full walkthrough:
 
 1. Move this folder somewhere permanent (Chrome loads it from there).
 2. Open `chrome://extensions` (Edge: `edge://extensions`) and turn on **Developer mode**.
@@ -137,7 +137,7 @@ private key (`.pem`) signs releases and must never be committed (`.gitignore` le
 ## Publishing to the Chrome Web Store (or Edge Add-ons)
 
 The listing text, a reason for each permission and the data-usage answers are in
-[STORE-LISTING.md](STORE-LISTING.md); the screenshots and promo image are in [`store`](store); the
+[store/STORE-LISTING.md](store/STORE-LISTING.md); the screenshots and promo image are in [`store`](store); the
 privacy policy is [PRIVACY.md](PRIVACY.md).
 
 Run `tools/build-webstore.sh` and upload `build/spruce-<version>-webstore.zip`. It is the last commit
@@ -150,8 +150,8 @@ promotional image.
 ## For administrators
 
 Settings can be forced with Google Workspace, Microsoft Intune or Group Policy. See
-[ADMIN-GUIDE.md](ADMIN-GUIDE.md) and the schema in [`schema.json`](schema.json);
-[`policy-example.json`](policy-example.json) shows a complete policy.
+[docs/ADMIN-GUIDE.md](docs/ADMIN-GUIDE.md) and the schema in [`schema.json`](schema.json);
+[`docs/policy-example.json`](docs/policy-example.json) shows a complete policy.
 
 The sender features (Gmail) each have their own key (`managedEnableSenderIdentity`,
 `managedEnableSenderIconFallback`, `managedEnableSenderAvatars`, `managedEnableSenderBimi`, `managedSenderPictureSize`, `managedEnableCopyAddress`, `managedEnableLookalikeCheck`, `managedEnableOwnNameCheck`, `managedEnableCallbackScamCheck`, `managedEnableSenderCountry`, the row highlighter (`managedEnableRowHighlighter`, `managedRowHighlightColor`, `managedRowHighlightStyle`, `managedRowHighlightSelected`, `managedRowHighlightSelectedColor`) and warnings about overlapping extensions (`managedEnableConflictWarnings`), `managedEnableSenderDomainCheck`, `managedEnableSenderAddressCheck`,
@@ -184,16 +184,23 @@ Some policies exist for administrators only, with no setting in the extension:
 | `options.*`, `help.js`, `popup.*` | Settings, logging, Link Inspector and Help; the toolbar popup |
 | `theme.css` / `theme.js` | Design tokens and light/dark appearance (WCAG 2.1 AA) |
 | `lib/` | Bundled pdf.js (Apache-2.0), used only for PDF attachments |
-| `tools/refresh-snapshot.js` | Refreshes the bundled shortener-domain snapshot |
-| `CHANGELOG.md` | Full release history with rationale for every change |
+| `icons/` | Toolbar and store icons |
+| `tools/` | Maintenance scripts: `build-webstore.sh` (the store zip), `refresh-snapshot.js` (the bundled shortener list) |
+| `docs/` | Architecture guide, admin guide, tester instructions, policy example |
+| `store/` | Chrome Web Store listing text and images, and the script that makes the images |
+| `branding/` | Logos, icons and the donation QR code (PNG and SVG) |
+| `tests/` | Unit and end-to-end tests, with sanitized sample emails |
+| `CHANGELOG.md` · `PRIVACY.md` · `LICENSE` | Release history · privacy policy · Apache 2.0 license |
+
+Everything at the top level besides those three files and the README is part of the extension (the folder a browser loads); `docs/`, `store/`, `branding/`, `tests/` and `tools/` never go into a package.
 
 ## Documentation
 
 - [**Architecture deep dive**](docs/ARCHITECTURE.md), with diagrams: what runs where, how links and
   senders are judged, how emails are moved to Spam, and what leaves the device.
 - [CHANGELOG.md](CHANGELOG.md) — every version, what changed and why.
-- [INSTALL-FOR-TESTERS.md](INSTALL-FOR-TESTERS.md) — install and update steps.
-- [ADMIN-GUIDE.md](ADMIN-GUIDE.md) — deployment and policy keys.
+- [docs/INSTALL-FOR-TESTERS.md](docs/INSTALL-FOR-TESTERS.md) — install and update steps.
+- [docs/ADMIN-GUIDE.md](docs/ADMIN-GUIDE.md) — deployment and policy keys.
 - The extension's own **Help** tab explains how each warning works, the privacy details and
   troubleshooting.
 

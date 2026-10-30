@@ -236,7 +236,7 @@ Every feature has its own setting, on by default, with a matching policy key (`m
 it. Policy comes from Google Workspace, Microsoft Intune or Group Policy (Chrome and Edge), or
 `policies.json` and Windows policy (Firefox). Some policies exist for administrators only: the
 phishing-training rules, a simpler popup, and hiding the Donate button. The full list is in
-[schema.json](../schema.json) and the [admin guide](../ADMIN-GUIDE.md).
+[schema.json](../schema.json) and the [admin guide](ADMIN-GUIDE.md).
 
 ## 12. The three builds
 

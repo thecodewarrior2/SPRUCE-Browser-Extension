@@ -14,7 +14,7 @@
 
 - **Fixed: an opened email was amber where the inbox showed it red.** A sender using a brand's name on another address ("PayPal Service" from an address that isn't PayPal's) was red in the inbox list but only "be careful" once opened, because the opened email's verdict didn't count the name. It now counts the same signs as the list (a brand's name, or a colleague's, on another address), and the warning appears once, in the verdict.
 - **New: your organization's name plus a word like "support"** on a domain that isn't yours (lincolnschools-support.org, for lincolnschools.org) is flagged red as a look-alike, as a well-known brand's name with such a word already was: the classic "IT Help Desk: your password expires" phish. Your organization's name with an ordinary word (a foundation's domain) isn't.
-- **Privacy policy** ([PRIVACY.md](PRIVACY.md)), **store listing text** with a reason for each permission ([STORE-LISTING.md](STORE-LISTING.md)), and **store images** (four 1280×800 screenshots and a 440×280 promo tile, in `store`), made from the real extension on a made-up inbox.
+- **Privacy policy** ([PRIVACY.md](PRIVACY.md)), **store listing text** with a reason for each permission ([store/STORE-LISTING.md](store/STORE-LISTING.md)), and **store images** (four 1280×800 screenshots and a 440×280 promo tile, in `store`), made from the real extension on a made-up inbox.
 
 ## 5.73 — New home: SPRUCE-Browser-Extension
 

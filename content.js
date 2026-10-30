@@ -162,7 +162,7 @@ function phishSimGate(body) {
     }
     if (!weakRulesLogged && rules.some(r => r.weak)) {
         weakRulesLogged = true;
-        reportEvent('warning', `Phishing simulation rule${rules.filter(r => r.weak).length > 1 ? 's' : ''} ${rules.filter(r => r.weak).map(r => `“${r.name}”`).join(', ')} match a public header name only; a real phishing email could copy it. Add the vendor's secret header value or its sending addresses (Help for administrators: ADMIN-GUIDE.md).`);
+        reportEvent('warning', `Phishing simulation rule${rules.filter(r => r.weak).length > 1 ? 's' : ''} ${rules.filter(r => r.weak).map(r => `“${r.name}”`).join(', ')} match a public header name only; a real phishing email could copy it. Add the vendor's secret header value or its sending addresses (Help for administrators: docs/ADMIN-GUIDE.md).`);
     }
     body.dataset.unshortenerSim = 'pending';
     identifySimulation(body, rules, domains).then(found => guarded('Checking for a phishing simulation', () => {
