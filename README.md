@@ -130,25 +130,32 @@ version from this repository, follow [docs/INSTALL-FOR-TESTERS.md](docs/INSTALL-
 
 ## For administrators
 
-Settings can be forced with Google Workspace, Microsoft Intune or Group Policy. See
-[docs/ADMIN-GUIDE.md](docs/ADMIN-GUIDE.md) and the schema in [`schema.json`](schema.json);
-[`docs/policy-example.json`](docs/policy-example.json) shows a complete policy.
+Every setting can be set and locked by policy (Google Workspace, Microsoft Intune or Group Policy). Settings you don't set stay under each
+user's control, and users can't change or reset the ones you lock. The
+[admin guide](docs/ADMIN-GUIDE.md) lists **every** policy key with its default and what it does; the schema is [`schema.json`](schema.json),
+and [`docs/policy-example.json`](docs/policy-example.json) is a complete policy to start from.
 
-The sender features (Gmail) each have their own key (`managedEnableSenderIdentity`,
-`managedEnableSenderIconFallback`, `managedEnableSenderAvatars`, `managedEnableSenderBimi`, `managedSenderPictureSize`, `managedEnableCopyAddress`, `managedEnableLookalikeCheck`, `managedEnableOwnNameCheck`, `managedEnableCallbackScamCheck`, `managedEnableSenderCountry`, the row highlighter (`managedEnableRowHighlighter`, `managedRowHighlightColor`, `managedRowHighlightStyle`, `managedRowHighlightSelected`, `managedRowHighlightSelectedColor`) and warnings about overlapping extensions (`managedEnableConflictWarnings`), `managedEnableSenderDomainCheck`, `managedEnableSenderAddressCheck`,
-`managedEnableAutoSpam`, `managedEnableAutoSpamInSearch`, `managedEnableSpamNotice`, `managedEnableSpamFolderFlags`); `managedTrustedSenders` is the allow list of senders never to flag or move
-(addresses or whole domains), for example your phishing-training provider or a false positive. There is
-no sender block list: users report anything missed with Gmail's own Report spam.
+**Organization lists**, added to each user's own:
 
-Some policies exist for administrators only, with no setting in the extension:
+- `managedTrustedSenders`: senders never flagged or moved to Spam (addresses or whole domains), for
+  example your phishing-training provider or a false positive.
+- `managedAllowlist` and `managedBlocklist`: sites whose links are never checked, or always flagged.
 
-- **Phishing simulations:** training emails from KnowBe4, Wizer and others are left completely
-  unchecked, so the extension never records a false click or hides an open. They're recognized by their
-  link domains in every webmail (`managedPhishSimulationDomains`: all links must go to the vendor's
-  domains) or by header in Gmail (`managedPhishSimulationRules`, ideally with a secret value).
-- **A simpler popup** (`managedHidePopupSettingsButton`, `managedHideRecentActivity`, `managedHideDonateButton`): hides the
-  Settings button and recent activity; Settings stays reachable at
-  `chrome-extension://<ID>/options.html`.
+**Administrator-only policies**, with no setting in the extension:
+
+- **Phishing-simulation emails** (`managedPhishSimulationDomains`, `managedPhishSimulationRules`):
+  training emails from KnowBe4, Wizer and others are left completely unchecked, so the extension never
+  records a false click or hides an open. They're recognized by their link domains in every webmail
+  (all links must go to the vendor's domains) or by a header in Gmail (ideally with a secret value).
+- **Hide the Settings button** (`managedHidePopupSettingsButton`): removes **Open Settings** from the
+  toolbar popup. Settings stay reachable by typing the extension's address
+  (`chrome-extension://<extension ID>/options.html`; the ID is on `chrome://extensions` or the store page), so this
+  hides the button, it doesn't lock anything. To keep users from changing a setting, set that
+  setting by policy.
+- **Hide recent activity** (`managedHideRecentActivity`): removes the **Recent activity** list from the
+  toolbar popup. Activity is still recorded in Settings → Logging.
+- **Hide the Donate button** (`managedHideDonateButton`): removes the **Donate** button from
+  Settings → Help → About.
 
 ## Documentation
 

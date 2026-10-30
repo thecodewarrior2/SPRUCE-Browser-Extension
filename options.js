@@ -90,6 +90,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- SETTINGS BINDING (user values + Google Workspace policy locks) ---
     async function bindSettings() {
         const cfg = await loadEffectiveSettings();
+        // This installation's own extension ID wherever Help shows the Settings address.
+        document.querySelectorAll('.ext-id').forEach(e => { e.textContent = chrome.runtime.id; });
         // The donate button in About, unless the organization hides it (managedHideDonateButton).
         const donate = document.getElementById('donateRow');
         if (donate) donate.hidden = !!(cfg.policy && cfg.policy.hideDonateButton);

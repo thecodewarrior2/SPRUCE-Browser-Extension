@@ -173,11 +173,29 @@
   "managedDohMethod": {
     "Value": "GET"
   },
+  "managedDohBody": {
+    "Value": ""
+  },
+  "managedDohHeaders": {
+    "Value": ""
+  },
+  "managedDohFlagField": {
+    "Value": ""
+  },
   "managedUnshortenerEndpoint": {
     "Value": "https://unshorten.example.com/?url={url}"
   },
   "managedUnshortenerMethod": {
     "Value": "GET"
+  },
+  "managedUnshortenerBody": {
+    "Value": ""
+  },
+  "managedUnshortenerHeaders": {
+    "Value": ""
+  },
+  "managedUnshortenerField": {
+    "Value": ""
   },
   "managedUseUnshortenMeFallback": {
     "Value": true

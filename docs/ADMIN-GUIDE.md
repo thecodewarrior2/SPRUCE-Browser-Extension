@@ -237,7 +237,8 @@ them by hand.
 ```json
 {
   "managedHidePopupSettingsButton": { "Value": true },
-  "managedHideRecentActivity":      { "Value": true }
+  "managedHideRecentActivity":      { "Value": true },
+  "managedHideDonateButton":        { "Value": true }
 }
 ```
 
@@ -246,8 +247,9 @@ them by hand.
 - `managedHideRecentActivity` removes the **Recent activity** list and its **Clear activity** button from
   the popup. Activity is still recorded and visible in Settings → Logging.
 - **Settings stay reachable** for IT staff and anyone who knows the address: type
-  `chrome-extension://nnbeoijlicodfplamcelmdlkjggddfla/options.html` in the address bar (Edge: the same
-  address with the extension's Edge ID). Hiding the button is a convenience, not a lock: to stop users
+  `chrome-extension://<extension ID>/options.html` in the address bar. The ID is shown on
+  `chrome://extensions` (Edge: `edge://extensions`) and in the store page's address; the store gives the
+  published extension its own ID, different from the test version's. Hiding the button is a convenience, not a lock: to stop users
   changing a setting, set that setting by policy.
 
 ### Phishing simulation (training) emails

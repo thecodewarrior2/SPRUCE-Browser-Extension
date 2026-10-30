@@ -1071,12 +1071,13 @@ Flag field:      (leave empty: Google's replies are recognized automatically)</d
   <li><b>Your own services:</b> <code>managedUnshortenerEndpoint</code> and <code>managedDohEndpoint</code> with their method, body and header keys. Headers (API keys) set by policy are masked from users and never included in backups.</li>
   <li><b>Host access for your own services:</b> Chrome can't grant access to a custom service by policy, so the service should send CORS headers, or users approve a one-time prompt.</li>
   <li><b>Senders (Gmail):</b> sender icons, country flags, sender checks, moving flagged emails to Spam and the notice can each be set and locked (<code>managedEnableSenderIdentity</code>, <code>managedEnableSenderIconFallback</code>, <code>managedEnableSenderAvatars</code>, <code>managedEnableSenderCountry</code>, <code>managedEnableSenderDomainCheck</code>, <code>managedEnableSenderAddressCheck</code>, <code>managedEnableAutoSpam</code>, <code>managedEnableSpamNotice</code>), and <code>managedTrustedSenders</code> is the allow list of senders never flagged or moved (addresses or domains). Training emails matched by <code>managedPhishSimulationDomains</code> or <code>managedPhishSimulationRules</code> are never moved.</li>
+  <li><b>Organization lists:</b> <code>managedTrustedSenders</code> (senders never flagged or moved), <code>managedAllowlist</code> and <code>managedBlocklist</code> (sites never checked, or always flagged) are added to each user's own lists.</li>
   <li><b>Webmail apps:</b> each supported webmail can be switched on or off (<code>managedEnableOutlookSupport</code>, <code>managedEnableYahooSupport</code> and so on).</li>
   <li><b>Changes</b> to policy apply without reinstalling, from the next message opened.</li>
 </ul>
 
 <h3 id="deploy-admin-only">7. Administrator-only policies</h3>
-<p>These exist only in the policy; there's no setting for them here, and they aren't in backups or in <b>Copy as policy JSON</b>. Full details and examples are in <code>ADMIN-GUIDE.md</code>.</p>
+<p>These exist only in the policy; there's no setting for them here, and they aren't in backups or in <b>Copy as policy JSON</b>. Full details and examples are in the admin guide (<code>docs/ADMIN-GUIDE.md</code> in the project).</p>
 <ul class="simple-list">
   <li><code>managedHidePopupSettingsButton</code> and <code>managedHideRecentActivity</code> remove the <b>Open Settings</b> button and the <b>Recent activity</b> list from the toolbar popup. Settings stays reachable by typing <code>chrome-extension://<span class="ext-id">nnbeoijlicodfplamcelmdlkjggddfla</span>/options.html</code> in the address bar.</li>
   <li><code>managedHideDonateButton</code> removes the <b>Donate</b> button from Help → About.</li>

@@ -50,6 +50,10 @@ part('donate-button', async () => {
     const r = await run(policy, {});
     const opt = await options(r.ctx, r.sw);
     const shown = await opt.evaluate(() => { const d = document.getElementById('donateRow'); return !!d && !d.hidden && /paypal\.com\/donate/.test(d.querySelector('a').href); });
+    if (want) {
+      const id = await opt.evaluate(() => ({ shown: [...document.querySelectorAll('.ext-id')].map(e => e.textContent), own: location.host }));
+      check('Help shows this installation\'s own extension ID', id.shown.length > 0 && id.shown.every(x => x === id.own), id);
+    }
     check(want ? 'About shows the Donate button' : 'managedHideDonateButton hides the Donate button', shown === want, { policy, shown });
     await r.ctx.close();
   }

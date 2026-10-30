@@ -1,5 +1,11 @@
 # Changelog
 
+## 5.78 — Administrator documentation
+
+- **Every administrator-only policy has its own clear entry** in the README and Help: hiding the popup's Settings button (`managedHidePopupSettingsButton`, a convenience, not a lock: Settings stay reachable by address, and locked settings can't be changed there), hiding recent activity (`managedHideRecentActivity`), hiding the Donate button in Help → About (`managedHideDonateButton`), and the phishing-simulation rules. The organization lists (`managedTrustedSenders`, `managedAllowlist`, `managedBlocklist`) are described too, and the README now points to the admin guide for the full list of keys instead of listing some of them.
+- **Fixed: Help showed the test version's extension ID** in the Settings address; it now shows this installation's own ID (a store install has a different one). The admin guide explains where to find it.
+- The policy example now lists every key, including the request body, headers and reply field of your own threat-check and short-link services.
+
 ## 5.77 — A helper, not a guarantee
 
 - **Wording that promises nothing.** S.P.R.U.C.E+ is a best-effort helper and one small layer of protection, and the text now says so: Help (How it works, About), the README, the privacy policy, the store listing and images and the architecture guide carry a short note that it can miss dangerous emails and flag genuine ones, and doesn't replace the webmail's and the organization's own email security or the reader's judgment.
