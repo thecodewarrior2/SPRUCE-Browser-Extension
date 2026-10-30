@@ -2024,7 +2024,7 @@ function scanSenders() {
 const senderResults = new Map();           // raw address → Promise<result | null>, for this page
 const SENDER_RESULTS_MAX = 1000;
 const messageInfos = new Map();            // Gmail message id → Promise<{ fh, ip, an } | null>
-const senderIcons = new Map();             // site → Promise<data: URL | ''>
+const senderIcons = new Map();             // "site|address" → Promise<{ d: data: URL or "", avatar }>
 const openedStates = new WeakMap();        // message body → what's known about its sender (opened emails)
 const loggedVerdicts = new Set();          // emails whose own verdict was already logged on this page (newest 2,000)
 const spamQueue = new Map();               // conversation → { kind: 'row' | 'thread', address, reason, msgId, since }
@@ -2227,27 +2227,71 @@ function serverCountry(info) {
 // --- Drawing ---------------------------------------------------------------------------------------
 // The site icon from the background (fetched once from Google's icon service and remembered; only the
 // site name is sent). A site without an icon, and "Offline only", get a blank space of the same size.
-function senderIconEl(domain, S) {
+// The sender's icon: a remembered photo or verified logo for the address first (round, as the webmail
+// shows them), else the site's icon, else a blank space of the same size.
+function senderIconEl(domain, S, address) {
     const wrap = document.createElement('span');
     wrap.className = 'unshortener-sender-icon';
-    const slot = document.createElement('span');
-    slot.className = 'unshortener-sender-blank';
-    slot.setAttribute('aria-hidden', 'true');
-    wrap.appendChild(slot);
-    const site = siteOfSender(domain);
-    if (S.enableDnsThreatCheck && SENDER_DOMAIN_RE.test(site)) {
-        if (!senderIcons.has(site)) senderIcons.set(site, new Promise(resolve => safeSend({ action: 'senderIcon', site }, (d) => resolve(typeof d === 'string' && d.startsWith('data:image/') ? d : ''))));
-        senderIcons.get(site).then(d => {
-            if (!d || !slot.isConnected) return;
-            const img = document.createElement('img');
-            img.alt = '';
-            img.width = 16; img.height = 16;
-            img.addEventListener('error', () => img.replaceWith(slot), { once: true });
-            img.src = d;
-            slot.replaceWith(img);
-        });
-    }
+    wrap.dataset.site = siteOfSender(domain);
+    wrap.dataset.address = String(address || '').toLowerCase();
+    fillSenderIcon(wrap, S);
     return wrap;
+}
+function fillSenderIcon(wrap, S) {
+    const site = wrap.dataset.site, address = wrap.dataset.address;
+    const blank = () => { const b = document.createElement('span'); b.className = 'unshortener-sender-blank'; b.setAttribute('aria-hidden', 'true'); return b; };
+    wrap.querySelectorAll('img, .unshortener-sender-blank').forEach(e => e.remove());
+    const slot = blank();
+    wrap.insertBefore(slot, wrap.firstChild);
+    const avatars = !!(MAIL_CAN.avatars && S.enableSenderAvatars && address);
+    if (!(SENDER_DOMAIN_RE.test(site) && (S.enableDnsThreatCheck || avatars))) return;
+    const key = `${site}|${avatars ? address : ''}`;
+    if (!senderIcons.has(key)) {
+        if (senderIcons.size >= SENDER_RESULTS_MAX) senderIcons.delete(senderIcons.keys().next().value);
+        senderIcons.set(key, new Promise(resolve => safeSend({ action: 'senderIcon', site, address: avatars ? address : '' },
+            (r) => resolve(r && typeof r.d === 'string' && r.d.startsWith('data:image/') ? r : { d: '' }))));
+    }
+    senderIcons.get(key).then(r => {
+        if (!r.d || !slot.isConnected) return;
+        const img = document.createElement('img');
+        img.alt = '';
+        img.width = 16; img.height = 16;
+        if (r.avatar) img.className = 'unshortener-sender-avatar';
+        img.addEventListener('error', () => img.replaceWith(blank()), { once: true });
+        img.src = r.d;
+        slot.replaceWith(img);
+    });
+}
+
+// Photos and logos (the profile's message.avatar): the one the webmail shows beside the sender of an
+// opened email is remembered for the address, so the inbox list shows it too. Only two kinds are used:
+// a personal photo of someone in the user's own organization (its directory), and a logo for an email
+// that passed the webmail's own sender verification (DMARC; the webmail shows a brand's BIMI logo only
+// then). Personal photos of outside senders are never used: anyone can make their profile photo look
+// like a bank's logo. The webmail loads the image late, so it's looked for again after 0.5, 1.5 and 3 s.
+// A changed photo replaces the old one, and every icon of that sender on the page is redrawn.
+function harvestAvatar(body, who, auth) {
+    const A = MAIL_CAN.avatars ? MAIL.message.avatar : null;
+    if (!A || !lastSettings.enableSenderAvatars || !who || !who.address) return;
+    const org = ownOrgDomain();
+    const own = !!org && (who.domain === org || who.domain.endsWith('.' + org));
+    const attempt = (n) => {
+        const container = messageContainerOf(body);
+        const img = container && [...container.querySelectorAll(A.img)].find(i => (i.getAttribute(A.addressAttr) || '').trim().toLowerCase() === who.address);
+        const url = img ? (img.currentSrc || img.getAttribute('src') || '') : '';
+        if (!url || !A.host.test(url) || A.placeholder.test(url)) {
+            if (n < 3) setTimeout(() => guarded('Reading a sender photo', () => attempt(n + 1)), [500, 1500, 3000][n]);
+            return;
+        }
+        const kind = A.personal.test(url) ? 'personal' : 'logo';
+        if (kind === 'personal' ? !own : !(auth && auth.dmarc === 'pass')) return;
+        safeSend({ action: 'senderAvatar', address: who.address, url, kind }, (r) => guarded('Showing a sender photo', () => {
+            if (r !== 'saved' && r !== 'updated') return;
+            for (const k of [...senderIcons.keys()]) if (k.endsWith('|' + who.address)) senderIcons.delete(k);
+            document.querySelectorAll('.unshortener-sender-icon').forEach(w => { if (w.dataset.address === who.address) fillSenderIcon(w, lastSettings); });
+        }));
+    };
+    attempt(0);
 }
 
 function setSenderFlag(icon, country, source) {
@@ -2319,7 +2363,7 @@ function scanSenderRows(S) {
         // The sender shown first is the one decorated; a flagged one anywhere in the row wins.
         let icon = null, chip = null;
         if (S.enableSenderIdentity) {
-            icon = senderIconEl(senders[0].domain, S);
+            icon = senderIconEl(senders[0].domain, S, senders[0].address);
             chip = senderChipEl(senders[0].domain, dark, senders[0].address);
             const nameCell = firstMatch(row, MAIL.list.nameCell);
             const subject = firstMatch(row, MAIL.list.subjectCell);
@@ -2454,7 +2498,7 @@ function scanOpenedSenders(S) {
         nameEl.dataset.unshortenerSender = key;
         let icon = null, chip = null;
         if (S.enableSenderIdentity && holder) {
-            icon = senderIconEl(who.domain, S);
+            icon = senderIconEl(who.domain, S, who.address);
             chip = senderChipEl(who.domain, isDarkSurface(nameEl), who.address);
             chip.style.marginLeft = '6px';
             nameEl.insertAdjacentElement('beforebegin', icon);
@@ -2468,6 +2512,7 @@ function scanOpenedSenders(S) {
             if (!nameEl.isConnected || nameEl.dataset.unshortenerSender !== key || !r || openedStates.get(body) !== st) return;
             st.base = r;
             st.info = info;
+            harvestAvatar(body, who, auth);
             st.authLine = auth ? [`${SITE.name}'s sender verification: DMARC ${auth.dmarc}, SPF ${auth.spf}, DKIM ${auth.dkim}.`] : [];
             if (icon && S.enableSenderCountry) {
                 setSenderFlag(icon, r.country, r.countrySource);
@@ -2951,7 +2996,7 @@ if (MAIL) setTimeout(scheduleScan, 500);
 window.addEventListener('hashchange', () => { scheduleBadgeUpdate(); if (MAIL) scheduleScan(); });
 window.addEventListener('popstate', scheduleBadgeUpdate);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { lastReported = ''; scheduleBadgeUpdate(); if (spamQueue.size) scheduleSpamMoves(); } });
-const SENDER_SETTING_KEYS = ['enableSenderIdentity', 'enableSenderCountry', 'enableSenderDomainCheck', 'enableSenderAddressCheck', 'enableAutoSpam', 'customTrustedSenders', 'customAllowlist', 'enableDnsThreatCheck'];
+const SENDER_SETTING_KEYS = ['enableSenderIdentity', 'enableSenderAvatars', 'enableSenderIconFallback', 'enableSenderCountry', 'enableSenderDomainCheck', 'enableSenderAddressCheck', 'enableAutoSpam', 'customTrustedSenders', 'customAllowlist', 'enableDnsThreatCheck'];
 // Turning protection on or off in Settings or the popup takes effect on the icon immediately.
 chrome.storage.onChanged.addListener((changes, area) => {
     // A policy change (for example sender features locked off) applies at once.

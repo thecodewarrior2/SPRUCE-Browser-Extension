@@ -1437,6 +1437,46 @@ async function senderDomainDns(domain, S) {
     return dns;
 }
 
+// SENDER PHOTOS AND VERIFIED LOGOS. The photo or logo the webmail itself shows beside a sender in an
+// opened email (content.js decides which may be used: a colleague's profile photo, or a logo the
+// webmail showed for an email that passed its sender verification) is fetched once from the
+// webmail's own image host and kept in the icon store under "@<address>", with the address it came
+// from. When the webmail later shows a different one, the new one replaces it (a changed photo);
+// the same one is only looked at again after a week. Shown before the site icon.
+const AVATAR_RECHECK_MS = 7 * 24 * 60 * 60 * 1000;
+const avatarInFlight = new Map();
+async function rememberAvatar(address, url, kind) {
+    const key = '@' + address;
+    const hit = await iconStore.get(key).catch(() => null);
+    if (hit && hit.from === url && hit.bytes && Date.now() - hit.ts < AVATAR_RECHECK_MS) return 'same';
+    if (avatarInFlight.has(key)) return avatarInFlight.get(key);
+    const p = (async () => {
+        try {
+            const icon = await fetchIconFrom(url, []);
+            const found = icon && await normalizeIcon(icon);
+            if (!found) return 'unusable';
+            await iconStore.put(key, found.type, found.bytes, kind === 'personal' ? 'avatar-personal' : 'avatar-logo', url);
+            logInfo(`Sender ${kind === 'personal' ? 'photo' : 'verified logo'} for ${address}: ${hit && hit.bytes ? (hit.from === url ? 'checked again, unchanged' : 'changed, replaced') : 'remembered'}.`, 'Sender checks');
+            return hit && hit.bytes && hit.from !== url ? 'updated' : 'saved';
+        } catch (e) {
+            logWarning(`The ${kind === 'personal' ? 'photo' : 'logo'} for ${address} could not be fetched (${errorText(e)}); the site icon is shown instead.`, 'Sender checks');
+            return 'failed';
+        } finally {
+            avatarInFlight.delete(key);
+        }
+    })();
+    avatarInFlight.set(key, p);
+    return p;
+}
+// Only from an image host a webmail entry names for its avatars (Gmail: googleusercontent.com).
+function avatarHostAllowed(url) {
+    return WEBMAIL_SITES.some(w => w.mail && w.mail.message && w.mail.message.avatar && w.mail.message.avatar.host.test(url));
+}
+async function avatarFor(address) {
+    const rec = await iconStore.get('@' + address).catch(() => null);
+    return rec && rec.bytes ? iconDataUrl(rec) : '';
+}
+
 // The sender's exact address on the community scam-sender list (downloaded with the phishing lists).
 async function phishingSenderHit(address, cfg) {
     if (!cfg.values.enablePhishingFeeds) return null;
@@ -2163,8 +2203,22 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     // A sender's site icon (data: URL, or '' for none), fetched once and remembered.
     if (request.action === 'senderIcon') {
         if (!sender || sender.id !== chrome.runtime.id || typeof request.site !== 'string') { sendResponse(''); return false; }
-        getConfig().then(cfg => (cfg.values.enableSenderIdentity && cfg.values.enableDnsThreatCheck ? senderIcon(request.site, { fallback: !!cfg.values.enableSenderIconFallback }) : ''))
-            .then(d => sendResponse(d || ''), () => sendResponse(''));
+        // A remembered photo or verified logo for the sender comes first (no network: they are only
+        // ever learned from opened emails), then the site's icon. Answers { d, avatar } for the page.
+        const address = typeof request.address === 'string' ? request.address.toLowerCase().slice(0, 320) : '';
+        getConfig().then(async cfg => {
+            if (!cfg.values.enableSenderIdentity) return { d: '' };
+            if (address && cfg.values.enableSenderAvatars) { const a = await avatarFor(address); if (a) return { d: a, avatar: true }; }
+            return { d: cfg.values.enableDnsThreatCheck ? await senderIcon(request.site, { fallback: !!cfg.values.enableSenderIconFallback }) : '' };
+        }).then(r => sendResponse(r), () => sendResponse({ d: '' }));
+        return true;
+    }
+    if (request.action === 'senderAvatar') {
+        if (!sender || sender.id !== chrome.runtime.id || typeof request.address !== 'string' || typeof request.url !== 'string'
+            || !avatarHostAllowed(request.url) || !['personal', 'logo'].includes(request.kind)) { sendResponse('refused'); return false; }
+        getConfig().then(cfg => cfg.values.enableSenderIdentity && cfg.values.enableSenderAvatars && cfg.values.enableDnsThreatCheck
+            ? rememberAvatar(request.address.toLowerCase().slice(0, 320), request.url.slice(0, 2000), request.kind) : 'off')
+            .then(r => sendResponse(r), () => sendResponse('failed'));
         return true;
     }
     if (request.action === 'forgetSpamMoves') {

@@ -29,6 +29,11 @@ a:focus + .unshortener-icon.unshortener-hover-reveal,
     vertical-align: middle;
     flex: none;
 }
+/* A sender's photo or verified logo is round, as the webmail shows it. */
+.unshortener-sender-icon img.unshortener-sender-avatar {
+    border-radius: 50%;
+    object-fit: cover;
+}
 .unshortener-sender-icon img,
 .unshortener-sender-blank {
     width: 16px;

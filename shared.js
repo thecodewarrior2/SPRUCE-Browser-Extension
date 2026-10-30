@@ -26,6 +26,10 @@ const SETTING_DEFS = [
     // A site without its own icon gets its parent domain's, or DuckDuckGo's icon service's (a second
     // icon service, asked only for such sites); re-checked weekly so the site's own icon replaces it.
     { key: 'enableSenderIconFallback',    managedKey: 'managedEnableSenderIconFallback',    def: true, type: 'boolean' },
+    // Sender photos and verified brand logos, as the webmail itself shows them in opened emails, in
+    // place of the site icon: colleagues' profile photos (the user's own organization), and logos the
+    // webmail displayed only after the email passed its sender verification (BIMI).
+    { key: 'enableSenderAvatars',         managedKey: 'managedEnableSenderAvatars',         def: true, type: 'boolean' },
     // Country flag of the server that sent the email (the domain's ending when it can't be looked up).
     { key: 'enableSenderCountry',         managedKey: 'managedEnableSenderCountry',         def: true, type: 'boolean' },
     // Sender domains checked against the threat services and phishing lists (Gmail).
@@ -1087,7 +1091,10 @@ function riskyScheme(href) {
 //                 elements that carry them
 //   openThread    the heading of an open conversation (carries its id)
 //   message       container of one opened message, its sender element, and the element after which
-//                 the sender's label goes (senderAfter; else right after the sender)
+//                 the sender's label goes (senderAfter; else right after the sender); avatar: the photo
+//                 or logo the webmail shows for the sender (img, the attribute holding its address,
+//                 allowed image host, placeholder images to ignore, and the address pattern of
+//                 personal account photos as opposed to brand logos)
 //   toolbar       the toolbar that acts on selected or open conversations; spamAction: an attribute
 //                 that marks the Report spam button whatever its language
 //   views         inbox: views (address after "#") where emails may be moved to Spam; spam: the Spam
@@ -1119,7 +1126,11 @@ const WEBMAIL_SITES = [
               messageHolder: '[data-message-id], [data-legacy-message-id]'
           },
           openThread: 'h2[data-thread-perm-id], h2[data-legacy-thread-id]',
-          message: { container: '.adn, [data-message-id], .gs', sender: '.gD[email]', senderAfter: '.go' },
+          message: { container: '.adn, [data-message-id], .gs', sender: '.gD[email]', senderAfter: '.go',
+                     // The photo or logo Gmail shows beside the sender (its hovercard id is the address).
+                     avatar: { img: 'img[data-hovercard-id]', addressAttr: 'data-hovercard-id',
+                               host: /^https:\/\/[^/]*\.googleusercontent\.com\//, placeholder: /default-user|\/ic_|anonymous/i,
+                               personal: /\.googleusercontent\.com\/a-?\// } },
           toolbar: '[gh="mtb"], [gh="tm"]',
           spamAction: { attr: 'act', value: '9' },
           views: { inbox: /^(inbox(\/.*)?|category\/[a-z]+(\/.*)?)?$/, spam: /^(spam(\/|$)|search\/.*in(:|%3A)spam)/i, spamHref: '#spam' },
@@ -1193,6 +1204,7 @@ function mailCapabilities(site) {
         headers: !!(M && !M.generic && M.headers),            // signs in the original source; server country
         move: !!(M && !M.generic && M.list && M.toolbar && M.views),   // moving flagged emails to Spam
         compose: !!(M && !M.generic && M.compose),            // checking links before sending
+        avatars: !!(M && !M.generic && M.message && M.message.avatar),   // sender photos and verified logos
         attachments: !!(site && site.attachments)             // attachment checks
     };
 }
@@ -1240,6 +1252,7 @@ const FEATURE_SUPPORT = [
     { name: 'Sender checks in opened emails (brand names, look-alike domains, company links)', needs: 'opened' },
     { name: 'Sender icon, country flag and label in opened emails', needs: 'opened' },
     { name: 'Sender icon, country flag and label in the inbox list', needs: 'list' },
+    { name: 'Colleagues\' photos and verified brand logos (BIMI) as sender icons', needs: 'avatars' },
     { name: 'The webmail\'s own warnings about a sender counted in the email\'s verdict', needs: 'opened' },
     { name: 'Signs of forgery in the headers (DMARC, forged delivery records…)', needs: 'headers' },
     { name: 'Phishing-simulation emails recognized by their headers', needs: 'headers' },
