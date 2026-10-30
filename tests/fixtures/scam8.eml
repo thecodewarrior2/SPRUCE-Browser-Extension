@@ -1,0 +1,38 @@
+Delivered-To: sample_user@gmail.com
+Received: by 2002:ab2:784c:0:b0:345:212:701e with SMTP id m12csp736729lqp; Thu, 29 Oct 2026 06:59:51 -0700 (PDT)
+X-Received: by 2002:a17:907:940d:b0:c2e:378c:8ceb with SMTP id a640c23a62f3a-c49be04547amr488747166b.36.1793282391005; Thu, 29 Oct 2026 06:59:51 -0700 (PDT)
+ARC-Authentication-Results: i=1; mx.google.com; dkim=pass header.i=@gmail.com header.s=20260707 header.b=ipy34Fpc; spf=pass (google.com: domain of order_sender@gmail.com designates 209.85.220.41 as permitted sender) smtp.mailfrom=order_sender@gmail.com; dmarc=pass (p=NONE sp=QUARANTINE dis=NONE) header.from=gmail.com; dara=pass header.i=@gmail.com
+Return-Path: <order_sender@gmail.com>
+Received: from mail-sor-f41.google.com (mail-sor-f41.google.com. [209.85.220.41]) by mx.google.com with SMTPS id a640c23a62f3a-c49bf4c9858sor197501066b.11.2026.10.29.06.59.50 for <sample_user@gmail.com> (Google Transport Security); Thu, 29 Oct 2026 06:59:50 -0700 (PDT)
+Received-SPF: pass (google.com: domain of order_sender@gmail.com designates 209.85.220.41 as permitted sender) client-ip=209.85.220.41;
+Authentication-Results: mx.google.com; dkim=pass header.i=@gmail.com header.s=20260707 header.b=ipy34Fpc; spf=pass (google.com: domain of order_sender@gmail.com designates 209.85.220.41 as permitted sender) smtp.mailfrom=order_sender@gmail.com; dmarc=pass (p=NONE sp=QUARANTINE dis=NONE) header.from=gmail.com; dara=pass header.i=@gmail.com
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=gmail.com; s=20260707; t=1793282390; x=1793887190; h=priority:importance:subject:from:to:mime-version:content-type:date:message-id; bh=UN6QUe+I0R1zj3LJLr85utgtgP/4wmBp/gCqNLLPwgs=; b=ipy34Fpc
+X-Received: by 2002:a17:907:97c3:b0:c40:231:6ea1 with SMTP id a640c23a62f3a-c49be091784mr483709866b.43.1793282390279; Thu, 29 Oct 2026 06:59:50 -0700 (PDT)
+Return-Path: <order_sender@gmail.com>
+Received: from [172.28.16.60] ([192.0.2.216]) by smtp.gmail.com with ESMTPSA id a640c23a62f3a-c46bd795bf8sm739627366b.70.2026.10.29.06.59.49 for <sample_user@gmail.com> (version=TLS1_3 cipher=TLS_AES_256_GCM_SHA384 bits=256/256); Thu, 29 Oct 2026 06:59:49 -0700 (PDT)
+Message-ID: <6ae35155.432b5173.22d127.6766@mx.google.com>
+Date: Thu, 29 Oct 2026 06:59:49 -0700 (PDT)
+Content-Type: multipart/mixed; boundary="===============5533170032406071678=="
+MIME-Version: 1.0
+to: Sample_user <sample_user@gmail.com>
+from: Sample_user <order_sender@gmail.com>
+subject: Your Order Acknowledgement Thursday, October 29, 2026: Sample_user Bill 2391244872
+Importance: normal
+Priority: normal
+
+--===============5533170032406071678==
+Content-Type: text/plain; charset="utf-8"
+MIME-Version: 1.0
+Content-Transfer-Encoding: base64
+
+RGF0ZTogVGh1cnNkYXksIE9jdG9iZXIgMjksIDIwMjYKQmlsbCBObzogSU5WNTE2Mjk0CgpEZWFy
+IEFjY291bnQgSG9sZGVyLAoKVGhpcyBub3RpZmljYXRpb24gcHJvdmlkZXMgZGV0YWlscyBvZiB0
+aGUgYXV0b21hdGljIHJlbmV3YWwgb2YgeW91ciBOb3J0b24gc3Vic2NyaXB0aW9uIG9uIFRodXJz
+ZGF5LCBPY3RvYmVyIDI5LCAyMDI2IGZvciB0aGUgdXBjb21pbmcgc2VydmljZSBwZXJpb2QuCgpJ
+dGVtOiBTZXJ2aWNlIFRyYWNraW5nIE5ldHdvcmsKU2VydmljZSBQZXJpb2Q6IFRocmVlIFllYXJz
+CkFtb3VudDogVVNENDM1LjYyCgpBY2NvdW50IE5hbWU6IFNhbXBsZV91c2VyCkFjY291bnQgRW1h
+aWw6IHNhbXBsZV91c2VyQGdtYWlsLmNvbQoKRm9yIGFzc2lzdGFuY2Ugd2l0aCB5b3VyIHN1YnNj
+cmlwdGlvbiBvciBiaWxsaW5nIGRldGFpbHMsIHBsZWFzZSBjb250YWN0ICsxICg1NTUpIDAxMC0w
+MTk5IG9yICg1NTUpLTAxMCAwMTQyLgoKVGhhbmtzIGFuZCByZWdhcmRzLAoKU2FtcGxlIEFnZW50
+ClRlbGVwaG9uZTogKzEgKDU1NSkgMDEwLTAxOTkK
+--===============5533170032406071678==--

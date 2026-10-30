@@ -51,11 +51,15 @@ part('dialogs-selection', async () => {
 part('views', async () => {
   const { ctx, sw } = await browser();
   let r;
-  for (const view of ['#spam', '#trash', '#search/evil', '#label/work', '#all', '#sent']) {
+  for (const view of ['#spam', '#trash', '#search/in%3Atrash+evil', '#label/work', '#all', '#sent']) {
     r = await scenario(ctx, sw, 'view ' + view, BASE, 'https://mail.google.com/mail/u/0/' + view);
     check(`view ${view}: nothing moved (badges still shown)`, r.spammed.length === 0 && r.chips > 0, r);
     await r.page.close();
   }
+  // Search results are moved like the inbox (test-search.js covers the rest).
+  r = await scenario(ctx, sw, 'search', BASE, 'https://mail.google.com/mail/u/0/#search/evil', null, 2);
+  check('search results: moved', r.spammed.length === 2, r);
+  await r.page.close();
   r = await scenario(ctx, sw, 'category', BASE, 'https://mail.google.com/mail/u/0/#category/promotions', null, 2);
   check('inbox category tab: moved', r.spammed.length === 2, r);
   await r.page.close();

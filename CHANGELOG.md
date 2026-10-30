@@ -1,5 +1,20 @@
 # Changelog
 
+## 5.69 — Flagged emails in search results are moved; four more kinds of scam caught (Safari build, same as Chrome 5.69)
+
+- **New: Also move flagged emails found by a search** (on by default). Flagged emails were moved to Spam only from the inbox, so a malicious email found by a search stayed where it was, even with its red label. Search results now count like the inbox, whether the email is in the inbox, archived or under a label, as a list or opened. Never a search in Spam, Trash, Sent, Drafts, chats or everywhere (`in:spam`, `in:trash`, `in:sent`, `in:anywhere`…), never a conversation you wrote in, and one you took back out of Spam stays out. Search results that Gmail splits into sections are moved too. Unread emails in search results are still checked from their sender only (their headers are read only in Spam), as in the inbox.
+- **Stronger: your own name as the sender's name, in any case.** A fake Norton bill ("Your Order Acknowledgement… Bill") came from a stranger's Gmail address under the recipient's own mailbox name, with a capital first letter. At Gmail, Outlook.com and other big providers a mailbox name is nobody's real name, so it now counts in any case (red, without opening). At an organization's own domain, where a mailbox can be a plain first name, it still counts only written exactly as in the address.
+- **New signs of forgery in the headers** (read emails, and unread ones in Spam), each found in a scam that wasn't red:
+  - the sender's name padded with invisible characters (Hangul or braille "fillers", zero-width spaces), as in a "FidelityLife" offer;
+  - web-page code (`<strong>`, `<br/>`) in the To, Cc or Bcc lines, which no mail program writes there;
+  - an "In-Reply-To" line holding an address instead of a message ID (a made-up reply);
+  - a cPanel marker, counted with the other unrelated sending services the headers claim at once;
+  - a fake Gmail (or other big provider's) signature, with a key the provider doesn't have, as in a casino ad that also failed DMARC;
+  - a subject ending in filler and random letters ("…FOR YOU!_______kvksrphdly");
+  - an "X-Spam-Flag: YES" mark: a mail system it passed through (here the sender's own provider) had already found it was spam;
+  - an unsubscribe link or tracking image on the sender's own computer (127.0.0.1, localhost), as in an IPTV ad. Other links to localhost, normal in developers' mail, don't count.
+- Emails checked before are checked again.
+
 ## 5.68 — Senders using your own name are flagged (Safari build, same as Chrome 5.68)
 
 - **New: Catch senders using your own name** (on by default). A fake cloud-storage email ("We've blocked your account! Your photos and videos will be deleted…") sat in Spam without a red label: its sender's name was the recipient's own mailbox name (the part of their address before the @), sent from a stranger's address, so it looked like a notice about their own account. An email whose sender name is your own email address, or your mailbox name written exactly as in your address, but which comes from someone else's address is now flagged red from the inbox list, without opening it, and moved to Spam (in the Spam folder it is marked red). Left alone: shared mailbox names (info, office, support…), senders from your own organization, an address that contains your mailbox name (likely your other account), a name written with capitals, as people write names ("Patdoe" for patdoe@…), and trusted senders.
