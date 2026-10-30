@@ -105,12 +105,13 @@
         const sites = WEBMAIL_SITES;
         const caps = sites.map(mailCapabilities);
         const short = (n) => n.replace(/ on the web$/, '').replace(/ Mail$/, '');
-        const mark = (yes) => yes ? el('span', { class: 'yes', 'aria-label': 'Yes', title: 'Works' }, '✓') : el('span', { class: 'no', 'aria-label': 'Not yet', title: 'Not yet' }, '—');
+        const mark = (v) => v === 'generic' ? el('span', { class: 'basic', 'aria-label': 'Basic', title: 'Basic: found through the page\'s accessibility labels (experimental)' }, '◐')
+            : v ? el('span', { class: 'yes', 'aria-label': 'Yes', title: 'Works' }, '✓') : el('span', { class: 'no', 'aria-label': 'Not yet', title: 'Not yet' }, '—');
         const head = el('tr', null, el('th', { scope: 'col' }, 'Feature'), sites.map(w => el('th', { scope: 'col' }, short(w.name))));
         const status = el('tr', { class: 'status' }, el('th', { scope: 'row', style: 'font-weight: normal;' }, 'Support'), sites.map(w => el('td', null, w.mail ? 'Full' : 'Experimental')));
         const rows = FEATURE_SUPPORT.map(f => el('tr', null,
             el('th', { scope: 'row', style: 'font-weight: normal;' }, f.name, f.needs ? '' : el('span', { style: 'color: var(--text-muted);' }, ' (every site)')),
-            caps.map(c => el('td', null, mark(!f.needs || c[f.needs])))));
+            caps.map(c => el('td', null, mark(f.needs ? c[f.needs] : true)))));
         fill('compatTable', el('table', { class: 'help-table compat-table' }, el('thead', null, head), el('tbody', null, status, rows)));
     }
 
@@ -139,7 +140,8 @@
         fill('archEngine', table(['Site', 'Message body', 'Inbox list', 'Opened emails', 'Original source', 'Report spam', 'Compose'],
             WEBMAIL_SITES.map(w => {
                 const c = mailCapabilities(w), M = w.mail || {};
-                return [w.name, code(w.body), yes(c.list, M.list && M.list.row), yes(c.opened, M.message && M.message.sender),
+                const gen = (v, own) => v === 'generic' ? 'Generic (accessibility labels)' : yes(v, own);
+                return [w.name, code(w.body), gen(c.list, M.list && M.list.row), gen(c.opened, M.message && M.message.sender),
                         yes(c.headers, M.headers && M.headers.receiver && `trusts ${M.headers.receiver.host}`), yes(c.move), yes(c.compose)];
             })));
     }

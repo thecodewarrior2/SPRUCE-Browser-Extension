@@ -37,20 +37,22 @@ const SITE = (() => {
             // Proxied images are fetched by the extension from the site's proxy (never from the sender).
             proxyImageUrl: (src) => proxy && proxy.host.test(src) ? src.split('#')[0] : null,
             attachments: site.attachments || null,
-            mail: site.mail || null
+            // The site's own profile, else the generic one (accessibility labels; read-only).
+            mail: site.mail !== undefined ? site.mail : GENERIC_MAIL
         };
     };
     const site = WEBMAIL_SITES.find(w => w.host.test(host) && (inFrame || !w.path || w.path.test(location.pathname)));
     if (site) return adapter(site);
     // Pages of a supported host that aren't mail (e.g. iCloud Photos), and the test harness.
-    return adapter({ id: 'other', name: 'this site', body: '.ii.gt', imageProxy: (WEBMAIL_SITES.find(w => w.imageProxy) || {}).imageProxy });
+    return adapter({ id: 'other', name: 'this site', body: '.ii.gt', imageProxy: (WEBMAIL_SITES.find(w => w.imageProxy) || {}).imageProxy, mail: null });
 })();
 
 // ---------------------------------------------------------------------------
 // MAIL ENGINE: reads any webmail's inbox list, opened emails, toolbar and compose window from its
 // `mail` profile (WEBMAIL_SITES in shared.js). The same code runs on every site; only the profile
 // differs. On a site without a profile, MAIL is null and only the checks inside opened emails run.
-// What a site can do follows from what its profile describes:
+// A site whose entry has no profile of its own gets the generic one (GENERIC_MAIL: accessibility labels,
+// read-only). What a site can do follows from what its profile describes (mailCapabilities):
 //   MAIL_CAN.list     sender icons, labels and checks in the inbox list
 //   MAIL_CAN.opened   sender checks, icons and labels in opened emails
 //   MAIL_CAN.headers  signs in the email's original source (forged headers, DMARC…), server country
@@ -991,7 +993,7 @@ function infoBar(anchor, text, severity) {
     anchor.after(bar);
     // A dangerous attachment counts in the email's verdict (sender label, banner, Spam).
     if (severity === 'danger') {
-        const msg = MAIL_CAN.opened ? anchor.closest(MAIL.message.container) : null;
+        const msg = MAIL_CAN.opened && MAIL.message.container ? anchor.closest(MAIL.message.container) : null;
         const body = msg && msg.querySelector(SITE.body);
         if (body) scheduleBannerRefresh(body);
     }
@@ -1250,7 +1252,7 @@ const MESSAGE_AUTH_MAX = 100;
 const pageValueCache = new Map();
 let authFetchFailureLogged = false;
 
-function senderChecksActive() { return MAIL_CAN.opened && lastSettings.enableSenderChecks !== false; }
+function senderChecksActive() { return !!MAIL_CAN.opened && lastSettings.enableSenderChecks !== false && !(SITE.settingKey && lastSettings[SITE.settingKey] === false); }
 
 // The permanent id of the message a body belongs to (Gmail: "msg-f:<decimal>").
 function messageIdOf(el) {
@@ -1381,13 +1383,41 @@ function verifyCompanyLink(el, d, company) {
     }));
 }
 
-// The sender the webmail shows for the message a body belongs to.
-function openedSenderOf(body) {
+// The opened message a body belongs to: { container, el } with the element showing its sender, or
+// null. A site's own profile names them (message.container, message.sender). The generic profile
+// looks outward from the body (at most 8 levels) for the first element showing an address that comes
+// before the body on the page and isn't part of it, an inbox row or the extension's own additions:
+// webmail show the sender above the message.
+function openedSenderElement(body) {
     if (!MAIL_CAN.opened) return null;
-    const msg = body.closest(MAIL.message.container) || document;
-    const s = msg.querySelector(MAIL.message.sender);
-    const A = MAIL.senderAttrs || {};
-    return s ? { name: (A.name && s.getAttribute(A.name)) || s.textContent.trim(), address: ((A.address && s.getAttribute(A.address)) || '').toLowerCase() } : null;
+    const M = MAIL.message;
+    if (M.container) {
+        const container = body.closest(M.container) || body.parentElement;
+        const el = container && container.querySelector(M.sender);
+        return el ? { container, el } : null;
+    }
+    let node = body;
+    for (let depth = 0; depth < 8 && node.parentElement && node.parentElement !== document.body; depth++) {
+        node = node.parentElement;
+        for (const el of node.querySelectorAll(M.near)) {
+            if (body.contains(el) || el.closest('[class*="unshortener-"]') || (MAIL.list && el.closest(MAIL.list.row))) continue;
+            if (!(el.compareDocumentPosition(body) & Node.DOCUMENT_POSITION_FOLLOWING) || !isShown(el) || !senderOf(el)) continue;
+            return { container: node, el };
+        }
+    }
+    return null;
+}
+// The element holding one whole opened message (its header, body and attachments).
+function messageContainerOf(body) {
+    if (MAIL_CAN.opened && MAIL.message.container) return body.closest(MAIL.message.container) || body.parentElement;
+    const found = openedSenderElement(body);
+    return (found && found.container) || body.parentElement;
+}
+// The sender the webmail shows for the message a body belongs to: { name, address }.
+function openedSenderOf(body) {
+    const found = openedSenderElement(body);
+    const who = found && senderOf(found.el);
+    return who ? { name: who.name, address: who.address } : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -2002,7 +2032,8 @@ const STATUS_SHOWN = new Set(['flagged', 'caution', 'trusted']);
 const STATUS_RANK = { flagged: 5, caution: 4, unknown: 3, unverified: 2, trusted: 1, clean: 1, pending: 0 };
 
 function senderFeaturesOn(S) {
-    return (MAIL_CAN.list || MAIL_CAN.opened) && !!(S.enableSenderIdentity || S.enableSenderDomainCheck || S.enableSenderAddressCheck);
+    if (SITE.settingKey && S[SITE.settingKey] === false) return false;          // support for this webmail switched off
+    return !!(MAIL_CAN.list || MAIL_CAN.opened) && !!(S.enableSenderIdentity || S.enableSenderDomainCheck || S.enableSenderAddressCheck);
 }
 
 // Conversation ids (Gmail: "thread-f:<decimal>") of a list row and of the open conversation, and the
@@ -2017,7 +2048,9 @@ function currentThreadKey() {
 }
 // The rows of the inbox list, and their state (the profile's `list` entry).
 function listRows() { return MAIL_CAN.list ? [...document.querySelectorAll(MAIL.list.row)] : []; }
-function rowIsUnread(row) { return !!(MAIL.list.unread && row.matches(MAIL.list.unread)); }
+function rowIsUnread(row) {
+    return !!(MAIL.list.unread && row.matches(MAIL.list.unread)) || !!(MAIL.list.unreadLabel && MAIL.list.unreadLabel.test(row.getAttribute('aria-label') || ''));
+}
 function rowCheckbox(row) { return row.querySelector(MAIL.list.checkbox); }
 function rowIsSelected(row) { return !!(MAIL.list.selected && row.matches(MAIL.list.selected)) || (rowCheckbox(row) || { getAttribute: () => null }).getAttribute('aria-checked') === 'true'; }
 
@@ -2039,10 +2072,28 @@ function ownOrgDomain() {
 // more than 64 characters before the @…) are kept: they are themselves a sign of forgery.
 function senderOf(el) {
     const A = (MAIL && MAIL.senderAttrs) || {};
-    // As written: an encoded part ("=?UTF-8?B?…?=") is case-sensitive, so it's never lower-cased.
-    const raw = String((A.address && el.getAttribute(A.address)) || '').trim();
+    const attrs = (names) => [].concat(names || []);
+    let raw = '';
+    for (const n of attrs(A.address)) {
+        const v = el.getAttribute(n);
+        if (!v) continue;
+        // A whole attribute is the address as written: an encoded part ("=?UTF-8?B?…?=") is
+        // case-sensitive, so it's never lower-cased. With `extract`, the address is taken out of a
+        // longer value ("Jane Doe <jane@example.com>", "mailto:…").
+        raw = A.extract ? ((v.replace(/^mailto:/i, '').match(EMAIL_IN_TEXT_RE) || [])[0] || '') : v;
+        raw = raw.trim();
+        if (raw) break;
+    }
     const p = parseSenderAddress(raw);
-    return p ? { raw, address: p.address, domain: p.domain, name: (A.name && el.getAttribute(A.name)) || el.textContent.trim() } : null;
+    if (!p) return null;
+    let name = '';
+    for (const n of attrs(A.name)) { name = el.getAttribute(n) || ''; if (name) break; }
+    if (!name) name = el.textContent.trim();
+    if (!name || name.includes('@')) {                              // a title like "Jane Doe <jane@example.com>"
+        const t = (el.getAttribute('title') || '').split('<')[0].trim();
+        if (t && !t.includes('@')) name = t;
+    }
+    return { raw, address: p.address, domain: p.domain, name: name.slice(0, 120) };
 }
 
 // Senders shown in a list row (up to 3, without the signed-in user), in the order the webmail shows them.
@@ -2050,7 +2101,8 @@ function rowSenders(row) {
     const me = accountAddress();
     const out = new Map();
     let spans = row.querySelectorAll(MAIL.list.sender);
-    if (!spans.length && MAIL.senderAttrs && MAIL.senderAttrs.address) spans = row.querySelectorAll(`[${MAIL.senderAttrs.address}]`);
+    const firstAttr = MAIL.senderAttrs && [].concat(MAIL.senderAttrs.address || [])[0];
+    if (!spans.length && firstAttr) spans = row.querySelectorAll(`[${firstAttr}]`);
     for (const s of spans) {
         const who = senderOf(s);
         if (!who || who.address === me || out.has(who.raw)) continue;
@@ -2252,6 +2304,12 @@ function scanSenderRows(S) {
             const subject = firstMatch(row, MAIL.list.subjectCell);
             if (nameCell) nameCell.insertBefore(icon, nameCell.firstChild);
             if (subject) subject.insertBefore(chip, subject.firstChild);
+            // No cells described (the generic profile): the icon before the sender, the label after it.
+            if (!nameCell || !subject) {
+                const holder = [...row.querySelectorAll(MAIL.list.sender)].find(e => senderOf(e)) || null;
+                if (holder && !nameCell) holder.insertAdjacentElement('beforebegin', icon);
+                if (holder && !subject) holder.insertAdjacentElement('afterend', chip);
+            }
             else if (nameCell) nameCell.insertBefore(chip, icon.nextSibling);
         }
         // A read email's own headers are read (once) for the server's country and signs of forgery.
@@ -2309,7 +2367,7 @@ function emailContentSignals(body) {
         out.push({ weight: danger >= 2 || danger === total ? 5 : 3,
             text: `${danger === total ? (danger === 1 ? 'Its only link is' : `All ${danger} of its links are`) : `${danger} of its ${total} links ${danger === 1 ? 'is' : 'are'}`} flagged as dangerous${why ? ` (${why})` : ''}.` });
     }
-    const msg = (MAIL_CAN.opened && body.closest(MAIL.message.container)) || body.parentElement;
+    const msg = messageContainerOf(body);
     if (msg) {
         if (msg.querySelector('.unshortener-qr-bar[data-severity="danger"]')) out.push({ weight: 5, text: 'It has an attachment flagged as dangerous.' });
         const noname = findAttachments().filter(a => msg.contains(a.el) && /^noname(\.[a-z0-9]{1,5})?$/i.test(String(a.name || '').trim()));
@@ -2318,12 +2376,29 @@ function emailContentSignals(body) {
     return out;
 }
 
-// The opened email's own verdict from its sender, its headers, its name and its content; drawn on its
-// label and in its banner, and queued for Spam when flagged.
+// The text the webmail shows around an opened email, without the body (written by the sender) and
+// without the extension's own additions: where the webmail puts its own warnings about the sender.
+function webmailTextAround(body) {
+    const container = messageContainerOf(body);
+    if (!container) return '';
+    let text = '';
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
+        acceptNode: (n) => (body.contains(n) || (n.parentElement && n.parentElement.closest('[class*="unshortener-"]'))) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT
+    });
+    for (let n = walker.nextNode(); n && text.length < 6000; n = walker.nextNode()) {
+        const t = n.nodeValue.trim();
+        if (t) text += t + '\n';
+    }
+    return text;
+}
+
+// The opened email's own verdict from its sender, its headers, its name, its content and the webmail's
+// own warnings about the sender; drawn on its label and in its banner, and queued for Spam when flagged.
 function updateOpenedVerdict(body) {
     const st = openedStates.get(body);
     if (!st || !st.base || !st.nameEl.isConnected) return;
-    const signals = [...displayNameAnomalies(st.name), ...(st.info && st.info.fh === addressFingerprint(st.address) ? st.info.an : []), ...emailContentSignals(body)];
+    const signals = [...displayNameAnomalies(st.name), ...(st.info && st.info.fh === addressFingerprint(st.address) ? st.info.an : []), ...emailContentSignals(body),
+                     ...serviceWarningSigns(webmailTextAround(body), SITE.name)];
     const final = applyEmailSignals(st.base, signals);
     st.final = final;
     logEmailVerdict(st.msgId || st.address, st.address, st.base, final);
@@ -2346,8 +2421,8 @@ function scanOpenedSenders(S) {
     if (!MAIL_CAN.opened) return;
     for (const body of inBodies('')) {               // training emails are never in this list (phishSimGate)
         if (!isShown(body)) continue;
-        const msg = body.closest(MAIL.message.container) || body.parentElement;
-        const nameEl = msg && msg.querySelector(MAIL.message.sender);
+        const found = openedSenderElement(body);
+        const nameEl = found && found.el;
         if (!nameEl) continue;
         const who = senderOf(nameEl);
         if (!who || who.address === accountAddress()) continue;
@@ -2384,7 +2459,7 @@ function scanOpenedSenders(S) {
 
 // --- Moving to Spam --------------------------------------------------------------------------------
 function queueSpamMove(thread, item) {
-    if (spamAttempted.has(thread) || spamQueue.has(thread)) return;
+    if (!MAIL_CAN.move || !thread || spamAttempted.has(thread) || spamQueue.has(thread)) return;
     spamQueue.set(thread, Object.assign({}, item, { since: Date.now() }));
     scheduleSpamMoves();
 }
@@ -2869,7 +2944,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
     }
     if (relevant) scheduleBadgeUpdate();
     // Sender features switched on or off: drawn or removed right away.
-    if (MAIL && SENDER_SETTING_KEYS.some(k => changes[k])) {
+    if (MAIL && (SENDER_SETTING_KEYS.some(k => changes[k]) || (SITE.settingKey && changes[SITE.settingKey]))) {
         senderResults.clear();
         removeSenderDecorations();
         scheduleScan();
