@@ -90,6 +90,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- SETTINGS BINDING (user values + enterprise policy locks) ---
     async function bindSettings() {
         const cfg = await loadEffectiveSettings();
+        // The donate button in About, unless the organization hides it (managedHideDonateButton).
+        const donate = document.getElementById('donateRow');
+        if (donate) donate.hidden = !!(cfg.policy && cfg.policy.hideDonateButton);
         let anyLocked = false;
 
         document.querySelectorAll('[data-setting]').forEach(el => {

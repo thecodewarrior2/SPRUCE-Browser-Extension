@@ -8,6 +8,8 @@
 **Spam & Phishing Risk URL Checker Extension+**.
 Logos and icons (PNG and SVG, for light and dark backgrounds) are in [`branding/`](branding).
 
+<p><a href="https://www.paypal.com/donate/?hosted_button_id=NA8SK5RBLWGW6"><img src="https://img.shields.io/badge/Donate-PayPal-0070ba?logo=paypal&amp;logoColor=white" alt="Donate with PayPal"></a></p>
+
 A Firefox (Manifest V3) add-on that shows where the links in your email **really** go before you
 click them, flags phishing and look-alike sites, and blocks email tracking pixels. Everything
 sensitive happens on your device: QR codes, attachments and the phishing lists are read locally,
@@ -148,7 +150,7 @@ Some policies exist for administrators only, with no setting in the extension:
   unchecked, so the extension never records a false click or hides an open. They're recognized by their
   link domains in every webmail (`managedPhishSimulationDomains`: all links must go to the vendor's
   domains) or by header in Gmail (`managedPhishSimulationRules`, ideally with a secret value).
-- **A simpler popup** (`managedHidePopupSettingsButton`, `managedHideRecentActivity`): hides the
+- **A simpler popup** (`managedHidePopupSettingsButton`, `managedHideRecentActivity`, `managedHideDonateButton`): hides the
   Settings button and recent activity; Settings stays reachable from `about:addons`.
 
 ## Repository layout
@@ -213,3 +215,11 @@ cd tests && npm install && node run-all.js
 
 [Apache License 2.0](LICENSE). Bundled third-party components keep their own licenses
 (`lib/PDFJS-LICENSE`, credits in the extension's Help → About).
+
+## Support the project
+
+S.P.R.U.C.E+ is free, with no ads and no tracking. If it keeps phishing out of your inbox, you can
+support its development with a donation:
+[**Donate with PayPal**](https://www.paypal.com/donate/?hosted_button_id=NA8SK5RBLWGW6), or scan the code below.
+
+<img src="branding/donate-qr.png" alt="QR code for the PayPal donation page" width="128" height="128">

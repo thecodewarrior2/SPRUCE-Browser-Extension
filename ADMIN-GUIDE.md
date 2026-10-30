@@ -92,6 +92,7 @@ update can replace it. See <https://mozilla.github.io/policy-templates/>.
 | managedEnableSenderChecks | boolean | true | Gmail: read Gmail's sender verification when needed; trust company-only links (c.gle…) only in mail verified as from that company directly to the user; warn about brand impersonation |
 | managedHidePopupSettingsButton | boolean | false | Administrator only (no setting in the extension): remove "Open Settings" from the toolbar popup; Settings stays reachable from about:addons → the add-on → Options |
 | managedHideRecentActivity | boolean | false | Administrator only: remove "Recent activity" from the toolbar popup |
+| managedHideDonateButton | boolean | false | Administrator only: remove the Donate button from Settings → Help → About |
 | managedPhishSimulationDomains | array of strings | [] | Administrator only, every webmail: training-vendor link domains; an email whose links ALL go there is left unchecked |
 | managedPhishSimulationRules | array of objects | [] | Administrator only, Gmail: phishing-simulation emails to leave unchecked (see "Administrator-only policies") |
 | managedEnableSendCheck | boolean | true | Gmail: check the links in an email when Send is pressed, and list problems (typos, unreachable or non-existent sites, look-alike, phishing and malware sites) before it goes |
@@ -300,6 +301,7 @@ them by hand.
 ```
 
 - `managedHidePopupSettingsButton` removes **Open Settings** from the toolbar popup.
+- `managedHideDonateButton` removes the **Donate** button from Settings → Help → About.
 - `managedHideRecentActivity` removes the **Recent activity** list and its **Clear activity** button from
   the popup. Activity is still recorded and visible in Settings → Logging.
 - **Settings stay reachable** for IT staff and anyone who knows where to look: `about:addons` → the

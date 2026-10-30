@@ -82,6 +82,7 @@
           ],
           "managedHidePopupSettingsButton": false,
           "managedHideRecentActivity": false,
+          "managedHideDonateButton": false,
           "managedPhishSimulationRules": [],
           "managedPhishSimulationDomains": []
         }
