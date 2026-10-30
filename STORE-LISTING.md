@@ -39,10 +39,17 @@ FOR SCHOOLS AND BUSINESSES
 • Every check has its own switch, and administrators can set or lock any of them by policy (Google Workspace, Microsoft Intune, Group Policy).
 • Phishing-training emails from your provider can be left alone.
 
-Works fully in Gmail; Outlook on the web, Yahoo, AOL, Zoho, iCloud, Fastmail, GMX and Proton Mail are supported in a basic, read-only way.
+Works fully in Gmail. Other popular webmail services are supported in a basic, read-only way.
 
 Privacy policy: https://github.com/thecodewarrior2/SPRUCE-Browser-Extension/blob/main/PRIVACY.md
 ```
+
+> **Review note (first submission):** the Chrome Web Store rejected the first submission for
+> keyword spam because the description listed every supported webmail service by name ("Supported
+> webmail: Gmail (full support), plus experimental support for Outlook on the web, Proton Mail, Yahoo
+> Mail, AOL Mail…"). Keep the public description free of such lists: name Gmail, and say "other
+> popular webmail services". The full list belongs only in the permission reasons below, which
+> reviewers read but the public doesn't see.
 
 **Category:** the store's privacy and security category (or Productivity if that isn't offered).
 
