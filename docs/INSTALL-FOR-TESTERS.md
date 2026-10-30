@@ -1,6 +1,8 @@
 # Installing the test version (Firefox)
 
-The add-on isn't on addons.mozilla.org yet, so it's loaded from this folder. It takes about a minute
+These steps load an unsigned test version, which Firefox removes when it restarts. To install
+the add-on for good, use addons.mozilla.org or the signed `.xpi` from the
+[releases page](https://github.com/thecodewarrior2/SPRUCE-Browser-Extension/releases). A test version is loaded from this folder. It takes about a minute
 and needs **Firefox 140 or later**.
 
 ## Install

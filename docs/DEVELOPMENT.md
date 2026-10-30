@@ -3,6 +3,19 @@
 For people working on the extension itself: the Firefox build (branch `firefox`). Everyone else needs only the
 [README](../README.md); administrators, the [admin guide](ADMIN-GUIDE.md).
 
+## Branches and workflow
+
+| Branch | What it holds |
+|---|---|
+| `testing` | **Where all work happens first.** Every change is made, tested and committed there. |
+| `main` | The Chrome and Edge build. |
+| `firefox` | The Firefox (desktop) build. |
+| `safari` | The Safari build. |
+
+A change is made and tested on `testing`, brought into `main`, and then ported to this branch (its
+files differ in places: the background page, policies, browser APIs) and tested here before it is
+pushed. Nothing goes to `main`, `firefox` or `safari` that hasn't been on `testing` first.
+
 ## Run it from source
 
 Requires **Firefox 140 or later** (desktop). Until it's on addons.mozilla.org, it's loaded from this
@@ -16,6 +29,14 @@ A temporary add-on stays loaded until Firefox restarts. To check the build, run 
 to package it for addons.mozilla.org, run `npx web-ext build`. The add-on ID
 (`spruce@spruce-browser-extension`, in `manifest.json`) keeps settings and managed policies
 attached to the same add-on on every computer.
+
+## Publishing a release
+
+Upload the add-on to addons.mozilla.org (desktop only). Release Firefox only installs add-ons signed by
+Mozilla, so the [releases page](https://github.com/thecodewarrior2/SPRUCE-Browser-Extension/releases) gets the **signed** `.xpi` from the developer hub once the
+version is approved (or, without a public listing, from an "On your own" submission), named
+`spruce-<version>-firefox.xpi`. Never attach an unsigned zip. The release notes drafts are in
+`docs/releases/` on `main`.
 
 ## Repository layout
 

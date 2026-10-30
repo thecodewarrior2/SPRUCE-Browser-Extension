@@ -32,7 +32,9 @@ Every feature in detail, and which webmail supports what: [docs/FEATURES.md](doc
 
 ## Install
 
-Once it is published, install it from addons.mozilla.org (desktop Firefox). To try a test version from this repository, follow
+Once it is published, install it from addons.mozilla.org (desktop Firefox). The
+[releases page](https://github.com/thecodewarrior2/SPRUCE-Browser-Extension/releases) also has the Mozilla-signed `spruce-<version>-firefox.xpi`: open it in Firefox
+and click **Add**. To try an unsigned test version from this repository, follow
 [docs/INSTALL-FOR-TESTERS.md](docs/INSTALL-FOR-TESTERS.md).
 
 ## Documentation
