@@ -58,6 +58,33 @@ Proton Mail, Yahoo Mail, AOL Mail, Zoho Mail, iCloud Mail, Fastmail and GMX.
   go to the DNS threat filters) or *Offline only* (nothing leaves the browser). Every feature can
   be switched off individually, and every one can be set and locked by your administrator.
 
+## Feature compatibility
+
+One engine handles every supported webmail. What it can do on a site depends only on what that site's
+entry in `WEBMAIL_SITES` (`shared.js`) describes; the same chart, generated from the running code, is
+in Settings → Help → Which features work where. Gmail is fully supported and tested; the other sites
+are experimental (layouts mapped from public information) and gain the remaining features as their
+entries are filled in, with no new code. Header features need a page the webmail offers with the
+email's original source; Proton Mail encrypts messages, so it can't offer one. Nothing needs an extra
+sign-in, an app registration or an administrator-approved API.
+
+| Feature | Gmail | Outlook | Proton | Yahoo | AOL | Zoho | iCloud | Fastmail | GMX |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| *Support* | Full | Experimental | Experimental | Experimental | Experimental | Experimental | Experimental | Experimental | Experimental |
+| Links: hidden destinations revealed, dangerous and look-alike links marked *(every site)* | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Tracking pixels blocked *(every site)* | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| QR codes in email images *(every site)* | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| QR codes drawn without an image *(every site)* | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Phishing-simulation emails recognized by their link domains *(every site)* | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Attachment checks (QR codes, scripts, fake logins, encrypted archives) | ✓ | — | — | — | — | — | — | — | — |
+| Sender checks in opened emails (brand names, look-alike domains, company links) | ✓ | — | — | — | — | — | — | — | — |
+| Sender icon, country flag and label in opened emails | ✓ | — | — | — | — | — | — | — | — |
+| Sender icon, country flag and label in the inbox list | ✓ | — | — | — | — | — | — | — | — |
+| Signs of forgery in the headers (DMARC, forged delivery records…) | ✓ | — | — | — | — | — | — | — | — |
+| Phishing-simulation emails recognized by their headers | ✓ | — | — | — | — | — | — | — | — |
+| Flagged emails moved to Spam | ✓ | — | — | — | — | — | — | — | — |
+| Links checked before sending | ✓ | — | — | — | — | — | — | — | — |
+
 ## Install
 
 Requires **Firefox 140 or later** (desktop). Until it's on addons.mozilla.org, it's loaded from this

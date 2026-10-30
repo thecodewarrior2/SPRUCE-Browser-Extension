@@ -39,6 +39,7 @@
         document.querySelectorAll('.help-section').forEach(s => s.classList.toggle('active', s.id === `help-${section}`));
         if (section === 'architecture') renderArchitecture();
         if (section === 'privacy') renderPrivacyTable();
+        if (section === 'compat') renderCompat();
         if (section === 'about') document.getElementById('aboutVersion').textContent = chrome.runtime.getManifest().version;
         const target = anchor ? document.getElementById(anchor) : document.querySelector('.help-body');
         if (target) setTimeout(() => target.scrollIntoView({ behavior: 'smooth', block: 'start' }), 30);
@@ -97,6 +98,22 @@
         ]));
     }
 
+    // ---------------------------------------------------------------- compatibility chart
+    // Generated from WEBMAIL_SITES and FEATURE_SUPPORT (shared.js) with mailCapabilities, the same
+    // function the content script uses to decide what runs on a site.
+    function renderCompat() {
+        const sites = WEBMAIL_SITES;
+        const caps = sites.map(mailCapabilities);
+        const short = (n) => n.replace(/ on the web$/, '').replace(/ Mail$/, '');
+        const mark = (yes) => yes ? el('span', { class: 'yes', 'aria-label': 'Yes', title: 'Works' }, '✓') : el('span', { class: 'no', 'aria-label': 'Not yet', title: 'Not yet' }, '—');
+        const head = el('tr', null, el('th', { scope: 'col' }, 'Feature'), sites.map(w => el('th', { scope: 'col' }, short(w.name))));
+        const status = el('tr', { class: 'status' }, el('th', { scope: 'row', style: 'font-weight: normal;' }, 'Support'), sites.map(w => el('td', null, w.mail ? 'Full' : 'Experimental')));
+        const rows = FEATURE_SUPPORT.map(f => el('tr', null,
+            el('th', { scope: 'row', style: 'font-weight: normal;' }, f.name, f.needs ? '' : el('span', { style: 'color: var(--text-muted);' }, ' (every site)')),
+            caps.map(c => el('td', null, mark(!f.needs || c[f.needs])))));
+        fill('compatTable', el('table', { class: 'help-table compat-table' }, el('thead', null, head), el('tbody', null, status, rows)));
+    }
+
     // ---------------------------------------------------------------- architecture
     let archRendered = false;
     let snapshotCount = null;
@@ -117,7 +134,18 @@
         });
     }
 
+    function renderEngine() {
+        const yes = (v, extra) => v ? (extra ? `Yes (${extra})` : 'Yes') : '—';
+        fill('archEngine', table(['Site', 'Message body', 'Inbox list', 'Opened emails', 'Original source', 'Report spam', 'Compose'],
+            WEBMAIL_SITES.map(w => {
+                const c = mailCapabilities(w), M = w.mail || {};
+                return [w.name, code(w.body), yes(c.list, M.list && M.list.row), yes(c.opened, M.message && M.message.sender),
+                        yes(c.headers, M.headers && M.headers.receiver && `trusts ${M.headers.receiver.host}`), yes(c.move), yes(c.compose)];
+            })));
+    }
+
     function renderStatic() {
+        renderEngine();
         fill('archFiles', table(['File', 'Runs in', 'Responsibility'], [
             [code('manifest.json'), 'Firefox', 'Manifest V3: add-on ID, permissions, background page, content scripts.'],
             [code('background.html'), 'background page', 'Loads the background scripts and the scanner (Firefox event page).'],

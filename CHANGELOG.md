@@ -6,6 +6,7 @@
 - Header checks now trust header lines only from the receiving mail system named in the site's entry (for Gmail, `mx.google.com`), never from a fixed name in the code; with no such entry, no header line is trusted.
 - Links to another webmail inside an email (for example a `mail.google.com` link in an Outlook email) are now checked like any other link; only links to the webmail being used are skipped.
 - Messages in the log and on screen name the webmail being used instead of always saying "Gmail".
+- **New: a feature compatibility chart** (Settings → Help → Which features work where, and in the README and admin guide), generated from the same table and function the engine uses, so it always matches the running version. Help's architecture page has a new live section on the mail engine and each site's entry.
 
 ## 5.49 — More signs of forged email in the headers (Firefox build, same as Chrome 5.49)
 
