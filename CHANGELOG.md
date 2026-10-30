@@ -1,5 +1,9 @@
 # Changelog
 
+## 5.53 — Why a sender photo or logo wasn't used (Firefox build, same as Chrome 5.53)
+
+- The application log (Settings → Logging) now says, once per sender, why a photo or logo wasn't used: none shown beside the sender, only the generic placeholder, an image from an unexpected host (named, never the full address), an outside sender's personal photo, or a logo for an email that didn't pass DMARC (with the result). Photos and logos are learned when an email is opened; the inbox list shows them from then on.
+
 ## 5.52 — Sender photos and verified logos (Firefox build, same as Chrome 5.52)
 
 - **Sender photos and verified brand logos in the inbox and in opened emails** (Gmail), in place of the site icon, round like Gmail's own. When you open an email, the photo or logo Gmail shows beside its sender is remembered for that address, so the inbox list shows it from then on. Inspired by Simplify Gmail's sender avatars.
