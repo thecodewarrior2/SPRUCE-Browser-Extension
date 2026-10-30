@@ -1,5 +1,9 @@
 # Changelog
 
+## 5.73 — New home: SPRUCE-Browser-Extension (Firefox build, same as Chrome 5.73)
+
+- The project moved to its own repository, [github.com/thecodewarrior2/SPRUCE-Browser-Extension](https://github.com/thecodewarrior2/SPRUCE-Browser-Extension), with the Chrome build on `main` and the Firefox and Safari builds on the `firefox` and `safari` branches. Settings → About links there. Nothing else changes.
+
 ## 5.72 — Store-ready description (Firefox build, same as Chrome 5.72)
 
 - **Shorter description** (111 characters), the same in every build: the Chrome Web Store refuses one over 132, and Safari shows at most 112.
