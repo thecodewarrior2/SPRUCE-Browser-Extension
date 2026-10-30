@@ -10,6 +10,12 @@ Logos and icons (PNG and SVG, for light and dark backgrounds) are in [`branding/
 
 <p><a href="https://www.paypal.com/donate/?hosted_button_id=NA8SK5RBLWGW6"><img src="https://img.shields.io/badge/Donate-PayPal-0070ba?logo=paypal&amp;logoColor=white" alt="Donate with PayPal"></a></p>
 
+> **A helper, not a guarantee.** S.P.R.U.C.E+ makes a best effort to point out warning signs, but it
+> can miss dangerous emails and links, and it can flag genuine ones. It is one small layer of
+> protection: keep your webmail's own spam filtering, your organization's email security, your
+> browser's protections and your own judgment. When in doubt, don't click: contact the sender
+> another way.
+
 A Firefox (Manifest V3) add-on that shows where the links in your email **really** go before you
 click them, flags phishing and look-alike sites, and blocks email tracking pixels. Everything
 sensitive happens on your device: QR codes, attachments and the phishing lists are read locally,
@@ -119,17 +125,8 @@ sign-in, an app registration or an administrator-approved API.
 
 ## Install
 
-Requires **Firefox 140 or later** (desktop). Until it's on addons.mozilla.org, it's loaded from this
-folder. See [docs/INSTALL-FOR-TESTERS.md](docs/INSTALL-FOR-TESTERS.md) for the full walkthrough:
-
-1. Open `about:debugging#/runtime/this-firefox`.
-2. Click **Load Temporary Add-on…** and choose `manifest.json` in this folder.
-3. Reload your webmail tab.
-
-A temporary add-on stays loaded until Firefox restarts. To check the build, run `npx web-ext lint`;
-to package it for addons.mozilla.org, run `npx web-ext build`. The add-on ID
-(`spruce@spruce-browser-extension`, in `manifest.json`) keeps settings and managed policies
-attached to the same add-on on every computer.
+Once it is published, install S.P.R.U.C.E+ from addons.mozilla.org. To try a test version from
+this repository, follow [docs/INSTALL-FOR-TESTERS.md](docs/INSTALL-FOR-TESTERS.md).
 
 ## For administrators
 
@@ -153,62 +150,14 @@ Some policies exist for administrators only, with no setting in the extension:
 - **A simpler popup** (`managedHidePopupSettingsButton`, `managedHideRecentActivity`, `managedHideDonateButton`): hides the
   Settings button and recent activity; Settings stays reachable from `about:addons`.
 
-## Repository layout
-
-| Path | Role |
-|---|---|
-| `manifest.json` | Manifest V3 declaration, add-on ID, permissions, supported sites |
-| `background.html` | Background event page: loads the background scripts and the scanner |
-| `background.js` | Link pipeline, threat checks, list sync, badge |
-| `content.js` / `content.css` | Injected into webmail: banners, link markings, hover card, sender checks, sender icons and moving phishing to Spam, the Send check. One mail engine for every site, driven by the site's entry in `WEBMAIL_SITES` (`shared.js`); today only Gmail's entry describes its inbox list, toolbar and compose window |
-| `shared.js` | Settings, constants and helpers shared by all contexts |
-| `decoders.js` | Offline decoders for short links, gateways and trackers |
-| `custom-endpoints.js` | Requests and replies for your own lookup service or threat resolver |
-| `qr-decoder.js` | Self-contained QR decoder (no dependencies) |
-| `scanner.js` / `compat.js` | QR/PDF scanning in the background page; shims pdf.js needs on older Firefox |
-| `options.*`, `help.js`, `popup.*` | Settings, logging, Link Inspector and Help; the toolbar popup |
-| `theme.css` / `theme.js` | Design tokens and light/dark appearance (WCAG 2.1 AA) |
-| `lib/` | Bundled pdf.js (Apache-2.0), used only for PDF attachments |
-| `icons/` | Toolbar and store icons |
-| `tools/` | Maintenance scripts: `refresh-snapshot.js` (the bundled shortener list) |
-| `docs/` | Architecture guide, admin guide, tester instructions, policy example |
-| `branding/` | Logos, icons and the donation QR code (PNG and SVG) |
-| `tests/` | Unit and end-to-end tests, with sanitized sample emails |
-| `CHANGELOG.md` · `PRIVACY.md` · `LICENSE` | Release history · privacy policy · Apache 2.0 license |
-
-Everything at the top level besides those three files and the README is part of the extension (the folder a browser loads); `docs/`, `store/`, `branding/`, `tests/` and `tools/` never go into a package.
-
 ## Documentation
 
+- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — building, testing and publishing, repository layout, design rules.
 - [CHANGELOG.md](CHANGELOG.md) — every version, what changed and why.
 - [docs/INSTALL-FOR-TESTERS.md](docs/INSTALL-FOR-TESTERS.md) — install and update steps.
 - [docs/ADMIN-GUIDE.md](docs/ADMIN-GUIDE.md) — deployment and policy keys.
 - The extension's own **Help** tab explains how each warning works, the privacy details and
   troubleshooting.
-
-## Design rules
-
-- **Never contact a link's destination on your behalf** when reading mail; only lookup services
-  you can switch off are used. The one exception is the Send check, which makes one request to each
-  website you link to, as your reader would by clicking it, and never for one-time links.
-- **Never change an email being written,** only emails being read.
-- **Only flagged senders are moved to Spam,** only once, and only with Gmail's own Report spam; what the
-  user takes back out of Spam stays out.
-- **Never trap an email:** if the Send check can't finish, the email is sent.
-- **Managed settings win:** policy values (Firefox enterprise policy) can't be changed or
-  reset by the user.
-
-## Testing
-
-Unit tests (Node) cover the link pipeline, decoders and shared logic; browser tests (Playwright)
-run the extension on simulated webmail pages; accessibility audits check contrast in light and dark
-mode and names and roles. Webmail page structure is mapped from public information and simulated
-pages, so changes to a webmail's layout need checking on the live site. The tests are in `tests/`
-(see `tests/README.md`; not part of the extension package):
-
-```bash
-cd tests && npm install && node run-all.js
-```
 
 ## Privacy
 
@@ -224,8 +173,8 @@ cd tests && npm install && node run-all.js
 
 ## Support the project
 
-S.P.R.U.C.E+ is free, with no ads and no tracking. If it keeps phishing out of your inbox, you can
-support its development with a donation:
+S.P.R.U.C.E+ is free, with no ads and no tracking. If you find it useful, you can support its
+development with a donation:
 [**Donate with PayPal**](https://www.paypal.com/donate/?hosted_button_id=NA8SK5RBLWGW6), or scan the code below.
 
 <img src="branding/donate-qr.png" alt="QR code for the PayPal donation page" width="128" height="128">

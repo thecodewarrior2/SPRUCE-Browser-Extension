@@ -1,5 +1,10 @@
 # Changelog
 
+## 5.77 — A helper, not a guarantee (Firefox build, same as Chrome 5.77)
+
+- **Wording that promises nothing.** S.P.R.U.C.E+ is a best-effort helper and one small layer of protection, and the text now says so: Help (How it works, About), the README, the privacy policy and the architecture guide carry a short note that it can miss dangerous emails and flag genuine ones, and doesn't replace the webmail's and the organization's own email security or the reader's judgment.
+- Phrases that sounded like a promise are gone: the description is now "Helps you spot phishing and scams…", the Settings status reads "Checks are on" (not "Protection is on"), the Standard privacy level offers "the most checks" (not "full protection"), and Help no longer calls links that pass the checks "safe".
+
 ## 5.76 — Donate button (Firefox build, same as Chrome 5.76)
 
 - **A small Donate button** in Settings → Help → About, opening the project's PayPal donation page. Organizations can hide it with the administrator-only policy `managedHideDonateButton`.

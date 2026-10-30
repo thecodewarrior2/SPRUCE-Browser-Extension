@@ -12,8 +12,7 @@ Effective October 30, 2026.
 - To check whether a website is dangerous, it can send **the website's name** (for example
   `example.com`) to public security services. What can be sent, and to whom, is listed below. You can
   turn every one of these off.
-- Nothing is sold, shared for advertising, or used for anything except protecting you from spam and
-  phishing.
+- Nothing is sold, shared for advertising, or used for anything except helping you spot spam and phishing.
 
 ## What the extension reads, on your device
 
