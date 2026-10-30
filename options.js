@@ -229,9 +229,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // --- RESET ---
-    // Only the user's own choices are reset. Settings managed by the organization (Firefox enterprise
-    // policy) are left completely alone, including the user's stored value underneath
-    // them, so nothing changes if the organization later stops managing a setting.
+    // Only the user's own choices are reset. Safari has no extension policies, so nothing is managed
+    // here; the check stays so the reset behaves like the Chrome and Firefox builds.
     document.getElementById('resetDefaultsBtn').addEventListener('click', async () => {
         const cfg = await loadEffectiveSettings();
         const managed = SETTING_DEFS.filter(d => cfg.locked[d.key]);
@@ -288,75 +287,6 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
     });
-
-    // Produces the JSON an administrator pastes into Admin console > Policy for extensions.
-    // The policy for the current settings: install the add-on and lock every setting and both lists
-    // (policies → 3rdparty → Extensions → add-on ID, read by the extension as storage.managed).
-    const INSTALL_URL = 'https://addons.mozilla.org/firefox/downloads/latest/ADDON-SLUG/latest.xpi';
-    async function currentPolicySettings() {
-        const cfg = await loadEffectiveSettings();
-        const settings = {};
-        SETTING_DEFS.forEach(d => { settings[d.managedKey] = cfg.values[d.key]; });
-        const local = await new Promise(r => chrome.storage.local.get({ customAllowlist: [], customBlocklist: [], customTrustedSenders: [] }, r));
-        settings.managedAllowlist = normalizeDomainList(local.customAllowlist);
-        settings.managedBlocklist = normalizeDomainList(local.customBlocklist);
-        settings.managedTrustedSenders = normalizeSenderList(local.customTrustedSenders);
-        return settings;
-    }
-
-    function buildPoliciesJson(settings) {
-        const id = chrome.runtime.id;
-        return JSON.stringify({ policies: {
-            ExtensionSettings: { [id]: { installation_mode: 'force_installed', install_url: INSTALL_URL } },
-            '3rdparty': { Extensions: { [id]: settings } }
-        } }, null, 2);
-    }
-
-    // PowerShell for Intune (or any Windows management tool) that writes the same policy to the registry
-    // Firefox reads (HKLM\SOFTWARE\Policies\Mozilla\Firefox). The add-on's settings go in as one JSON
-    // string, which Firefox parses, so every value keeps its type. Keys are only created when missing:
-    // New-Item -Force on an existing key would wipe other add-ons' values under 3rdparty\Extensions.
-    function buildIntuneScript(settings) {
-        const q = (v) => `'${String(v).replace(/'/g, "''")}'`;
-        return [
-            '# Gmail Link Unshortener — Firefox policy for Windows (Microsoft Intune, Group Policy or any management tool).',
-            `# Generated ${new Date().toISOString().slice(0, 10)} from the Options page (version ${chrome.runtime.getManifest().version}).`,
-            '# Intune: Devices → Scripts and remediations → Platform scripts → Add (Windows 10 and later);',
-            '# run as system (logged on credentials: No) in 64-bit PowerShell. Check the result at about:policies.',
-            '#',
-            "# IMPORTANT: replace ADDON-SLUG with the add-on's address on addons.mozilla.org (or set $InstallUrl to",
-            '# your own signed .xpi). Delete any settings in $Settings you do not want to lock.',
-            `$AddonId = ${q(chrome.runtime.id)}`,
-            `$InstallUrl = ${q(INSTALL_URL)}`,
-            `$Settings = ${q(JSON.stringify(settings))}`,
-            '',
-            "$Firefox = 'HKLM:\\SOFTWARE\\Policies\\Mozilla\\Firefox'",
-            '$Install = "$Firefox\\ExtensionSettings\\$AddonId"',
-            'if (-not (Test-Path $Install)) { New-Item -Path $Install -Force | Out-Null }',
-            "New-ItemProperty -Path $Install -Name 'installation_mode' -PropertyType String -Value 'force_installed' -Force | Out-Null",
-            "New-ItemProperty -Path $Install -Name 'install_url' -PropertyType String -Value $InstallUrl -Force | Out-Null",
-            '$Extensions = "$Firefox\\3rdparty\\Extensions"',
-            'if (-not (Test-Path $Extensions)) { New-Item -Path $Extensions -Force | Out-Null }',
-            'New-ItemProperty -Path $Extensions -Name $AddonId -PropertyType String -Value $Settings -Force | Out-Null',
-            ''
-        ].join('\r\n');
-    }
-
-    for (const [btn, result, build, done] of [
-        ['copyPolicyJsonBtn', 'copyPolicyResult', buildPoliciesJson, 'Copied. Replace ADDON-SLUG with the add-on\'s address on addons.mozilla.org, and delete any settings you do not want to lock.'],
-        ['copyIntuneScriptBtn', 'copyIntuneResult', buildIntuneScript, 'Copied. Paste it into a .ps1 file and replace ADDON-SLUG before deploying.']
-    ]) {
-        document.getElementById(btn).addEventListener('click', async () => {
-            const out = document.getElementById(result);
-            try {
-                await navigator.clipboard.writeText(build(await currentPolicySettings()));
-                out.style.color = ''; out.textContent = done;
-            } catch (e) {
-                out.style.color = 'var(--danger-text)'; out.textContent = 'Copy failed.';
-                reportToLog('warning', 'Options page', `Copying the policy (${btn}) failed: ${e.message || e}`);
-            }
-        });
-    }
 
     // Endpoint address fields have a Save button (it asks the browser for access to the host).
     const ENDPOINT_FIELDS = [
@@ -1444,26 +1374,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ---------------------------------------------------------------------------
 // OTHER EXTENSIONS THAT DO THE SAME JOB (Settings → Other extensions). Lists the ones found in the
-// webmail page (content.js) and, once the user allows it (the browser asks: optional "management"
-// permission), the installed ones from OVERLAPPING_EXTENSIONS. Each can be turned off with one click
-// (Chrome; Firefox lets only the user turn other add-ons off, so it gets the steps), or our own
-// matching feature can be turned off instead, or the warning ignored.
+// webmail page (content.js). Safari has no management API, so the user gets the steps to turn the
+// other one off; or our own matching feature can be turned off instead, or the warning ignored.
 // ---------------------------------------------------------------------------
 (() => {
     const listEl = document.getElementById('conflictList');
     if (!listEl) return;
-    const isFirefox = typeof browser !== 'undefined' && /firefox/i.test(navigator.userAgent);
-    const hasManagement = () => new Promise(r => { try { chrome.permissions.contains({ permissions: ['management'] }, r); } catch (e) { r(false); } });
-
-    async function installedConflicts() {
-        if (!(await hasManagement()) || !chrome.management) return [];
-        const all = await new Promise(r => chrome.management.getAll(r));
-        return all.filter(x => x.enabled && x.id !== chrome.runtime.id).map(x => {
-            const known = OVERLAPPING_EXTENSIONS.find(k => k.ids.includes(x.id));
-            return known ? { key: x.id, name: x.name || known.name, does: known.does, features: known.features, via: 'installed', ts: Date.now() } : null;
-        }).filter(Boolean);
-    }
-
     // Several redraws can be under way at once (a button's own redraw and the storage change it
     // causes): each builds its list apart, and only the latest one is put on the page.
     let renderSeq = 0;
@@ -1472,11 +1388,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const cfg = await loadEffectiveSettings();
         const st = await new Promise(r => chrome.storage.local.get({ detectedConflicts: {}, ignoredConflicts: [], keptConflictFeatures: {} }, r));
         const map = Object.assign({}, st.detectedConflicts || {});
-        for (const c of await installedConflicts()) map[c.key] = Object.assign({}, map[c.key] || {}, c);
         const ignored = new Set(st.ignoredConflicts || []);
         const keptOn = st.keptConflictFeatures || {};
         const items = Object.values(map).sort((a, b) => (b.ts || 0) - (a.ts || 0));
-        const management = await hasManagement();
         if (seq !== renderSeq) return;
         const out = document.createDocumentFragment();
         if (!items.length) {
@@ -1486,7 +1400,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const box = document.createElement('div'); box.className = 'conflict-item';
             const title = document.createElement('div');
             const b = document.createElement('b'); b.textContent = c.name;
-            title.append(b, ` also does ${c.does}`, c.site ? ` (seen in ${c.site})` : '', c.via === 'installed' ? ' (installed)' : '', ignored.has(c.key) ? ' · ignored' : '');
+            title.append(b, ` also does ${c.does}`, c.site ? ` (seen in ${c.site})` : '', ignored.has(c.key) ? ' · ignored' : '');
             const ours = (c.features || []).filter(k => SETTING_BY_KEY[k]);
             const oursOn = ours.filter(k => cfg.values[k]);
             const settled = oursOn.length && conflictSettled(oursOn, keptOn[c.key]);
@@ -1496,23 +1410,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 : `Ours does the same with: ${oursOn.map(k => FEATURE_NAMES[k] || k).join(', ')}. We recommend keeping ours on and turning ${c.name === 'Another extension' ? 'the other one' : c.name} off, or turn off just the settings of ours that overlap.`;
             const actions = document.createElement('div'); actions.className = 'actions';
             const btn = (label, cls, fn) => { const x = document.createElement('button'); x.type = 'button'; x.className = cls; x.textContent = label; x.addEventListener('click', fn); actions.appendChild(x); return x; };
-            const isExtId = /^[a-p]{32}$/.test(c.key);
-            if (isExtId && !isFirefox) {
-                btn(`Turn off ${c.name}`, 'btn-primary', async () => {
-                    const granted = management || await new Promise(r => chrome.permissions.request({ permissions: ['management'] }, r));
-                    if (!granted) { note.textContent = 'Not allowed: your browser didn\'t give permission. You can turn it off yourself in chrome://extensions.'; return; }
-                    chrome.management.setEnabled(c.key, false, () => {
-                        if (chrome.runtime.lastError) { note.textContent = `${c.name} couldn't be turned off (${chrome.runtime.lastError.message}). Turn it off in chrome://extensions.`; return; }
-                        reportToLog('info', 'Options page', `${c.name} turned off by the user (it did the same job as this extension).`);
-                        chrome.storage.local.get({ detectedConflicts: {} }, r => { const m = r.detectedConflicts || {}; delete m[c.key]; chrome.storage.local.set({ detectedConflicts: m }, render); });
-                    });
-                });
-            } else {
-                const how = document.createElement('div'); how.className = 'setting-desc';
-                how.textContent = isFirefox ? `Firefox lets only you turn other add-ons off: open the menu ☰ → Add-ons and themes → Extensions, and turn ${c.name === 'Another extension' ? 'the other one' : c.name} off.`
-                    : `To turn ${c.name === 'Another extension' ? 'it' : c.name} off: open chrome://extensions and switch it off there.`;
-                box.appendChild(how);
-            }
+            const how = document.createElement('div'); how.className = 'setting-desc';
+            how.textContent = `Safari lets only you turn other extensions off: open Safari → Settings → Extensions and uncheck ${c.name === 'Another extension' ? 'the other one' : c.name} (on iPhone or iPad: the Settings app → Apps → Safari → Extensions).`;
+            box.appendChild(how);
             // Only the overlapping settings of ours: one at a time, or all of them.
             const offButton = (keys, label) => {
                 const x = btn(label, 'btn-action', () => turnOffForConflict(c.key, oursOn, keys, cfg.locked, (done) => {
@@ -1538,11 +1438,6 @@ document.addEventListener('DOMContentLoaded', () => {
         listEl.replaceChildren(out);
     }
 
-    document.getElementById('checkExtensionsBtn').addEventListener('click', async () => {
-        const granted = (await hasManagement()) || await new Promise(r => { try { chrome.permissions.request({ permissions: ['management'] }, r); } catch (e) { r(false); } });
-        document.getElementById('checkExtensionsNote').textContent = granted ? 'Checked just now.' : 'Not checked: your browser didn\'t give permission. Extensions found in the webmail page are still listed.';
-        render();
-    });
     chrome.storage.onChanged.addListener((ch, area) => { if (area === 'local' && (ch.detectedConflicts || ch.ignoredConflicts || ch.keptConflictFeatures || ch.enableSenderIdentity || ch.enableSenderAvatars || ch.enableRowHighlighter || ch.enableTrackingPixelBlocking)) render(); });
     render();
 

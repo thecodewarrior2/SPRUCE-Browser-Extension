@@ -99,7 +99,7 @@ part('conflicts', async () => {
   // Settings → Other extensions lists it.
   const opt = await ctx.newPage(); await opt.goto(`chrome-extension://${ID}/options.html#conflicts`); await sleep(1500);
   const listed = await opt.evaluate(() => { const i = document.querySelector('#conflictList .conflict-item'); return i && { text: i.textContent, buttons: [...i.querySelectorAll('button')].map(b => b.textContent) }; });
-  check('Settings → Other extensions lists it, with a one-click "Turn off" (Chrome)', listed && /Gmail Sender Icons/.test(listed.text) && listed.buttons.some(b => /Turn off Gmail Sender Icons/.test(b)), listed);
+  check('Settings → Other extensions lists it, with the steps to turn it off in Safari (no management API)', listed && /Gmail Sender Icons/.test(listed.text) && /Safari → Settings → Extensions/.test(listed.text) && !listed.buttons.some(b => /^Turn off Gmail Sender Icons/.test(b)), listed);
   await opt.close();
   // Ignore: not warned again.
   await set(base);

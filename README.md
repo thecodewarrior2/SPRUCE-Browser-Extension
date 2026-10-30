@@ -1,6 +1,6 @@
 # Gmail Link Unshortener & Tracker Blocker
 
-A Firefox (Manifest V3) add-on that shows where the links in your email **really** go before you
+A Safari (Manifest V3) web extension that shows where the links in your email **really** go before you
 click them, flags phishing and look-alike sites, and blocks email tracking pixels. Everything
 sensitive happens on your device: QR codes, attachments and the phishing lists are read locally,
 and nothing about you is sent anywhere unless you choose a lookup service that needs the link.
@@ -56,7 +56,7 @@ Proton Mail, Yahoo Mail, AOL Mail, Zoho Mail, iCloud Mail, Fastmail and GMX.
   if the check can't finish.
 - **Privacy levels.** *Standard*, *Private* (no link sent to any lookup service; site names still
   go to the DNS threat filters) or *Offline only* (nothing leaves the browser). Every feature can
-  be switched off individually, and every one can be set and locked by your administrator.
+  be switched off individually (Safari has no extension policies, so settings can't be locked centrally).
 
 ## Feature compatibility
 
@@ -93,66 +93,58 @@ sign-in, an app registration or an administrator-approved API.
 
 ✓ works · ◐ basic (found through the page's accessibility labels; read-only, never clicks) · — not yet
 
+In Safari the two phishing-simulation rows don't apply: their rules are set by policy, which Safari doesn't have.
+
 ## Install
 
-Requires **Firefox 140 or later** (desktop). Until it's on addons.mozilla.org, it's loaded from this
-folder. See [INSTALL-FOR-TESTERS.md](INSTALL-FOR-TESTERS.md) for the full walkthrough:
+Requires **Safari 18.2 or later** (macOS; iOS and iPadOS with a build signed by your organization). In
+Safari an extension comes inside a small app, built from this folder with Apple's converter. See
+[INSTALL-FOR-TESTERS.md](INSTALL-FOR-TESTERS.md) for the full walkthrough:
 
-1. Open `about:debugging#/runtime/this-firefox`.
-2. Click **Load Temporary Add-on…** and choose `manifest.json` in this folder.
-3. Reload your webmail tab.
+1. On a Mac with Xcode, run `tools/build-safari.sh` (or download the app from the **Safari build**
+   GitHub workflow, `.github/workflows/safari.yml`).
+2. In Safari, turn on **Settings → Advanced → Show features for web developers**, then
+   **Develop → Allow Unsigned Extensions**.
+3. Open the app once, tick the extension in **Safari → Settings → Extensions**, and choose
+   **Always Allow on This Website** on your webmail.
 
-A temporary add-on stays loaded until Firefox restarts. To check the build, run `npx web-ext lint`;
-to package it for addons.mozilla.org, run `npx web-ext build`. The add-on ID
-(`link-unshortener@gmail-link-scanner`, in `manifest.json`) keeps settings and managed policies
-attached to the same add-on on every computer.
+The script leaves an Xcode project in `build/safari/` to sign with your team and archive for the App
+Store, TestFlight or Developer ID distribution.
 
 ## For administrators
 
-Settings can be forced with Firefox enterprise policy: `policies.json` on any platform, the Windows
-registry with Microsoft Intune or Group Policy (Settings → **Copy Intune script** generates the
-PowerShell), or a macOS configuration profile. See [ADMIN-GUIDE.md](ADMIN-GUIDE.md); [`policy-example.json`](policy-example.json) is a
-complete `policies.json` with every key.
-
-The sender features (Gmail) each have their own key (`managedEnableSenderIdentity`,
-`managedEnableSenderIconFallback`, `managedEnableSenderAvatars`, `managedEnableSenderBimi`, `managedSenderPictureSize`, `managedEnableCopyAddress`, `managedEnableLookalikeCheck`, `managedEnableSenderCountry`, the row highlighter (`managedEnableRowHighlighter`, `managedRowHighlightColor`, `managedRowHighlightStyle`, `managedRowHighlightSelected`, `managedRowHighlightSelectedColor`) and warnings about overlapping extensions (`managedEnableConflictWarnings`), `managedEnableSenderDomainCheck`, `managedEnableSenderAddressCheck`,
-`managedEnableAutoSpam`, `managedEnableSpamNotice`); `managedTrustedSenders` is the allow list of senders never to flag or move
-(addresses or whole domains), for example your phishing-training provider or a false positive. There is
-no sender block list: users report anything missed with Gmail's own Report spam.
-
-Some policies exist for administrators only, with no setting in the extension:
-
-- **Phishing simulations:** training emails from KnowBe4, Wizer and others are left completely
-  unchecked, so the extension never records a false click or hides an open. They're recognized by their
-  link domains in every webmail (`managedPhishSimulationDomains`: all links must go to the vendor's
-  domains) or by header in Gmail (`managedPhishSimulationRules`, ideally with a secret value).
-- **A simpler popup** (`managedHidePopupSettingsButton`, `managedHideRecentActivity`): hides the
-  Settings button and recent activity; Settings stays reachable from `about:addons`.
+Safari has no extension policies: settings can't be set or locked by an administrator. Device
+management (macOS 15, iOS 18 and iPadOS 18 or later) can install the app, keep the extension always on
+and allow it on your webmail sites; the same settings for everyone come from a backup file each person
+restores. The policy-only options of the Chrome and Firefox builds (a simpler popup, phishing-simulation
+rules) aren't available. See [ADMIN-GUIDE.md](ADMIN-GUIDE.md).
 
 ## Repository layout
 
 | Path | Role |
 |---|---|
-| `manifest.json` | Manifest V3 declaration, add-on ID, permissions, supported sites |
-| `background.html` | Background event page: loads the background scripts and the scanner |
+| `manifest.json` | Manifest V3 declaration, permissions, supported sites (minimum Safari version) |
+| `background.html` | Non-persistent background page: loads the background scripts and the scanner |
 | `background.js` | Link pipeline, threat checks, list sync, badge |
 | `content.js` / `content.css` | Injected into webmail: banners, link markings, hover card, sender checks, sender icons and moving phishing to Spam, the Send check. One mail engine for every site, driven by the site's entry in `WEBMAIL_SITES` (`shared.js`); today only Gmail's entry describes its inbox list, toolbar and compose window |
 | `shared.js` | Settings, constants and helpers shared by all contexts |
 | `decoders.js` | Offline decoders for short links, gateways and trackers |
 | `custom-endpoints.js` | Requests and replies for your own lookup service or threat resolver |
 | `qr-decoder.js` | Self-contained QR decoder (no dependencies) |
-| `scanner.js` / `compat.js` | QR/PDF scanning in the background page; shims pdf.js needs on older Firefox |
+| `scanner.js` / `compat.js` | QR/PDF scanning in the background page; shims pdf.js needs in Safari |
 | `options.*`, `help.js`, `popup.*` | Settings, logging, Link Inspector and Help; the toolbar popup |
 | `theme.css` / `theme.js` | Design tokens and light/dark appearance (WCAG 2.1 AA) |
 | `lib/` | Bundled pdf.js (Apache-2.0), used only for PDF attachments |
 | `tools/refresh-snapshot.js` | Refreshes the bundled shortener-domain snapshot |
+| `tools/build-safari.sh` | Wraps the extension in a Mac/iPhone/iPad app with Apple's converter and builds it (macOS, Xcode) |
+| `.github/workflows/safari.yml` | Builds the app on a GitHub Mac and offers it for download |
 | `CHANGELOG.md` | Full release history with rationale for every change |
 
 ## Documentation
 
 - [CHANGELOG.md](CHANGELOG.md) — every version, what changed and why.
 - [INSTALL-FOR-TESTERS.md](INSTALL-FOR-TESTERS.md) — install and update steps.
-- [ADMIN-GUIDE.md](ADMIN-GUIDE.md) — deployment and policy keys.
+- [ADMIN-GUIDE.md](ADMIN-GUIDE.md) — building, signing and deploying the Safari app.
 - The extension's own **Help** tab explains how each warning works, the privacy details and
   troubleshooting.
 
@@ -165,8 +157,7 @@ Some policies exist for administrators only, with no setting in the extension:
 - **Only flagged senders are moved to Spam,** only once, and only with Gmail's own Report spam; what the
   user takes back out of Spam stays out.
 - **Never trap an email:** if the Send check can't finish, the email is sent.
-- **Managed settings win:** policy values (Firefox enterprise policy) can't be changed or
-  reset by the user.
+- **Managed settings win** in the Chrome and Firefox builds (Safari has no extension policies).
 
 ## Testing
 
@@ -179,6 +170,10 @@ pages, so changes to a webmail's layout need checking on the live site. The test
 ```bash
 cd tests && npm install && node run-all.js
 ```
+
+The browser tests drive Chromium, which can't load a Safari build; on this branch they check the
+shared code, and the unit tests run against it directly (`EXT=. node --test tests/unit/unit.test.js`).
+Try each change in Safari itself before release.
 
 ## Privacy
 

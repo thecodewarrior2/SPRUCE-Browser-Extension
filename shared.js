@@ -5,8 +5,8 @@
 // ---------------------------------------------------------------------------
 // SETTINGS
 // Every setting can be changed by the user (stored in chrome.storage.local) and can be
-// locked by a Firefox enterprise policy (storage.managed, keys = managedKey).
-// A managed value always wins and the UI shows the setting as locked.
+// locked by an enterprise policy (storage.managed, keys = managedKey) in the Chrome and Firefox
+// builds. Safari has no storage.managed, so in this build nothing is ever locked.
 // All features are ON by default.
 // ---------------------------------------------------------------------------
 const SETTING_DEFS = [

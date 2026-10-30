@@ -149,13 +149,13 @@
     function renderStatic() {
         renderEngine();
         fill('archFiles', table(['File', 'Runs in', 'Responsibility'], [
-            [code('manifest.json'), 'Firefox', 'Manifest V3: add-on ID, permissions, background page, content scripts.'],
-            [code('background.html'), 'background page', 'Loads the background scripts and the scanner (Firefox event page).'],
+            [code('manifest.json'), 'Safari', 'Manifest V3: permissions, background page, content scripts. Wrapped in a Mac or iPhone/iPad app by Apple\'s converter (tools/build-safari.sh).'],
+            [code('background.html'), 'background page', 'Loads the background scripts and the scanner (non-persistent background page).'],
             [code('shared.js'), 'everywhere', 'Settings model and policy merging, domain lists, one-time detection, misleading-link checks, backup/restore, shared constants.'],
             [code('content.js'), 'webmail tab', 'Finds opened messages, sends links for analysis, rewrites and marks links, blocks pixels, reveal flow, error reporting. Its mail engine reads the inbox list, senders, toolbar and compose window of any webmail from that site\'s entry in WEBMAIL_SITES (shared.js): one code path for every site, Gmail included.'],
             [code('qr-decoder.js'), 'scanner', 'Self-contained QR Code reader (ISO/IEC 18004): finder patterns, perspective correction, Reed-Solomon.'],
             [code('scanner.js'), 'background page', 'Decodes QR codes in images and PDF pages and lists PDF links.'],
-            [code('compat.js'), 'background page', 'Small shims for JavaScript features pdf.js uses that older Firefox versions lack.'],
+            [code('compat.js'), 'background page', 'Small shims for JavaScript features pdf.js uses that Safari lacks.'],
             [code('lib/pdf.min.mjs, lib/pdf.worker.min.mjs'), 'scanner', 'pdf.js (Mozilla, Apache-2.0) for rendering PDF attachments.'],
             [code('content.css'), 'Gmail tab', 'Shows the 🔍 on email tracking links only while the link is hovered or focused; styles the sender icons, domain labels and the moved-to-Spam notice.'],
             [code('background.js'), 'background page', 'Link pipeline, threat checks, lookups, list sync and safeguards, logging, cleanup, message API, badge.'],
@@ -166,8 +166,9 @@
             [code('theme.js'), 'Options page, popup', 'Light/dark appearance: follows the system by default and remembers the user\'s choice.'],
             [code('popup.html / popup.js'), 'toolbar popup', 'Counts for the open message, visual toggle, recent activity.'],
             [code('shortener-snapshot.txt'), 'background page', 'Bundled shortener list used before the first download.'],
-            [code('icons/'), 'Firefox', 'Toolbar and extension-page icons (16, 32, 48, 128 px).'],
-            [code('tools/refresh-snapshot.js'), 'your computer (Node)', 'Optional: refreshes the bundled snapshot before packaging.']
+            [code('icons/'), 'Safari', 'Toolbar and extension-page icons (16, 32, 48, 128 px).'],
+            [code('tools/refresh-snapshot.js'), 'your computer (Node)', 'Optional: refreshes the bundled snapshot before packaging.'],
+            [code('tools/build-safari.sh'), 'a Mac (Xcode)', 'Wraps the extension in an app with Apple\'s converter and builds it.']
         ]));
 
         fill('archMessages', table(['Message', 'From → to', 'Purpose'], [
@@ -204,12 +205,12 @@
             [code('listState'), 'List sync state per source: {active[], pending{domain: {count, last}}, lastSuccess}, plus fallback and syncDisabledSince.'],
             [code('remoteShorteners'), 'The combined list of synced shortener domains currently in use.'],
             [code('lastSyncTime / cacheSchema / welcomeDismissed'), 'Bookkeeping.'],
-            [code('storage.managed'), 'Read-only: Firefox enterprise policy (managed… keys).']
+            [code('storage.managed'), 'Not available in Safari (no extension policies); read as empty.']
         ]));
 
         fill('archPlatform',
             el('p', null, el('b', null, 'WebExtension APIs: '),
-               'storage (local, managed, onChanged), alarms (daily list update and cleanup), runtime (messaging, install/update events, packaged files), action (toolbar badge), tabs (popup → Gmail tab), permissions (one-host access for your own services).'),
+               'storage (local, onChanged; managed is read but Safari has none), alarms (daily list update and cleanup), runtime (messaging, install/update events, packaged files), action (toolbar badge), tabs (popup → Gmail tab), permissions (one-host access for your own services).'),
             el('p', null, el('b', null, 'Web platform: '),
                'fetch with AbortController timeouts, MutationObserver, URL and URLSearchParams, atob/btoa (base64), DataView (DNS wire format, RFC 8484), BigInt (Flickr base-58), the Clipboard API.'),
             el('p', null, el('b', null, 'Third-party code: '),
@@ -323,7 +324,7 @@
 
         // Settings reference
         const typeText = (d) => d.type === 'integer' ? `integer ${d.min}–${d.max}` : d.type === 'enum' ? d.values.join(' | ') : d.type;
-        fill('archSettings', table(['Setting', 'Policy key', 'Type', 'Default', 'Now'], SETTING_DEFS.map(d => [
+        fill('archSettings', table(['Setting', 'Policy key (Chrome, Firefox)', 'Type', 'Default', 'Now'], SETTING_DEFS.map(d => [
             code(d.key), code(d.managedKey), typeText(d), d.def === '' ? '(empty)' : String(d.def),
             d.secret ? (S[d.key] ? '•••••• (hidden)' : '(empty)') + (cfg.locked[d.key] ? ' 🔒' : '')
                      : (S[d.key] === '' ? '(empty)' : String(S[d.key])) + (cfg.locked[d.key] ? ' 🔒' : '')

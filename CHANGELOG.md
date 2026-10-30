@@ -1,5 +1,12 @@
 # Changelog
 
+## 5.62 — First Safari build (same features as Chrome 5.62)
+
+- **Safari 18.2 or later** on macOS (and iOS/iPadOS with a build signed by your organization). The extension is the Firefox build's code with a non-persistent background page, wrapped in a small app by Apple's converter: `tools/build-safari.sh` builds it on a Mac with Xcode, and the **Safari build** GitHub workflow builds it on a GitHub Mac and offers it for download.
+- **No extension policies in Safari:** nothing can be set or locked by an administrator, so the policy buttons (Copy policies.json, Intune script) and `policy-example.json` are gone. Help → Deploying in organizations and ADMIN-GUIDE.md now describe building, signing, distributing (App Store, TestFlight or Developer ID), Apple's Safari extensions management (always on, allowed on your webmail; macOS 15, iOS 18, iPadOS 18) and sharing settings with a backup file. The policy-only options (a simpler popup, phishing-simulation rules) aren't available.
+- **Other extensions:** Safari doesn't let an extension see or turn off other extensions, so only the ones found in the webmail page are listed, with the steps to turn them off in Safari's settings.
+- **PDF scanning:** two small shims (`Map.getOrInsert`, reading a stream with `for await`) for features pdf.js uses that Safari lacks.
+
 ## 5.62 — Look-alike senders caught in the inbox list, without opening anything (Firefox build, same as Chrome 5.62)
 
 - **New: Catch look-alike senders** (on by default; policy `managedEnableLookalikeCheck`). Every inbox row's sender domain is compared with about 14,000 protected domains: the top 10,000 of two public popular-site lists (the Chrome UX Report top list, via a research copy on GitHub by Zakir Durumeric, data CC BY 4.0; and Tranco, tranco-list.eu, which adds the services that send a lot of email but are rarely visited, such as sendgrid.net and docusign.net), refreshed monthly; the built-in brands; your own organization; and domains whose mail passed DMARC in your mailbox.

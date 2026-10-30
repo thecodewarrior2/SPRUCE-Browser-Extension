@@ -2875,7 +2875,8 @@ function applyRowHighlighter(S) {
 
 // --- Other extensions that do the same job ---------------------------------------------------------
 // Found from what they add to the page: their own resources (a "chrome-extension://<id>/…" image or
-// stylesheet, which names the extension; matched against OVERLAPPING_EXTENSIONS) and their effects
+// stylesheet, which names the extension; matched against OVERLAPPING_EXTENSIONS. In Safari the address
+// holds a random per-install UUID instead, so there only the effects tell) and their effects
 // (sender icons or photos in inbox rows that aren't ours). Each one found is reported to the
 // background (shown in Settings → Other extensions), and a notice offers the fixes: turn the other
 // one off (recommended: ours also checks senders for phishing), turn our matching feature off, or
@@ -2889,13 +2890,13 @@ function detectConflicts(S) {
     if (!S.enableConflictWarnings || Date.now() - conflictsCheckedAt < 20000) return;
     conflictsCheckedAt = Date.now();
     const found = new Map();                                          // key → { key, name, does, features, via }
-    const ownId = chrome.runtime.id;
+    const ownId = chrome.runtime.id, ownHost = new URL(chrome.runtime.getURL('')).host;   // Safari: a per-install UUID
     // 1. Resources another extension added to the page.
     const urls = [...document.querySelectorAll('[src*="-extension://"], [href*="-extension://"]')].map(e => e.getAttribute('src') || e.getAttribute('href') || '');
     for (const sh of document.styleSheets) { try { if (sh.href) urls.push(sh.href); } catch (e) { /* ignore */ } }
     for (const u of urls) {
-        const m = /^(?:chrome|moz)-extension:\/\/([^/]+)\//i.exec(u);
-        if (!m || m[1] === ownId) continue;
+        const m = /^(?:chrome|moz|safari-web)-extension:\/\/([^/]+)\//i.exec(u);
+        if (!m || m[1] === ownId || m[1] === ownHost) continue;
         const known = OVERLAPPING_EXTENSIONS.find(x => x.ids.includes(m[1]));
         if (known) found.set(known.ids[0], { key: known.ids[0], name: known.name, does: known.does, features: known.features, via: 'page' });
     }

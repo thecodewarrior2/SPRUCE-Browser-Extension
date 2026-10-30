@@ -371,8 +371,7 @@
                 <div class="setting-row"><div class="setting-text">Warn me about extensions that do the same job<div class="setting-desc">Checked from what other extensions add to the webmail page. Nothing about them is sent anywhere.</div></div>
                     <label class="switch"><input type="checkbox" data-setting="enableConflictWarnings"><span class="slider"></span></label></div>
                 <div id="conflictList" aria-live="polite"></div>
-                <div style="margin-top: 10px;"><button type="button" class="btn-primary" id="checkExtensionsBtn">Check installed extensions</button>
-                    <span class="setting-desc" id="checkExtensionsNote" style="margin-left: 8px;">Lists installed extensions that do the same job, so you can turn them off with one click. Your browser asks you first to let this extension see and manage your extensions; nothing is sent anywhere.</span></div>
+                <p class="setting-desc" style="margin-top: 10px;">Safari doesn't let an extension see or turn off other extensions, so only the ones found in the webmail page are listed, with the steps to turn them off yourself.</p>
             </div>
 
             <div class="card">
@@ -581,10 +580,7 @@
                 <div class="setting-row"><div class="setting-text">Restore from a backup<div class="setting-desc">You'll see exactly what will be restored before anything changes.</div></div>
                     <button id="importSettingsBtn" class="btn-secondary">Restore…</button>
                     <input type="file" id="importFileInput" accept=".json" style="display: none;"></div>
-                <div class="setting-row"><div class="setting-text">Manage with Firefox enterprise policy<div class="setting-desc">Every setting and list can be set and locked by your administrator with Firefox's <code>policies.json</code> (or the equivalent Windows Group Policy / Intune or macOS profile). This button copies a complete <code>policies.json</code> that installs the add-on and locks your current settings. <a href="#" data-help-link="deploy">Administrator guide</a><div id="copyPolicyResult" style="margin-top: 4px; color: var(--success-text);"></div></div></div>
-                    <button id="copyPolicyJsonBtn" class="btn-action">Copy policies.json</button></div>
-                <div class="setting-row"><div class="setting-text">Manage with Microsoft Intune (Firefox on Windows)<div class="setting-desc">Copies a PowerShell script that writes the same policy to the Windows registry, where Firefox reads Group Policy, for an Intune platform script (or Group Policy / any device-management tool). <a href="#" data-help-link="deploy" data-help-anchor="deploy-intune">Intune guide</a><div id="copyIntuneResult" style="margin-top: 4px; color: var(--success-text);"></div></div></div>
-                    <button id="copyIntuneScriptBtn" class="btn-action">Copy Intune script</button></div>
+                <div class="setting-row"><div class="setting-text">Settings for everyone in your organization<div class="setting-desc">Safari doesn't let administrators set an extension's settings by policy. To give everyone the same settings, back them up here and have each person restore the file. Device management (macOS 15 and iOS/iPadOS 18 or later) can install the app, keep the extension turned on and allow it on your webmail. <a href="#" data-help-link="deploy" data-help-anchor="deploy-prepare">How to deploy</a></div></div></div>
             </details>
 
             <div class="reset-row">
@@ -881,7 +877,7 @@
 </ul>
 <h3>Phishing senders and trusted senders</h3>
 <p>Sender addresses are compared on this device with the community scam-sender list <a href="https://github.com/sefinek/Blacklisted-Emails" target="_blank" rel="noopener noreferrer">sefinek/Blacklisted-Emails</a> (MIT license), downloaded with the phishing lists at most once a day. From the community list only exact addresses count, never whole domains, and never addresses at big companies' own domains.</p>
-<p><b>Trusted senders</b> (Settings → Senders → Trusted senders, and your organization's <code>managedTrustedSenders</code>) are the opposite: addresses or whole domains that are never flagged or moved to Spam. Their links are still checked, and your organization's phishing-sender list still wins.</p>
+<p><b>Trusted senders</b> (Settings → Senders → Trusted senders) are the opposite: addresses or whole domains that are never flagged or moved to Spam. Their links are still checked, and your organization's phishing-sender list still wins.</p>
 <h3>Logging</h3>
 <p><b>Logging → Senders: icons &amp; flags</b> lists every sender checked recently with its icon, country, verdict, every reason and what was checked. <b>Logging → Moved to Spam</b> lists each email moved, each move that didn't work and why, and each conversation you took out of Spam. The application log has a readable line for each sender check, country and icon lookup, and move.</p>
 <h3>Privacy</h3>
@@ -897,6 +893,7 @@
   <li><b>Basic</b>: on a site without an entry of its own, the extension finds inbox rows and senders through the page's accessibility labels, the markup screen readers use, which well-built webmail share. It only <b>reads</b> the page: it never clicks anything there, so moving to Spam and the Send check wait for a site's own entry, tested on a real account. A row that doesn't show the sender's address gets no label.</li>
   <li><b>Gmail</b> is fully supported and tested. The other sites are <b>experimental</b>: their page layouts were mapped from public information, and each gains the remaining features as its entry is filled in (no new code is needed).</li>
   <li>Features that read an email's <b>headers</b> need a page the webmail itself offers with the email's original source (Gmail's “Show original”). Proton Mail encrypts messages, so it can't offer one.</li>
+  <li>In Safari the <b>phishing-simulation</b> rows don't apply: their rules are set by an administrator's policy, which Safari doesn't have.</li>
   <li>Nothing here needs an extra sign-in, an app registration or an administrator-approved API: only the webmail page you already have open, and the public services listed in <a href="#" data-help-link="privacy">Your privacy</a>.</li>
 </ul>
 </section>
@@ -948,7 +945,6 @@
 <tr><td>A setting is greyed out with 🔒</td><td>Your organization manages it.</td></tr>
 <tr><td>Your own resolver doesn't work</td><td>Use its <b>Test</b> button; it shows the exact reply. Make sure you clicked <b>Save service</b> (this grants the browser access) and that the API key header is correct.</td></tr>
 <tr><td>Nothing happens in Gmail</td><td>Reload the Gmail tab after installing or updating the extension.</td></tr>
-<tr><td>"Reset my settings to defaults" left some settings unchanged</td><td>Those settings are managed by your organization; reset never changes them.</td></tr>
 </table>
 </section>
 
@@ -962,11 +958,11 @@
 <tr><td>Company short links</td><td>Links like Google's c.gle can't be decoded offline. In Gmail they're trusted only when the email verifiably came from that company directly to you; otherwise, and in other webmail, they're mentioned in the banner at the top of the email (never marked one by one).</td><td>Your own lookup service, which can expand them.</td></tr>
 <tr><td>Threat checks</td><td>The built-in checks judge whole websites by name, not individual pages, so phishing pages on shared hosting (Google Docs, Firebase, Weebly…) aren't detected by them. Each service blocks different sites, and a network that blocks these services leaves links "not verified".</td><td>Your own threat resolver, for example <a href="#" data-help-link="deploy" data-help-anchor="deploy-webrisk">Google Web Risk</a>, which checks full addresses.</td></tr>
 <tr><td>Security-gateway links</td><td>Mimecast, Hornetsecurity, SpamTitan LinkLock, Vade, Intermedia/Proofpoint Essentials and Zix keep the destination on their own servers; it can't be read from the link. The gateway checks it when you click.</td><td>—</td></tr>
-<tr><td>Phishing simulations</td><td>Training emails (KnowBe4, Wizer…) are recognized only when your administrator has set rules for them: by their link domains in every webmail, or by header in Gmail. Otherwise they're checked like any email, so their links may be marked.</td><td>Your administrator: <code>managedPhishSimulationDomains</code>, <code>managedPhishSimulationRules</code>.</td></tr>
+<tr><td>Phishing simulations</td><td>Training emails (KnowBe4, Wizer…) are recognized only by rules an administrator sets by policy, which Safari doesn't have. In Safari they're checked like any email, so their links may be marked and their sender flagged.</td><td>Add the training sender to Trusted senders (its links are still checked).</td></tr>
 <tr><td>Checking links before sending</td><td>Gmail only. A website that answers with an error page (such as “page not found”) still counts as working: only sites that don't answer at all, or have an invalid certificate, are reported. At the Offline only level just typos and look-alikes are checked. One-time links are never visited.</td><td>—</td></tr>
 <tr><td>Sender checks</td><td>Full in Gmail; basic on the other webmail (the sender is found through the page's accessibility labels, and checks that need the email's headers, such as DMARC, need Gmail). They prove which company's servers sent an email, not that its content is safe: attackers can make company systems send their text, and compromised accounts send genuine mail.</td><td>Stay alert to unexpected requests even from real companies.</td></tr>
 <tr><td>Phishing lists</td><td>Updated once a day, so brand-new phishing sites may not be listed yet.</td><td>—</td></tr>
-<tr><td>Sender icons and moving to Spam</td><td>Sender icons and labels: every supported webmail (basic outside Gmail; a row that doesn't show the sender's address gets none). Moving to Spam: Gmail only, in the web version; on other webmail a flagged email is marked and explained but never moved, because the extension doesn't click anything on a page it hasn't been tested on. Moving uses Gmail's own Report spam button, recognized by its label in English and several other languages or by Gmail's internal action number; if Gmail changes its page so the button can't be found, moving keeps pausing and retrying (and says so in the log) while the icons and warnings keep working. A phishing sender that is on no list and whose domain no security service blocks yet isn't flagged. Report spam also tells Google about the sender and teaches Gmail to send that sender's mail to Spam, as it does when you click it; <b>Not spam</b> undoes that. Moves wait until you've been idle in Gmail for 10 seconds.</td><td>Trusted senders (<code>managedTrustedSenders</code>) for false positives; Gmail's own Report spam for anything missed.</td></tr>
+<tr><td>Sender icons and moving to Spam</td><td>Sender icons and labels: every supported webmail (basic outside Gmail; a row that doesn't show the sender's address gets none). Moving to Spam: Gmail only, in the web version; on other webmail a flagged email is marked and explained but never moved, because the extension doesn't click anything on a page it hasn't been tested on. Moving uses Gmail's own Report spam button, recognized by its label in English and several other languages or by Gmail's internal action number; if Gmail changes its page so the button can't be found, moving keeps pausing and retrying (and says so in the log) while the icons and warnings keep working. A phishing sender that is on no list and whose domain no security service blocks yet isn't flagged. Report spam also tells Google about the sender and teaches Gmail to send that sender's mail to Spam, as it does when you click it; <b>Not spam</b> undoes that. Moves wait until you've been idle in Gmail for 10 seconds.</td><td>Trusted senders for false positives; Gmail's own Report spam for anything missed.</td></tr>
 <tr><td>Look-alike domains</td><td>Compared with about 65 commonly impersonated brands.</td><td>Your own blocklist for local brands.</td></tr>
 <tr><td>QR codes and attachments</td><td>Attachments are checked in Gmail only (up to 10 MB; PDFs up to 10 pages). In other webmail, only images the webmail hosts are read. Badly damaged QR codes may not decode.</td><td>—</td></tr>
 <tr><td>Other webmail</td><td>Outlook, Proton, Yahoo, AOL, Zoho, iCloud, Fastmail and GMX support is experimental: their layouts were mapped from public information. All sites share one engine; each gets the sender, Spam and Send features once its entry describes its inbox list, toolbar and compose window (see <a href="#" data-help-link="compat">Which features work where</a>). Proton Mail encrypts messages, so header checks can't run there.</td><td>Report problems with the application log.</td></tr>
@@ -977,64 +973,26 @@
 
 <section id="help-deploy" class="help-section">
 <h2>Deploying in organizations</h2>
-<p class="lead">Install the add-on for everyone automatically and set (or lock) its settings centrally with Firefox enterprise policies: a <code>policies.json</code> file (any platform), the Windows registry (Microsoft Intune, Group Policy) or a macOS configuration profile.</p>
-<div class="callout-warn"><b>Before you start.</b> Always test with a small pilot group first and check the result at <code>about:policies</code>, which lists the active policies and marks errors.</div>
+<p class="lead">In Safari an extension comes inside a small Mac (or iPhone/iPad) app. You build the app once from this extension, sign it, and install it on your devices; device management can then keep the extension turned on and allowed on your webmail. Safari has no extension policies, so settings can't be set or locked centrally (see <a href="#" data-help-link="deploy" data-help-anchor="deploy-settings">What can be managed</a>).</p>
+<div class="callout-warn"><b>Before you start.</b> You need a Mac with Xcode (free from the App Store) to build the app, and an Apple Developer account to sign it for other computers. Test with a small pilot group first.</div>
 
-<h3 id="deploy-prepare">1. Publish the add-on</h3>
-<ul class="simple-list">
-  <li><b>addons.mozilla.org (AMO)</b>, listed or unlisted: Firefox only installs add-ons signed by Mozilla, and both kinds are signed and updated automatically. A listed add-on installs from <code>https://addons.mozilla.org/firefox/downloads/latest/&lt;slug&gt;/latest.xpi</code>, where <code>&lt;slug&gt;</code> is the last part of its AMO address.</li>
-  <li>An unlisted (self-distributed) add-on is a signed <code>.xpi</code> you host yourself; use its address as <code>install_url</code>.</li>
-  <li>The add-on ID is <code>link-unshortener@gmail-link-scanner</code> (in <code>manifest.json</code>); policies refer to the add-on by this ID.</li>
-</ul>
-<p>The extension's settings are delivered as <b>extension policy</b>: every setting has a policy key (listed in the <a href="#" data-help-link="architecture" data-help-anchor="arch-settings">settings reference</a>). A policy value always wins and appears with 🔒 to the user; anything you don't set stays under the user's control.</p>
+<h3 id="deploy-prepare">1. Build the app</h3>
+<ol class="simple-list">
+  <li>On a Mac, run <code>tools/build-safari.sh</code> from this extension's folder. It uses Apple's converter (<code>xcrun safari-web-extension-converter</code>) to wrap the extension in an Xcode project and builds it. Or let GitHub build it: the <b>Safari build</b> workflow does the same on a GitHub Mac and offers the unsigned app for download.</li>
+  <li>To try it on one Mac without signing: in Safari, <b>Settings → Advanced → Show features for web developers</b>, then <b>Develop → Allow Unsigned Extensions</b> (asked again each time Safari starts), open the app once, and turn the extension on in <b>Safari → Settings → Extensions</b>.</li>
+</ol>
 
-<h3 id="deploy-policies">2. policies.json (Linux, Windows and macOS)</h3>
-<ol class="simple-list">
-  <li>Generate the file from <b>Settings → Backup &amp; enterprise policy → Copy policies.json</b>, replace <code>ADDON-SLUG</code>, and delete the settings you don't want to lock. The format is:
-    <div class="deploy-code">{
-  "policies": {
-    "ExtensionSettings": {
-      "link-unshortener@gmail-link-scanner": {
-        "installation_mode": "force_installed",
-        "install_url": "https://addons.mozilla.org/firefox/downloads/latest/&lt;slug&gt;/latest.xpi"
-      }
-    },
-    "3rdparty": {
-      "Extensions": {
-        "link-unshortener@gmail-link-scanner": {
-          "managedEnableThirdPartyResolution": true,
-          "managedDnsCloudflareFamily": true,
-          "managedBlocklist": ["tracking.example.com"]
-        }
-      }
-    }
-  }
-}</div></li>
-  <li>Put it in a folder named <code>distribution</code> in the Firefox installation folder (for example <code>C:\Program Files\Mozilla Firefox\distribution\policies.json</code>, <code>/Applications/Firefox.app/Contents/Resources/distribution/policies.json</code>, or <code>/usr/lib/firefox/distribution/policies.json</code>; on Linux <code>/etc/firefox/policies/policies.json</code> also works). Deploy it with any device-management tool. On Windows managed with Intune or Group Policy, use the registry instead (next section).</li>
-  <li><code>installation_mode</code> <code>force_installed</code> installs the add-on and stops users removing it; <code>normal_installed</code> installs it but lets users disable it.</li>
-  <li>Restart Firefox. <b>Check</b>: <code>about:policies</code> lists the policies, <code>about:addons</code> shows the add-on, and Settings shows 🔒 on the locked options.</li>
-</ol>
-<h3 id="deploy-intune">3. Windows with Microsoft Intune or Group Policy</h3>
-<p>On Windows, Firefox also reads policy from the registry (<code>HKLM\SOFTWARE\Policies\Mozilla\Firefox</code>), which is where Group Policy and Intune write it. If both the registry and <code>policies.json</code> set the same top-level policy (for example <code>ExtensionSettings</code> or <code>3rdparty</code>), <b>the registry wins</b> and that part of <code>policies.json</code> is ignored, so deliver this add-on's policy one way only.</p>
-<ol class="simple-list">
-  <li>In this add-on, choose <b>Settings → Backup &amp; enterprise policy → Copy Intune script</b>. It produces a PowerShell script that force-installs the add-on and writes your current settings. Replace <code>ADDON-SLUG</code> and delete the settings you don't want to lock (they are on the <code>$Settings</code> line).</li>
-  <li>In the Microsoft Intune admin center, go to <b>Devices → Scripts and remediations → Platform scripts → Add → Windows 10 and later</b>, upload the .ps1 file, and set <b>Run this script using the logged on credentials: No</b> (runs as system) and <b>Run script in 64 bit PowerShell host: Yes</b>.</li>
-  <li><b>Assign</b> it to a pilot group, then to everyone. To change settings later, upload a new version of the script (or use a <b>Remediation</b> that re-applies it on a schedule).</li>
-  <li><b>Check</b> on a device after restarting Firefox: <code>about:policies</code> lists <code>ExtensionSettings</code> and <code>3rdparty</code> without errors, and Settings shows 🔒 on locked options.</li>
-</ol>
-<p>The script writes:</p>
-<div class="deploy-code">HKLM\SOFTWARE\Policies\Mozilla\Firefox\ExtensionSettings\link-unshortener@gmail-link-scanner
-    installation_mode   REG_SZ   force_installed
-    install_url         REG_SZ   https://addons.mozilla.org/firefox/downloads/latest/&lt;slug&gt;/latest.xpi
-HKLM\SOFTWARE\Policies\Mozilla\Firefox\3rdparty\Extensions
-    link-unshortener@gmail-link-scanner   REG_SZ   {"managedRetentionDays":14,"managedBlocklist":["tracking.example.com"]}</div>
+<h3 id="deploy-policies">2. Sign and distribute it</h3>
 <ul class="simple-list">
-  <li><b>Settings as one JSON value:</b> Firefox parses the add-on's value as JSON, so every setting keeps its type. You can write the same values with <b>Group Policy Preferences → Registry</b> on domain-joined computers.</li>
-  <li><b>Installing with Mozilla's ADMX templates instead:</b> if you already manage Firefox with Mozilla's ADMX templates (imported in Intune under <b>Devices → Configuration → Import ADMX</b>, or in Group Policy), you can install the add-on with their <b>Extensions → Extension Management</b> setting and keep only the <code>3rdparty</code> part of the script; the templates have no setting for an add-on's own policy.</li>
+  <li><b>Mac App Store or TestFlight:</b> open the generated Xcode project, choose your team under <b>Signing &amp; Capabilities</b>, and use <b>Product → Archive</b> to upload it. Apps from the store can be assigned to devices with Apple Business Manager or Apple School Manager.</li>
+  <li><b>Directly (Developer ID):</b> archive the app, sign it with your Developer ID and have Apple notarize it, then deploy it with your device-management tool (Jamf, Intune, Mosyle…).</li>
 </ul>
 
-<h3 id="deploy-macos">4. macOS</h3>
-<p>On macOS, deliver the same policy as a configuration profile (for example with Intune or Jamf) for the <code>org.mozilla.firefox</code> domain, with <code>EnterprisePoliciesEnabled</code> set to true and the <code>ExtensionSettings</code> and <code>3rdparty</code> dictionaries from <code>policies.json</code>; or place <code>policies.json</code> as above (an app update can replace it, so a profile is more reliable). See Mozilla's <a href="https://mozilla.github.io/policy-templates/" target="_blank" rel="noopener noreferrer">policy templates</a>.</p>
+<h3 id="deploy-intune">3. Turn it on everywhere</h3>
+<p>Apple's <b>Safari extensions management</b> declarative configuration (macOS 15, iOS 18 and iPadOS 18 or later; supervised devices) can set the extension to <b>Always On</b>, control Private Browsing, and allow it on your webmail sites (for example <code>mail.google.com</code>) so people aren't asked. The extension is identified as <code>Identifier (TeamIdentifier)</code>; get it with <code>codesign -dv</code> on the extension inside the app's <code>PlugIns</code> folder. The app must be installed on the device.</p>
+
+<h3 id="deploy-macos">4. Website access</h3>
+<p>Safari asks each person before an extension can read a website. Without the configuration above, people choose <b>Always Allow on This Website</b> for their webmail the first time. The extension also downloads its lists and runs its threat checks from its background page (the services listed under <a href="#" data-help-link="permissions">Permissions</a>). If Safari asks about those sites, allow them; otherwise the lists and checks can't update, and <b>Settings → Logging</b> says so.</p>
 
 <h3 id="deploy-webrisk">5. Threat checks with Google Web Risk</h3>
 <p>Google's Web Risk API checks full addresses against Google's lists of phishing and malware pages (the data behind Google Safe Browsing). It needs a Google Cloud project with billing enabled; check Google's current Web Risk pricing first. <b>Note:</b> unlike the built-in checks, which only send site names, Web Risk receives the full link (one-time links are never sent).</p>
@@ -1048,46 +1006,23 @@ Method:          GET
 Request headers: X-Goog-Api-Key: YOUR_API_KEY
 Flag field:      (leave empty: Google's replies are recognized automatically)</div>
     Click <b>Save service</b>, then <b>Test resolver</b>. Matches show as, for example, "Phishing (Google Web Risk)".</li>
-  <li>To deploy it to everyone, add it to your policy (the key is hidden from users and never included in backups):
-    <div class="deploy-code">"managedDohEndpoint": "https://webrisk.googleapis.com/v1/uris:search?threatTypes=MALWARE&amp;threatTypes=SOCIAL_ENGINEERING&amp;threatTypes=UNWANTED_SOFTWARE&amp;uri={url}",
-"managedDohMethod":   "GET",
-"managedDohHeaders":  "X-Goog-Api-Key: YOUR_API_KEY"</div></li>
+  <li>To give it to everyone, each person sets it up once (API keys are never included in backups, so they aren't shared through a backup file).</li>
 </ol>
 <p>Google Safe Browsing (v4, <code>threatMatches:find</code>) is also understood, but Google limits it to non-commercial use; organizations should use Web Risk. <b>Short links:</b> Google has no API to expand them; use your own lookup service (<a href="#" data-help-link="limitations">Limitations</a>).</p>
 
 <h3 id="deploy-settings">6. What can be managed</h3>
-<p>Every setting, both site lists (allowed and blocked) and both custom services can be set and locked. Anything you don't set stays under the user's control, and <b>Reset my settings to defaults</b> never changes managed settings.</p>
+<p>In Safari, nothing inside the extension can be set or locked by an administrator: there is no extension policy (Chrome and Firefox have one, and their builds of this extension use it). What you can do:</p>
 <ul class="simple-list">
-  <li><b>Settings and lists:</b> all keys are in the <a href="#" data-help-link="architecture" data-help-anchor="arch-settings">settings reference</a> (generated from the code) and in <code>ADMIN-GUIDE.md</code> in the extension package.</li>
-  <li><b>Your own services:</b> <code>managedUnshortenerEndpoint</code> and <code>managedDohEndpoint</code> with their method, body and header keys. Headers (API keys) set by policy are masked from users and never included in backups.</li>
-  <li><b>Host access for your own services:</b> Firefox can't grant access to a custom service by policy, so the service should send CORS headers, or users approve a one-time prompt.</li>
-  <li><b>Senders (Gmail):</b> sender icons, country flags, sender checks, moving flagged emails to Spam and the notice can each be set and locked (<code>managedEnableSenderIdentity</code>, <code>managedEnableSenderIconFallback</code>, <code>managedEnableSenderAvatars</code>, <code>managedEnableSenderCountry</code>, <code>managedEnableSenderDomainCheck</code>, <code>managedEnableSenderAddressCheck</code>, <code>managedEnableAutoSpam</code>, <code>managedEnableSpamNotice</code>), and <code>managedTrustedSenders</code> is the allow list of senders never flagged or moved (addresses or domains). Training emails matched by <code>managedPhishSimulationDomains</code> or <code>managedPhishSimulationRules</code> are never moved.</li>
-  <li><b>Webmail apps:</b> each supported webmail can be switched on or off (<code>managedEnableOutlookSupport</code>, <code>managedEnableYahooSupport</code> and so on).</li>
-  <li><b>Changes</b> to policy apply without reinstalling, from the next message opened.</li>
+  <li><b>Same settings for everyone:</b> set the extension up once, use <b>Back up</b>, and have each person <b>Restore</b> the file. API keys are never included in backups.</li>
+  <li><b>Keep it on:</b> the Safari extensions management configuration above (Always On, website access).</li>
+  <li><b>Not available in Safari:</b> locked settings, the administrator-only options (hiding the popup's buttons, phishing-simulation rules for security-training emails) and the organization's own services delivered with their keys. Security-training emails from vendors such as KnowBe4 may therefore be flagged; add the vendor's sending domain to Trusted senders and its link domains to the Allowlist before making the backup you share.</li>
 </ul>
 
-<h3 id="deploy-admin-only">7. Administrator-only policies</h3>
-<p>These exist only in the policy; there's no setting for them here, and they aren't in backups or in <b>Copy policies.json</b>. Full details and examples are in <code>ADMIN-GUIDE.md</code>.</p>
+<h3 id="deploy-tips">7. Tips</h3>
 <ul class="simple-list">
-  <li><code>managedHidePopupSettingsButton</code> and <code>managedHideRecentActivity</code> remove the <b>Open Settings</b> button and the <b>Recent activity</b> list from the toolbar popup. Settings stays reachable from <code>about:addons</code> → the add-on → <b>Options</b>.</li>
-  <li><code>managedPhishSimulationDomains</code> (every webmail) lists your training vendor's link domains. An email whose links <b>all</b> go to those domains (after unwrapping SafeLinks, Proofpoint and similar) is left completely unchecked; one link anywhere else and it's checked as usual, so real phishing can't hide behind a training link. Shared platforms (such as <code>docs.google.com</code>, <code>sharepoint.com</code>, <code>bit.ly</code> or cloud hosting) are refused, with a warning in the log.</li>
-  <li><code>managedPhishSimulationRules</code> (Gmail) lists your phishing-simulation (security training) emails, for example from KnowBe4 or Wizer, by the header the vendor adds, a secret value in it, and/or the vendor's sending addresses. In Gmail, a matching email is left completely unchecked: no link is looked up (which the vendor could record as a click), no tracking pixel is blocked and no warning is shown. Use a secret value or the sending addresses: a public header name alone could be copied by real phishing.</li>
-</ul>
-<div class="deploy-code">"managedPhishSimulationDomains": ["ssuport.com", "the-verification.com"],
-"managedPhishSimulationRules": [
-  { "name": "KnowBe4", "header": "X-KB4TOKEN", "value": "YOUR-KSAT-TOKEN" },
-  { "name": "Wizer", "header": "X-TestPhish", "ips": ["&lt;Wizer's sending addresses&gt;"] }
-]</div>
-
-<p><b>Best practice:</b> use both identifiers: the vendor's link domains (every webmail) and a header rule with a secret value (Gmail). List only domains the vendor owns, and keep the list current. <code>ADMIN-GUIDE.md</code> has a best-practice checklist and step-by-step setups for KnowBe4 and Wizer, with links to their documentation.</p>
-
-<h3 id="deploy-tips">8. Tips</h3>
-<ul class="simple-list">
-  <li><b>Lock only what matters.</b> Settings you leave out of the policy keep their defaults and remain adjustable by users.</li>
-  <li><b>API keys</b> for your own resolver or unshortener can be delivered by policy (<code>managedDohHeaders</code>, <code>managedUnshortenerHeaders</code>); users see them masked and they are never included in backups.</li>
-  <li><b>No third-party requests at all:</b> set <code>managedEnableThirdPartyResolution</code>, <code>managedEnableDnsThreatCheck</code>, <code>managedEnableRemoteListSync</code> and <code>managedEnablePhishingFeeds</code> to <code>false</code>; nothing then leaves the browser.</li>
-  <li><b>Network filters:</b> allow the services listed under <a href="#" data-help-link="architecture" data-help-anchor="arch-network">every network request</a>, or deliver your own resolver and unshortener by policy.</li>
-  <li><b>Troubleshooting:</b> if a setting isn't applied, compare its name with the settings reference (names are case-sensitive) and look at <code>about:policies</code>, which marks errors in the file.</li>
+  <li><b>No third-party requests at all:</b> set the privacy level to <b>Offline only</b> before making the backup you share.</li>
+  <li><b>Network filters:</b> allow the services listed under <a href="#" data-help-link="architecture" data-help-anchor="arch-network">every network request</a>.</li>
+  <li><b>Troubleshooting:</b> in Safari, <b>Develop → Web Extension Background Content</b> opens the extension's background page with its console; <b>Settings → Logging</b> shows what the extension did.</li>
 </ul>
 </section>
 
@@ -1130,7 +1065,7 @@ Flag field:      (leave empty: Google's replies are recognized automatically)</d
 <h4>Where it works</h4>
 <ul class="simple-list">
   <li>Gmail (full support), plus Outlook on the web, Proton Mail, Yahoo Mail, AOL Mail, Zoho Mail, iCloud Mail, Fastmail and GMX (experimental, each can be switched off).</li>
-  <li>Firefox 140 or later (desktop).</li>
+  <li>Safari 18.2 or later on macOS (also iPadOS and iOS 18.2 or later), as an app built with Xcode (see <a href="#" data-help-link="deploy" data-help-anchor="deploy-prepare">Deploying</a>).</li>
 </ul>
 <h4>Privacy and control</h4>
 <ul class="simple-list">
@@ -1141,9 +1076,9 @@ Flag field:      (leave empty: Google's replies are recognized automatically)</d
 </ul>
 <h4>For organizations</h4>
 <ul class="simple-list">
-  <li>Every setting, list and custom service can be set and locked by Firefox enterprise policy (policies.json, Group Policy / Intune, macOS profiles); managed settings show 🔒 and are never changed by a reset.</li>
-  <li>One-click export of a ready-to-deploy <code>policies.json</code> or a PowerShell script for Microsoft Intune / Group Policy.</li>
-  <li>Your own short-link and threat-check services, with API keys hidden from users.</li>
+  <li>Settings can be shared with a backup file; Safari has no extension policies for administrators.</li>
+  <li>Turned on for every Mac, iPhone and iPad with Apple's Safari extensions management (macOS 15, iOS 18 and iPadOS 18 or later).</li>
+  <li>Your own short-link and threat-check services.</li>
 </ul>
 <h4>Using it</h4>
 <ul class="simple-list">
@@ -1209,7 +1144,7 @@ Flag field:      (leave empty: Google's replies are recognized automatically)</d
   <rect x="320" y="310" width="250" height="78" rx="10" class="box-store"/>
   <text x="335" y="335" class="t-title">storage</text>
   <text x="335" y="356" class="t-body">local: settings, cache, logs</text>
-  <text x="335" y="373" class="t-body">managed: enterprise policy</text>
+  <text x="335" y="373" class="t-body">(no managed policy in Safari)</text>
   <rect x="630" y="20" width="220" height="80" rx="10" class="box-ext"/>
   <text x="645" y="45" class="t-title">Link lookup</text>
   <text x="645" y="68" class="t-body">custom unshortener</text>
@@ -1319,8 +1254,8 @@ Flag field:      (leave empty: Google's replies are recognized automatically)</d
 <h3 id="arch-logging">Logging model <span class="live-tag">LIVE</span></h3>
 <div id="archLogging"></div>
 
-<h3 id="arch-settings">Settings and policy reference <span class="live-tag">LIVE</span></h3>
-<p>Every setting, its policy key, type and default. A policy value always wins and locks the setting; an empty policy string counts as "not set".</p>
+<h3 id="arch-settings">Settings reference <span class="live-tag">LIVE</span></h3>
+<p>Every setting, its key, type and default. Safari has no extension policies; in the Chrome and Firefox builds the key is also the policy name, and a policy value wins and locks the setting.</p>
 <div id="archSettings"></div>
 
 <h3 id="arch-platform">Platform APIs and resources</h3>
@@ -1332,7 +1267,7 @@ Flag field:      (leave empty: Google's replies are recognized automatically)</d
 
 <section id="help-permissions" class="help-section">
 <h2>Permissions</h2>
-<p>Firefox shows these when the add-on is installed or updated. Each one is used only for what is listed here.</p>
+<p>Safari asks before the extension can read a website (choose <b>Always Allow on This Website</b> for your webmail). Each permission is used only for what is listed here.</p>
 <table class="help-table">
 <tr><th style="width: 32%;">Permission</th><th>Why it's needed</th></tr>
 <tr><td>Gmail and the supported webmail sites<br><span style="font-size: 11px;">mail.google.com, Outlook, Proton, Yahoo, AOL, Zoho, iCloud, Fastmail, GMX</span></td><td>Read the links, images and attachments of the message you have open, in your browser only.</td></tr>
@@ -1346,7 +1281,6 @@ Flag field:      (leave empty: Google's replies are recognized automatically)</d
 <tr><td><code>1.1.1.1</code> and the company's logo server</td><td>Company logos from BIMI: the company's BIMI and DMARC records (its main domain name only, to Cloudflare's 1.1.1.1), then its logo, from the address the company publishes, at most once a week per company. The logo server sees your computer's IP address, as for any picture a web page shows (no cookies, no referrer). Off with <b>Company logos from BIMI</b>.</td></tr>
 <tr><td><code>icons.duckduckgo.com</code></td><td>Stand-in sender icons: asked only for a site that has no icon of its own (and whose parent domain has none either), at most once a week per site; only the site name is sent. Off with <b>Stand-in icon for sites without their own</b>.</td></tr>
 <tr><td><code>api.country.is</code></td><td>The country of a sending server for the sender flag (only its IP address is sent; at most once a month per address).</td></tr>
-<tr><td>Manage your extensions <span style="font-size: 11px;">(optional, <code>management</code>)</span></td><td>Not asked at install. Only when you press <b>Check installed extensions</b> or <b>Turn off …</b> in Settings → Other extensions does your browser ask you to allow it. It's used only to list installed extensions that do the same job as this one and to turn off the one you choose. Nothing about your extensions is sent anywhere. Firefox doesn't let extensions turn others off, so there you get the steps instead.</td></tr>
 <tr><td><code>storage.googleapis.com</code>, <code>firebasestorage.googleapis.com</code></td><td>Only when you click 🔍 on a cloud-storage link: reads that page's code to see where it redirects.</td></tr>
 <tr><td><code>storage</code> and <code>unlimitedStorage</code></td><td>Settings, cache, history, logs and the phishing lists (several MB), kept in this browser.</td></tr>
 <tr><td><code>alarms</code></td><td>The daily list updates and data cleanup.</td></tr>

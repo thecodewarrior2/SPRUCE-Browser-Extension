@@ -203,13 +203,15 @@ test('backup includes and restores the phishing-sender list', () => {
 test('every new setting is on by default and has a policy key in schema.json', () => {
   const hasSchema = fs.existsSync(path.join(EXT, 'schema.json'));
   const schema = hasSchema ? JSON.parse(fs.readFileSync(path.join(EXT, 'schema.json'), 'utf8')) : null;
-  let example = JSON.parse(fs.readFileSync(path.join(EXT, 'policy-example.json'), 'utf8'));
-  if (example.policies) example = example.policies['3rdparty'].Extensions['link-unshortener@gmail-link-scanner'];
+  // The Safari build has no policies, so no example file.
+  const examplePath = path.join(EXT, 'policy-example.json');
+  let example = fs.existsSync(examplePath) ? JSON.parse(fs.readFileSync(examplePath, 'utf8')) : null;
+  if (example && example.policies) example = example.policies['3rdparty'].Extensions['link-unshortener@gmail-link-scanner'];
   for (const d of S('SETTING_DEFS')) {
     if (schema) assert.ok(schema.properties[d.managedKey], 'schema: ' + d.managedKey);
-    if (/Sender|Spam/.test(d.managedKey)) assert.ok(d.managedKey in example, 'example: ' + d.managedKey);
+    if (example && /Sender|Spam/.test(d.managedKey)) assert.ok(d.managedKey in example, 'example: ' + d.managedKey);
   }
-  assert.ok(!('managedPhishingSenders' in example));
+  if (example) assert.ok(!('managedPhishingSenders' in example));
   for (const k of ['enableSenderIdentity', 'enableSenderCountry', 'enableSenderDomainCheck', 'enableSenderAddressCheck', 'enableAutoSpam', 'enableSpamNotice']) assert.equal(S('SETTING_BY_KEY')[k].def, true, k);
   if (schema) assert.ok(!schema.properties.managedPhishingSenders && schema.properties.managedTrustedSenders);
 });
