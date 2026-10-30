@@ -1,6 +1,8 @@
-// content.js — runs inside Gmail (isolated world). Watches for opened messages, sends each link to
-// the background page for analysis, then rewrites or marks it; blocks tracking pixels; handles the 🔍
-// reveal; reports its own failures to the application log. Never reports Gmail's own errors.
+// content.js — runs inside each supported webmail (isolated world). Watches for opened messages, sends
+// each link to the background page for analysis, then rewrites or marks it; blocks tracking pixels;
+// handles the 🔍 reveal; reads senders, the inbox list and the toolbar through the shared mail engine
+// (one code path for every webmail, driven by its WEBMAIL_SITES entry); reports its own failures to
+// the application log. Never reports the webmail's own errors.
 // shared.js (loaded first) provides: isGhostAnchorStyle, detectLinkProblem, emailTrackerProvider,
 // BUILTIN_TRACKER_SET, hostInSet and the settings model.
 
@@ -8,8 +10,9 @@ let linkCount = 0;
 let pixelCount = 0;
 let visualOverridesActive = true;
 // ---------------------------------------------------------------------------
-// SITE ADAPTER: where message bodies are and how each webmail proxies images.
-// Gmail is fully supported; Outlook on the web and Proton Mail are experimental.
+// SITE ADAPTER: which webmail this is, from the WEBMAIL_SITES table (shared.js): where message bodies
+// are, how it proxies images, and its `mail` profile for the shared mail engine below. Gmail is one
+// entry of that table like the others.
 // ---------------------------------------------------------------------------
 const SITE = (() => {
     const inFrame = window !== window.top;
@@ -20,31 +23,68 @@ const SITE = (() => {
         try { const u = new URL(src); for (const n of names) { const v = u.searchParams.get(n); if (v && /^https?:\/\//i.test(v)) return v; } } catch (e) { /* ignore */ }
         return src;
     };
-    // Gmail's image proxy keeps the sender's original URL after a '#'.
-    const gmailOriginal = (src) => (/googleusercontent\.com\//.test(src) && src.includes('#http')) ? src.slice(src.indexOf('#') + 1) : src;
-    if (host === 'mail.google.com') {
+    const adapter = (site) => {
+        const proxy = site.imageProxy;
         return {
-            id: 'gmail', name: 'Gmail', body: '.ii.gt', settingKey: null, readFrames: false,
-            originalImageUrl: gmailOriginal,
-            // Proxied images are fetched by the extension from Google's proxy (never from the sender).
-            proxyImageUrl: (src) => /^https:\/\/[^/]*\.googleusercontent\.com\//.test(src) ? src.split('#')[0] : null,
-            attachments: true
-        };
-    }
-    const site = WEBMAIL_SITES.find(w => w.host.test(host) && (inFrame || !w.path || w.path.test(location.pathname)));
-    if (site) {
-        return {
-            id: site.id, name: site.name, settingKey: site.settingKey,
+            id: site.id, name: site.name, settingKey: site.settingKey || null,
             // In a site's message frame the whole frame is the message.
             body: inFrame && site.frameBody ? 'body' : site.body,
             readFrames: !inFrame && !!site.readFrames,
-            originalImageUrl: (src) => fromParam(src, site.imageParams || ['url']),
-            proxyImageUrl: () => null, attachments: false
+            // An image proxy that keeps the original address after "#" (Gmail's), or one that passes it
+            // as a query parameter.
+            originalImageUrl: (src) => (proxy && proxy.originalAfterHash && proxy.host.test(src) && src.includes('#http')) ? src.slice(src.indexOf('#') + 1)
+                : site.imageParams ? fromParam(src, site.imageParams) : src,
+            // Proxied images are fetched by the extension from the site's proxy (never from the sender).
+            proxyImageUrl: (src) => proxy && proxy.host.test(src) ? src.split('#')[0] : null,
+            attachments: site.attachments || null,
+            mail: site.mail || null
         };
-    }
+    };
+    const site = WEBMAIL_SITES.find(w => w.host.test(host) && (inFrame || !w.path || w.path.test(location.pathname)));
+    if (site) return adapter(site);
     // Pages of a supported host that aren't mail (e.g. iCloud Photos), and the test harness.
-    return { id: 'other', name: 'this site', body: '.ii.gt', settingKey: null, readFrames: false, originalImageUrl: gmailOriginal, proxyImageUrl: () => null, attachments: false };
+    return adapter({ id: 'other', name: 'this site', body: '.ii.gt', imageProxy: (WEBMAIL_SITES.find(w => w.imageProxy) || {}).imageProxy });
 })();
+
+// ---------------------------------------------------------------------------
+// MAIL ENGINE: reads any webmail's inbox list, opened emails, toolbar and compose window from its
+// `mail` profile (WEBMAIL_SITES in shared.js). The same code runs on every site; only the profile
+// differs. On a site without a profile, MAIL is null and only the checks inside opened emails run.
+// What a site can do follows from what its profile describes:
+//   MAIL_CAN.list     sender icons, labels and checks in the inbox list
+//   MAIL_CAN.opened   sender checks, icons and labels in opened emails
+//   MAIL_CAN.headers  signs in the email's original source (forged headers, DMARC…), server country
+//   MAIL_CAN.move     moving flagged emails to Spam with the site's own Report spam
+//   MAIL_CAN.compose  checking links before sending
+// ---------------------------------------------------------------------------
+const MAIL = SITE.mail;
+const MAIL_CAN = {
+    list: !!(MAIL && MAIL.list),
+    opened: !!(MAIL && MAIL.message),
+    headers: !!(MAIL && MAIL.headers),
+    move: !!(MAIL && MAIL.list && MAIL.toolbar && MAIL.views),
+    compose: !!(MAIL && MAIL.compose)
+};
+// The first element matching the comma-separated selectors, trying them in the order listed.
+function firstMatch(root, selectors) {
+    if (!root || !selectors) return null;
+    for (const sel of selectors.split(',')) { const el = root.querySelector(sel.trim()); if (el) return el; }
+    return null;
+}
+// An id read from an element by the profile's readers: { attr, match } (the pattern's first group) or
+// { attr, hex } (a hexadecimal id written as "<hex>:<decimal>").
+function readId(el, readers) {
+    if (!el || !readers) return null;
+    for (const r of readers) {
+        const v = el.getAttribute(r.attr);
+        if (!v) continue;
+        if (r.match) { const m = r.match.exec(v); if (m) return m[1]; continue; }
+        if (r.hex && /^[0-9a-f]{6,16}$/i.test(v)) { try { return `${r.hex}:${BigInt('0x' + v).toString()}`; } catch (e) { /* ignore */ } }
+    }
+    return null;
+}
+// Links to the webmail itself (its own pages) are never checked.
+function isOwnWebmailHost(host) { return !!(MAIL && MAIL.ownHosts && MAIL.ownHosts.includes(host)); }
 
 // Documents to scan. Several webmails (Proton, iCloud, Zoho, GMX) show each message in a frame. Some
 // of those frames are sandboxed without scripts, where extension scripts can't run; when the frame
@@ -105,14 +145,15 @@ function inBodies(suffix) {
 // Phishing simulations (administrator policies). While rules exist, an email is checked only after it
 // is known not to be a training email:
 //   - managedPhishSimulationDomains (every webmail): every link goes to the vendor's domains;
-//   - managedPhishSimulationRules (Gmail): the vendor's header (and secret value / sending address).
+//   - managedPhishSimulationRules (webmail whose original source can be read): the vendor's header
+//     (and secret value / sending address).
 // A training email is left completely alone (no lookups that could count as a click, no pixel
 // blocking that would hide "opened", no banners). If the check can't be made, the email is checked as
 // usual.
 let weakRulesLogged = false;
 let refusedDomainsLogged = false;
 function phishSimGate(body) {
-    const rules = SITE.id === 'gmail' ? ((lastPolicy && lastPolicy.phishSimRules) || []) : [];
+    const rules = MAIL_CAN.headers ? ((lastPolicy && lastPolicy.phishSimRules) || []) : [];
     const domains = (lastPolicy && lastPolicy.phishSimDomains) || [];
     if (!rules.length && !domains.length) return true;
     const st = body.dataset.unshortenerSim;
@@ -167,7 +208,7 @@ const processedLinksMap = new Map(); // Standard Map with explicit lifecycle cle
 function reportEvent(level, message) {
     try {
         if (!chrome.runtime || !chrome.runtime.id) return;   // extension reloaded: this tab's script is orphaned
-        chrome.runtime.sendMessage({ action: 'logEvent', level, source: 'Gmail', message: String(message) }, () => { void chrome.runtime.lastError; });
+        chrome.runtime.sendMessage({ action: 'logEvent', level, source: SITE.name, message: String(message) }, () => { void chrome.runtime.lastError; });
     } catch (e) { /* nothing more can be done from an orphaned script */ }
 }
 
@@ -238,7 +279,7 @@ function linkStats() {
         const disabled = a.hasAttribute('data-unshortener-original-href');
         const href = disabled ? a.getAttribute('data-unshortener-original-href') : (a.getAttribute('href') || '');
         if (!/^\s*(https?|javascript|data|vbscript|blob|file):/i.test(href)) continue;
-        if (!disabled) { try { if (new URL(a.href).hostname === 'mail.google.com') continue; } catch (e) { continue; } }
+        if (!disabled) { try { if (isOwnWebmailHost(new URL(a.href).hostname)) continue; } catch (e) { continue; } }
         s.total++;
         const d = processedLinksMap.get(a);
         if (disabled) { s.scanned++; s.unsafe++; }
@@ -712,7 +753,7 @@ function unshortenLinks() {
 
     safeSend({ action: 'getSettings' }, (cfg) => guarded('Scanning an email', () => {
         if (!cfg || !cfg.values) {
-            reportEvent('error', 'Settings could not be loaded, so this email was not scanned. Reload Gmail; if it keeps happening, reload the extension.');
+            reportEvent('error', `Settings could not be loaded, so this email was not scanned. Reload ${SITE.name}; if it keeps happening, reload the extension.`);
             return;
         }
         lastSettings = cfg.values;
@@ -746,7 +787,7 @@ function unshortenLinks() {
         links.forEach(link => {
             const originalUrl = link.href;
 
-            // Decide by the parsed host. (A substring test on "mail.google.com" let any link skip
+            // Decide by the parsed host. (A substring test on the webmail's own host let any link skip
             // scanning just by containing that text, e.g. https://evil.example/?x=mail.google.com.)
             let linkHost = '';
             try {
@@ -757,7 +798,7 @@ function unshortenLinks() {
                 flagRiskySchemeLink(link, riskyScheme(link.getAttribute('href')));
                 return;
             }
-            if (link.dataset.unshortened || !linkHost || linkHost === 'mail.google.com') {
+            if (link.dataset.unshortened || !linkHost || isOwnWebmailHost(linkHost)) {
                 return;
             }
 
@@ -925,9 +966,9 @@ function maybeScanQr(img) {
         .catch(() => { img.dataset.qr = 'failed'; });
 }
 
-// Gmail attachments. Located by the chip's download_url attribute ("mime:name:url") and, as a
-// fallback, by download links (attid= with view=att / disp=). Each is fetched with the user's own Gmail
-// session (same site) and checked on this device, by type:
+// Attachments, located as the site's `attachments` entry describes (Gmail: the chip's download_url
+// attribute, "mime:name:url", and as a fallback its download links, attid= with view=att / disp=).
+// Each is fetched with the user's own session (same site) and checked on this device, by type:
 //   images, PDFs → QR codes (+ PDF links) · SVG, HTML → scripts, redirects, fake logins · .ics → links
 //   ZIP/RAR/7z → encrypted? · any file name → hidden text-direction characters
 const ATTACHMENT_MAX_PER_SCAN = 6;
@@ -935,14 +976,18 @@ const EXT_MIME = { pdf: 'application/pdf', svg: 'image/svg+xml', svgz: 'image/sv
     xhtml: 'text/html', ics: 'text/calendar', zip: 'application/zip', rar: 'application/x-rar', '7z': 'application/x-7z-compressed',
     png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', bmp: 'image/bmp' };
 
+// Attachment cards, as the site's `attachments` entry describes them: an attribute holding
+// "mime:name:address" (cardAttr), and download links (link selector, href pattern).
 function findAttachments() {
     const found = [];
-    for (const el of document.querySelectorAll('[download_url]')) {
-        const parts = String(el.getAttribute('download_url')).split(':');
+    const A = SITE.attachments;
+    if (!A) return found;
+    if (A.cardAttr) for (const el of document.querySelectorAll(`[${A.cardAttr}]`)) {
+        const parts = String(el.getAttribute(A.cardAttr)).split(':');
         if (parts.length >= 3) found.push({ el, mime: parts[0], name: parts[1], url: parts.slice(2).join(':') });
     }
-    for (const a of document.querySelectorAll('a[href*="attid="]')) {
-        if (!/[?&](view=att|disp=(safe|inline|attd))/.test(a.getAttribute('href'))) continue;
+    if (A.link) for (const a of document.querySelectorAll(A.link)) {
+        if (A.linkHref && !A.linkHref.test(a.getAttribute('href'))) continue;
         if (found.some(f => f.url === a.href)) continue;
         const name = (a.getAttribute('download') || a.getAttribute('aria-label') || a.textContent || '').replace(/^Download (attachment )?/i, '').trim();
         const ext = (name.match(/\.([a-z0-9]{1,5})$/i) || [])[1];
@@ -973,7 +1018,7 @@ function infoBar(anchor, text, severity) {
     anchor.after(bar);
     // A dangerous attachment counts in the email's verdict (sender label, banner, Spam).
     if (severity === 'danger') {
-        const msg = anchor.closest('.adn, [data-message-id], .gs');
+        const msg = MAIL_CAN.opened ? anchor.closest(MAIL.message.container) : null;
         const body = msg && msg.querySelector(SITE.body);
         if (body) scheduleBannerRefresh(body);
     }
@@ -1221,43 +1266,64 @@ function showScanResults(anchor, res, label, img) {
 function hostLabel(u) { try { return new URL(u).hostname; } catch (e) { return u; } }
 
 // ---------------------------------------------------------------------------
-// SENDER CHECKS (Gmail). Gmail's own authentication verdict for the open email is read from the
-// message's original source ("Show original", same site, the user's own session) only when needed:
+// SENDER CHECKS (webmail with a `mail` profile). The webmail's own authentication verdict for the open
+// email is read from the message's original source (Gmail's "Show original"; same site, the user's
+// own session; the profile's `headers` entry) only when needed:
 // the email contains a company-only short link (c.gle…) whose destination is unknown, or the
 // sender's name claims a brand. Nothing is sent anywhere else. Results are cached per message.
 // ---------------------------------------------------------------------------
-const messageAuth = new Map();          // Gmail message id → Promise<auth | null>
+const messageAuth = new Map();          // message id → Promise<auth | null>
 const MESSAGE_AUTH_MAX = 100;
-let gmailIkCache = null;
+const pageValueCache = new Map();
 let authFetchFailureLogged = false;
 
-function senderChecksActive() { return SITE.id === 'gmail' && lastSettings.enableSenderChecks !== false; }
+function senderChecksActive() { return MAIL_CAN.opened && lastSettings.enableSenderChecks !== false; }
 
-// The permanent id of the message a body belongs to, as "msg-f:<decimal>".
-function gmailMessageId(el) {
-    const holder = el.closest('[data-message-id], [data-legacy-message-id]');
-    if (!holder) return null;
-    const permanent = (holder.getAttribute('data-message-id') || '').replace(/^#/, '');
-    if (/^msg-f:\d+$/.test(permanent)) return permanent;
-    const legacy = holder.getAttribute('data-legacy-message-id');
-    if (legacy && /^[0-9a-f]{6,16}$/i.test(legacy)) { try { return `msg-f:${BigInt('0x' + legacy).toString()}`; } catch (e) { /* ignore */ } }
-    return null;
+// The permanent id of the message a body belongs to (Gmail: "msg-f:<decimal>").
+function messageIdOf(el) {
+    if (!MAIL || !MAIL.ids || !MAIL.ids.messageHolder) return null;
+    return readId(el.closest(MAIL.ids.messageHolder), MAIL.ids.message);
 }
 
-// Gmail's account key (ik): from the page's GLOBALS script, else from any link that carries it.
-function gmailIk() {
-    if (gmailIkCache !== null) return gmailIkCache;
-    let ik = '';
-    for (const s of document.querySelectorAll('script:not([src])')) {
-        const m = /GLOBALS\s*=\s*\[((?:[^\]]){0,3000})/.exec(s.textContent || '');
-        if (m) { const parts = m[1].split(','); const v = (parts[9] || '').replace(/["'\s]/g, ''); if (/^[0-9a-f]{8,12}$/i.test(v)) { ik = v; break; } }
+// A value the original-source address needs, as the profile describes it: from the page address
+// (path pattern), from an inline script (pattern, then the field-th comma-separated item), or from
+// any link that carries it (linkParam). Remembered for the page.
+function pageValue(name, spec) {
+    if (pageValueCache.has(name)) return pageValueCache.get(name);
+    let v = '';
+    const ok = (x) => !!x && (!spec.valid || spec.valid.test(x));
+    if (spec.path) { const m = spec.path.exec(location.pathname); if (m) v = m[1]; }
+    if (!v && spec.script) {
+        for (const sc of document.querySelectorAll('script:not([src])')) {
+            const m = spec.script.exec(sc.textContent || '');
+            if (!m) continue;
+            const x = spec.field === undefined ? m[1] : (m[1].split(',')[spec.field] || '').replace(/["'\s]/g, '');
+            if (ok(x)) { v = x; break; }
+        }
     }
-    if (!ik) { const a = document.querySelector('a[href*="ik="]'); const m = a && /[?&]ik=([0-9a-f]{8,12})/i.exec(a.getAttribute('href')); if (m) ik = m[1]; }
-    gmailIkCache = ik;
-    return ik;
+    if (!v && spec.linkParam) {
+        const a = document.querySelector(`a[href*="${spec.linkParam}="]`);
+        const m = a && new RegExp(`[?&]${spec.linkParam}=([^&#]+)`).exec(a.getAttribute('href'));
+        if (m && ok(m[1])) v = m[1];
+    }
+    if (!v && spec.fallback !== undefined) v = spec.fallback;
+    if (!spec.path) pageValueCache.set(name, v);          // the account in the address can change
+    return v;
+}
+// The address of a message's original source, from the profile's template.
+function headersUrl(id) {
+    const H = MAIL.headers;
+    return H.url.replace(/\{(\w+)\}/g, (m, k) => {
+        if (k === 'origin') return location.origin;
+        if (k === 'id') return encodeURIComponent(id);
+        const spec = H.values && H.values[k];
+        if (!spec) return '';
+        const v = pageValue(k, spec);
+        return v ? (spec.format ? spec.format.replace('{value}', encodeURIComponent(v)) : encodeURIComponent(v)) : '';
+    });
 }
 
-// "Show original" is the whole raw message, attachments included (possibly megabytes); only the
+// The original source is the whole raw message, attachments included (possibly megabytes); only the
 // headers at the top are needed, so reading stops once they end (blank line), at most 512 KB.
 async function readUntilHeadersEnd(response) {
     if (!response.body || !response.body.getReader) return response.text();
@@ -1280,31 +1346,29 @@ async function readUntilHeadersEnd(response) {
     return text;
 }
 
-// The open email's headers from Gmail's "Show original" ({ raw, auth }), read once per email and
-// shared by the sender checks and the phishing-simulation check; null if they can't be read.
+// The open email's headers from its original source ({ raw, auth }), read once per email and shared
+// by the sender checks and the phishing-simulation check; null if they can't be read.
 function getMessageHeaders(el) {
-    return getMessageHeadersById(gmailMessageId(el));
+    return getMessageHeadersById(messageIdOf(el));
 }
 function getMessageHeadersById(id) {
-    if (!id) return Promise.resolve(null);
+    if (!id || !MAIL_CAN.headers) return Promise.resolve(null);
     if (messageAuth.has(id)) return messageAuth.get(id);
     if (messageAuth.size >= MESSAGE_AUTH_MAX) messageAuth.delete(messageAuth.keys().next().value);
-    const account = (/\/mail\/u\/(\d+)/.exec(location.pathname) || [, '0'])[1];
-    const ik = gmailIk();
-    const url = `${location.origin}/mail/u/${account}/?${ik ? `ik=${ik}&` : ''}view=om&permmsgid=${encodeURIComponent(id)}`;
-    const p = fetch(url, { credentials: 'include' })
+    const H = MAIL.headers;
+    const p = fetch(headersUrl(id), { credentials: 'include' })
         .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return readUntilHeadersEnd(r); })
         .then(text => {
             let raw = text;
             if (/<pre[\s>]/i.test(text)) {
                 const doc = new DOMParser().parseFromString(text, 'text/html');
-                const pre = doc.querySelector('#raw_message_text, pre.raw_message_text, pre');
+                const pre = firstMatch(doc, H.text || 'pre');
                 raw = pre ? pre.textContent : text;
             }
-            return { raw, auth: parseAuthResults(raw) };
+            return { raw, auth: parseAuthResults(raw, H.receiver && H.receiver.host) };
         })
         .catch(e => {
-            if (!authFetchFailureLogged) { authFetchFailureLogged = true; reportEvent('warning', `Gmail's original message could not be read (${e.message}), so senders are treated as not checked.`); }
+            if (!authFetchFailureLogged) { authFetchFailureLogged = true; reportEvent('warning', `${SITE.name}'s original message could not be read (${e.message}), so senders are treated as not checked.`); }
             return null;
         });
     messageAuth.set(id, p);
@@ -1313,7 +1377,7 @@ function getMessageHeadersById(id) {
 
 function getMessageAuth(el) {
     return getMessageHeaders(el).then(h => {
-        if (h && !h.auth && !authFetchFailureLogged) { authFetchFailureLogged = true; reportEvent('warning', 'Sender checks: no authentication results from Gmail in the original message, so senders are treated as not checked.'); }
+        if (h && !h.auth && !authFetchFailureLogged) { authFetchFailureLogged = true; reportEvent('warning', `Sender checks: no authentication results from ${SITE.name} in the original message, so senders are treated as not checked.`); }
         return h ? h.auth : null;
     });
 }
@@ -1344,11 +1408,13 @@ function verifyCompanyLink(el, d, company) {
     }));
 }
 
-// The sender shown by Gmail for the message a body belongs to.
-function gmailSenderOf(body) {
-    const msg = body.closest('.adn, [data-message-id], .gs') || document;
-    const s = msg.querySelector('.gD[email]');
-    return s ? { name: s.getAttribute('name') || s.textContent.trim(), address: (s.getAttribute('email') || '').toLowerCase() } : null;
+// The sender the webmail shows for the message a body belongs to.
+function openedSenderOf(body) {
+    if (!MAIL_CAN.opened) return null;
+    const msg = body.closest(MAIL.message.container) || document;
+    const s = msg.querySelector(MAIL.message.sender);
+    const A = MAIL.senderAttrs || {};
+    return s ? { name: (A.name && s.getAttribute(A.name)) || s.textContent.trim(), address: ((A.address && s.getAttribute(A.address)) || '').toLowerCase() } : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -1440,7 +1506,7 @@ const CATEGORY_TEXT = {
 
 function refreshEmailBanner(body) {
     if (!body.isConnected) return;
-    if (SITE.id === 'gmail' && openedStates.has(body)) updateOpenedVerdict(body);
+    if (MAIL_CAN.opened && openedStates.has(body)) updateOpenedVerdict(body);
     const st = bannerState(body);
     const companyGroups = new Map(), dangerLinks = [], cautionLinks = [];
     for (const [el, d] of processedLinksMap) {
@@ -1684,24 +1750,27 @@ function attachHoverCard(doc) {
 attachHoverCard(document);
 
 // ---------------------------------------------------------------------------
-// CHECKING LINKS BEFORE SENDING (Gmail). Send (the button, or Ctrl/⌘+Enter) is held while the links
+// CHECKING LINKS BEFORE SENDING (webmail whose profile describes its compose window). Send (the
+// button, or Ctrl/⌘+Enter) is held while the links
 // in the new message are checked; the quoted original is left out. If any link has a problem, a
 // dialog lists them and the user goes back to fix them or sends anyway. An email without links
 // sends at once. Checks that can't finish (network down, too slow) don't block sending.
 // ---------------------------------------------------------------------------
 const sendApproved = new WeakSet();      // compose windows allowed to send (our own repeated click)
 let sendCheckRunning = false;
-const COMPOSE_BODY_SELECTOR = 'div[contenteditable="true"][g_editable="true"], div[contenteditable="true"][role="textbox"]';
+const COMPOSE_BODY_SELECTOR = MAIL_CAN.compose ? MAIL.compose.body : '';
 
-function sendCheckActive() { return SITE.id === 'gmail' && protectionOn() && lastSettings.enableSendCheck !== false; }
+function sendCheckActive() { return MAIL_CAN.compose && protectionOn() && lastSettings.enableSendCheck !== false; }
 
-function gmailSendButtonFrom(target) {
+// The Send button a click or key went to: its label says Send (and not Schedule…), or it carries the
+// site's own class for Send in any language (Gmail's long-stable one).
+function sendButtonFrom(target) {
     const b = target && target.closest ? target.closest('[role="button"]') : null;
     if (!b) return null;
+    const C = MAIL.compose;
     const label = (b.getAttribute('data-tooltip') || b.getAttribute('aria-label') || '').trim();
-    if (/schedule|later|more send options/i.test(label)) return null;
-    // "Send" in English, or Gmail's own (long-stable) class for the Send button in any language.
-    if (!/^send\b/i.test(label) && !b.classList.contains('aoO')) return null;
+    if (C.notSend && C.notSend.test(label)) return null;
+    if (!(C.send && C.send.test(label)) && !(C.sendClass && b.classList.contains(C.sendClass))) return null;
     return b;
 }
 function composeOf(el) {
@@ -1871,10 +1940,10 @@ function onSendAttempt(e) {
         if (e.key !== 'Enter' || !(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) return;
         compose = composeOf(e.target);
         if (!compose) return;
-        btn = [...compose.querySelectorAll('[role="button"]')].find(b => gmailSendButtonFrom(b));
+        btn = [...compose.querySelectorAll('[role="button"]')].find(b => sendButtonFrom(b));
         if (!btn) return;
     } else {
-        btn = gmailSendButtonFrom(e.target);
+        btn = sendButtonFrom(e.target);
         if (!btn) return;
         compose = composeOf(btn);
         if (!compose) return;
@@ -1892,18 +1961,18 @@ function onSendAttempt(e) {
         });
     }
 }
-if (SITE.id === 'gmail') {
+if (MAIL_CAN.compose) {
     for (const t of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click', 'keydown']) document.addEventListener(t, onSendAttempt, true);
 }
 
-// Checks each message's sender once: names claiming a brand, look-alike domains, and (with Gmail's
-// verdict, fetched only when the name claims a brand or a company-only link is present) brand
+// Checks each message's sender once: names claiming a brand, look-alike domains, and (with the
+// webmail's verdict, fetched only when the name claims a brand or a company-only link is present) brand
 // domains failing verification and scam text inside genuine company notifications.
 function scanSenders() {
     if (!senderChecksActive()) return;
     for (const body of inBodies('')) {
         if (body.dataset.senderChecked || !isShown(body)) continue;
-        const sender = gmailSenderOf(body);
+        const sender = openedSenderOf(body);
         if (!sender || !sender.address) continue;
         body.dataset.senderChecked = '1';
         const needsVerdict = !!displayNameBrand(sender.name) || [...body.querySelectorAll('a[href]')].some(a => companyOnlyShortener(a.href));
@@ -1919,12 +1988,13 @@ function scanSenders() {
 }
 
 // ---------------------------------------------------------------------------
-// SENDER IDENTITY AND AUTOMATIC SPAM (Gmail). Every sender in the inbox list and in opened emails gets
+// SENDER IDENTITY AND AUTOMATIC SPAM (webmail with a `mail` profile; Gmail today). Every sender in the
+// inbox list and in opened emails gets
 // its site icon, the country flag and a domain label colored by its check (checkSender in
 // background.js). An email whose sender is FLAGGED (never one that is unverified, unknown or clean) is
-// moved to Spam with Gmail's own Report spam button, only from the inbox and only once: conversations
+// moved to Spam with the webmail's own Report spam button, only from the inbox and only once: conversations
 // the extension moved are remembered, so one the user takes back out of Spam stays where they put it.
-// A short notice at the top of Gmail says how many were moved, with a link to the Spam folder.
+// A short notice at the top of the webmail says how many were moved, with a link to the Spam folder.
 // Nothing here runs on a training email from your phishing simulation (administrator policies).
 // ---------------------------------------------------------------------------
 const senderResults = new Map();           // raw address → Promise<result | null>, for this page
@@ -1959,54 +2029,55 @@ const STATUS_SHOWN = new Set(['flagged', 'caution', 'trusted']);
 const STATUS_RANK = { flagged: 5, caution: 4, unknown: 3, unverified: 2, trusted: 1, clean: 1, pending: 0 };
 
 function senderFeaturesOn(S) {
-    return SITE.id === 'gmail' && !!(S.enableSenderIdentity || S.enableSenderDomainCheck || S.enableSenderAddressCheck);
+    return (MAIL_CAN.list || MAIL_CAN.opened) && !!(S.enableSenderIdentity || S.enableSenderDomainCheck || S.enableSenderAddressCheck);
 }
 
-function gmailIdFromHex(prefix, hex) {
-    if (!hex || !/^[0-9a-f]{6,16}$/i.test(hex)) return null;
-    try { return `${prefix}:${BigInt('0x' + hex).toString()}`; } catch (e) { return null; }
-}
-// "thread-f:<decimal>" from a list row's subject or an open conversation's title.
-function gmailThreadKey(el) {
-    if (!el) return null;
-    const perm = (el.getAttribute('data-thread-perm-id') || el.getAttribute('data-thread-id') || '').replace(/^#/, '');
-    if (/^thread-f:\d+$/.test(perm)) return perm;
-    return gmailIdFromHex('thread-f', el.getAttribute('data-legacy-thread-id'));
-}
-function rowThreadElement(row) { return row.querySelector('[data-thread-id], [data-legacy-thread-id]'); }
-function rowThreadKey(row) { return gmailThreadKey(rowThreadElement(row)); }
+// Conversation ids (Gmail: "thread-f:<decimal>") of a list row and of the open conversation, and the
+// id of a row's newest message, as the profile's `ids` entry describes them.
+function rowThreadElement(row) { return MAIL && MAIL.ids ? row.querySelector(MAIL.ids.rowThread) : null; }
+function rowThreadKey(row) { return MAIL && MAIL.ids ? readId(rowThreadElement(row), MAIL.ids.thread) : null; }
+function rowLastMessageId(row) { return MAIL && MAIL.ids ? readId(rowThreadElement(row), MAIL.ids.rowLastMessage) : null; }
 function currentThreadKey() {
-    const h = [...document.querySelectorAll('h2[data-thread-perm-id], h2[data-legacy-thread-id]')].find(isShown);
-    return h ? gmailThreadKey(h) : null;
+    if (!MAIL || !MAIL.openThread) return null;
+    const h = [...document.querySelectorAll(MAIL.openThread)].find(isShown);
+    return h ? readId(h, MAIL.ids.thread) : null;
 }
+// The rows of the inbox list, and their state (the profile's `list` entry).
+function listRows() { return MAIL_CAN.list ? [...document.querySelectorAll(MAIL.list.row)] : []; }
+function rowIsUnread(row) { return !!(MAIL.list.unread && row.matches(MAIL.list.unread)); }
+function rowCheckbox(row) { return row.querySelector(MAIL.list.checkbox); }
+function rowIsSelected(row) { return !!(MAIL.list.selected && row.matches(MAIL.list.selected)) || (rowCheckbox(row) || { getAttribute: () => null }).getAttribute('aria-checked') === 'true'; }
 
-// The signed-in account ("Subject - name@school.org - Gmail" in the title), and its organization's
-// domain. The LAST address in the title is the account's: an email's subject comes first and can
-// contain any address. A personal-mail domain (gmail.com…) is no organization: others share it.
-function gmailAccountAddress() {
+// The signed-in account (Gmail: "Subject - name@school.org - Gmail" in the title), and its
+// organization's domain. The LAST address in the title is the account's: an email's subject comes
+// first and can contain any address. A personal-mail domain (gmail.com…) is no organization: others
+// share it.
+function accountAddress() {
+    if (!MAIL || !MAIL.account || !MAIL.account.fromTitle) return '';
     const all = (document.title || '').match(/[A-Za-z0-9._%+'-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g);
     return all ? all[all.length - 1].toLowerCase() : '';
 }
 function ownOrgDomain() {
-    const d = domainOfAddress(gmailAccountAddress());
+    const d = domainOfAddress(accountAddress());
     return d && !isPersonalMailDomain(d) ? d : '';
 }
 
-// A sender as Gmail shows it: { raw, address, domain, name }. Broken addresses (encoded parts, more
-// than 64 characters before the @…) are kept: they are themselves a sign of forgery.
+// A sender as the webmail shows it: { raw, address, domain, name }. Broken addresses (encoded parts,
+// more than 64 characters before the @…) are kept: they are themselves a sign of forgery.
 function senderOf(el) {
+    const A = (MAIL && MAIL.senderAttrs) || {};
     // As written: an encoded part ("=?UTF-8?B?…?=") is case-sensitive, so it's never lower-cased.
-    const raw = String(el.getAttribute('email') || '').trim();
+    const raw = String((A.address && el.getAttribute(A.address)) || '').trim();
     const p = parseSenderAddress(raw);
-    return p ? { raw, address: p.address, domain: p.domain, name: el.getAttribute('name') || el.textContent.trim() } : null;
+    return p ? { raw, address: p.address, domain: p.domain, name: (A.name && el.getAttribute(A.name)) || el.textContent.trim() } : null;
 }
 
-// Senders shown in a list row (up to 3, without the signed-in user), in the order Gmail shows them.
+// Senders shown in a list row (up to 3, without the signed-in user), in the order the webmail shows them.
 function rowSenders(row) {
-    const me = gmailAccountAddress();
+    const me = accountAddress();
     const out = new Map();
-    let spans = row.querySelectorAll('.yW [email], .yX [email]');
-    if (!spans.length) spans = row.querySelectorAll('[email]');
+    let spans = row.querySelectorAll(MAIL.list.sender);
+    if (!spans.length && MAIL.senderAttrs && MAIL.senderAttrs.address) spans = row.querySelectorAll(`[${MAIL.senderAttrs.address}]`);
     for (const s of spans) {
         const who = senderOf(s);
         if (!who || who.address === me || out.has(who.raw)) continue;
@@ -2092,8 +2163,9 @@ function messageInfo(msgId) {
             const from = ((headers.find(([n]) => n === 'from') || [])[1] || '');
             const fm = /<([^>]*)>\s*$/.exec(from);
             const parsed = parseSenderAddress(fm ? fm[1] : ((from.match(EMAIL_IN_TEXT_RE) || [])[0] || from));
-            const an = headerAnomalies(h.raw, gmailAccountAddress());
-            const info = { fh: parsed ? addressFingerprint(parsed.address) : '', ip: gmailDeliveringIp(headers) || '', an, v: HEADER_SIGNS_VERSION, t: Date.now() };
+            const receiver = MAIL.headers.receiver || {};
+            const an = headerAnomalies(h.raw, accountAddress(), receiver);
+            const info = { fh: parsed ? addressFingerprint(parsed.address) : '', ip: deliveringIp(headers, receiver.host) || '', an, v: HEADER_SIGNS_VERSION, t: Date.now() };
             cache[msgId] = info;
             saveSenderMessageCache();
             return info;
@@ -2184,16 +2256,15 @@ function logEmailVerdict(id, address, base, final) {
 
 // --- Inbox list ------------------------------------------------------------------------------------
 function scanSenderRows(S) {
-    const rows = [...document.querySelectorAll('tr.zA')].filter(isShown);
+    const rows = listRows().filter(isShown);
     if (!rows.length) return;
     const dark = isDarkSurface(rows[0]);
     for (const row of rows) {
         const senders = rowSenders(row);
         if (!senders.length) continue;
-        const threadEl = rowThreadElement(row);
-        const thread = gmailThreadKey(threadEl);
-        const msgId = threadEl ? gmailIdFromHex('msg-f', threadEl.getAttribute('data-legacy-last-message-id')) : null;
-        const unread = row.classList.contains('zE');
+        const thread = rowThreadKey(row);
+        const msgId = rowLastMessageId(row);
+        const unread = rowIsUnread(row);
         const key = [thread, msgId, unread ? 'u' : 'r', ...senders.map(s => s.raw), S.enableSenderIdentity ? 'id' : '', S.enableSenderCountry ? 'cc' : ''].join('|');
         // Unchanged since the last scan (and Gmail hasn't redrawn the row without our label).
         if (row.dataset.unshortenerSender === key && (!S.enableSenderIdentity || row.querySelector('.unshortener-sender-chip'))) continue;
@@ -2204,8 +2275,8 @@ function scanSenderRows(S) {
         if (S.enableSenderIdentity) {
             icon = senderIconEl(senders[0].domain, S);
             chip = senderChipEl(senders[0].domain, dark, senders[0].address);
-            const nameCell = row.querySelector('.yW') || row.querySelector('.yX');
-            const subject = row.querySelector('.xT') || row.querySelector('.y6');
+            const nameCell = firstMatch(row, MAIL.list.nameCell);
+            const subject = firstMatch(row, MAIL.list.subjectCell);
             if (nameCell) nameCell.insertBefore(icon, nameCell.firstChild);
             if (subject) subject.insertBefore(chip, subject.firstChild);
             else if (nameCell) nameCell.insertBefore(chip, icon.nextSibling);
@@ -2265,7 +2336,7 @@ function emailContentSignals(body) {
         out.push({ weight: danger >= 2 || danger === total ? 5 : 3,
             text: `${danger === total ? (danger === 1 ? 'Its only link is' : `All ${danger} of its links are`) : `${danger} of its ${total} links ${danger === 1 ? 'is' : 'are'}`} flagged as dangerous${why ? ` (${why})` : ''}.` });
     }
-    const msg = body.closest('.adn, [data-message-id], .gs') || body.parentElement;
+    const msg = (MAIL_CAN.opened && body.closest(MAIL.message.container)) || body.parentElement;
     if (msg) {
         if (msg.querySelector('.unshortener-qr-bar[data-severity="danger"]')) out.push({ weight: 5, text: 'It has an attachment flagged as dangerous.' });
         const noname = findAttachments().filter(a => msg.contains(a.el) && /^noname(\.[a-z0-9]{1,5})?$/i.test(String(a.name || '').trim()));
@@ -2299,13 +2370,14 @@ function updateOpenedVerdict(body) {
 }
 
 function scanOpenedSenders(S) {
+    if (!MAIL_CAN.opened) return;
     for (const body of inBodies('')) {               // training emails are never in this list (phishSimGate)
         if (!isShown(body)) continue;
-        const msg = body.closest('.adn, [data-message-id], .gs') || body.parentElement;
-        const nameEl = msg && msg.querySelector('.gD[email]');
+        const msg = body.closest(MAIL.message.container) || body.parentElement;
+        const nameEl = msg && msg.querySelector(MAIL.message.sender);
         if (!nameEl) continue;
         const who = senderOf(nameEl);
-        if (!who || who.address === gmailAccountAddress()) continue;
+        if (!who || who.address === accountAddress()) continue;
         const key = `${who.raw}|${S.enableSenderIdentity ? 'id' : ''}|${S.enableSenderCountry ? 'cc' : ''}`;
         const holder = nameEl.parentElement;
         if (nameEl.dataset.unshortenerSender === key && (!S.enableSenderIdentity || !holder || holder.querySelector('.unshortener-sender-chip'))) continue;
@@ -2317,17 +2389,17 @@ function scanOpenedSenders(S) {
             chip = senderChipEl(who.domain, isDarkSurface(nameEl), who.address);
             chip.style.marginLeft = '6px';
             nameEl.insertAdjacentElement('beforebegin', icon);
-            const after = holder.querySelector('.go') || nameEl;
+            const after = (MAIL.message.senderAfter && holder.querySelector(MAIL.message.senderAfter)) || nameEl;
             after.insertAdjacentElement('afterend', chip);
         }
-        const msgId = gmailMessageId(body);
+        const msgId = messageIdOf(body);
         const st = { nameEl, chip, icon, address: who.address, domain: who.domain, name: who.name, msgId, thread: currentThreadKey(), base: null, info: null, authLine: [] };
         openedStates.set(body, st);
         Promise.all([senderResultsFor([who.raw]), messageInfo(msgId), getMessageAuth(body)]).then(([[r], info, auth]) => guarded('Showing who sent an email', () => {
             if (!nameEl.isConnected || nameEl.dataset.unshortenerSender !== key || !r || openedStates.get(body) !== st) return;
             st.base = r;
             st.info = info;
-            st.authLine = auth ? [`Gmail's sender verification: DMARC ${auth.dmarc}, SPF ${auth.spf}, DKIM ${auth.dkim}.`] : [];
+            st.authLine = auth ? [`${SITE.name}'s sender verification: DMARC ${auth.dmarc}, SPF ${auth.spf}, DKIM ${auth.dkim}.`] : [];
             if (icon && S.enableSenderCountry) {
                 setSenderFlag(icon, r.country, r.countrySource);
                 if (S.enableDnsThreatCheck && info && info.fh === addressFingerprint(who.address)) serverCountry(info).then(c => { if (c && nameEl.dataset.unshortenerSender === key) setSenderFlag(icon, c, 'server'); });
@@ -2363,44 +2435,44 @@ function sendWithTimeout(message, ms = 8000) {
     });
 }
 
-// The monitor: every few seconds while Gmail is shown, flagged rows still in the inbox are queued again,
+// The monitor: every few seconds while the webmail is shown, flagged rows still in the inbox are queued again,
 // a pass that never finished is abandoned, and waiting moves are retried. Moving never switches itself
 // off; after repeated failures it only pauses, for longer each time.
 function spamMonitor() {
-    if (SITE.id !== 'gmail' || document.hidden || !lastSettings.enableAutoSpam || !senderFeaturesOn(lastSettings)) return;
+    if (!MAIL_CAN.move || document.hidden || !lastSettings.enableAutoSpam || !senderFeaturesOn(lastSettings)) return;
     if (spamMoveRunning && Date.now() - spamMoveRunning > SPAM_RUN_TIMEOUT_MS) {
         spamMoveRunning = 0;
-        reportEvent('warning', 'Moving emails to Spam had stalled (Gmail or the extension didn\'t answer); it was restarted.');
+        reportEvent('warning', `Moving emails to Spam had stalled (${SITE.name} or the extension didn't answer); it was restarted.`);
     }
-    for (const row of document.querySelectorAll('tr.zA')) {
+    for (const row of listRows()) {
         if (!row.unshortenerSpam || !isShown(row)) continue;
         const thread = rowThreadKey(row);
         if (thread) queueSpamMove(thread, row.unshortenerSpam);
     }
     if (spamQueue.size && !spamMoveRunning && !spamMoveTimer) scheduleSpamMoves();
 }
-// Runs only while the Gmail tab is shown: stopped while it's in the background, so it never wakes the
+// Runs only while the webmail's tab is shown: stopped while it's in the background, so it never wakes the
 // computer for nothing (a background tab can't move emails anyway).
 let spamMonitorTimer = null;
 function setSpamMonitor() {
-    const on = SITE.id === 'gmail' && !document.hidden;
+    const on = MAIL_CAN.move && !document.hidden;
     if (on && !spamMonitorTimer) spamMonitorTimer = setInterval(() => guarded('Watching moves to Spam', spamMonitor), 5000);
     else if (!on && spamMonitorTimer) { clearInterval(spamMonitorTimer); spamMonitorTimer = null; }
 }
 setSpamMonitor();
 document.addEventListener('visibilitychange', setSpamMonitor);
 
-// The user's own activity in Gmail (a click, a key, the wheel, the mouse moving over the list).
+// The user's own activity in the webmail (a click, a key, the wheel, the mouse moving over the list).
 // Moving waits until there has been none for SPAM_QUIET_MS: rows never disappear under the pointer,
-// and Gmail's Undo for the user's own action isn't replaced by one for ours.
+// and the webmail's Undo for the user's own action isn't replaced by one for ours.
 const SPAM_QUIET_MS = 10000;
 let lastUserActivity = 0;
 function noteUserActivity(e) {
-    if (!e.isTrusted) return;                       // our own clicks on Gmail's buttons don't count
-    if (e.type === 'pointermove' && !(e.target && e.target.closest && e.target.closest('[role="main"], tr.zA'))) return;
+    if (!e.isTrusted) return;                       // our own clicks on the webmail's buttons don't count
+    if (e.type === 'pointermove' && !(e.target && e.target.closest && e.target.closest(`[role="main"], ${MAIL.list.row}`))) return;
     lastUserActivity = Date.now();
 }
-if (SITE.id === 'gmail') for (const t of ['pointerdown', 'keydown', 'wheel', 'pointermove']) document.addEventListener(t, noteUserActivity, { capture: true, passive: true });
+if (MAIL_CAN.move) for (const t of ['pointerdown', 'keydown', 'wheel', 'pointermove']) document.addEventListener(t, noteUserActivity, { capture: true, passive: true });
 function quietRemaining() { return Math.max(0, lastUserActivity + SPAM_QUIET_MS - Date.now()); }
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -2408,7 +2480,8 @@ async function waitFor(test, ms) {
     for (const end = Date.now() + ms; Date.now() < end; await sleep(100)) if (test()) return true;
     return test();
 }
-function gmailPress(el) {
+// A click as the webmail's own buttons expect it (some react to the press, not the click).
+function press(el) {
     for (const t of ['mouseover', 'mousedown', 'mouseup', 'click']) {
         el.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window, button: 0 }));
     }
@@ -2420,13 +2493,15 @@ function shownAll(selector) { return [...document.querySelectorAll(selector)].fi
 // Selected rows in the list shown. (Gmail keeps lists it showed earlier hidden in the page; a selection
 // left there doesn't count, or moving would wait forever.)
 function selectedRows() {
-    return [...document.querySelectorAll('tr.zA')].filter(r => isShown(r) && (r.classList.contains('x7') || (r.querySelector('[role="checkbox"]') || { getAttribute: () => null }).getAttribute('aria-checked') === 'true'));
+    return listRows().filter(r => isShown(r) && rowIsSelected(r));
 }
-// Anything selected that the toolbar would act on: shown rows, or Gmail's own select-all box (which
-// also covers a selection in a collapsed inbox section).
+// Each part of the toolbar selector, followed by a descendant selector.
+function inToolbar(descendant) { return MAIL.toolbar.split(',').map(t => `${t.trim()} ${descendant}`).join(', '); }
+// Anything selected that the toolbar would act on: shown rows, or the toolbar's own select-all box
+// (which also covers a selection in a collapsed inbox section).
 function anySelection() {
     if (selectedRows().length) return true;
-    const all = [...document.querySelectorAll('[gh="mtb"] [role="checkbox"], [gh="tm"] [role="checkbox"]')].find(isShown);
+    const all = [...document.querySelectorAll(inToolbar('[role="checkbox"]'))].find(isShown);
     return !!all && /^(true|mixed)$/.test(all.getAttribute('aria-checked') || '');
 }
 function userBusy() {
@@ -2435,21 +2510,24 @@ function userBusy() {
     return shownAll('[role="dialog"], [role="alertdialog"], [role="menu"], .unshortener-send-dialog').length > 0;
 }
 
-// Gmail's own Report spam button, by its label (several languages), or by Gmail's action number when
-// its label still says spam in another language. Never any other button.
+// The webmail's own Report spam button, by its label (several languages), or by the attribute the
+// profile names for it (spamAction; Gmail's action number) when its label still says spam in another
+// language. Never any other button.
 const REPORT_SPAM_LABEL = /^(report spam|spam melden|signaler comme spam|marcar como spam|denunciar spam|segnala come spam|als spam markeren|rapportér spam|rapporter som spam|rapportera som skräppost|zgłoś spam|nahlásit spam|ilmoita roskapostiksi)/i;
 const SPAM_WORD = /spam|skräp|迷惑|垃圾|스팸|спам/i;
 const UNSUBSCRIBE_LABEL = /unsubscribe|abmelden|abbestellen|désabonner|desuscribir|cancelar (la )?suscripción|annulla iscrizione|uitschrijven|afmeld|avsluta|wypisz/i;
-function gmailReportSpamButton() {
-    for (const b of document.querySelectorAll('[gh="mtb"] [role="button"], [gh="tm"] [role="button"], [act="9"][role="button"]')) {
+function reportSpamButton() {
+    const act = MAIL.spamAction;
+    const sel = inToolbar('[role="button"]') + (act ? `, [${act.attr}="${act.value}"][role="button"]` : '');
+    for (const b of document.querySelectorAll(sel)) {
         if (!isShown(b) || b.getAttribute('aria-disabled') === 'true' || b.closest('[role="dialog"], [role="alertdialog"], [role="menu"]')) continue;
         const label = (b.getAttribute('aria-label') || b.getAttribute('data-tooltip') || '').trim();
-        if (REPORT_SPAM_LABEL.test(label) || (b.getAttribute('act') === '9' && SPAM_WORD.test(label))) return b;
+        if (REPORT_SPAM_LABEL.test(label) || (act && b.getAttribute(act.attr) === act.value && SPAM_WORD.test(label))) return b;
     }
     return null;
 }
 
-// Gmail sometimes asks "Report spam and unsubscribe?". Only plain Report spam is ever chosen
+// The webmail may ask "Report spam and unsubscribe?" (Gmail does). Only plain Report spam is ever chosen
 // (unsubscribing from a phisher confirms your address); anything unclear is cancelled.
 function newDialogs(before) { return shownAll('[role="alertdialog"], [role="dialog"]').filter(d => !before.has(d)); }
 function cancelNewDialogs(before) {
@@ -2461,14 +2539,14 @@ async function confirmSpamDialog(before) {
     if (!dialog) return true;
     const buttons = [...dialog.querySelectorAll('button, [role="button"]')].filter(isShown);
     const plain = buttons.find(b => REPORT_SPAM_LABEL.test((b.textContent || b.getAttribute('aria-label') || '').trim()) && !UNSUBSCRIBE_LABEL.test(b.textContent || ''));
-    if (plain) { gmailPress(plain); return true; }
+    if (plain) { press(plain); return true; }
     dialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true }));
     return false;
 }
 
 // Still allowed to act, right now: the setting, the view and the user (checked before every click).
 function mayActNow() {
-    return !!lastSettings.enableAutoSpam && !document.hidden && gmailViewAllowsAutoSpam(location.hash) && !userBusy() && !quietRemaining();
+    return !!lastSettings.enableAutoSpam && !document.hidden && viewAllowsAutoSpam(location.hash, MAIL.views) && !userBusy() && !quietRemaining();
 }
 // Each row still shows the conversation it was checked for (Gmail can redraw a row for another one).
 function rowsStillMatch(items) {
@@ -2483,17 +2561,17 @@ const SPAM_CONFIRM_MS = 8000;
 async function reportSpamRows(items) {
     if (anySelection() || !mayActNow() || !rowsStillMatch(items)) return null;
     const none = { moved: [], ignored: items, failed: [] };
-    const boxes = items.map(it => it.row.querySelector('[role="checkbox"]'));
+    const boxes = items.map(it => rowCheckbox(it.row));
     if (boxes.some(b => !b)) return none;
-    const unselect = () => items.forEach((it, i) => { if (it.row.isConnected && boxes[i].getAttribute('aria-checked') === 'true') gmailPress(boxes[i]); });
-    boxes.forEach(gmailPress);
+    const unselect = () => items.forEach((it, i) => { if (it.row.isConnected && boxes[i].getAttribute('aria-checked') === 'true') press(boxes[i]); });
+    boxes.forEach(press);
     await sleep(200);
     const sel = selectedRows();
     if (sel.length !== items.length || items.some(it => !sel.includes(it.row)) || !rowsStillMatch(items)) { unselect(); return none; }
-    const btn = gmailReportSpamButton();
+    const btn = reportSpamButton();
     if (!btn || !mayActNow()) { unselect(); return btn ? null : none; }
     const before = new Set(shownAll('[role="alertdialog"], [role="dialog"]'));
-    gmailPress(btn);
+    press(btn);
     if (!await confirmSpamDialog(before)) { await sleep(200); cancelNewDialogs(before); unselect(); return { moved: [], ignored: [], failed: items }; }
     const gone = (it) => !it.row.isConnected || !isShown(it.row) || rowThreadKey(it.row) !== it.thread;
     await waitFor(() => items.every(gone), SPAM_CONFIRM_MS);
@@ -2507,10 +2585,10 @@ async function reportSpamOpenThread(item) {
     // The toolbar would act on a selection; and the conversation on screen must still be this one.
     if (anySelection() || !mayActNow() || currentThreadKey() !== item.thread) return null;
     const none = { moved: [], ignored: [item], failed: [] };
-    const btn = gmailReportSpamButton();
+    const btn = reportSpamButton();
     if (!btn) return none;
     const before = new Set(shownAll('[role="alertdialog"], [role="dialog"]'));
-    gmailPress(btn);
+    press(btn);
     if (!await confirmSpamDialog(before)) { await sleep(200); cancelNewDialogs(before); return { moved: [], ignored: [], failed: [item] }; }
     if (await waitFor(() => currentThreadKey() !== item.thread, SPAM_CONFIRM_MS)) return { moved: [item], ignored: [], failed: [] };
     cancelNewDialogs(before);
@@ -2554,7 +2632,7 @@ function forgetSpamThreads(items) {
 // The user takes conversations out of Spam (Not spam, Move to Inbox): remembered, so that whatever
 // put them there (Gmail or the extension), the extension never moves them back.
 const NOT_SPAM_LABEL = /^(not spam|move to inbox|kein spam|in den posteingang|pas un spam|non spam|déplacer vers la boîte de réception|no es spam|mover a recibidos|non è spam|sposta in posta in arrivo|geen spam|verplaatsen naar inbox|nie jest spamem|não é spam|mover para a caixa de entrada|inte skräppost)/i;
-function inSpamView() { return /^#(spam(\/|$)|search\/.*in(:|%3A)spam)/i.test(location.hash); }
+function inSpamView() { return !!(MAIL && MAIL.views && MAIL.views.spam && MAIL.views.spam.test(location.hash.replace(/^#/, ''))); }
 function onRescueClick(e) {
     if (!inSpamView()) return;
     const b = e.target && e.target.closest ? e.target.closest('[role="button"]') : null;
@@ -2564,7 +2642,7 @@ function onRescueClick(e) {
     if (open) threads.add(open);
     if (threads.size) rememberSpamThreads([...threads].map(thread => ({ thread, reason: 'taken out of Spam by you' })), 'rescued');
 }
-if (SITE.id === 'gmail') document.addEventListener('mousedown', onRescueClick, true);
+if (MAIL_CAN.move) document.addEventListener('mousedown', onRescueClick, true);
 
 // The conversations moved or rescued (see recordSpamMoves), kept in the page as one compact list (see
 // compactSet) and read again only when they change, not on every try. Resolves to { has(thread) },
@@ -2588,7 +2666,7 @@ function movedThreads() {
 // one (its verdict changed); null when it isn't shown right now (an email is open, the list is hidden).
 function rowForThread(thread) {
     let found = null;
-    for (const r of document.querySelectorAll('tr.zA')) {
+    for (const r of listRows()) {
         if (!isShown(r) || rowThreadKey(r) !== thread) continue;
         if (r.unshortenerSpam) return r;
         found = false;
@@ -2603,18 +2681,18 @@ async function runSpamMoves() {
     try {
         // Paused after repeated failures, hidden tab, not the inbox or the user is busy: wait (every
         // exit below looks again later while anything is queued).
-        if (Date.now() < spamPausedUntil || document.hidden || !gmailViewAllowsAutoSpam(location.hash) || userBusy() || quietRemaining()) return;
+        if (Date.now() < spamPausedUntil || document.hidden || !viewAllowsAutoSpam(location.hash, MAIL.views) || userBusy() || quietRemaining()) return;
         const current = currentThreadKey();
         // Several lists on the inbox page (Multiple Inboxes, Priority Inbox sections): some can show
         // conversations that aren't in the inbox, so nothing is moved from the list there.
-        if (!current && new Set(shownAll('tr.zA').map(r => r.closest('table'))).size > 1) {
+        if (!current && new Set(shownAll(MAIL.list.row).map(r => r.closest(MAIL.list.container || 'table'))).size > 1) {
             if (!multiListLogged) { multiListLogged = true; reportEvent('info', 'Emails from flagged senders are not moved to Spam from an inbox with several sections (Multiple Inboxes or Priority Inbox); they are still marked, and are moved when opened.'); }
             return;
         }
         // Split view (a conversation open beside the list): which one the toolbar acts on isn't certain,
         // so nothing is moved there.
-        if (current && shownAll('tr.zA').length) {
-            if (!splitViewLogged) { splitViewLogged = true; reportEvent('info', 'Emails from flagged senders are not moved to Spam while Gmail shows a conversation beside the list (split view); they are still marked.'); }
+        if (current && shownAll(MAIL.list.row).length) {
+            if (!splitViewLogged) { splitViewLogged = true; reportEvent('info', `Emails from flagged senders are not moved to Spam while ${SITE.name} shows a conversation beside the list (split view); they are still marked.`); }
             return;
         }
         // Only now the memory (after the cheap checks above, so a wait never reads it).
@@ -2681,14 +2759,14 @@ async function runSpamMoves() {
         }
         if (retry.length) { await forgetSpamThreads(retry); retry.forEach(it => spamQueue.delete(it.thread)); }
         for (const it of giveUp) { spamQueue.delete(it.thread); spamAttempted.add(it.thread); }
-        const notMoved = [...failed.map(it => Object.assign({}, it, { how: 'Gmail asked something unclear before reporting it, so that was cancelled' })),
-                          ...giveUp.map(it => Object.assign({}, it, { how: `Gmail didn't move it after ${SPAM_MAX_TRIES} tries (its Report spam button didn't respond as expected)` }))];
+        const notMoved = [...failed.map(it => Object.assign({}, it, { how: `${SITE.name} asked something unclear before reporting it, so that was cancelled` })),
+                          ...giveUp.map(it => Object.assign({}, it, { how: `${SITE.name} didn't move it after ${SPAM_MAX_TRIES} tries (its Report spam button didn't respond as expected)` }))];
         if (notMoved.length) rememberSpamThreads(notMoved, 'failed');
         if (!moved.length) {
             if (++spamMoveFailures >= SPAM_PAUSE_AFTER) {
                 const pause = Math.min(15000 * 2 ** (spamMoveFailures - SPAM_PAUSE_AFTER), 10 * 60 * 1000);
                 spamPausedUntil = Date.now() + pause;
-                reportEvent('warning', `Gmail didn't move flagged emails to Spam ${spamMoveFailures} times in a row (its Report spam button didn't respond as expected). Trying again in ${Math.round(pause / 1000)} seconds; they stay marked meanwhile.`);
+                reportEvent('warning', `${SITE.name} didn't move flagged emails to Spam ${spamMoveFailures} times in a row (its Report spam button didn't respond as expected). Trying again in ${Math.round(pause / 1000)} seconds; they stay marked meanwhile.`);
             }
         } else spamPausedUntil = 0;
     } finally {
@@ -2715,7 +2793,7 @@ function showSpamNotice(n) {
         el.setAttribute('aria-live', 'polite');
         const text = document.createElement('span');
         const review = document.createElement('a');
-        review.href = '#spam';
+        review.href = (MAIL.views && MAIL.views.spamHref) || '#';
         review.textContent = 'Review';
         review.addEventListener('click', () => close());
         const x = document.createElement('button');
@@ -2743,7 +2821,7 @@ function showSpamNotice(n) {
 
 // One pass over the inbox list and the opened emails.
 function scanSenderIdentity() {
-    if (SITE.id !== 'gmail') return;
+    if (!MAIL_CAN.list && !MAIL_CAN.opened) return;
     safeSend({ action: 'getSettings' }, (cfg) => guarded('Checking senders', () => {
         if (!cfg || !cfg.values) return;
         lastSettings = cfg.values;
@@ -2761,8 +2839,8 @@ function scanSenderIdentity() {
     }));
 }
 
-// Gmail's inbox rows are watched too, for the sender icons and checks.
-const WATCH_SELECTOR = SITE.id === 'gmail' ? `${SITE.body}, tr.zA` : SITE.body;
+// The inbox rows are watched too (webmail with a list profile), for the sender icons and checks.
+const WATCH_SELECTOR = MAIL_CAN.list ? `${SITE.body}, ${MAIL.list.row}` : SITE.body;
 
 // Watches for Gmail inserting a message body. Gmail changes the page constantly, so the callback
 // does as little as possible: text nodes and leaf elements (which cannot contain a message body)
@@ -2797,18 +2875,18 @@ function scheduleScan() {
 
 observer.observe(document.body, { childList: true, subtree: true });
 if (document.querySelector(SITE.body) || (SITE.readFrames && document.querySelector('iframe'))) setTimeout(() => guarded('Scanning an email', unshortenLinks), 500);
-if (SITE.id === 'gmail') setTimeout(scheduleScan, 500);
+if (MAIL) setTimeout(scheduleScan, 500);
 
 // Gmail switches views without reloading; report the state right away on navigation and tab switches.
 // Going back to the inbox shows the list Gmail kept, without inserting anything: scan it again.
-window.addEventListener('hashchange', () => { scheduleBadgeUpdate(); if (SITE.id === 'gmail') scheduleScan(); });
+window.addEventListener('hashchange', () => { scheduleBadgeUpdate(); if (MAIL) scheduleScan(); });
 window.addEventListener('popstate', scheduleBadgeUpdate);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { lastReported = ''; scheduleBadgeUpdate(); if (spamQueue.size) scheduleSpamMoves(); } });
 const SENDER_SETTING_KEYS = ['enableSenderIdentity', 'enableSenderCountry', 'enableSenderDomainCheck', 'enableSenderAddressCheck', 'enableAutoSpam', 'customTrustedSenders', 'customAllowlist', 'enableDnsThreatCheck'];
 // Turning protection on or off in Settings or the popup takes effect on the icon immediately.
 chrome.storage.onChanged.addListener((changes, area) => {
     // A policy change (for example sender features locked off) applies at once.
-    if (area === 'managed' && SITE.id === 'gmail') { spamQueue.clear(); senderResults.clear(); removeSenderDecorations(); scheduleScan(); return; }
+    if (area === 'managed' && MAIL) { spamQueue.clear(); senderResults.clear(); removeSenderDecorations(); scheduleScan(); return; }
     if (area !== 'local') return;
     if (changes.senderMessageCache && changes.senderMessageCache.newValue === undefined) senderMessageCache = null;   // cleared in Settings
     if (changes.spamMovedThreads || changes.spamRescuedThreads) spamMemory = null;   // read again when next needed
@@ -2818,7 +2896,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
     }
     if (relevant) scheduleBadgeUpdate();
     // Sender features switched on or off: drawn or removed right away.
-    if (SITE.id === 'gmail' && SENDER_SETTING_KEYS.some(k => changes[k])) {
+    if (MAIL && SENDER_SETTING_KEYS.some(k => changes[k])) {
         senderResults.clear();
         removeSenderDecorations();
         scheduleScan();

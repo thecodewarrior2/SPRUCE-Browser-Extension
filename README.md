@@ -101,7 +101,7 @@ Some policies exist for administrators only, with no setting in the extension:
 | `manifest.json` | Manifest V3 declaration, add-on ID, permissions, supported sites |
 | `background.html` | Background event page: loads the background scripts and the scanner |
 | `background.js` | Link pipeline, threat checks, list sync, badge |
-| `content.js` / `content.css` | Injected into webmail: banners, link markings, hover card, sender checks, sender icons and moving phishing to Spam (Gmail), the Send check |
+| `content.js` / `content.css` | Injected into webmail: banners, link markings, hover card, sender checks, sender icons and moving phishing to Spam, the Send check. One mail engine for every site, driven by the site's entry in `WEBMAIL_SITES` (`shared.js`); today only Gmail's entry describes its inbox list, toolbar and compose window |
 | `shared.js` | Settings, constants and helpers shared by all contexts |
 | `decoders.js` | Offline decoders for short links, gateways and trackers |
 | `custom-endpoints.js` | Requests and replies for your own lookup service or threat resolver |

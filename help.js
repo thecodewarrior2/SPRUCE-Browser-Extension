@@ -122,7 +122,7 @@
             [code('manifest.json'), 'Firefox', 'Manifest V3: add-on ID, permissions, background page, content scripts.'],
             [code('background.html'), 'background page', 'Loads the background scripts and the scanner (Firefox event page).'],
             [code('shared.js'), 'everywhere', 'Settings model and policy merging, domain lists, one-time detection, misleading-link checks, backup/restore, shared constants.'],
-            [code('content.js'), 'Gmail tab', 'Finds opened messages, sends links for analysis, rewrites and marks links, blocks pixels, reveal flow, error reporting.'],
+            [code('content.js'), 'webmail tab', 'Finds opened messages, sends links for analysis, rewrites and marks links, blocks pixels, reveal flow, error reporting. Its mail engine reads the inbox list, senders, toolbar and compose window of any webmail from that site\'s entry in WEBMAIL_SITES (shared.js): one code path for every site, Gmail included.'],
             [code('qr-decoder.js'), 'scanner', 'Self-contained QR Code reader (ISO/IEC 18004): finder patterns, perspective correction, Reed-Solomon.'],
             [code('scanner.js'), 'background page', 'Decodes QR codes in images and PDF pages and lists PDF links.'],
             [code('compat.js'), 'background page', 'Small shims for JavaScript features pdf.js uses that older Firefox versions lack.'],
