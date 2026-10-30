@@ -107,6 +107,12 @@ html[data-unshortener-pictures="medium"] .unshortener-row-avatar {
     border-radius: 3px;
     flex: none;
 }
+/* An icon that wouldn't show on the row (a black logo on the dark theme, a white one on the light
+   theme) sits on a small plate of a contrasting color (set by content.js). */
+.unshortener-sender-icon img.unshortener-icon-plate {
+    box-sizing: border-box;
+    padding: 1px;
+}
 /* A site without an icon gets an empty space of the same size (never a generic globe). */
 .unshortener-sender-blank {
     display: inline-block;
