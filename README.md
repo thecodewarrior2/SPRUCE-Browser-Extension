@@ -115,7 +115,7 @@ Settings can be forced with Google Workspace, Microsoft Intune or Group Policy. 
 [`policy-example.json`](policy-example.json) shows a complete policy.
 
 The sender features (Gmail) each have their own key (`managedEnableSenderIdentity`,
-`managedEnableSenderIconFallback`, `managedEnableSenderAvatars`, `managedEnableSenderBimi`, `managedEnableSenderCountry`, the row highlighter (`managedEnableRowHighlighter`, `managedRowHighlightColor`, `managedRowHighlightStyle`, `managedRowHighlightSelected`, `managedRowHighlightSelectedColor`) and warnings about overlapping extensions (`managedEnableConflictWarnings`), `managedEnableSenderDomainCheck`, `managedEnableSenderAddressCheck`,
+`managedEnableSenderIconFallback`, `managedEnableSenderAvatars`, `managedEnableSenderBimi`, `managedSenderPictureSize`, `managedEnableSenderCountry`, the row highlighter (`managedEnableRowHighlighter`, `managedRowHighlightColor`, `managedRowHighlightStyle`, `managedRowHighlightSelected`, `managedRowHighlightSelectedColor`) and warnings about overlapping extensions (`managedEnableConflictWarnings`), `managedEnableSenderDomainCheck`, `managedEnableSenderAddressCheck`,
 `managedEnableAutoSpam`, `managedEnableSpamNotice`); `managedTrustedSenders` is the allow list of senders never to flag or move
 (addresses or whole domains), for example your phishing-training provider or a false positive. There is
 no sender block list: users report anything missed with Gmail's own Report spam.

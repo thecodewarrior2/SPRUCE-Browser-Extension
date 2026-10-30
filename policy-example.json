@@ -26,6 +26,9 @@
   "managedEnableSenderBimi": {
     "Value": true
   },
+  "managedSenderPictureSize": {
+    "Value": "auto"
+  },
   "managedEnableRowHighlighter": {
     "Value": true
   },

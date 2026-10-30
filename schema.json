@@ -49,6 +49,17 @@
       "description": "Show the logo a company publishes in DNS for its email (BIMI, default._bimi.<domain>) over the checkbox of each inbox row from that company, with no email opened. Only for organization domains (never subdomains) that enforce DMARC (p=quarantine or p=reject). DNS lookups go to Cloudflare (1.1.1.1, or its security resolver when 1.1.1.1 is blocked); the logo is downloaded by the extension where the logo's server allows it, otherwise loaded by the inbox page from its address with no referrer, so the company's logo server sees the user's IP address. Checked again weekly. Requires managedEnableSenderIdentity and network checks.",
       "type": "boolean"
     },
+    "managedSenderPictureSize": {
+      "title": "Size of Sender Pictures (Gmail)",
+      "description": "auto (default) follows Gmail's display density: Default gets 36-pixel circles over each inbox row's checkbox, Comfortable 32-pixel circles, Compact small icons beside the country flag (no circles). large, medium or inline set one size for everyone. A sender with no photo, logo or site icon gets a colored circle with their initial (not inline).",
+      "type": "string",
+      "enum": [
+        "auto",
+        "large",
+        "medium",
+        "inline"
+      ]
+    },
     "managedEnableRowHighlighter": {
       "title": "Row Highlighter",
       "description": "Highlight the inbox row under the mouse (and selected rows) in Gmail and the other supported webmail, so users can see exactly which email a click opens. A see-through color and/or an outline, readable in light and dark themes. Inspired by Row Highlighter for Gmail.",

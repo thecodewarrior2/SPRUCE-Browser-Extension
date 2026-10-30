@@ -36,12 +36,14 @@ a:focus + .unshortener-icon.unshortener-hover-reveal,
     position: relative;
 }
 .unshortener-row-avatar {
+    --unshortener-circle: 36px;
+    --unshortener-icon-pad: 7px;
     position: absolute;
     top: 50%;
     left: 50%;
-    width: 28px;
-    height: 28px;
-    margin: -14px 0 0 -14px;
+    width: var(--unshortener-circle);
+    height: var(--unshortener-circle);
+    margin: calc(var(--unshortener-circle) / -2) 0 0 calc(var(--unshortener-circle) / -2);
     border-radius: 50%;
     object-fit: cover;
     background: #fff;
@@ -54,16 +56,38 @@ a:focus + .unshortener-icon.unshortener-hover-reveal,
 }
 /* A flagged or caution email never shows a company logo or photo: before an email is opened its
    sender isn't verified, so a forged "paypal.com" must not get PayPal's logo. Its checkbox shows. */
-.unshortener-avatar-row:has(.unshortener-sender-chip[data-status="flagged"]) .unshortener-row-avatar:not(.unshortener-row-icon),
-.unshortener-avatar-row:has(.unshortener-sender-chip[data-status="caution"]) .unshortener-row-avatar:not(.unshortener-row-icon) {
+.unshortener-avatar-row:has(.unshortener-sender-chip[data-status="flagged"]) .unshortener-row-avatar:not(.unshortener-row-icon):not(.unshortener-row-initial),
+.unshortener-avatar-row:has(.unshortener-sender-chip[data-status="caution"]) .unshortener-row-avatar:not(.unshortener-row-icon):not(.unshortener-row-initial) {
     display: none;
 }
-/* A site's small icon (no photo or logo): in the middle of a plain circle. */
+/* Sizes follow Gmail's display density (content.js applyPictureMode): 36 px circles for Default,
+   32 px for Comfortable. Compact has no circles (the icon goes in line with the flag). */
+html[data-unshortener-pictures="medium"] .unshortener-row-avatar {
+    --unshortener-circle: 32px;
+    --unshortener-icon-pad: 6px;
+}
+/* A site's small icon (no photo or logo): in the middle of a plain circle (20 px in a 36 px circle,
+   18 px in a 32 px one). */
 .unshortener-row-avatar.unshortener-row-icon {
     box-sizing: border-box;
-    padding: 5px;
+    padding: var(--unshortener-icon-pad);
     object-fit: contain;
     border: 1px solid rgba(60, 64, 67, 0.2);
+}
+/* No picture and no icon: the sender's initial on a color of their own, so every row looks alike. */
+.unshortener-row-avatar.unshortener-row-initial {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font: 500 calc(var(--unshortener-circle) * 0.47) / 1 "Google Sans", Roboto, Helvetica, Arial, sans-serif;
+    text-transform: uppercase;
+    user-select: none;
+}
+/* Compact density: the site's icon in line with the country flag, at the flag's size. */
+.unshortener-sender-icon img.unshortener-flag-size {
+    width: 15px;
+    height: 15px;
 }
 .unshortener-avatar-row:hover .unshortener-row-avatar,
 .unshortener-avatar-row:focus-within .unshortener-row-avatar,

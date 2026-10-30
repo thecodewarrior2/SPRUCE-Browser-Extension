@@ -1,4 +1,4 @@
-const { launch, servePage, sleep, check, done } = require('./harness');
+const { launch, servePage, sleep, until, check, done } = require('./harness');
 (async () => {
   const { ctx, sw } = await launch();
   await sw.evaluate(() => chrome.storage.local.set({
@@ -11,7 +11,9 @@ const { launch, servePage, sleep, check, done } = require('./harness');
   page.on('console', m => { if (m.type() === 'error') console.log('console:', m.text()); });
   page.on('pageerror', e => console.log('pageerror:', e.message));
   await page.goto('https://mail.google.com/mail/u/0/#inbox');
-  await sleep(5000);
+  await until(() => page.evaluate(() => window.__spammed.length), n => n >= 2, 15000);
+  await until(() => page.locator('.unshortener-spam-notice').textContent().catch(() => ''), t => /2 emails/.test(t || ''), 8000);
+  await sleep(1500);                                 // and long enough for a (wrong) third move
   const spammed = await page.evaluate(() => window.__spammed);
   check('flagged unread rows moved (1001, 1007)', spammed.includes('#thread-f:1001') && spammed.includes('#thread-f:1007'), spammed);
   check('rescued thread 1005 not moved again', !spammed.includes('#thread-f:1005'), spammed);
@@ -37,7 +39,7 @@ const { launch, servePage, sleep, check, done } = require('./harness');
   const neutral = look.filter(x => x.status === 'unverified' || x.status === 'clean');
   check('not verified / checked labels: no mark, neutral grey', neutral.length >= 2 && neutral.every(x => x.mark === '' && x.bg === 'rgb(241, 243, 244)'), look);
   check('flagged labels: ⛔ and red', look.filter(x => x.status === 'flagged').every(x => x.mark === '⛔' && x.bg === 'rgb(252, 232, 230)') && look.some(x => x.status === 'flagged'), look);
-  check('offline: no icon fetched, and nothing drawn beside the sender or over the checkbox', chips.filter(c => c.chip).every(c => !c.img && !c.circle), chips);
+  check('offline: no icon fetched; nothing beside the sender (the circles show initials)', chips.filter(c => c.chip).every(c => !c.img), chips);
   // Gmail rewrites the rows in place (tab shown again): the icons and labels come back.
   const before = await page.evaluate(() => document.querySelectorAll('tr.zA .unshortener-sender-chip').length);
   await page.evaluate(() => window.__rewriteRows());

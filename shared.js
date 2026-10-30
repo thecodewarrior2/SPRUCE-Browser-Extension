@@ -30,6 +30,9 @@ const SETTING_DEFS = [
     // the site icon: colleagues' own photos (the user's own organization), and one logo per other
     // company, learned from a verified email from its shared mailbox or with a BIMI logo.
     { key: 'enableSenderAvatars',         managedKey: 'managedEnableSenderAvatars',         def: true, type: 'boolean' },
+    // Size of sender pictures in the inbox list: auto follows Gmail's display density (Default: large
+    // 36-pixel circles; Comfortable: medium 32; Compact: small icons in line with the country flag).
+    { key: 'senderPictureSize',           managedKey: 'managedSenderPictureSize',           def: 'auto', type: 'enum', values: ['auto', 'large', 'medium', 'inline'] },
     // BIMI logos: the company logo a domain publishes in DNS, shown without opening any email.
     { key: 'enableSenderBimi',            managedKey: 'managedEnableSenderBimi',            def: true, type: 'boolean' },
     // Row highlighter: the inbox row under the mouse (and selected rows) is highlighted, so it's clear
@@ -1130,6 +1133,11 @@ const WEBMAIL_SITES = [
       mail: {
           ownHosts: ['mail.google.com'],
           list: { row: 'tr.zA', container: 'table', unread: '.zE', selected: '.x7', checkbox: '[role="checkbox"]',
+                  // Display density (Settings → Density), told from the page: a left-menu item of 28 px or
+                  // less (or rows under 36 px) is Compact; attachment chips under a subject are Default; a
+                  // paperclip instead of chips is Comfortable.
+                  density: { navItem: '[role="navigation"] .TN, .aqn.aIH .TN, .TN, .bzz', compactNavMax: 28, compactRowMax: 35,
+                             chips: '.brd .brc', paperclip: '.yf img' },
                   sender: '.yW [email], .yX [email]', nameCell: '.yW, .yX', subjectCell: '.xT, .y6' },
           senderAttrs: { address: 'email', name: 'name' },
           ids: {
@@ -1283,6 +1291,25 @@ const OVERLAPPING_EXTENSIONS = [
     { name: 'Contact Avatars for Gmail', ids: ['pkljbdckinbcelpeipbnniamlhenoeon'], features: ['enableSenderAvatars'], does: 'sender photos in the inbox' },
     { name: 'Row Highlighter for Gmail', ids: ['ijfolchflbmnfopmpmodilcelmdakbfl'], features: ['enableRowHighlighter'], does: 'highlighting the row under the mouse' }
 ];
+// Colors of the initial shown for a sender with no picture (white letter; each at least 5:1 contrast).
+// No red, yellow or green: those mean flagged, caution and trusted elsewhere in the extension.
+const INITIAL_COLORS = ['#1967D2', '#8430CE', '#00737A', '#5F6368', '#B80672', '#3949AB', '#6D4C41', '#01579B'];
+// The color for an address: always the same one for the same sender.
+function initialColor(address) {
+    let h = 0;
+    for (const ch of String(address || '').toLowerCase()) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+    return INITIAL_COLORS[h % INITIAL_COLORS.length];
+}
+// The letter shown for a sender with no picture: the first letter or digit of their name, else of
+// their address.
+function senderInitial(name, address) {
+    for (const s of [name, String(address || '').split('@')[0]]) {
+        const m = /[\p{L}\p{N}]/u.exec(String(s || ''));
+        if (m) return m[0].toLocaleUpperCase();
+    }
+    return '';
+}
+
 // The names of our features, as the conflict warnings say them.
 const FEATURE_NAMES = {
     enableSenderIdentity: 'sender icons and labels', enableSenderAvatars: 'sender photos and company logos',

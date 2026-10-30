@@ -528,3 +528,19 @@ test('BIMI logos: DMARC enforced, organization domain only, downloaded or kept b
   assert.equal(await run('bimiLogo("gmail.com")'), '', 'personal email service: never looked up');
   assert.equal((await run('iconStore.get("bimi:nobimi.example")')).source, 'none', 'remembered as none');
 });
+
+test('initials: letter from the name (else the address), steady color per sender, readable white text', () => {
+  const b = loadBackground();
+  const run = (c) => vm.runInContext(c, b);
+  assert.equal(run('senderInitial("Olivia Example", "x@example.org")'), 'O');
+  assert.equal(run('senderInitial("\\"  (Billing) Team", "x@example.org")'), 'B', 'punctuation skipped');
+  assert.equal(run('senderInitial("", "zoe@example.org")'), 'Z', 'no name: the address');
+  assert.equal(run('senderInitial("élodie", "")'), 'É', 'accented letters kept');
+  assert.equal(run('senderInitial("", "")'), '');
+  assert.equal(run('initialColor("a@example.org")'), run('initialColor("A@Example.org")'), 'same sender, same color');
+  const colors = run('INITIAL_COLORS');
+  const lum = (h) => { const c = [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255).map(x => x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
+  for (const h of colors) assert.ok(1.05 / (lum(h) + 0.05) >= 4.5, `${h} too light for white text`);
+  const used = new Set(Array.from({ length: 200 }, (_, i) => run(`initialColor("user${i}@example.org")`)));
+  assert.equal(used.size, colors.length, 'senders spread over all colors');
+});

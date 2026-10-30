@@ -10,12 +10,28 @@
   <div role="button" aria-label="Not spam" data-tooltip="Not spam" id="notSpamBtn" class="sel-only hidden">Not spam</div>
   <div role="button" aria-label="Refresh" id="refresh">Refresh</div>
 </div>
+<div role="navigation" id="nav"><div class="TN" style="height:32px">Inbox</div></div>
 <div role="main"><table class="F"><tbody id="list"></tbody></table></div>
 <div id="toast"></div>
 <script>
 window.__spammed = [];
 { const P = new URLSearchParams(location.search);
   if (P.get('title')) document.title = P.get('title');
+  // Gmail's display density: compact = 28 px menu items; default rows show attachment chips;
+  // comfortable rows show a paperclip instead.
+  window.__density = P.get('density') || '';
+  window.__setDensity = (d) => {
+    window.__density = d;
+    document.querySelector('#nav .TN').style.height = d === 'compact' ? '28px' : '32px';
+    document.querySelectorAll('.att').forEach(e => e.remove());
+    const first = document.querySelector('#list tr.zA .xT');
+    if (!first) return;
+    const extra = document.createElement('span'); extra.className = 'att';
+    if (d === 'default') extra.innerHTML = '<div class="brd"><span class="brc">report.pdf</span></div>';
+    if (d === 'comfortable') extra.innerHTML = '<span class="yf"><img alt="Attachment" width="16" height="16" src="data:image/gif;base64,R0lGODlhAQABAAAAACw="></span>';
+    first.appendChild(extra);
+  };
+  if (window.__density) setTimeout(() => window.__setDensity(window.__density), 350);
   if (P.get('label')) document.addEventListener('DOMContentLoaded', () => { const b = document.getElementById('spamBtn'); b.setAttribute('aria-label', P.get('label')); b.setAttribute('data-tooltip', P.get('label')); });
   if (P.get('multi')) setTimeout(() => { const t = document.createElement('table'); t.className = 'F'; const tb = document.createElement('tbody'); t.appendChild(tb); document.querySelector('[role=main]').appendChild(t); tb.appendChild(row({ t: 1999, email: 'other@section.test', name: 'Other', subj: 'In another section' })); }, 400);
   if (P.get('split')) setTimeout(() => { const h = document.createElement('h2'); h.setAttribute('data-thread-perm-id', 'thread-f:9999'); h.textContent = 'Open conversation'; document.body.appendChild(h); }, 100);
