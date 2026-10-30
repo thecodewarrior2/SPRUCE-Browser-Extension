@@ -1,5 +1,5 @@
 {
-  "name": "gmail-link-scanner-tests",
+  "name": "spruce-tests",
   "private": true,
   "description": "Unit tests and end-to-end tests (Playwright, simulated webmail pages) for the extension. Not part of the extension package.",
   "scripts": {
