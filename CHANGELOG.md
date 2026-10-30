@@ -1,5 +1,11 @@
 # Changelog
 
+## 5.58 — Sender pictures over the checkbox, a Spam-moving fix, and faster tests (Firefox build, same as Chrome 5.58)
+
+- **Sender photos and company logos now sit over the inbox row's checkbox**, as a circle (the way Gmail and Simplify Gmail draw avatars), instead of next to the site icon and flag. Point at the row, or tick it, and the checkbox is back and works as usual; the picture never takes a click. The icon next to the sender is always the site's own icon again.
+- **Fixed:** if the inbox list was hidden at the moment the extension first looked at it (for example while an email was open) and Gmail showed it again without changing it, those emails were never checked, so flagged ones were never moved to Spam until something else changed the list. The 5-second check now spots rows that are shown but were never checked.
+- **Tests are now kept with the code** (`tests/`, left out of the extension package) and run in parallel: the full run takes about 2 minutes instead of 15. Slow suites are split into parts, fixed pauses were replaced by waiting for what's expected, each suite has a time limit so nothing can hang, and the phishing samples use placeholder domains.
+
 ## 5.57 — Company logos in the inbox list, the photo-finding fix, and finer conflict choices (Firefox build, same as Chrome 5.57)
 
 - **Fixed: photos and logos were never found in real Gmail.** Gmail puts the sender's picture in its own column beside the message body, and the extension only looked inside the body's box, so every opened email logged "Gmail showed no photo or logo beside the sender". It now looks in the whole message.

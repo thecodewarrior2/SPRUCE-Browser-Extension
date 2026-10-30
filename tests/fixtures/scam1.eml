@@ -1,0 +1,24 @@
+Delivered-To: user@example.org
+Received: by 2002:ab2:7e06:0:b0:218:20e2:624c with SMTP id z6csp758531lqg; Wed, 8 Jan 2025 11:56:37 -0800 (PST)
+ARC-Authentication-Results: i=1; mx.google.com; dkim=neutral (body hash did not verify) header.i=@theinformation.com header.s=m1 header.b="frA/bDpq"; spf=pass (google.com: domain of noreply_qhsugifc@relief-sample.example designates 142.202.189.58 as permitted sender) smtp.mailfrom=noReply_qhsugifc@relief-sample.example; dmarc=pass (p=NONE sp=NONE dis=NONE) header.from=relief-sample.example
+Return-Path: <noReply_qhsugifc@relief-sample.example>
+Received: from 58.189.202.142.in-addr.arpa (paleodietingnow.com. [142.202.189.58]) by mx.google.com with ESMTPS id 41be03b00d2f7-842f964b64esi46742328a12.698.2025.01.08.11.56.33 for <user@example.org> (version=TLS1 cipher=ECDHE-ECDSA-AES128-SHA bits=128/128); Wed, 08 Jan 2025 11:56:36 -0800 (PST)
+Received-SPF: pass (google.com: domain of noreply_qhsugifc@relief-sample.example designates 142.202.189.58 as permitted sender) client-ip=142.202.189.58;
+Authentication-Results: mx.google.com; dkim=neutral (body hash did not verify) header.i=@theinformation.com header.s=m1 header.b="frA/bDpq"; spf=pass (google.com: domain of noreply_qhsugifc@relief-sample.example designates 142.202.189.58 as permitted sender) smtp.mailfrom=noReply_qhsugifc@relief-sample.example; dmarc=pass (p=NONE sp=NONE dis=NONE) header.from=relief-sample.example
+Received: from ea197.mta.exacttarget.com (mta.txn-email.account.sony.com. ) by mx.google.com with ESMTPS id o14-20020ac85a4e000000b00423e1af1776si9425548qta.555.2023.12.24.12.40.28 for <someone1@example.net> (version=TLS1_2 cipher=ECDHE-ECDSA-AES128-GCM-SHA256 bits=128/128); Sun, 24 Dec 2023 12:40:28 -0800 (PST)
+Received: from esa4.hc324-48.eu.iphmx.com (esa4.hc324-48.eu.iphmx.com. ) by mx.google.com with ESMTPS id q12-20020a2e914c000000b002cd1c068442si106067ljg.469.2024.01.08.11.19.57 for <someone2@example.net> (version=TLS1_2 cipher=ECDHE-ECDSA-CHACHA20-POLY1305 bits=256/256); Mon, 08 Jan 2024 11:19:58 -0800 (PST)
+From: """""""""""""=?CP1256?Q?National Debt Relief?=""""""""""""" <contact_support.adi@=?UTF-8?B?cmVsaWVmLXNhbXBsZS5leGFtcGxl?=>
+CC: "UserUq@XWQQZDSGPUUQH.namprd04.prod.outlook.com" <User@MXIPDOULQTXWI.namprd04.prod.outlook.com>
+MIME-Version: 1.0
+Thread-Topic: Validez votre inscription sur newslettermode.com
+Importance: High
+Date: Wed, 08 Jan 2025 19:54:17 UTC
+X-Mailer: Microsoft CDO for Windows 2000
+Thread-Topic: Validez votre inscription sur newslettermode.com
+Priority: urgent
+Subject: Notifications psvh
+To: "user@example.org" <User@AIWVJPKZLLTDZ.namprd04.prod.outlook.com>
+Message-ID: <CH2PR04MB70784324Af7aQ3DGqj2DE36EC7638761AEDA74C2@RJTASJJLRHJHJ.namprd04.prod.outlook.com>
+Content-Type: multipart/PARALLEL; boundary="--_NexPart_206_"; type="multipart/alternative"
+
+body

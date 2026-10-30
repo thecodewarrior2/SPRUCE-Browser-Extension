@@ -29,10 +29,29 @@ a:focus + .unshortener-icon.unshortener-hover-reveal,
     vertical-align: middle;
     flex: none;
 }
-/* A sender's photo or verified logo is round, as the webmail shows it. */
-.unshortener-sender-icon img.unshortener-sender-avatar {
+/* A sender's photo or company logo: a circle over the inbox row's checkbox, as the webmail draws its
+   own avatars. Never takes clicks; out of the way while the row is under the mouse, focused or
+   ticked, so the checkbox shows and works as usual. */
+.unshortener-avatar-cell {
+    position: relative;
+}
+.unshortener-row-avatar {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 28px;
+    height: 28px;
+    margin: -14px 0 0 -14px;
     border-radius: 50%;
     object-fit: cover;
+    background: #fff;
+    pointer-events: none;
+    z-index: 1;
+}
+.unshortener-avatar-row:hover .unshortener-row-avatar,
+.unshortener-avatar-row:focus-within .unshortener-row-avatar,
+.unshortener-avatar-cell:has([aria-checked="true"]) .unshortener-row-avatar {
+    display: none;
 }
 .unshortener-sender-icon img,
 .unshortener-sender-blank {

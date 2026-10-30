@@ -171,7 +171,12 @@ Some policies exist for administrators only, with no setting in the extension:
 Unit tests (Node) cover the link pipeline, decoders and shared logic; browser tests (Playwright)
 run the extension on simulated webmail pages; accessibility audits check contrast in light and dark
 mode and names and roles. Webmail page structure is mapped from public information and simulated
-pages, so changes to a webmail's layout need checking on the live site.
+pages, so changes to a webmail's layout need checking on the live site. The tests are in `tests/`
+(see `tests/README.md`; not part of the extension package):
+
+```bash
+cd tests && npm install && node run-all.js
+```
 
 ## Privacy
 

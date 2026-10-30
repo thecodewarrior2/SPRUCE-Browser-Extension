@@ -2249,18 +2249,43 @@ function fillSenderIcon(wrap, S) {
     if (!senderIcons.has(key)) {
         if (senderIcons.size >= SENDER_RESULTS_MAX) senderIcons.delete(senderIcons.keys().next().value);
         senderIcons.set(key, new Promise(resolve => safeSend({ action: 'senderIcon', site, address: avatars ? address : '' },
-            (r) => resolve(r && typeof r.d === 'string' && r.d.startsWith('data:image/') ? r : { d: '' }))));
+            (r) => {
+                const img = (v) => typeof v === 'string' && v.startsWith('data:image/') ? v : '';
+                resolve({ d: img(r && r.d), a: img(r && r.a) });
+            })));
     }
     senderIcons.get(key).then(r => {
-        if (!r.d || !slot.isConnected) return;
+        if (!slot.isConnected) return;
+        placeRowAvatar(wrap, r.a || '');
+        if (!r.d) return;
         const img = document.createElement('img');
         img.alt = '';
         img.width = 16; img.height = 16;
-        if (r.avatar) img.className = 'unshortener-sender-avatar';
         img.addEventListener('error', () => img.replaceWith(blank()), { once: true });
         img.src = r.d;
         slot.replaceWith(img);
     });
+}
+// The sender's photo or company logo in an inbox row: a circle over the row's checkbox (as Gmail's
+// own avatars and Simplify Gmail draw it), not next to the site icon. It never takes clicks, and it
+// steps aside while the row is under the mouse, focused or ticked, so the checkbox is there to use.
+function placeRowAvatar(wrap, url) {
+    const row = MAIL && MAIL.list && MAIL.list.checkbox ? wrap.closest(MAIL.list.row) : null;
+    if (!row) return;
+    row.querySelectorAll('.unshortener-row-avatar').forEach(e => e.remove());
+    const box = url ? row.querySelector(MAIL.list.checkbox) : null;
+    if (!box || !box.parentElement) { delete row.dataset.unshortenerAvatar; return; }
+    const cell = box.parentElement;
+    cell.classList.add('unshortener-avatar-cell');
+    row.classList.add('unshortener-avatar-row');
+    const img = document.createElement('img');
+    img.className = 'unshortener-row-avatar';
+    img.alt = '';
+    img.setAttribute('aria-hidden', 'true');
+    img.addEventListener('error', () => { img.remove(); delete row.dataset.unshortenerAvatar; }, { once: true });
+    img.src = url;
+    cell.appendChild(img);
+    row.dataset.unshortenerAvatar = '1';
 }
 
 // Photos and logos (the profile's message.avatar): the picture the webmail shows beside the sender of
@@ -2385,7 +2410,8 @@ function setChipResult(chip, r, address, extra) {
 }
 
 function removeSenderDecorations(root = document) {
-    root.querySelectorAll('.unshortener-sender-icon, .unshortener-sender-chip').forEach(e => e.remove());
+    root.querySelectorAll('.unshortener-sender-icon, .unshortener-sender-chip, .unshortener-row-avatar').forEach(e => e.remove());
+    root.querySelectorAll('[data-unshortener-avatar]').forEach(r => { delete r.dataset.unshortenerAvatar; });
     root.querySelectorAll('[data-unshortener-sender]').forEach(e => { delete e.dataset.unshortenerSender; e.unshortenerSpam = null; });
 }
 
@@ -2410,9 +2436,9 @@ function scanSenderRows(S) {
         const thread = rowThreadKey(row);
         const msgId = rowLastMessageId(row);
         const unread = rowIsUnread(row);
-        const key = [thread, msgId, unread ? 'u' : 'r', ...senders.map(s => s.raw), S.enableSenderIdentity ? 'id' : '', S.enableSenderCountry ? 'cc' : ''].join('|');
+        const key = [thread, msgId, unread ? 'u' : 'r', ...senders.map(s => s.raw), S.enableSenderIdentity ? 'id' : '', S.enableSenderCountry ? 'cc' : '', S.enableSenderAvatars ? 'av' : ''].join('|');
         // Unchanged since the last scan (and Gmail hasn't redrawn the row without our label).
-        if (row.dataset.unshortenerSender === key && (!S.enableSenderIdentity || row.querySelector('.unshortener-sender-chip'))) continue;
+        if (row.dataset.unshortenerSender === key && (!S.enableSenderIdentity || (row.querySelector('.unshortener-sender-chip') && !avatarLost(row)))) continue;
         removeSenderDecorations(row);
         row.dataset.unshortenerSender = key;
         // The sender shown first is the one decorated; a flagged one anywhere in the row wins.
@@ -2738,11 +2764,17 @@ function spamMonitor() {
         spamMoveRunning = 0;
         reportEvent('warning', `Moving emails to Spam had stalled (${SITE.name} or the extension didn't answer); it was restarted.`);
     }
+    let unchecked = false;
     for (const row of listRows()) {
-        if (!row.unshortenerSpam || !isShown(row)) continue;
+        if (!isShown(row)) continue;
+        // Shown but never looked at: the list was hidden when it was scanned and came back without
+        // the webmail changing its contents (nothing for the page observer to see), so scan again.
+        if (!row.dataset.unshortenerSender) { unchecked = true; continue; }
+        if (!row.unshortenerSpam) continue;
         const thread = rowThreadKey(row);
         if (thread) queueSpamMove(thread, row.unshortenerSpam);
     }
+    if (unchecked) scheduleScan();
     if (spamQueue.size && !spamMoveRunning && !spamMoveTimer) scheduleSpamMoves();
 }
 // Runs only while the webmail's tab is shown: stopped while it's in the background, so it never wakes the
@@ -3147,8 +3179,10 @@ const WATCH_SELECTOR = MAIL_CAN.list ? `${SITE.body}, ${MAIL.list.row}` : SITE.b
 function rowLostDecorations(target) {
     if (!MAIL_CAN.list || !lastSettings.enableSenderIdentity || !target || target.nodeType !== Node.ELEMENT_NODE) return false;
     const row = target.closest(MAIL.list.row);
-    return !!(row && row.dataset.unshortenerSender && !row.querySelector('.unshortener-sender-icon, .unshortener-sender-chip'));
+    return !!(row && row.dataset.unshortenerSender && (!row.querySelector('.unshortener-sender-icon, .unshortener-sender-chip') || avatarLost(row)));
 }
+// Gmail redrew the checkbox cell and took the photo over it with it.
+function avatarLost(row) { return row.dataset.unshortenerAvatar === '1' && !row.querySelector('.unshortener-row-avatar'); }
 const observer = new MutationObserver((mutations) => {
     scheduleBadgeUpdate();                     // opening, closing or switching views can change the state
     let emailOpened = false;

@@ -1,0 +1,12 @@
+{
+  "name": "gmail-link-scanner-tests",
+  "private": true,
+  "description": "Unit tests and end-to-end tests (Playwright, simulated webmail pages) for the extension. Not part of the extension package.",
+  "scripts": {
+    "test": "node run-all.js",
+    "test:unit": "node --test unit/unit.test.js"
+  },
+  "devDependencies": {
+    "fake-indexeddb": "^6.2.6"
+  }
+}
