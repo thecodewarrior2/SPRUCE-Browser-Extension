@@ -1,5 +1,12 @@
 # Changelog
 
+## 5.50 — One mail engine for every webmail (no visible change)
+
+- **Internal rework, no change in behavior on Gmail.** Everything that read Gmail's page (the inbox list, opened emails, the toolbar, Report spam, the compose window, attachment cards, "Show original") is now one shared mail engine. Everything that differs between webmail sites is data in that site's entry of the `WEBMAIL_SITES` table (`shared.js`): selectors, how conversation and message ids are written, which views are the inbox, the original-source address, the receiving mail system whose header lines can be trusted, and so on. Gmail is now one entry of that table like Outlook, Yahoo and the others. Its entry is still the only one that describes an inbox list and toolbar, so sender icons, moving to Spam and the Send check still run on Gmail only; other sites get them as their entries are filled in.
+- Header checks now trust header lines only from the receiving mail system named in the site's entry (for Gmail, `mx.google.com`), never from a fixed name in the code; with no such entry, no header line is trusted.
+- Links to another webmail inside an email (for example a `mail.google.com` link in an Outlook email) are now checked like any other link; only links to the webmail being used are skipped.
+- Messages in the log and on screen name the webmail being used instead of always saying "Gmail".
+
 ## 5.49 — More signs of forged email in the headers
 
 From a phishing sample that wasn't caught (a fake "AHS Warranty" email): it now scores 13 (5 flags an email).

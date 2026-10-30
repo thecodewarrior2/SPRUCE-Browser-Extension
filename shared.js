@@ -1059,16 +1059,85 @@ function riskyScheme(href) {
 }
 
 // ---------------------------------------------------------------------------
-// SUPPORTED WEBMAIL (besides Gmail). Shared by the content script (where message bodies are) and the
-// popup (which sites are supported). Selectors were written from public knowledge of each app and
-// are marked experimental: if a site changes its layout, only this table needs updating.
+// SUPPORTED WEBMAIL. Shared by the content script (where message bodies are, and how the shared
+// engine reads each site) and the popup (which sites are supported). Everything that differs between
+// webmail sites is data in this table; the code that uses it is the same for every site. Selectors
+// for sites other than Gmail were written from public knowledge of each app and are experimental: if
+// a site changes its layout, only this table needs updating.
 //   body        message-body containers in the page
 //   readFrames  also read same-site frames from the page (messages shown in frames)
 //   frameBody   inside a frame on the site, treat the whole frame as the message
 //   path        only on these paths (sites that host other apps, such as iCloud)
 //   imageParams query parameters of the site's image proxy that hold the original image address
+//   imageProxy  { host, originalAfterHash }: a proxy that keeps the original address after "#"
+//   attachments how the site's attachment cards are found: cardAttr (an attribute holding
+//               "mime:name:address"), link (download links) and linkHref (their address pattern)
+//   mail        how the shared engine reads the site's inbox list, opened emails, toolbar and compose
+//               window (see SITE_MAIL_FIELDS below). A site without it gets the checks inside opened
+//               emails only.
+// ---------------------------------------------------------------------------
+// The `mail` profile:
+//   ownHosts      links to the webmail itself, never checked
+//   list          inbox rows: row, container (one list; several shown at once means sections such as
+//                 Multiple Inboxes), unread, selected (selectors a row matches), checkbox, sender (elements
+//                 holding a sender), nameCell (where the sender's icon goes), subjectCell (its label)
+//   senderAttrs   attributes of a sender element: address, name
+//   ids           how conversations and messages are named: thread / message / rowLastMessage are lists of
+//                 readers, { attr, match } (a pattern whose first group is the id) or { attr, hex }
+//                 (a hexadecimal id written as "<hex>:<decimal>"); rowThread and messageHolder are the
+//                 elements that carry them
+//   openThread    the heading of an open conversation (carries its id)
+//   message       container of one opened message, its sender element, and the element after which
+//                 the sender's label goes (senderAfter; else right after the sender)
+//   toolbar       the toolbar that acts on selected or open conversations; spamAction: an attribute
+//                 that marks the Report spam button whatever its language
+//   views         inbox: views (address after "#") where emails may be moved to Spam; spam: the Spam
+//                 folder's views; spamHref: link to the Spam folder
+//   account       where the signed-in address is shown (fromTitle: the page title)
+//   headers       the email's original source, fetched with the user's own session: url (template with
+//                 {origin}, {account}, {ik}, {id}), the values filled in, the element holding the text,
+//                 and the receiving mail system (host, name) whose own header lines can be trusted
+//   compose       the compose window: body, the Send button (label pattern, class) and labels that
+//                 aren't Send
 // ---------------------------------------------------------------------------
 const WEBMAIL_SITES = [
+    { id: 'gmail', name: 'Gmail', settingKey: null, host: /^mail\.google\.com$/, body: '.ii.gt',
+      attachments: { cardAttr: 'download_url', link: 'a[href*="attid="]', linkHref: /[?&](view=att|disp=(safe|inline|attd))/ },
+      // Gmail's image proxy keeps the sender's original address after "#"; the extension fetches
+      // proxied images from Google's proxy, never from the sender.
+      imageProxy: { host: /^https:\/\/[^/]*\.googleusercontent\.com\//, originalAfterHash: true },
+      mail: {
+          ownHosts: ['mail.google.com'],
+          list: { row: 'tr.zA', container: 'table', unread: '.zE', selected: '.x7', checkbox: '[role="checkbox"]',
+                  sender: '.yW [email], .yX [email]', nameCell: '.yW, .yX', subjectCell: '.xT, .y6' },
+          senderAttrs: { address: 'email', name: 'name' },
+          ids: {
+              thread: [{ attr: 'data-thread-perm-id', match: /^#?(thread-f:\d+)$/ }, { attr: 'data-thread-id', match: /^#?(thread-f:\d+)$/ },
+                       { attr: 'data-legacy-thread-id', hex: 'thread-f' }],
+              rowThread: '[data-thread-id], [data-legacy-thread-id]',
+              rowLastMessage: [{ attr: 'data-legacy-last-message-id', hex: 'msg-f' }],
+              message: [{ attr: 'data-message-id', match: /^#?(msg-f:\d+)$/ }, { attr: 'data-legacy-message-id', hex: 'msg-f' }],
+              messageHolder: '[data-message-id], [data-legacy-message-id]'
+          },
+          openThread: 'h2[data-thread-perm-id], h2[data-legacy-thread-id]',
+          message: { container: '.adn, [data-message-id], .gs', sender: '.gD[email]', senderAfter: '.go' },
+          toolbar: '[gh="mtb"], [gh="tm"]',
+          spamAction: { attr: 'act', value: '9' },
+          views: { inbox: /^(inbox(\/.*)?|category\/[a-z]+(\/.*)?)?$/, spam: /^(spam(\/|$)|search\/.*in(:|%3A)spam)/i, spamHref: '#spam' },
+          account: { fromTitle: true },
+          headers: {
+              url: '{origin}/mail/u/{account}/?{ik}view=om&permmsgid={id}',
+              values: {
+                  account: { path: /\/mail\/u\/(\d+)/, fallback: '0' },
+                  // Gmail's account key: from the page's GLOBALS script, else from any link that carries it.
+                  ik: { script: /GLOBALS\s*=\s*\[((?:[^\]]){0,3000})/, field: 9, linkParam: 'ik', valid: /^[0-9a-f]{8,12}$/i, format: 'ik={value}&' }
+              },
+              text: '#raw_message_text, pre.raw_message_text, pre',
+              receiver: { host: 'mx.google.com', name: 'Gmail' }
+          },
+          compose: { body: 'div[contenteditable="true"][g_editable="true"], div[contenteditable="true"][role="textbox"]',
+                     send: /^send\b/i, sendClass: 'aoO', notSend: /schedule|later|more send options/i }
+      } },
     { id: 'outlook',  name: 'Outlook on the web', settingKey: 'enableOutlookSupport',
       host: /(^|\.)outlook\.(live|office|office365)\.com$|^outlook\.cloud\.microsoft$/,
       body: '[aria-label="Message body"], [role="document"]', imageParams: ['url', 'Url'] },
@@ -1092,11 +1161,10 @@ const WEBMAIL_SITES = [
       readFrames: true, frameBody: true, imageParams: ['url', 'u'] }
 ];
 
-// The supported webmail entry for a page address (Gmail included), or null.
+// The supported webmail entry for a page address, or null.
 function webmailSiteFor(urlString) {
     let u;
     try { u = new URL(urlString); } catch (e) { return null; }
-    if (u.hostname === 'mail.google.com') return { id: 'gmail', name: 'Gmail', settingKey: null };
     return WEBMAIL_SITES.find(s => s.host.test(u.hostname) && (!s.path || s.path.test(u.pathname))) || null;
 }
 
@@ -1238,12 +1306,14 @@ function parseRawHeaders(raw) {
 const EMAIL_IN_TEXT_RE = /[A-Za-z0-9._%+'-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 const domainOfAddress = (a) => String(a || '').toLowerCase().replace(/^.*@/, '').replace(/[>\s]+$/, '');
 
-// Reads the receiver's verdict. Only the topmost Authentication-Results whose authserv-id matches
-// isReceiver counts (RFC 8601: anything lower may have been written by the sender). Returns null
-// when there is no such header.
-function parseAuthResults(raw, isReceiver = (id) => id === 'mx.google.com') {
+// Reads the receiver's verdict. Only the topmost Authentication-Results written by the receiving mail
+// system (its authserv-id, the webmail's `receiver`, e.g. "mx.google.com") counts (RFC 8601: anything
+// lower may have been written by the sender). Returns null when there is no such header, or when the
+// receiver isn't known (then no header can be trusted).
+function parseAuthResults(raw, receiver) {
+    if (!receiver) return null;
     const headers = parseRawHeaders(raw);
-    const ar = headers.find(([n, v]) => n === 'authentication-results' && isReceiver(v.split(';')[0].trim().toLowerCase()));
+    const ar = headers.find(([n, v]) => n === 'authentication-results' && v.split(';')[0].trim().toLowerCase() === receiver);
     if (!ar) return null;
     const v = ar[1];
     const result = (m) => { const r = new RegExp(`\\b${m}=([a-z]+)`, 'i').exec(v); return r ? r[1].toLowerCase() : 'none'; };
@@ -1483,14 +1553,19 @@ function normalizePhishSimRules(raw) {
     return out;
 }
 
-// The address of the server that handed the email to Gmail: the topmost Received header written by
-// Gmail ("by mx.google.com"); lower ones could have been written by the sender. Null when the email
-// was placed in the mailbox directly (vendors' "direct injection"), which has no such hop.
-function gmailDeliveringIp(headers) {
+// "by <receiver>" in a Received header, e.g. "by mx.google.com".
+function receivedByRe(receiver) { return new RegExp(`\\bby ${String(receiver).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i'); }
+// The address of the server that handed the email to the webmail: the topmost Received header written
+// by its receiving mail system ("by mx.google.com"); lower ones could have been written by the sender.
+// Null when the email was placed in the mailbox directly (vendors' "direct injection"), which has no
+// such hop, or when the receiver isn't known.
+function deliveringIp(headers, receiver) {
+    if (!receiver) return null;
+    const by = receivedByRe(receiver);
     for (const [n, v] of headers) {
         if (n !== 'received') continue;
-        if (!/\bby mx\.google\.com\b/i.test(v)) continue;
-        const from = v.split(/\bby mx\.google\.com\b/i)[0];
+        if (!by.test(v)) continue;
+        const from = v.split(by)[0];
         const m = /\[([0-9a-f:.]+)\]/i.exec(from);
         return m ? m[1] : null;
     }
@@ -1498,9 +1573,9 @@ function gmailDeliveringIp(headers) {
 }
 
 // The first rule an email matches, or null. A rule matches when the header is present (and, if set,
-// its value contains the rule's value) and, if the rule lists addresses, Gmail received the email
-// from one of them.
-function matchPhishSimulation(raw, rules) {
+// its value contains the rule's value) and, if the rule lists addresses, the webmail's receiving mail
+// system (receiver) got the email from one of them.
+function matchPhishSimulation(raw, rules, receiver) {
     if (!rules || !rules.length) return null;
     const headers = parseRawHeaders(raw);
     let ip;
@@ -1509,7 +1584,7 @@ function matchPhishSimulation(raw, rules) {
         if (!values.length) continue;
         if (rule.value && !values.some(v => v.toLowerCase().includes(rule.value.toLowerCase()))) continue;
         if (rule.ips.length) {
-            if (ip === undefined) ip = gmailDeliveringIp(headers);
+            if (ip === undefined) ip = deliveringIp(headers, receiver);
             if (!ip || !ipInList(ip, rule.ips)) continue;
         }
         return rule;
@@ -1599,12 +1674,13 @@ function countryName(cc) {
     } catch (e) { return cc; }
 }
 
-// Gmail views where a conversation is known to be in the inbox: the inbox itself and its category
-// tabs, list or opened conversation. Emails are only ever moved to Spam from these views, never from
-// Spam, Trash, Sent, Drafts, labels, searches or All mail.
-function gmailViewAllowsAutoSpam(hash) {
+// Views where a conversation is known to be in the inbox (the webmail's `mail.views.inbox`, matched
+// against the address after "#"; for Gmail the inbox itself and its category tabs, list or opened
+// conversation). Emails are only ever moved to Spam from these views, never from Spam, Trash, Sent,
+// Drafts, labels, searches or All mail. No such views known: never.
+function viewAllowsAutoSpam(hash, views) {
     const h = String(hash || '').replace(/^#/, '');
-    return h === '' || h === 'inbox' || h.startsWith('inbox/') || /^category\/[a-z]+(\/|$)/.test(h);
+    return !!(views && views.inbox && views.inbox.test(h));
 }
 
 // Sender verdict from the separate checks. All inputs are optional:
@@ -1742,35 +1818,38 @@ const ESP_HEADER_MARKERS = [
 // Bumped whenever headerAnomalies learns new signs, so results saved by an older version are worked
 // out again (see messageInfo in content.js).
 const HEADER_SIGNS_VERSION = 2;
-function headerAnomalies(raw, accountAddress) {
+// receiver: the webmail's receiving mail system, whose own records can be trusted:
+// { host: 'mx.google.com', name: 'Gmail' } (see the `mail.headers` entry of WEBMAIL_SITES).
+function headerAnomalies(raw, accountAddress, receiver = {}) {
     const headers = parseRawHeaders(raw);
     const out = [];
     const get = (n) => headers.filter(([h]) => h === n).map(([, v]) => v);
     // Delivery records ("Received:") are written as an email travels, minutes apart, newest on top
     // (the one Gmail writes on arrival). One dated long before that was written by the sender, copied
-    // from other, older emails to look like a normal delivery: an extra Gmail record more than 2 days
-    // older (Gmail writes one per arrival), or any record more than a week older (longer than any mail
-    // server keeps retrying).
+    // from other, older emails to look like a normal delivery: an extra record by the receiver more than
+    // 2 days older (it writes one per arrival), or any record more than a week older (longer than any
+    // mail server keeps retrying).
     const received = get('received');
     const newest = received.map(receivedTime).find(Number.isFinite);
     if (Number.isFinite(newest)) {
-        const gmailHop = (v) => /\bby mx\.google\.com\b/i.test(v);
-        let gmailSeen = 0;
+        const by = receiver.host ? receivedByRe(receiver.host) : null;
+        const receiverHop = (v) => !!by && by.test(v);
+        let receiverSeen = 0;
         const forged = received.filter(v => {
-            const t = receivedTime(v), first = gmailHop(v) && gmailSeen++ === 0;
-            return Number.isFinite(t) && (newest - t > 7 * 864e5 || (gmailHop(v) && !first && newest - t > 2 * 864e5));
+            const t = receivedTime(v), first = receiverHop(v) && receiverSeen++ === 0;
+            return Number.isFinite(t) && (newest - t > 7 * 864e5 || (receiverHop(v) && !first && newest - t > 2 * 864e5));
         });
         if (forged.length) {
             const years = [...new Set(forged.map(v => new Date(receivedTime(v)).getUTCFullYear()))].sort();
-            const n = forged.length, gm = forged.every(gmailHop);
-            out.push({ weight: 3, text: `Its headers contain ${n} fake ${gm ? 'Gmail ' : ''}delivery record${n === 1 ? '' : 's'} (copied from other, older emails${gm ? '' : `; dated ${years.join(', ')}`}).` });
+            const n = forged.length, gm = forged.every(receiverHop);
+            out.push({ weight: 3, text: `Its headers contain ${n} fake ${gm && receiver.name ? receiver.name + ' ' : ''}delivery record${n === 1 ? '' : 's'} (copied from other, older emails${gm ? '' : `; dated ${years.join(', ')}`}).` });
         }
     }
     // The sender's own verification (DMARC), as Gmail itself recorded it on arrival. When the domain
     // in the From line publishes "quarantine" or "reject", its owner says mail that fails is not
     // theirs. A mailing list or forwarder can break DMARC for genuine mail, so a real mailing list
     // (a well-formed List-ID) or a trusted forwarding chain (ARC) only makes it a strong sign.
-    const auth = parseAuthResults(raw);
+    const auth = parseAuthResults(raw, receiver.host);
     const listId = get('list-id')[0] || '';
     const realList = /<[a-z0-9][^<>\s]*\.[a-z]{2,}>/i.test(listId) && !/\.(local|localhost|invalid|test|example)>/i.test(listId);
     if (auth && auth.dmarc === 'fail') {

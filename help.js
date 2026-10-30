@@ -121,7 +121,7 @@
         fill('archFiles', table(['File', 'Runs in', 'Responsibility'], [
             [code('manifest.json'), 'Chrome', 'Manifest V3: permissions, service worker, content script, policy schema.'],
             [code('shared.js'), 'everywhere', 'Settings model and policy merging, domain lists, one-time detection, misleading-link checks, backup/restore, shared constants.'],
-            [code('content.js'), 'Gmail tab', 'Finds opened messages, sends links for analysis, rewrites and marks links, blocks pixels, reveal flow, error reporting.'],
+            [code('content.js'), 'webmail tab', 'Finds opened messages, sends links for analysis, rewrites and marks links, blocks pixels, reveal flow, error reporting. Its mail engine reads the inbox list, senders, toolbar and compose window of any webmail from that site\'s entry in WEBMAIL_SITES (shared.js): one code path for every site, Gmail included.'],
             [code('qr-decoder.js'), 'scanner', 'Self-contained QR Code reader (ISO/IEC 18004): finder patterns, perspective correction, Reed-Solomon. Used where Chrome has no built-in BarcodeDetector.'],
             [code('scanner.html / scanner.js'), 'hidden offscreen document', 'Decodes QR codes in images and PDF pages and lists PDF links; created on demand, closed after a minute idle.'],
             [code('lib/pdf.min.mjs, lib/pdf.worker.min.mjs'), 'scanner', 'pdf.js (Mozilla, Apache-2.0) for rendering PDF attachments.'],
