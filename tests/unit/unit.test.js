@@ -85,6 +85,30 @@ test('combineSenderVerdict: only flagged senders move', () => {
   }
 });
 
+test('sender domain with no DNS records of its own under an existing organization domain is not "doesn\'t exist"', async () => {
+  // Like hello.blink.com: its DNS answers "no such domain" for the name itself (only names below it
+  // exist: the bounce address, the DKIM key), while the company's own domain exists.
+  const exists = { 'brand.example': '203.0.113.9' };
+  const fetch = async (u) => {
+    u = String(u);
+    if (/[?&]dns=/.test(u)) throw new Error('wire format not simulated');
+    const name = decodeURIComponent((/[?&]name=([^&]+)/.exec(u) || [])[1] || '');
+    const ip = exists[name];
+    return { ok: true, status: 200, json: async () => ip ? { Status: 0, Answer: [{ type: 1, data: ip }] } : { Status: 3 } };
+  };
+  const b = loadBackground({}, { fetch });
+  const run = (c) => vm.runInContext(c, b);
+  b.__S = (await run('getConfig()')).values;
+  const sub = await run('senderDomainDns("hello.brand.example", __S)');
+  assert.ok(!/doesn't exist/.test(sub.note || ''), JSON.stringify(sub));
+  assert.equal(sub.verdict, 'safe', 'checked through its organization\'s domain');
+  assert.notEqual(S('combineSenderVerdict')({ address: 'team@hello.brand.example', dns: sub }).status, 'flagged', 'not flagged');
+  const gone = await run('senderDomainDns("mail.nowhere.example", __S)');
+  assert.ok(/doesn't exist/.test(gone.note || ''), 'the organization\'s domain doesn\'t exist either: still "doesn\'t exist"');
+  const top = await run('senderDomainDns("nowhere.example", __S)');
+  assert.ok(/doesn't exist/.test(top.note || ''), 'an organization domain that doesn\'t exist');
+});
+
 test('combineSenderVerdict: shared providers are judged only by exact address', () => {
   const c = S('combineSenderVerdict');
   const flag = { verdict: 'unsafe', scanner: 'Quad9', reason: 'x' };

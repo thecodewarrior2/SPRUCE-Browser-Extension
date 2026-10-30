@@ -1,5 +1,10 @@
 # Changelog
 
+## 5.66 — No more "domain doesn't exist" for company subdomains (Safari build, same as Chrome 5.66)
+
+- **Fixed: real company mail flagged as forged.** An email from Blink (Amazon), sent from `hello.blink.com`, was flagged red and moved to Spam as "The sender's domain doesn't exist". Blink's DNS answers "no such domain" for `hello.blink.com` itself, because only names below it exist (its bounce address `e.hello.blink.com` and its DKIM key), and the email passed Gmail's sender verification (DMARC) for blink.com. A subdomain with no DNS records of its own now counts as missing only when its organization's own domain is missing too; otherwise the organization's domain is checked for threats instead, and the log says so.
+- Senders flagged by the previous version are checked again after the update. To bring that email back, open Spam and click **Not spam**.
+
 ## 5.65 — Red flags in the Spam folder; forged delivery records weigh more (Safari build, same as Chrome 5.65)
 
 - **New: Flag dangerous emails in the Spam folder** (on by default). In Spam, every email the same checks would move there is marked red, whether this extension moved it or Gmail (or you) did. An email the extension moved keeps its red label there, with when and why, even when the reason was something only seen once it was opened (its links or attachments). Unread emails in Spam are checked too: their headers are read there, which isn't done in the inbox. Nothing is flagged just for being in Spam: an email without a red label there isn't flagged by any check, so Gmail put it in Spam, or you did, and it may be a mistake.
