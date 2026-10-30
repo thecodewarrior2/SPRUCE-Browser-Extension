@@ -1,0 +1,30 @@
+Delivered-To: user@example.org
+Received: by 2002:a05:6500:c198:b0:328:9ed1:9897 with SMTP id t24csp169206lqt; Thu, 30 Jul 2026 07:42:16 -0700 (PDT)
+ARC-Authentication-Results: i=1; mx.google.com; dkim=pass header.i=@homecare-sample.example header.s=selector1 header.b=I2Vm4kjm; spf=pass (google.com: domain of homecaresample@mail.homecare-sample.example designates 203.96.179.22 as permitted sender) smtp.mailfrom=homecaresample@mail.homecare-sample.example; dmarc=pass (p=REJECT sp=REJECT dis=NONE) header.from=homecare-sample.example
+Return-Path: <homecaresample@mail.homecare-sample.example>
+Received: from homecare-sample.example (homecare-sample.example. [203.96.179.22]) by mx.google.com with ESMTPS id d2e1a72fcca58-84ea04346f0si13749102b3a.259.2026.07.30.07.42.14 for <user@example.org> (version=TLS1 cipher=ECDHE-ECDSA-AES128-SHA bits=128/128); Thu, 30 Jul 2026 07:42:16 -0700 (PDT)
+Authentication-Results: mx.google.com; dkim=pass header.i=@homecare-sample.example header.s=selector1 header.b=I2Vm4kjm; spf=pass (google.com: domain of homecaresample@mail.homecare-sample.example designates 203.96.179.22 as permitted sender) smtp.mailfrom=homecaresample@mail.homecare-sample.example; dmarc=pass (p=REJECT sp=REJECT dis=NONE) header.from=homecare-sample.example
+Recived: from m243-1.mailgun.net (m243-1.mailgun.net. [209.85.220.41]) by mx.google.com with SMTPS id d9443c01a7336-297e660fc38sor20627385ad.1.2025.11.09.05.34.57 for <user@example.org> (version=TLS1_3 cipher=TLS_AES_128_GCM_SHA256 bits=128/128);
+Received: from JdQ.homecare-sample.example (JdQ.homecare-sample.example . [209.85.220.41]) by mx.google.com with SMTPS id e9e14a558f8ab-4334f527f1csor38042955ab.13.2025.11.09.05.01.12 for <user@example.org>
+From: "	Fidelity Life
+ 							•°”˜.•°”˜˜.•°”˜
+  " <noreply_homecaresample_noreply_homecaresample_noreply_homecaresample_noreply_homecaresample_noreply@homecare-sample.example>
+To: user@example.org <user@example.org@azheupsvkp.recipient-isp.example>
+Subject: USER
+  WELCOME TO YOUR FIDELITY LIFE OFFER -
+  863
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                JYWNNHXDXVLTPVZNYGLHEIPEGZURACVZWFJRWFUDYZMKBXIMFVFBOOTXJGQAPKXRFMLFKNZQRAEPCSZTBOFKKZIVKDJVBVUN []
+Date: Thu, 30 Jul 2026 10:36:27 -0400 (EDT)
+MIME-Version: 1.0
+MIME-Version: 1.0
+X-lid: (_IE6rxc5)(_IE6rxc5)=
+X-mid: (_IE6rxc5)(_IE6rxc5)
+X-Xyz-cn: (_IE6rxc5)
+X-Mailgun-Tag: alx:FT2CITLV20
+X-SG-ID: 11fd96c4e86e
+X-EMarSys-Identify: (_IE6rxc5)/_TRANSACTIONAL
+x-beehiiv-type: newsletter(_IE6rxc5)
+X-Report-Abuse: Please report abuse to abuse@activecampaign.com
+X-PMMail-Priority: Normal
+
+body

@@ -1,0 +1,41 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Mail - Outlook</title>
+<style>body{font:14px Arial} [role=option]{display:flex;gap:8px;padding:6px;border-bottom:1px solid #eee}</style></head>
+<body>
+<div role="main">
+  <div role="toolbar" aria-label="Mail commands">
+    <button id="junk" aria-label="Report junk">Junk</button>
+    <button id="del" aria-label="Delete">Delete</button>
+  </div>
+  <div role="listbox" aria-label="Message list" id="list">
+    <div role="option" aria-label="Unread Billing Team Your invoice is overdue" aria-selected="false">
+      <div role="checkbox" aria-checked="false"></div>
+      <span title="billing@evil-scam.test">Billing Team</span><span>Your invoice is overdue</span>
+    </div>
+    <div role="option" aria-label="Friend Lunch?" aria-selected="false">
+      <div role="checkbox" aria-checked="false"></div>
+      <span title="Friend &lt;friend@gmail.com&gt;">Friend</span><span>Lunch?</span>
+    </div>
+    <div role="option" aria-label="Newsletter Weekly digest" aria-selected="false">
+      <div role="checkbox" aria-checked="false"></div>
+      <span>Newsletter</span><span>No address shown in this row</span>
+    </div>
+  </div>
+  <div role="region" aria-label="Reading Pane" id="pane">
+    <div class="msg-header">
+      <span class="from" title="PayPal Service &lt;service@paypa1-secure.test&gt;">PayPal Service</span>
+      <div class="to">To: <span title="me@example.org">me@example.org</span></div>
+      <div class="warn" id="warnbox"></div>
+    </div>
+    <div aria-label="Message body"><p>Your account is limited. <a href="https://example.com/login">Restore access</a></p></div>
+  </div>
+</div>
+<script>
+window.__clicks = [];
+document.querySelectorAll('button').forEach(b => b.addEventListener('click', () => window.__clicks.push(b.id)));
+document.querySelectorAll('[role=checkbox]').forEach(b => b.addEventListener('click', () => window.__clicks.push('checkbox')));
+const P = new URLSearchParams(location.search);
+if (P.get('warn')) document.getElementById('warnbox').textContent = 'This sender failed our fraud detection checks and may not be who they appear to be. Learn about spoofing';
+if (P.get('nopane')) document.getElementById('pane').remove();
+</script>
+</body></html>

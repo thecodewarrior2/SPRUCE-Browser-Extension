@@ -2266,13 +2266,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     // A sender's site icon (data: URL, or '' for none), fetched once and remembered.
     if (request.action === 'senderIcon') {
         if (!sender || sender.id !== chrome.runtime.id || typeof request.site !== 'string') { sendResponse(''); return false; }
-        // A remembered colleague's photo or company logo comes first (no network: they are only ever
-        // learned from opened emails), then the site's icon. Answers { d, avatar } for the page.
+        // The site's icon (d) and, apart from it, a remembered colleague's photo or company logo (a; no
+        // network: they are only ever learned from opened emails), drawn over the row's checkbox.
         const address = typeof request.address === 'string' ? request.address.toLowerCase().slice(0, 320) : '';
         getConfig().then(async cfg => {
-            if (!cfg.values.enableSenderIdentity) return { d: '' };
-            if (cfg.values.enableSenderAvatars) { const a = await avatarFor(address, request.site); if (a) return { d: a, avatar: true }; }
-            return { d: cfg.values.enableDnsThreatCheck ? await senderIcon(request.site, { fallback: !!cfg.values.enableSenderIconFallback }) : '' };
+            if (!cfg.values.enableSenderIdentity) return { d: '', a: '' };
+            const [a, d] = await Promise.all([cfg.values.enableSenderAvatars ? avatarFor(address, request.site) : '',
+                cfg.values.enableDnsThreatCheck ? senderIcon(request.site, { fallback: !!cfg.values.enableSenderIconFallback }) : '']);
+            return { d, a };
         }).then(r => sendResponse(r), () => sendResponse({ d: '' }));
         return true;
     }

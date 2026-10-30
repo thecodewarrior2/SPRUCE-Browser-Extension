@@ -1,0 +1,104 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Inbox (3) - teacher@school.org - Gmail</title>
+<style>body{font:14px Arial;background:#fff} tr.zA td{padding:4px;border-bottom:1px solid #eee} .yW{display:inline-block;width:220px;overflow:hidden;white-space:nowrap}
+[gh=mtb] [role=button]{display:inline-block;padding:4px 8px;border:1px solid #ccc;margin:2px;cursor:pointer}
+.hidden{display:none !important}</style></head>
+<body>
+<div gh="mtb">
+  <div role="button" aria-label="Archive" act="7" class="sel-only hidden">Archive</div>
+  <div role="button" aria-label="Report spam" data-tooltip="Report spam" act="9" id="spamBtn" class="sel-only hidden">Spam</div>
+  <div role="button" aria-label="Not spam" data-tooltip="Not spam" id="notSpamBtn" class="sel-only hidden">Not spam</div>
+  <div role="button" aria-label="Refresh" id="refresh">Refresh</div>
+</div>
+<div role="main"><table class="F"><tbody id="list"></tbody></table></div>
+<div id="toast"></div>
+<script>
+window.__spammed = [];
+{ const P = new URLSearchParams(location.search);
+  if (P.get('title')) document.title = P.get('title');
+  if (P.get('label')) document.addEventListener('DOMContentLoaded', () => { const b = document.getElementById('spamBtn'); b.setAttribute('aria-label', P.get('label')); b.setAttribute('data-tooltip', P.get('label')); });
+  if (P.get('multi')) setTimeout(() => { const t = document.createElement('table'); t.className = 'F'; const tb = document.createElement('tbody'); t.appendChild(tb); document.querySelector('[role=main]').appendChild(t); tb.appendChild(row({ t: 1999, email: 'other@section.test', name: 'Other', subj: 'In another section' })); }, 400);
+  if (P.get('split')) setTimeout(() => { const h = document.createElement('h2'); h.setAttribute('data-thread-perm-id', 'thread-f:9999'); h.textContent = 'Open conversation'; document.body.appendChild(h); }, 100);
+}
+window.__dialogMode = new URLSearchParams(location.search).get('dialog') || '';
+const ROWS = [
+  { t: 1001, email: 'phisher@evil-scam.test', name: 'IT Support', unread: true, subj: 'Your password expires' },
+  { t: 1002, email: 'friend@gmail.com', name: 'Friend', subj: 'Lunch?' },
+  { t: 1003, email: 'news@notifications.example.de', name: 'Example News', subj: 'Newsletter' },
+  { t: 1004, email: 'teacher@school.org', name: 'me', subj: 'Note to self' },
+  { t: 1005, email: 'rescued@evil-scam.test', name: 'Rescued', subj: 'I was rescued' },
+  { t: 1006, email: 'colleague@sub.school.org', name: 'Colleague', subj: 'Meeting' },
+  { t: 1007, email: 'billing@evil-scam.test', name: 'Billing', subj: 'Invoice', unread: true }
+];
+if (new URLSearchParams(location.search).get('set') === 'dns') {
+  ROWS.length = 0;
+  ROWS.push({ t: 4001, email: 'alert@phishing.testcategory.com', name: 'Alerts', subj: 'Security alert', unread: true },
+            { t: 4002, email: 'promo@nudity.testcategory.com', name: 'Promo', subj: 'Adult promo' },
+            { t: 4003, email: 'someone@example.com', name: 'Someone', subj: 'Hello' },
+            { t: 4004, email: 'ghost@this-domain-does-not-exist-zz9q.com', name: 'Ghost', subj: 'Boo' });
+}
+if (new URLSearchParams(location.search).get('set') === 'r2') {
+  ROWS.length = 0;
+  ROWS.push({ t: 5001, email: 'noreply_homecaresample_noreply_homecaresample_noreply_homecaresample_noreply_homecaresample_noreply@homecare-sample.example', name: 'Fidelity Life •°”˜.•°”˜˜.•°”˜', subj: 'WELCOME TO YOUR OFFER', unread: true },
+            { t: 5002, email: 'contact@relief-sample.example', name: 'National Debt Relief', subj: 'Notifications' },
+            { t: 5003, email: 'friend@gmail.com', name: 'Friend', subj: 'Lunch?' },
+            { t: 5004, email: 'news@example.com', name: 'Example News', subj: 'Digest' },
+            { t: 5005, email: 'email_4Af7aQX8Io@zowfxdlzyhpb.newsletter-tool.example', name: 'AHS Warranty', subj: 'Verification' });
+}
+if (new URLSearchParams(location.search).get('mixed')) ROWS[0].email2 = 'friend@gmail.com';
+function row(r) {
+  const tr = document.createElement('tr');
+  tr.className = 'zA ' + (r.unread ? 'zE' : 'yO');
+  const hex = (r.t + 0x18000000).toString(16), mhex = (r.t * 7 + 0x10000000).toString(16);
+  tr.innerHTML = `<td class="oZ-x3"><div role="checkbox" aria-checked="false" tabindex="-1">☐</div></td>
+    <td class="yX xY"><div class="yW">${new URLSearchParams(location.search).get('fakeicons') ? '<img class="other-ext-icon" src="https://www.google.com/s2/favicons?domain=example.com" width="16">' : ''}<span class="bA4"><span class="${r.unread ? 'zF' : 'yP'}" email="${r.email}" name="${r.name}">${r.name}</span>${r.email2 ? `, <span class="yP" email="${r.email2}" name="Friend">Friend</span>` : ''}</span></div></td>
+    <td class="xY a4W"><div class="xS"><div class="xT"><div class="y6"><span class="bog"><span data-thread-id="#thread-f:${r.t}" data-legacy-thread-id="${hex}" data-legacy-last-message-id="${mhex}">${r.subj}</span></span></div></div></div></td>`;
+  const cb = tr.querySelector('[role=checkbox]');
+  cb.addEventListener('click', () => {
+    const on = cb.getAttribute('aria-checked') !== 'true';
+    cb.setAttribute('aria-checked', String(on));
+    tr.classList.toggle('x7', on);
+    updateToolbar();
+  });
+  return tr;
+}
+function updateToolbar() {
+  const any = document.querySelectorAll('tr.zA.x7').length > 0;
+  document.querySelectorAll('.sel-only').forEach(b => b.classList.toggle('hidden', !any));
+}
+// Test hooks: Gmail ignoring the first N Report spam clicks, the list hidden for a moment (as when an
+// email is opened and closed), and new emails arriving one after another.
+window.__ignoreClicks = +(new URLSearchParams(location.search).get('flaky') || 0);
+window.__arrive = (list) => { const tb = document.getElementById('list'); list.forEach(r => tb.prepend(row(r))); };
+// Gmail refreshing rows in place (as when the tab is shown again): each row's cells are rewritten.
+window.__rewriteRows = () => document.querySelectorAll('tr.zA').forEach(tr => { for (const td of tr.querySelectorAll('td')) td.innerHTML = td.innerHTML.replace(/<span class="unshortener-[^]*?<\/span>(<\/span>)?/g, ''); tr.querySelectorAll('[class^="unshortener-"]').forEach(e => e.remove()); });
+window.__hideList = (ms) => { const m = document.querySelector('[role=main]'); m.classList.add('hidden'); setTimeout(() => m.classList.remove('hidden'), ms); };
+function doSpam() {
+  if (window.__ignoreClicks > 0) { window.__ignoreClicks--; return; }
+  const sel = [...document.querySelectorAll('tr.zA.x7')];
+  sel.forEach(tr => { window.__spammed.push(tr.querySelector('[data-thread-id]').getAttribute('data-thread-id')); tr.remove(); });
+  document.getElementById('toast').textContent = 'Conversation marked as spam. Undo';
+  updateToolbar();
+}
+document.getElementById('spamBtn').addEventListener('click', () => {
+  if (window.__dialogMode) {
+    const d = document.createElement('div');
+    d.setAttribute('role', 'alertdialog');
+    d.id = 'dlg';
+    const labels = window.__dialogMode === 'unsub' ? ['Cancel', 'Report spam & unsubscribe', 'Report spam'] : ['Cancel', 'Unsubscribe and report spam', 'OK?'];
+    for (const l of labels) {
+      const b = document.createElement('button'); b.textContent = l;
+      b.addEventListener('click', () => { window.__dialogClicked = l; d.remove(); if (/^report spam$/i.test(l)) doSpam(); });
+      d.appendChild(b);
+    }
+    d.addEventListener('keydown', (e) => { if (e.key === 'Escape') { window.__dialogClicked = 'Escape'; d.remove(); } });
+    document.body.appendChild(d);
+  } else doSpam();
+});
+document.getElementById('notSpamBtn').addEventListener('click', () => { window.__rescued = [...document.querySelectorAll('tr.zA.x7')].map(tr => tr.querySelector('[data-thread-id]').getAttribute('data-thread-id')); });
+document.getElementById('refresh').addEventListener('click', () => {});
+setTimeout(() => { const tb = document.getElementById('list'); ROWS.forEach(r => tb.appendChild(row(r))); }, 300);
+// Another extension's resource in the page (as Gmail Sender Icons would add one).
+if (new URLSearchParams(location.search).get('ext')) { const i = document.createElement('img'); i.src = new URLSearchParams(location.search).get('ext') === 'simplify' ? 'chrome-extension://pbmlfaiicoikhdbjagjbglnbfcbcojpj/img/icon.png' : 'chrome-extension://jniljaamodclkmphgkgkooplflhkadpg/icon.png'; i.style.display = 'none'; document.body.appendChild(i); }
+</script>
+</body></html>
