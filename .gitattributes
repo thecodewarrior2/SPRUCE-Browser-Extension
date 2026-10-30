@@ -7,3 +7,4 @@ branding export-ignore
 # Store listing material (images, their sources, the listing text) isn't part of the extension.
 store export-ignore
 STORE-LISTING.md export-ignore
+.github export-ignore
