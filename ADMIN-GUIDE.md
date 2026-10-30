@@ -1,16 +1,12 @@
 # Managing S.P.R.U.C.E+ with Firefox enterprise policy
 
-S.P.R.U.C.E+ (Spam & Phishing Risk URL Checker Extension+) was called Gmail Link Unshortener before
-version 5.71. Only the name changed: the add-on ID (`link-unshortener@gmail-link-scanner`) and every
-policy name stay the same, so existing policies keep working.
-
 Every setting, plus the allowlist, blocklist and custom resolver, can be set and locked by policy.
 Locked settings show 🔒 in the Options page and the toolbar popup and cannot be changed by users.
 Anything you do **not** set stays under the user's control (all features are on by default).
 
 ## Set the policy
 Firefox passes an add-on's policy from `policies` → `3rdparty` → `Extensions` → the add-on ID
-(`link-unshortener@gmail-link-scanner`) to the add-on. The same `policies.json` can also install it:
+(`spruce@spruce-browser-extension`) to the add-on. The same `policies.json` can also install it:
 
 1. Create `policies.json` in the form below. Delete every setting you do not want to lock.
 2. Put it in a `distribution` folder in the Firefox installation folder (for example
@@ -25,14 +21,14 @@ Firefox passes an add-on's policy from `policies` → `3rdparty` → `Extensions
 {
   "policies": {
     "ExtensionSettings": {
-      "link-unshortener@gmail-link-scanner": {
+      "spruce@spruce-browser-extension": {
         "installation_mode": "force_installed",
         "install_url": "https://addons.mozilla.org/firefox/downloads/latest/<slug>/latest.xpi"
       }
     },
     "3rdparty": {
       "Extensions": {
-        "link-unshortener@gmail-link-scanner": {
+        "spruce@spruce-browser-extension": {
           "managedEnableThirdPartyResolution": false,
           "managedEnableRemoteListSync": false,
           "managedRetentionDays": 14,
@@ -67,11 +63,11 @@ top-level policy (`ExtensionSettings` or `3rdparty`), **the registry wins** and 
 The script writes:
 
 ```
-HKLM\SOFTWARE\Policies\Mozilla\Firefox\ExtensionSettings\link-unshortener@gmail-link-scanner
+HKLM\SOFTWARE\Policies\Mozilla\Firefox\ExtensionSettings\spruce@spruce-browser-extension
     installation_mode   REG_SZ   force_installed
     install_url         REG_SZ   https://addons.mozilla.org/firefox/downloads/latest/<slug>/latest.xpi
 HKLM\SOFTWARE\Policies\Mozilla\Firefox\3rdparty\Extensions
-    link-unshortener@gmail-link-scanner   REG_SZ   {"managedRetentionDays":14,"managedBlocklist":["internal.example.com"]}
+    spruce@spruce-browser-extension   REG_SZ   {"managedRetentionDays":14,"managedBlocklist":["internal.example.com"]}
 ```
 
 Firefox parses the add-on's value as JSON, so every setting keeps its type. On domain-joined computers
@@ -272,7 +268,7 @@ All of this is on by default and every part has its own key above. In short:
 - **Recommended rollout:** start a pilot with `managedEnableAutoSpam` set to `false` (flags only), review what
   is flagged, add any false positives to `managedTrustedSenders`, then enable moving.
 
-In `policies.json`, under `3rdparty` → `Extensions` → `link-unshortener@gmail-link-scanner`:
+In `policies.json`, under `3rdparty` → `Extensions` → `spruce@spruce-browser-extension`:
 
 ```json
 {

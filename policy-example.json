@@ -1,14 +1,14 @@
 {
   "policies": {
     "ExtensionSettings": {
-      "link-unshortener@gmail-link-scanner": {
+      "spruce@spruce-browser-extension": {
         "installation_mode": "force_installed",
         "install_url": "https://addons.mozilla.org/firefox/downloads/latest/ADDON-SLUG/latest.xpi"
       }
     },
     "3rdparty": {
       "Extensions": {
-        "link-unshortener@gmail-link-scanner": {
+        "spruce@spruce-browser-extension": {
           "managedEnableLinkUnmasking": true,
           "managedEnableTrackerReveal": true,
           "managedEnablePhishingFeeds": true,

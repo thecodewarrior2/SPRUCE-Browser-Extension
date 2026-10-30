@@ -229,7 +229,7 @@ test('every new setting is on by default and has a policy key in schema.json', (
   const hasSchema = fs.existsSync(path.join(EXT, 'schema.json'));
   const schema = hasSchema ? JSON.parse(fs.readFileSync(path.join(EXT, 'schema.json'), 'utf8')) : null;
   let example = JSON.parse(fs.readFileSync(path.join(EXT, 'policy-example.json'), 'utf8'));
-  if (example.policies) example = example.policies['3rdparty'].Extensions['link-unshortener@gmail-link-scanner'];
+  if (example.policies) example = example.policies['3rdparty'].Extensions['spruce@spruce-browser-extension'];
   for (const d of S('SETTING_DEFS')) {
     if (schema) assert.ok(schema.properties[d.managedKey], 'schema: ' + d.managedKey);
     if (/Sender|Spam/.test(d.managedKey)) assert.ok(d.managedKey in example, 'example: ' + d.managedKey);

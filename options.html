@@ -478,7 +478,7 @@
                         Address: https://urlhaus-api.abuse.ch/v1/host/<br>Method: POST<br>Body: host={hostname}<br>Headers: Auth-Key: YOUR_KEY</div>
                     <div class="code-example"><strong>Google Safe Browsing v4</strong> (API key from Google Cloud; check the API's terms of use, as the free API is for non-commercial use and Google's commercial equivalent is Web Risk)<br>
                         Address: https://safebrowsing.googleapis.com/v4/threatMatches:find?key=YOUR_KEY<br>Method: POST<br>
-                        Body: {"client":{"clientId":"gmail-link-unshortener","clientVersion":"1"},"threatInfo":{"threatTypes":["MALWARE","SOCIAL_ENGINEERING","UNWANTED_SOFTWARE"],"platformTypes":["ANY_PLATFORM"],"threatEntryTypes":["URL"],"threatEntries":[{"url":"{url}"}]}}</div>
+                        Body: {"client":{"clientId":"spruce","clientVersion":"1"},"threatInfo":{"threatTypes":["MALWARE","SOCIAL_ENGINEERING","UNWANTED_SOFTWARE"],"platformTypes":["ANY_PLATFORM"],"threatEntryTypes":["URL"],"threatEntries":[{"url":"{url}"}]}}</div>
                     <p style="color: var(--text-muted);">Replies are understood automatically for DNS-over-HTTPS (<code>Answer</code>), Safe Browsing (<code>matches</code>), URLhaus (<code>query_status</code>) and simple APIs returning <code>malicious</code>, <code>blocked</code> or similar. For anything else, set <strong>Flag field</strong> to the reply field that indicates a threat. A reply that is not understood (for example an invalid-key error) counts as "no answer", never as "safe".</p>
                 </details>
             </div>
@@ -994,7 +994,7 @@
 <ul class="simple-list">
   <li><b>addons.mozilla.org (AMO)</b>, listed or unlisted: Firefox only installs add-ons signed by Mozilla, and both kinds are signed and updated automatically. A listed add-on installs from <code>https://addons.mozilla.org/firefox/downloads/latest/&lt;slug&gt;/latest.xpi</code>, where <code>&lt;slug&gt;</code> is the last part of its AMO address.</li>
   <li>An unlisted (self-distributed) add-on is a signed <code>.xpi</code> you host yourself; use its address as <code>install_url</code>.</li>
-  <li>The add-on ID is <code>link-unshortener@gmail-link-scanner</code> (in <code>manifest.json</code>); policies refer to the add-on by this ID.</li>
+  <li>The add-on ID is <code>spruce@spruce-browser-extension</code> (in <code>manifest.json</code>); policies refer to the add-on by this ID.</li>
 </ul>
 <p>The extension's settings are delivered as <b>extension policy</b>: every setting has a policy key (listed in the <a href="#" data-help-link="architecture" data-help-anchor="arch-settings">settings reference</a>). A policy value always wins and appears with 🔒 to the user; anything you don't set stays under the user's control.</p>
 
@@ -1004,14 +1004,14 @@
     <div class="deploy-code">{
   "policies": {
     "ExtensionSettings": {
-      "link-unshortener@gmail-link-scanner": {
+      "spruce@spruce-browser-extension": {
         "installation_mode": "force_installed",
         "install_url": "https://addons.mozilla.org/firefox/downloads/latest/&lt;slug&gt;/latest.xpi"
       }
     },
     "3rdparty": {
       "Extensions": {
-        "link-unshortener@gmail-link-scanner": {
+        "spruce@spruce-browser-extension": {
           "managedEnableThirdPartyResolution": true,
           "managedDnsCloudflareFamily": true,
           "managedBlocklist": ["tracking.example.com"]
@@ -1033,11 +1033,11 @@
   <li><b>Check</b> on a device after restarting Firefox: <code>about:policies</code> lists <code>ExtensionSettings</code> and <code>3rdparty</code> without errors, and Settings shows 🔒 on locked options.</li>
 </ol>
 <p>The script writes:</p>
-<div class="deploy-code">HKLM\SOFTWARE\Policies\Mozilla\Firefox\ExtensionSettings\link-unshortener@gmail-link-scanner
+<div class="deploy-code">HKLM\SOFTWARE\Policies\Mozilla\Firefox\ExtensionSettings\spruce@spruce-browser-extension
     installation_mode   REG_SZ   force_installed
     install_url         REG_SZ   https://addons.mozilla.org/firefox/downloads/latest/&lt;slug&gt;/latest.xpi
 HKLM\SOFTWARE\Policies\Mozilla\Firefox\3rdparty\Extensions
-    link-unshortener@gmail-link-scanner   REG_SZ   {"managedRetentionDays":14,"managedBlocklist":["tracking.example.com"]}</div>
+    spruce@spruce-browser-extension   REG_SZ   {"managedRetentionDays":14,"managedBlocklist":["tracking.example.com"]}</div>
 <ul class="simple-list">
   <li><b>Settings as one JSON value:</b> Firefox parses the add-on's value as JSON, so every setting keeps its type. You can write the same values with <b>Group Policy Preferences → Registry</b> on domain-joined computers.</li>
   <li><b>Installing with Mozilla's ADMX templates instead:</b> if you already manage Firefox with Mozilla's ADMX templates (imported in Intune under <b>Devices → Configuration → Import ADMX</b>, or in Group Policy), you can install the add-on with their <b>Extensions → Extension Management</b> setting and keep only the <code>3rdparty</code> part of the script; the templates have no setting for an add-on's own policy.</li>

@@ -1,8 +1,11 @@
-<p align="center"><img src="branding/logo.png" alt="S.P.R.U.C.E+ — Spam &amp; Phishing Risk URL Checker Extension+" width="640"></p>
+<p align="center"><picture>
+  <source media="(prefers-color-scheme: dark)" srcset="branding/logo-dark-background.png">
+  <img src="branding/logo.png" alt="S.P.R.U.C.E+ — Spam &amp; Phishing Risk URL Checker Extension+" width="640">
+</picture></p>
 
 # S.P.R.U.C.E+
 
-**Spam & Phishing Risk URL Checker Extension+**, formerly *Gmail Link Unshortener & Tracker Blocker*.
+**Spam & Phishing Risk URL Checker Extension+**.
 Logos and icons (PNG and SVG, for light and dark backgrounds) are in [`branding/`](branding).
 
 A Firefox (Manifest V3) add-on that shows where the links in your email **really** go before you
@@ -123,7 +126,7 @@ folder. See [INSTALL-FOR-TESTERS.md](INSTALL-FOR-TESTERS.md) for the full walkth
 
 A temporary add-on stays loaded until Firefox restarts. To check the build, run `npx web-ext lint`;
 to package it for addons.mozilla.org, run `npx web-ext build`. The add-on ID
-(`link-unshortener@gmail-link-scanner`, in `manifest.json`) keeps settings and managed policies
+(`spruce@spruce-browser-extension`, in `manifest.json`) keeps settings and managed policies
 attached to the same add-on on every computer.
 
 ## For administrators
