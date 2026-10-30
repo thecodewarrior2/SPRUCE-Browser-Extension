@@ -75,6 +75,11 @@
       "description": "In the inbox list, without opening anything: flag (red, moved to Spam) an email whose sender name is the user's own email address or mailbox name (the part before the @, written as in the address; in any case for addresses at Gmail, Outlook.com and other big providers) but which comes from someone else's address. Shared mailbox names (info, office, support...), the user's own organization's senders and addresses containing the user's mailbox name are left alone.",
       "type": "boolean"
     },
+    "managedEnableCallbackScamCheck": {
+      "title": "Catch \"Call This Number\" Scams",
+      "description": "Flag (red, moved to Spam) an email whose subject gives a phone number to call about a purchase or charge the user didn't make, whoever sent it (attackers put such text into names that companies' own systems mail out); a number with only call or support wording is a caution. In opened emails, 'call this number if you didn't make this purchase' and look-alike mathematical letters are cautions. Also works in opened emails on the other webmail sites.",
+      "type": "boolean"
+    },
     "managedEnableRowHighlighter": {
       "title": "Row Highlighter",
       "description": "Highlight the inbox row under the mouse (and selected rows) in Gmail and the other supported webmail, so users can see exactly which email a click opens. A see-through color and/or an outline, readable in light and dark themes. Inspired by Row Highlighter for Gmail.",

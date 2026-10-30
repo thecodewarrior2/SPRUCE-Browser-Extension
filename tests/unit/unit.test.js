@@ -829,6 +829,26 @@ test('moving: search results (not in Spam, Trash, Sent, Drafts or everywhere) on
   assert.equal(f('#inbox', false), true, 'the inbox either way');
 });
 
+test('"call this number" scams: subject strong with the scam wording, body a caution; OneDrive is Microsoft\'s (sample 10)', () => {
+  const sub = (t) => S('subjectScamSigns')(t).map(x => x.weight);
+  const raw = fs.readFileSync(FX + 'scam10.eml', 'utf8');
+  const subject = S('decodeEncodedWords')(S('parseRawHeaders')(raw).find(([n]) => n === 'subject')[1]);
+  assert.deepEqual(sub(subject), [5, 2], 'sample 10: a genuine Microsoft email with scam text and look-alike letters');
+  assert.ok(S('SCAM_PHONE_RE').test('at 1(555)010-0188.') && S('SCAM_PHONE_RE').test('+1 (555) 010-0177') && S('SCAM_PHONE_RE').test('555-010-0100'), 'phone formats');
+  assert.deepEqual(sub('PayPal: you were charged $499.00, call 1-555-010-0101 to dispute'), [5]);
+  assert.deepEqual(sub('Your order is ready - call (555) 010-0123 to pick it up'), [3], 'a shop\'s number: caution');
+  assert.deepEqual(sub('Your receipt from Example Store #1234'), []);
+  assert.deepEqual(sub('Meeting at 10:30 re: invoice 555-0100'), [], 'no phone number');
+  const body = (t) => S('bodyScamSigns')(t).map(x => x.weight);
+  assert.deepEqual(body('If you did not make this purchase of $499.99, call 1 (555) 010-0123 now to cancel.'), [3]);
+  assert.deepEqual(body('Thank you for your order. Questions? Call 1-800-555-0100.'), [], 'a receipt with a support number');
+  assert.deepEqual(body('Fraud alert: if you did not make this purchase, call the number on the back of your card.'), [], 'a bank alert without a number');
+  // A genuine OneDrive email ("OneDrive" <photos@onedrive.com>) was flagged as a brand name on another address.
+  assert.deepEqual(S('nameAddressSigns')('OneDrive', 'photos@onedrive.com', '', new Set()), [], 'onedrive.com is Microsoft\'s');
+  assert.equal(S('evaluateSender')({ displayName: 'OneDrive', address: 'photos@onedrive.com' }).findings.length, 0);
+  assert.deepEqual(S('nameAddressSigns')('OneDrive', 'photos@onedrive-share.example', '', new Set()).map(x => x.weight), [5], 'still red elsewhere');
+});
+
 test('list storage: compressed, each entry once; old plain copies still read; a failed list keeps its domains', async () => {
   const b = loadBackground();
   const run = (c) => vm.runInContext(c, b);

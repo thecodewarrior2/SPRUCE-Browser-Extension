@@ -39,6 +39,9 @@ const SETTING_DEFS = [
     // A sender's name that is the user's own email address or mailbox name, on someone else's address
     // (inbox rows, nothing opened): a scam trick to look like a notice about the user's own account.
     { key: 'enableOwnNameCheck',          managedKey: 'managedEnableOwnNameCheck',          def: true, type: 'boolean' },
+    // "Call this number" scams: a phone number with purchase or support wording in the subject (inbox
+    // rows, nothing opened) or with "if you didn't make this purchase" in an opened email.
+    { key: 'enableCallbackScamCheck',     managedKey: 'managedEnableCallbackScamCheck',     def: true, type: 'boolean' },
     // BIMI logos: the company logo a domain publishes in DNS, shown without opening any email.
     { key: 'enableSenderBimi',            managedKey: 'managedEnableSenderBimi',            def: true, type: 'boolean' },
     // Row highlighter: the inbox row under the mouse (and selected rows) is highlighted, so it's clear
@@ -449,7 +452,7 @@ const FILE_EXTENSION_TLDS = new Set([
 // within one family are consistent (text "gmail.com" pointing to google.com, or Google's c.gle).
 const BRAND_FAMILIES = [
     { name: 'Google',    labels: ['google'], domains: ['gmail.com', 'youtube.com', 'youtu.be', 'android.com', 'withgoogle.com', 'blogger.com', 'googleblog.com', 'c.gle', 'g.co', 'goo.gle', 'goo.gl', 'gle'] },
-    { name: 'Microsoft', labels: [], domains: ['microsoft.com', 'microsoftonline.com', 'live.com', 'office.com', 'outlook.com', 'microsoft365.com', 'office365.com', 'azure.com', 'windows.com', 'xbox.com', 'bing.com', 'skype.com', 'sharepoint.com', 'aka.ms', 'msft.it'] },
+    { name: 'Microsoft', labels: [], domains: ['microsoft.com', 'microsoftonline.com', 'live.com', 'office.com', 'outlook.com', 'microsoft365.com', 'office365.com', 'azure.com', 'windows.com', 'xbox.com', 'bing.com', 'skype.com', 'sharepoint.com', 'aka.ms', 'msft.it', 'onedrive.com', '1drv.ms', 'sharepointonline.com', 'microsoftpersonalcontent.com', 'svc.ms', 'microsoftstore.com', 'msn.com', 'azure.net', 'powerbi.com', 'dynamics.com', 'visualstudio.com'] },
     { name: 'Amazon',    labels: ['amazon'], domains: ['amzn.to', 'amzn.eu', 'a.co', 'primevideo.com', 'audible.com'] },
     { name: 'Meta',      labels: [], domains: ['facebook.com', 'facebookmail.com', 'fb.com', 'fb.me', 'instagram.com', 'whatsapp.com', 'messenger.com', 'meta.com', 'threads.net'] },
     { name: 'PayPal',    labels: ['paypal'], domains: ['paypal.com'] },
@@ -1127,7 +1130,8 @@ function riskyScheme(href) {
 //   ownHosts      links to the webmail itself, never checked
 //   list          inbox rows: row, container (one list; several shown at once means sections such as
 //                 Multiple Inboxes), unread, selected (selectors a row matches), checkbox, sender (elements
-//                 holding a sender), nameCell (where the sender's icon goes), subjectCell (its label)
+//                 holding a sender), nameCell (where the sender's icon goes), subjectCell (its label),
+//                 subject (the subject's own text; message.subject: an opened conversation's)
 //   senderAttrs   attributes of a sender element: address, name
 //   ids           how conversations and messages are named: thread / message / rowLastMessage are lists of
 //                 readers, { attr, match } (a pattern whose first group is the id) or { attr, hex }
@@ -1166,7 +1170,7 @@ const WEBMAIL_SITES = [
                   // paperclip instead of chips is Comfortable.
                   density: { navItem: '[role="navigation"] .TN, .aqn.aIH .TN, .TN, .bzz', compactNavMax: 28, compactRowMax: 35,
                              chips: '.brd .brc', paperclip: '.yf img' },
-                  sender: '.yW [email], .yX [email]', nameCell: '.yW, .yX', subjectCell: '.xT, .y6' },
+                  sender: '.yW [email], .yX [email]', nameCell: '.yW, .yX', subjectCell: '.xT, .y6', subject: '.bog' },
           senderAttrs: { address: 'email', name: 'name' },
           ids: {
               thread: [{ attr: 'data-thread-perm-id', match: /^#?(thread-f:\d+)$/ }, { attr: 'data-thread-id', match: /^#?(thread-f:\d+)$/ },
@@ -1177,7 +1181,7 @@ const WEBMAIL_SITES = [
               messageHolder: '[data-message-id], [data-legacy-message-id]'
           },
           openThread: 'h2[data-thread-perm-id], h2[data-legacy-thread-id]',
-          message: { container: '.adn, [data-message-id], .gs', sender: '.gD[email]', senderAfter: '.go',
+          message: { container: '.adn, [data-message-id], .gs', sender: '.gD[email]', senderAfter: '.go', subject: 'h2.hP',
                      // The photo or logo Gmail shows beside the sender (its hovercard id is the address).
                      // It sits in its own column of the whole message (scope: .adn), beside the box that
                      // holds the body (.gs), so it is looked for in the whole message.
@@ -1447,6 +1451,7 @@ const FEATURE_SUPPORT = [
     { name: 'Copy button for the sender\'s address', needs: 'avatars' },
     { name: 'Look-alike senders caught in the inbox list (nothing opened)', needs: 'list' },
     { name: 'Senders using your own name or address as theirs, caught in the inbox list', needs: 'account' },
+    { name: '"Call this number" scams caught, even in emails genuinely sent by a company', needs: 'opened' },
     { name: 'Sender icon, country flag and label in the inbox list', needs: 'list' },
     { name: 'Sender pictures over the checkbox: colleagues\' photos, BIMI and company logos, site icons', needs: 'avatars' },
     { name: 'The webmail\'s own warnings about a sender counted in the email\'s verdict', needs: 'opened' },
@@ -1729,7 +1734,7 @@ function evaluateCompanyLink({ shortener, auth, inQuote }) {
 
 // Text that suggests a call-or-pay scam inside a genuine notification (attackers put it in fields
 // such as account or organization names that the company's system then mails out).
-const SCAM_PHONE_RE = /(?:\+?1[\s.-]?)?\(?\b\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}\b/;
+const SCAM_PHONE_RE = /(?:\+?1[\s.-]?)?(?:\(\d{3}\)[\s.-]?|\b\d{3}[\s.-])\d{3}[\s.-]\d{4}\b/;
 const SCAM_WORDS_RE = /\b(payment|charged|charge|invoice|refund|order|subscription|renewal|purchase|transaction|bitcoin|crypto|gift ?cards?|call (us|now|immediately)|cancel)\b/i;
 
 // Findings about the sender: [{ severity, message }], plus info for the log.
@@ -1756,6 +1761,39 @@ function evaluateSender({ displayName, address, auth, bodyText }) {
         }
     }
     return { findings, info };
+}
+
+// "Call this number" (callback) scams: a phone number to call about a purchase, renewal or charge.
+// Attackers also type such text into fields a company's own system mails out (an organization or
+// account name), so it counts whoever sent the email. In a subject it is strong: no genuine
+// notification puts a support number there. In an opened email it is a caution only when it says to
+// call if you didn't make the purchase (some banks' genuine fraud alerts say that too).
+const CALLBACK_MONEY_RE = /\b(purchase[ds]?|order(ed)?|payment|charged?|renewal|renewed|subscription|invoice|transaction|refund|billing)\b/i;
+const CALLBACK_CALL_RE = /\b(call|contact|support|help ?line|customer (service|care)|cancel|dispute)\b/i;
+const CALLBACK_URGE_RE = /\b(cancel(l?ation)?|dispute|refund|charged|immediately|urgent(ly)?|not you|wasn'?t you)\b/i;
+const CALLBACK_NOT_YOU_RE = /\b(not (made|authori[sz]ed|placed|requested) by you|did(n'?t| not) (make|authori[sz]e|place|request|order)|unauthori[sz]ed (purchase|charge|transaction|payment))\b/i;
+// Letters from the "mathematical" alphabets (𝐔𝐒𝐃), which look like ordinary ones but don't match a filter's words.
+const MATH_LETTERS_RE = /[\u{1D400}-\u{1D7FF}]/gu;
+function subjectScamSigns(subject) {
+    const s = String(subject || '').normalize('NFKC'), raw = String(subject || '');
+    const out = [];
+    if (SCAM_PHONE_RE.test(s) && CALLBACK_MONEY_RE.test(s)) {
+        // Strong with the scam's own wording (not you, cancel, dispute, charged, immediately); a
+        // number with "call" or "support" alone is a caution (a small shop may write "call to pick up").
+        if (CALLBACK_NOT_YOU_RE.test(s) || CALLBACK_URGE_RE.test(s)) out.push({ weight: 5, text: 'Its subject gives a phone number to call about a purchase or charge you didn\'t make: the "call this number" scam. Even emails really sent by a company can carry it (attackers type it into names its system mails out). Don\'t call it.' });
+        else if (CALLBACK_CALL_RE.test(s)) out.push({ weight: 3, text: 'Its subject gives a phone number to call about a purchase or payment, which genuine notifications rarely do.' });
+    }
+    if ((raw.match(MATH_LETTERS_RE) || []).length >= 2) out.push({ weight: 2, text: 'Its subject uses look-alike "mathematical" letters (such as 𝐔𝐒𝐃) to slip past filters.' });
+    return out;
+}
+function bodyScamSigns(text) {
+    const raw = String(text || '').slice(0, 20000), t = raw.normalize('NFKC');
+    const out = [];
+    if (SCAM_PHONE_RE.test(t) && CALLBACK_MONEY_RE.test(t) && CALLBACK_NOT_YOU_RE.test(t)) {
+        out.push({ weight: 3, text: 'It asks you to call a phone number if you didn\'t make a purchase: the "call this number" scam. Contact the company through its official website instead.' });
+    }
+    if ((raw.match(MATH_LETTERS_RE) || []).length >= 2) out.push({ weight: 2, text: 'Its text uses look-alike "mathematical" letters (such as 𝐔𝐒𝐃) to slip past filters.' });
+    return out;
 }
 
 // Sign-in links (Microsoft, Google) that send you on to another site afterwards: a phishing trick

@@ -38,6 +38,9 @@
   "managedEnableOwnNameCheck": {
     "Value": true
   },
+  "managedEnableCallbackScamCheck": {
+    "Value": true
+  },
   "managedEnableRowHighlighter": {
     "Value": true
   },

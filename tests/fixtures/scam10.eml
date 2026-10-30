@@ -1,0 +1,34 @@
+Received: from relay-sample.prod.outlook.com (::1) by mailbox-sample.prod.outlook.com with HTTPS; Fri, 18 Jul 2025 14:17:32 +0000
+Authentication-Results: spf=fail (sender IP is 192.0.2.25) smtp.mailfrom=microsoftonline.com; dkim=pass (signature was verified) header.d=microsoftonline.com;dmarc=pass action=none header.from=microsoftonline.com;compauth=pass reason=100
+Received: from mail-sor-f69.google.com (mail-sor-f69.google.com. [209.85.220.69]) by mx.google.com with SMTPS id 00721157ae682-7195320136asor8823287b3.1.2025.07.18.07.16.53 for <forward2@hotel-sample.example> (Google Transport Security); Fri, 18 Jul 2025 07:16:53 -0700 (PDT)
+Received: from NAM12-BN8-obe.outbound.protection.outlook.com (mail-bn8nam12acsn2181.outbound.protection.outlook.com. [104.47.55.181]) by mx.google.com with ESMTPS id 00721157ae682-71952d3f4f1si11917197b3.0.2025.07.18.07.16.52 for <receipt@hotel-sample.example> (version=TLS1_3 cipher=TLS_AES_256_GCM_SHA384 bits=256/256); Fri, 18 Jul 2025 07:16:52 -0700 (PDT)
+Message-ID: <687a5754.050a0220.14f80.390bSMTPIN_ADDED_BROKEN@mx.google.com>
+DKIM-Signature: v=1; a=rsa-sha256; d=microsoftonline.com; s=s1024; c=relaxed/relaxed; t=1752848210; h=from:to:cc:subject:date:messageid; bh=vSlkVWXD2mbjut2TG+zTFntbTVs2cH6sslOX7I5lN/o=; b=iDGqNbzg
+From: msonlineservicesteam@microsoftonline.com
+To: receipt@hotel-sample.example
+Subject: Your order of Windows Defender for
+ =?utf-8?b?KDU1NS42OPCdkJTwnZCS8J2Qgyk=?= was successfully purchased.If this
+ purchase was not made by you, please contact Microsoft Customer Support
+ Immediately at 1(555)010-0188. account email verification code
+Date: Fri, 18 Jul 2025 14:16:50 +0000
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+MIME-Version: 1.0
+
+<html><head><title>Your order of Windows Defender for (555.68=F0=9D=90=94=
+=F0=9D=90=92=F0=9D=90=83) was successfully purchased.If this purchase was n=
+ot made by you, please contact Microsoft Customer Support Immediately at 1(=
+555)010-0188. account email verification code</title></head>
+<body><span id=3D"HeaderPlaceholder_UserVerificationEmailHeader">Verify you=
+r email address</span>
+<span id=3D"BodyPlaceholder_UserVerificationEmailBodySentence1">Thanks for =
+verifying your order@tenant-sample.onmicrosoft.com account!</span>
+<span id=3D"BodyPlaceholder_UserVerificationEmailBodySentence2">Your code i=
+s: 000000</span>
+<div>Sincerely,</div>
+<div>Your order of Windows Defender for (555.68=F0=9D=90=94=F0=9D=90=92=F0=
+=9D=90=83) was successfully purchased.If this purchase was not made by you,=
+ please contact Microsoft Customer Support Immediately at 1(555)010-0188.</=
+div>
+<a href=3D"https://privacy.microsoft.com/en-US/privacystatement">Privacy</a>
+</body></html>
