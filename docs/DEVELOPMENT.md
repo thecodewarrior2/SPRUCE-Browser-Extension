@@ -3,6 +3,24 @@
 For people working on the extension itself: the Chrome and Edge build (branch `main`). Everyone else needs only the
 [README](../README.md); administrators, the [admin guide](ADMIN-GUIDE.md).
 
+## Branches and workflow
+
+| Branch | What it holds |
+|---|---|
+| `testing` | **Where all work happens first.** Every change is made, tested and committed here. |
+| `main` | The Chrome and Edge build: what the Chrome Web Store and Edge Add-ons get. |
+| `firefox` | The Firefox (desktop) build. |
+| `safari` | The Safari build. |
+
+1. Work on `testing` (start from the latest `main`: `git checkout testing && git merge main`).
+2. Run the tests (below) and try the change in the browser. Commit and push `testing`.
+3. When `testing` is ready, bring it into `main` (`git checkout main && git merge --ff-only testing`)
+   and push.
+4. Port the change to `firefox` and `safari` (their files differ in places: the background page,
+   policies, browser APIs), run their tests, and push them.
+
+Nothing goes to `main`, `firefox` or `safari` that hasn't been on `testing` first.
+
 ## Run it from source (load unpacked)
 
 The repository's top folder is the extension. See
@@ -33,6 +51,27 @@ the developer dashboard, the store also asks for a privacy policy link, a reason
 the data the extension handles (website content and email, read on the device), screenshots and a
 promotional image.
 
+## Publishing a GitHub release
+
+The [releases page](https://github.com/thecodewarrior2/SPRUCE-Browser-Extension/releases) is for people
+who install the extension themselves. Store installs update on their own; manual installs don't.
+
+1. On `main`, with the version in `manifest.json` and a `CHANGELOG.md` entry for it, run
+   `tools/build-webstore.sh --manual`. It builds `build/spruce-<version>-chrome-manual-install.zip`:
+   one folder, `S.P.R.U.C.E+-<version>`, with the extension and `INSTALL.md`. Unlike the store zip it
+   **keeps the `key`**, so every manual install has the same extension ID as the test version and
+   managed policies reach it.
+2. Firefox: release Firefox only installs add-ons signed by Mozilla, so never attach an unsigned zip.
+   Once the version is approved on addons.mozilla.org, download its signed `.xpi` from the developer
+   hub and name it `spruce-<version>-firefox.xpi`. (Without a public listing, submit it as
+   "On your own" to get a signed `.xpi`.)
+3. Safari: don't attach anything until there is a signed and notarized app (it needs an Apple
+   Developer account). An unsigned build only runs with Safari's "Allow unsigned extensions",
+   which resets every time Safari restarts.
+4. Write the release notes from the draft in [`docs/releases/`](releases) (one file per version), fill
+   in the store links and the checksums (`sha256sum` of each file), create the release with the tag
+   `v<version>` on `main`, and attach the files.
+
 ## Repository layout
 
 | Path | Role |
@@ -49,8 +88,8 @@ promotional image.
 | `theme.css` / `theme.js` | Design tokens and light/dark appearance (WCAG 2.1 AA) |
 | `lib/` | Bundled pdf.js (Apache-2.0), used only for PDF attachments |
 | `icons/` | Toolbar and store icons |
-| `tools/` | Maintenance scripts: `build-webstore.sh` (the store zip), `refresh-snapshot.js` (the bundled shortener list) |
-| `docs/` | Architecture guide, admin guide, tester instructions, policy example |
+| `tools/` | Maintenance scripts: `build-webstore.sh` (the store zip; `--manual` for the releases page), `refresh-snapshot.js` (the bundled shortener list) |
+| `docs/` | Features, admin guide, architecture, this guide, install steps, policy example, release notes drafts (`docs/releases/`) |
 | `store/` | Chrome Web Store listing text and images, and the script that makes the images |
 | `branding/` | Logos, icons and the donation QR code (PNG and SVG) |
 | `tests/` | Unit and end-to-end tests, with sanitized sample emails |

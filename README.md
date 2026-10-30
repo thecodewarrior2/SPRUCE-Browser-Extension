@@ -32,8 +32,13 @@ Every feature in detail, and which webmail supports what: [docs/FEATURES.md](doc
 
 ## Install
 
-Once it is published, install it from the Chrome Web Store (Edge: the Edge Add-ons store). To try a test version from this repository, follow
-[docs/INSTALL-FOR-TESTERS.md](docs/INSTALL-FOR-TESTERS.md).
+- **Chrome and Edge:** once it is published, from the Chrome Web Store (Edge: Edge Add-ons). To install
+  it yourself, download `spruce-<version>-chrome-manual-install.zip` from the
+  [releases page](https://github.com/thecodewarrior2/SPRUCE-Browser-Extension/releases) and follow
+  [docs/INSTALL-FOR-TESTERS.md](docs/INSTALL-FOR-TESTERS.md).
+- **Firefox (desktop):** once it is published, from addons.mozilla.org; the releases page also has the
+  Mozilla-signed `.xpi`.
+- **Safari:** not available as a download yet (the source is on the `safari` branch).
 
 ## Documentation
 
@@ -44,7 +49,7 @@ Once it is published, install it from the Chrome Web Store (Edge: the Edge Add-o
 | [Privacy policy](PRIVACY.md) | What is read on your device, what can leave it, and to whom |
 | [Architecture](docs/ARCHITECTURE.md) | How it works inside, with diagrams |
 | [Development](docs/DEVELOPMENT.md) | Building, testing and publishing; repository layout |
-| [Tester install](docs/INSTALL-FOR-TESTERS.md) | Installing a test version |
+| [Manual install](docs/INSTALL-FOR-TESTERS.md) | Installing a release download or test version yourself |
 | [Store listing](store/STORE-LISTING.md) | Chrome Web Store listing text, permission reasons and images |
 | [Changelog](CHANGELOG.md) | Every version, what changed and why |
 

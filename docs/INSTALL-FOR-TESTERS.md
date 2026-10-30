@@ -1,10 +1,14 @@
-# Installing the test version (Chrome or Edge)
+# Installing it manually (Chrome or Edge)
 
-The extension isn't in a web store yet, so it's installed from this folder. It takes about a minute.
+Most people should install S.P.R.U.C.E+ from the Chrome Web Store (Edge: Edge Add-ons): it updates
+itself. To install it yourself instead (a test version, or a download from the
+[releases page](https://github.com/thecodewarrior2/SPRUCE-Browser-Extension/releases), the file
+named `spruce-<version>-chrome-manual-install.zip`), follow these steps. It takes about a minute.
+A manual install doesn't update itself: check the releases page for new versions.
 
 ## Install
 
-1. **Unzip** the download and move the unzipped folder somewhere permanent
+1. **Unzip** the download and move the unzipped folder (`S.P.R.U.C.E+-<version>`) somewhere permanent
    (for example your Documents folder). Chrome loads it from there, so don't delete it later.
 2. Open **chrome://extensions** (Edge: **edge://extensions**).
 3. Turn on **Developer mode** (top-right in Chrome; left side in Edge).
@@ -21,7 +25,7 @@ Zoho Mail, iCloud Mail, Fastmail and GMX. The extension ID shown on its card sho
 
 - Chrome on Windows may show **"Disable developer mode extensions"** when it starts.
   Just close that message; the extension keeps working.
-- **Updating to a new test version:** replace the files in the same folder, then click the
+- **Updating to a new version:** replace the files in the same folder, then click the
   ↻ (reload) button on the extension's card and reload your webmail. Your settings are kept.
 - **Removing it:** click **Remove** on the extension's card.
 
