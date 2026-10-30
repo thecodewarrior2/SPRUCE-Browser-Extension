@@ -32,7 +32,7 @@ Proton Mail, Yahoo Mail, AOL Mail, Zoho Mail, iCloud Mail, Fastmail and GMX.
   proven safe. Point at the label for the reasons and Gmail's own verification (DMARC/SPF/DKIM).
 - **Phishing senders go to Spam (Gmail).** Sender addresses are compared with a community scam-sender
   list (there is no block list to maintain; Gmail's own Report spam covers anything missed); sender domains with the phishing lists and the DNS threat filters
-  (a domain that doesn't exist is flagged too). Each email is also checked for signs of forgery: malformed
+  (a domain that doesn't exist is flagged too, unless it's a subdomain of a company domain that does). Each email is also checked for signs of forgery: malformed
   addresses, forged delivery headers, padded names and subjects, unnamed or dangerous attachments, and
   links flagged as dangerous, so an email full of red links never shows a green sender. Trusted senders
   (yours and your organization's) are never flagged. Emails from a **flagged** sender (never unverified, unknown or clean ones) are moved

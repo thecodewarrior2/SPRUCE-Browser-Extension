@@ -1460,7 +1460,19 @@ async function senderIcon(site, opts = {}) {
 async function senderDomainDns(domain, S) {
     const hit = await senderDomainCache.get(domain);
     if (hit) return hit.dns;
-    const r = await checkDomainSafety(`https://${domain}/`, customThreatConf(S), S, { sender: true });
+    let r = await checkDomainSafety(`https://${domain}/`, customThreatConf(S), S, { sender: true });
+    // A name with no DNS records of its own can still send genuine mail: some companies' DNS answers
+    // "no such domain" for a subdomain that only has names below it (hello.blink.com: its bounce
+    // address and DKIM key are under it). It counts as missing only when the organization's own
+    // domain is missing too; otherwise that domain is the one checked for threats.
+    const org = registrableDomain(domain);
+    if (/doesn't exist/.test(r.note || '') && org && org !== domain) {
+        const o = await checkDomainSafety(`https://${org}/`, customThreatConf(S), S, { sender: true });
+        if (!/doesn't exist/.test(o.note || '')) {
+            logInfo(`Sender domain ${domain} has no DNS records of its own, but its organization's domain ${org} exists, so ${org} was checked instead.`, 'Sender checks');
+            r = o;
+        }
+    }
     const dns = { verdict: r.verdict, reason: r.reason || null, scanner: r.scanner || '', note: r.note || null, ip: r.resolvedIp && r.resolvedIp !== 'N/A' ? r.resolvedIp : null };
     if (r.verdict === 'unsafe' || /doesn't exist/.test(r.note || '') || (r.verdict === 'safe' && r.scanner === 'Multi-DoH')) senderDomainCache.set(domain, { dns });
     return dns;
