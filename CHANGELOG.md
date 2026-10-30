@@ -1,5 +1,17 @@
 # Changelog
 
+## 5.57 — Company logos in the inbox list, the photo-finding fix, and finer conflict choices
+
+- **Fixed: photos and logos were never found in real Gmail.** Gmail puts the sender's picture in its own column beside the message body, and the extension only looked inside the body's box, so every opened email logged "Gmail showed no photo or logo beside the sender". It now looks in the whole message.
+- **One logo per company, shown for everyone there.** A company's logo is learned from one opened email that passed Gmail's sender verification (DMARC) and came from one of its shared mailboxes (contact@, info@, support@, news@, no-reply@…, whose picture the company itself chose) or carried a verified BIMI logo. From then on every address at that company shows it in the inbox list, with no need to open each sender's email first.
+- **People at other companies show their company's logo**, never their own photo (bob@company shows company's logo).
+- **Your own organization shows each colleague's own photo**, never your organization's logo.
+- **Personal email services** (Gmail, Outlook.com, Yahoo…) keep the site icon.
+- **Other extensions: turn off only the settings that overlap.** When another extension overlaps with several of ours (Simplify Gmail: sender photos and tracking-pixel blocking), the warning and Settings → Other extensions offer one button per overlapping setting of ours, plus "all of ours", besides turning the other extension off. Once you've turned off the ones you want off, that extension isn't warned about again, unless a setting you turned off is turned back on while it's still there.
+- **Row highlighter: ticked emails get their own color** (blue by default; the row under the mouse stays yellow), so a ticked email and the one your mouse is over are never confused. Same six colors to choose from; if you pick the same color for both, Settings warns that it may be confusing but lets you. Policy `managedRowHighlightSelectedColor`.
+- **Fixed:** in Settings → Other extensions, pressing Ignore (or Warn me again) could list the same extension twice: two redraws of the list ran at once and both added their entries.
+- Settings → Logging → Senders counts colleagues' photos and company logos separately.
+
 ## 5.56 — Row highlighter, and warnings about extensions that do the same job
 
 - **New: row highlighter.** The inbox row under the mouse gets a soft see-through color and an outline, so it's clear which email a click opens; emails you've ticked keep the highlight. Six colors (yellow, blue, green, pink, purple, gray) and three styles (color and outline, color only, outline only), each with a light- and dark-theme variant so text keeps its contrast. Works on every webmail whose inbox list the extension finds. Inspired by Row Highlighter for Gmail. Settings → Row highlighter; policies `managedEnableRowHighlighter`, `managedRowHighlightColor`, `managedRowHighlightStyle`, `managedRowHighlightSelected`.

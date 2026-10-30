@@ -823,6 +823,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const bySource = (src) => withIcon.filter(i => i.source === src).length;
             document.getElementById('senderStats').replaceChildren(statItem('senders remembered', rows.length), statItem('flagged', counts.flagged || 0),
                 statItem('caution', counts.caution || 0), statItem(`icons remembered (${iconKB < 10 ? iconKB.toFixed(1) : Math.round(iconKB)} KB)`, withIcon.length),
+                statItem('colleagues\' photos', bySource('avatar-personal')), statItem('company logos', bySource('avatar-logo')),
                 statItem('stand-ins from the parent domain', bySource('parent')), statItem('stand-ins from DuckDuckGo', bySource('duckduckgo')),
                 statItem('sites without an icon', iconRecs.length - withIcon.length));
             for (const v of rows) {
@@ -1466,18 +1467,24 @@ document.addEventListener('DOMContentLoaded', () => {
         }).filter(Boolean);
     }
 
+    // Several redraws can be under way at once (a button's own redraw and the storage change it
+    // causes): each builds its list apart, and only the latest one is put on the page.
+    let renderSeq = 0;
     async function render() {
+        const seq = ++renderSeq;
         const cfg = await loadEffectiveSettings();
-        const st = await new Promise(r => chrome.storage.local.get({ detectedConflicts: {}, ignoredConflicts: [] }, r));
+        const st = await new Promise(r => chrome.storage.local.get({ detectedConflicts: {}, ignoredConflicts: [], keptConflictFeatures: {} }, r));
         const map = Object.assign({}, st.detectedConflicts || {});
         for (const c of await installedConflicts()) map[c.key] = Object.assign({}, map[c.key] || {}, c);
         const ignored = new Set(st.ignoredConflicts || []);
-        listEl.replaceChildren();
+        const keptOn = st.keptConflictFeatures || {};
         const items = Object.values(map).sort((a, b) => (b.ts || 0) - (a.ts || 0));
-        if (!items.length) {
-            const p = document.createElement('p'); p.className = 'setting-desc'; p.textContent = 'No other extension doing the same job has been found.'; listEl.appendChild(p); return;
-        }
         const management = await hasManagement();
+        if (seq !== renderSeq) return;
+        const out = document.createDocumentFragment();
+        if (!items.length) {
+            const p = document.createElement('p'); p.className = 'setting-desc'; p.textContent = 'No other extension doing the same job has been found.'; out.appendChild(p);
+        }
         for (const c of items) {
             const box = document.createElement('div'); box.className = 'conflict-item';
             const title = document.createElement('div');
@@ -1485,9 +1492,11 @@ document.addEventListener('DOMContentLoaded', () => {
             title.append(b, ` also does ${c.does}`, c.site ? ` (seen in ${c.site})` : '', c.via === 'installed' ? ' (installed)' : '', ignored.has(c.key) ? ' · ignored' : '');
             const ours = (c.features || []).filter(k => SETTING_BY_KEY[k]);
             const oursOn = ours.filter(k => cfg.values[k]);
+            const settled = oursOn.length && conflictSettled(oursOn, keptOn[c.key]);
             const note = document.createElement('div'); note.className = 'setting-desc';
-            note.textContent = oursOn.length ? `Ours does the same with: ${oursOn.map(k => FEATURE_NAMES[k] || k).join(', ')}. We recommend keeping ours on and turning ${c.name === 'Another extension' ? 'the other one' : c.name} off.`
-                : 'Our matching feature is already off, so there is no conflict.';
+            note.textContent = !oursOn.length ? 'Our matching settings are off, so there is no conflict.'
+                : settled ? `You turned off the rest and kept ours on: ${oursOn.map(k => FEATURE_NAMES[k] || k).join(', ')}. You won't be warned again unless one you turned off is turned back on.`
+                : `Ours does the same with: ${oursOn.map(k => FEATURE_NAMES[k] || k).join(', ')}. We recommend keeping ours on and turning ${c.name === 'Another extension' ? 'the other one' : c.name} off, or turn off just the settings of ours that overlap.`;
             const actions = document.createElement('div'); actions.className = 'actions';
             const btn = (label, cls, fn) => { const x = document.createElement('button'); x.type = 'button'; x.className = cls; x.textContent = label; x.addEventListener('click', fn); actions.appendChild(x); return x; };
             const isExtId = /^[a-p]{32}$/.test(c.key);
@@ -1507,23 +1516,29 @@ document.addEventListener('DOMContentLoaded', () => {
                     : `To turn ${c.name === 'Another extension' ? 'it' : c.name} off: open chrome://extensions and switch it off there.`;
                 box.appendChild(how);
             }
-            const offOurs = btn(`Turn off ours (${oursOn.map(k => FEATURE_NAMES[k] || k).join(', ') || 'already off'})`, 'btn-action', () => {
-                const changes = {};
-                oursOn.filter(k => !cfg.locked[k]).forEach(k => { changes[k] = false; });
-                chrome.storage.local.set(changes, () => { reportToLog('info', 'Options page', `Turned off our ${oursOn.map(k => FEATURE_NAMES[k] || k).join(' and ')} because ${c.name} does the same job.`); render(); });
-            });
-            if (!oursOn.length || oursOn.every(k => cfg.locked[k])) { offOurs.disabled = true; if (oursOn.length) offOurs.title = 'Set by your organization'; }
-            btn(ignored.has(c.key) ? 'Warn me again' : 'Ignore', 'btn-action', () => {
-                chrome.storage.local.get({ ignoredConflicts: [] }, r => {
+            // Only the overlapping settings of ours: one at a time, or all of them.
+            const offButton = (keys, label) => {
+                const x = btn(label, 'btn-action', () => turnOffForConflict(c.key, oursOn, keys, cfg.locked, (done) => {
+                    if (done.length) reportToLog('info', 'Options page', `Turned off our ${done.map(k => FEATURE_NAMES[k] || k).join(' and ')} because ${c.name} does the same job.`);
+                    render();
+                }));
+                if (keys.every(k => cfg.locked[k])) { x.disabled = true; x.title = 'Set by your organization'; }
+            };
+            if (oursOn.length > 1) oursOn.forEach(k => offButton([k], `Turn off only our ${FEATURE_NAMES[k] || k}`));
+            if (oursOn.length) offButton(oursOn, oursOn.length > 1 ? 'Turn off all of ours' : `Turn off our ${FEATURE_NAMES[oursOn[0]] || oursOn[0]}`);
+            btn(ignored.has(c.key) || settled ? 'Warn me again' : 'Ignore', 'btn-action', () => {
+                chrome.storage.local.get({ ignoredConflicts: [], keptConflictFeatures: {} }, r => {
                     const set = new Set(r.ignoredConflicts || []);
-                    if (set.has(c.key)) set.delete(c.key); else set.add(c.key);
-                    chrome.storage.local.set({ ignoredConflicts: [...set] }, render);
+                    const keptMap = r.keptConflictFeatures || {};
+                    if (set.has(c.key) || settled) { set.delete(c.key); delete keptMap[c.key]; } else set.add(c.key);
+                    chrome.storage.local.set({ ignoredConflicts: [...set], keptConflictFeatures: keptMap }, render);
                 });
             });
             box.prepend(title, note);
             box.appendChild(actions);
-            listEl.appendChild(box);
+            out.appendChild(box);
         }
+        listEl.replaceChildren(out);
     }
 
     document.getElementById('checkExtensionsBtn').addEventListener('click', async () => {
@@ -1531,7 +1546,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('checkExtensionsNote').textContent = granted ? 'Checked just now.' : 'Not checked: your browser didn\'t give permission. Extensions found in the webmail page are still listed.';
         render();
     });
-    chrome.storage.onChanged.addListener((ch, area) => { if (area === 'local' && (ch.detectedConflicts || ch.ignoredConflicts || ch.enableSenderIdentity || ch.enableSenderAvatars || ch.enableRowHighlighter || ch.enableTrackingPixelBlocking)) render(); });
+    chrome.storage.onChanged.addListener((ch, area) => { if (area === 'local' && (ch.detectedConflicts || ch.ignoredConflicts || ch.keptConflictFeatures || ch.enableSenderIdentity || ch.enableSenderAvatars || ch.enableRowHighlighter || ch.enableTrackingPixelBlocking)) render(); });
     render();
 
     // Row highlighter preview: the chosen color as a sample row.
@@ -1539,14 +1554,22 @@ document.addEventListener('DOMContentLoaded', () => {
         const cfg = await loadEffectiveSettings();
         const el = document.getElementById('rowHlPreview');
         if (!el) return;
-        const c = ROW_HIGHLIGHT_COLORS[cfg.values.rowHighlightColor] || ROW_HIGHLIGHT_COLORS.yellow;
         const dark = document.documentElement.dataset.theme === 'dark' || (!document.documentElement.dataset.theme && matchMedia('(prefers-color-scheme: dark)').matches);
         const style = cfg.values.rowHighlightStyle;
-        el.style.background = style === 'outline' ? 'transparent' : (dark ? c.dark : c.light);
-        el.style.outline = style === 'fill' ? 'none' : `2px solid ${dark ? c.accentDark : c.accent}`;
-        el.style.opacity = cfg.values.enableRowHighlighter ? '1' : '0.4';
+        const paint = (box, color, on) => {
+            if (!box) return;
+            const c = ROW_HIGHLIGHT_COLORS[color] || ROW_HIGHLIGHT_COLORS.yellow;
+            box.style.background = style === 'outline' ? 'transparent' : (dark ? c.dark : c.light);
+            box.style.outline = style === 'fill' ? 'none' : `2px solid ${dark ? c.accentDark : c.accent}`;
+            box.style.opacity = on ? '1' : '0.4';
+        };
+        paint(el, cfg.values.rowHighlightColor, cfg.values.enableRowHighlighter);
+        paint(document.getElementById('rowHlSelPreview'), cfg.values.rowHighlightSelectedColor, cfg.values.enableRowHighlighter && cfg.values.rowHighlightSelected);
+        // The same color for both is allowed, with a warning that the two can be confused.
+        const same = document.getElementById('rowHlSameWarning');
+        if (same) same.hidden = !(cfg.values.enableRowHighlighter && cfg.values.rowHighlightSelected && cfg.values.rowHighlightColor === cfg.values.rowHighlightSelectedColor);
     }
-    chrome.storage.onChanged.addListener((ch, area) => { if (area === 'local' && (ch.rowHighlightColor || ch.rowHighlightStyle || ch.enableRowHighlighter)) preview(); });
+    chrome.storage.onChanged.addListener((ch, area) => { if (area === 'local' && (ch.rowHighlightColor || ch.rowHighlightSelectedColor || ch.rowHighlightSelected || ch.rowHighlightStyle || ch.enableRowHighlighter)) preview(); });
     preview();
 
     // Opened from the webmail's notice (options.html#conflicts): this card.

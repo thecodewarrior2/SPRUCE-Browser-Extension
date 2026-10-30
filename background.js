@@ -19,7 +19,7 @@ function getConfig() {
 
 // Keys that never affect settings; changes to them don't invalidate the cache.
 const NON_CONFIG_KEYS = new Set(['errorLogs', 'recentActivity', 'resolutionHistory', 'lastSyncTime', 'listState', 'cacheSchema', 'welcomeDismissed', 'uiTheme',
-    'detectedConflicts', 'ignoredConflicts',
+    'detectedConflicts', 'ignoredConflicts', 'keptConflictFeatures',
     'senderDomainCache', 'geoCache', 'spamMovedThreads', 'spamRescuedThreads', 'senderMessageCache', 'senderResultCache', 'faviconCache', 'spamMoveLog']);
 function invalidateConfig() {
     configPromise = null;
@@ -1440,16 +1440,19 @@ async function senderDomainDns(domain, S) {
     return dns;
 }
 
-// SENDER PHOTOS AND VERIFIED LOGOS. The photo or logo the webmail itself shows beside a sender in an
-// opened email (content.js decides which may be used: a colleague's profile photo, or a logo the
-// webmail showed for an email that passed its sender verification) is fetched once from the
-// webmail's own image host and kept in the icon store under "@<address>", with the address it came
-// from. When the webmail later shows a different one, the new one replaces it (a changed photo);
-// the same one is only looked at again after a week. Shown before the site icon.
+// SENDER PHOTOS AND COMPANY LOGOS. The picture the webmail itself shows beside a sender in an opened
+// email (content.js decides which may be used) is kept in the icon store:
+//   - a colleague's photo (own organization) under "@<address>";
+//   - another company's logo under "logo:<site>", shown for every address at that site.
+// Pictures from the webmail's own image host are fetched once; embedded ones (data:) are stored as
+// they are. When the webmail later shows a different one, the new one replaces it (a changed photo or
+// logo); the same one is only looked at again after a week. Shown before the site icon.
 const AVATAR_RECHECK_MS = 7 * 24 * 60 * 60 * 1000;
 const avatarInFlight = new Map();
-async function rememberAvatar(address, url, kind) {
-    const key = '@' + address;
+const avatarKey = (target) => target.domain ? 'logo:' + target.domain : '@' + target.address;
+const avatarWhat = (target) => target.domain ? `Company logo for ${target.domain} (from ${target.address})` : `Sender photo for ${target.address}`;
+async function rememberAvatar(target, url) {
+    const key = avatarKey(target);
     const hit = await iconStore.get(key).catch(() => null);
     if (hit && hit.from === url && hit.bytes && Date.now() - hit.ts < AVATAR_RECHECK_MS) return 'same';
     if (avatarInFlight.has(key)) return avatarInFlight.get(key);
@@ -1458,11 +1461,11 @@ async function rememberAvatar(address, url, kind) {
             const icon = await fetchIconFrom(url, []);
             const found = icon && await normalizeIcon(icon);
             if (!found) return 'unusable';
-            await iconStore.put(key, found.type, found.bytes, kind === 'personal' ? 'avatar-personal' : 'avatar-logo', url);
-            logInfo(`Sender ${kind === 'personal' ? 'photo' : 'verified logo'} for ${address}: ${hit && hit.bytes ? (hit.from === url ? 'checked again, unchanged' : 'changed, replaced') : 'remembered'}.`, 'Sender checks');
+            await iconStore.put(key, found.type, found.bytes, target.domain ? 'avatar-logo' : 'avatar-personal', url);
+            logInfo(`${avatarWhat(target)}: ${hit && hit.bytes ? (hit.from === url ? 'checked again, unchanged' : 'changed, replaced') : 'remembered'}.`, 'Sender checks');
             return hit && hit.bytes && hit.from !== url ? 'updated' : 'saved';
         } catch (e) {
-            logWarning(`The ${kind === 'personal' ? 'photo' : 'logo'} for ${address} could not be fetched (${errorText(e)}); the site icon is shown instead.`, 'Sender checks');
+            logWarning(`The ${target.domain ? `logo for ${target.domain} (from ${target.address})` : `photo for ${target.address}`} could not be fetched (${errorText(e)}); the site icon is shown instead.`, 'Sender checks');
             return 'failed';
         } finally {
             avatarInFlight.delete(key);
@@ -1484,7 +1487,7 @@ function fingerprint(bytes) {
     for (let i = 0; i < bytes.length; i++) { h ^= bytes[i]; h = Math.imul(h, 0x01000193) >>> 0; }
     return h.toString(16).padStart(8, '0') + ':' + bytes.length;
 }
-async function rememberEmbeddedLogo(address, dataUrl) {
+async function rememberEmbeddedLogo(target, dataUrl) {
     const m = /^data:(image\/(?:png|gif|jpeg|webp|svg\+xml))(;base64)?,(.*)$/is.exec(dataUrl);
     if (!m) return 'refused';
     let bytes;
@@ -1492,19 +1495,26 @@ async function rememberEmbeddedLogo(address, dataUrl) {
     catch (e) { return 'unusable'; }
     const type = m[1].toLowerCase();
     if (!bytes.length || bytes.length > EMBEDDED_LOGO_MAX_BYTES) return 'unusable';
-    const key = '@' + address, print = 'embedded:' + fingerprint(bytes);
+    const key = avatarKey(target), print = 'embedded:' + fingerprint(bytes);
     const hit = await iconStore.get(key).catch(() => null);
     if (hit && hit.from === print && hit.bytes) return 'same';
     let found = { type, bytes: bytes.buffer };
     if (type !== 'image/svg+xml') found = await normalizeIcon(found);
     if (!found) return 'unusable';
-    await iconStore.put(key, found.type, found.bytes, 'avatar-logo', print);
-    logInfo(`Sender verified logo for ${address}: ${hit && hit.bytes ? 'changed, replaced' : 'remembered'} (embedded by the webmail; nothing downloaded).`, 'Sender checks');
+    await iconStore.put(key, found.type, found.bytes, target.domain ? 'avatar-logo' : 'avatar-personal', print);
+    logInfo(`${avatarWhat(target)}: ${hit && hit.bytes ? 'changed, replaced' : 'remembered'} (embedded by the webmail; nothing downloaded).`, 'Sender checks');
     return hit && hit.bytes ? 'updated' : 'saved';
 }
-async function avatarFor(address) {
-    const rec = await iconStore.get('@' + address).catch(() => null);
-    return rec && rec.bytes ? iconDataUrl(rec) : '';
+// The picture for a sender: a colleague's own photo, else (another company) its logo, else ''.
+async function avatarFor(address, site) {
+    const keys = [address && '@' + address];
+    const company = registrableDomain(site || '') || site;
+    if (company && !isPersonalMailDomain(company)) keys.push('logo:' + company);
+    for (const key of keys.filter(Boolean)) {
+        const rec = await iconStore.get(key).catch(() => null);
+        if (rec && rec.bytes) return iconDataUrl(rec);
+    }
+    return '';
 }
 
 // The sender's exact address on the community scam-sender list (downloaded with the phishing lists).
@@ -2256,12 +2266,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     // A sender's site icon (data: URL, or '' for none), fetched once and remembered.
     if (request.action === 'senderIcon') {
         if (!sender || sender.id !== chrome.runtime.id || typeof request.site !== 'string') { sendResponse(''); return false; }
-        // A remembered photo or verified logo for the sender comes first (no network: they are only
-        // ever learned from opened emails), then the site's icon. Answers { d, avatar } for the page.
+        // A remembered colleague's photo or company logo comes first (no network: they are only ever
+        // learned from opened emails), then the site's icon. Answers { d, avatar } for the page.
         const address = typeof request.address === 'string' ? request.address.toLowerCase().slice(0, 320) : '';
         getConfig().then(async cfg => {
             if (!cfg.values.enableSenderIdentity) return { d: '' };
-            if (address && cfg.values.enableSenderAvatars) { const a = await avatarFor(address); if (a) return { d: a, avatar: true }; }
+            if (cfg.values.enableSenderAvatars) { const a = await avatarFor(address, request.site); if (a) return { d: a, avatar: true }; }
             return { d: cfg.values.enableDnsThreatCheck ? await senderIcon(request.site, { fallback: !!cfg.values.enableSenderIconFallback }) : '' };
         }).then(r => sendResponse(r), () => sendResponse({ d: '' }));
         return true;
@@ -2269,18 +2279,24 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'senderAvatar') {
         if (!sender || sender.id !== chrome.runtime.id || typeof request.address !== 'string' || typeof request.url !== 'string') { sendResponse('refused'); return false; }
         const address = request.address.toLowerCase().slice(0, 320);
-        // A logo embedded in the page: stored directly (no network needed, so not tied to the privacy level).
-        if (request.kind === 'logo' && /^data:image\//i.test(request.url)) {
+        // kind 'personal': a colleague's photo, kept for the address; kind 'logo': a company's logo, kept
+        // for its site (never a personal email service's).
+        const domain = request.kind === 'logo' && typeof request.domain === 'string' ? request.domain.toLowerCase().slice(0, 253) : '';
+        if (request.kind === 'logo' && (!SENDER_DOMAIN_RE.test(domain) || isPersonalMailDomain(domain) || registrableDomain(address.split('@')[1] || '') !== domain)) { sendResponse('refused'); return false; }
+        if (request.kind !== 'logo' && request.kind !== 'personal') { sendResponse('refused'); return false; }
+        const target = { address, domain };
+        // Embedded in the page: stored directly (no network needed, so not tied to the privacy level).
+        if (/^data:image\//i.test(request.url)) {
             if (request.url.length > 64 * 1024) { sendResponse('unusable'); return false; }
-            getConfig().then(cfg => cfg.values.enableSenderIdentity && cfg.values.enableSenderAvatars ? rememberEmbeddedLogo(address, request.url) : 'off')
+            getConfig().then(cfg => cfg.values.enableSenderIdentity && cfg.values.enableSenderAvatars ? rememberEmbeddedLogo(target, request.url) : 'off')
                 .then(r => sendResponse(r), () => sendResponse('failed'));
             return true;
         }
-        // A person's photo: downloaded here from the webmail's own image host (the background isn't
-        // subject to the webmail page's own rules for loading images).
-        if (request.kind !== 'personal' || !avatarHostAllowed(request.url)) { sendResponse('refused'); return false; }
+        // From the webmail's own image host: downloaded here (the background isn't subject to the
+        // webmail page's own rules for loading images).
+        if (!avatarHostAllowed(request.url)) { sendResponse('refused'); return false; }
         getConfig().then(cfg => cfg.values.enableSenderIdentity && cfg.values.enableSenderAvatars && cfg.values.enableDnsThreatCheck
-            ? rememberAvatar(address, request.url.slice(0, 2000), 'personal') : 'off')
+            ? rememberAvatar(target, request.url.slice(0, 2000)) : 'off')
             .then(r => sendResponse(r), () => sendResponse('failed'));
         return true;
     }
@@ -2289,7 +2305,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     // chose to ignore.
     if (request.action === 'reportConflicts') {
         if (!sender || sender.id !== chrome.runtime.id || !Array.isArray(request.conflicts)) { sendResponse([]); return false; }
-        storageGet('local', { detectedConflicts: {}, ignoredConflicts: [] }).then(async (r) => {
+        storageGet('local', { detectedConflicts: {}, ignoredConflicts: [], keptConflictFeatures: {} }).then(async (r) => {
             const map = r.detectedConflicts && typeof r.detectedConflicts === 'object' ? r.detectedConflicts : {};
             for (const c of request.conflicts.slice(0, 10)) {
                 if (!c || typeof c.key !== 'string' || c.key.length > 80) continue;
@@ -2302,7 +2318,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             }
             const kept = Object.fromEntries(Object.entries(map).sort((a, b) => b[1].ts - a[1].ts).slice(0, 50));
             await chrome.storage.local.set({ detectedConflicts: kept });
-            sendResponse(Array.isArray(r.ignoredConflicts) ? r.ignoredConflicts : []);
+            // Not warned about: ignored ones, and ones whose features still on were all kept on purpose.
+            const keptOn = r.keptConflictFeatures && typeof r.keptConflictFeatures === 'object' ? r.keptConflictFeatures : {};
+            const skip = (Array.isArray(r.ignoredConflicts) ? r.ignoredConflicts : []).concat(request.conflicts
+                .filter(c => c && typeof c.key === 'string' && conflictSettled(c.features, keptOn[c.key])).map(c => c.key));
+            sendResponse(skip);
         }).catch(() => sendResponse([]));
         return true;
     }

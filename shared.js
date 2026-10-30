@@ -26,9 +26,9 @@ const SETTING_DEFS = [
     // A site without its own icon gets its parent domain's, or DuckDuckGo's icon service's (a second
     // icon service, asked only for such sites); re-checked weekly so the site's own icon replaces it.
     { key: 'enableSenderIconFallback',    managedKey: 'managedEnableSenderIconFallback',    def: true, type: 'boolean' },
-    // Sender photos and verified brand logos, as the webmail itself shows them in opened emails, in
-    // place of the site icon: colleagues' profile photos (the user's own organization), and logos the
-    // webmail displayed only after the email passed its sender verification (BIMI).
+    // Sender photos and company logos, as the webmail itself shows them in opened emails, in place of
+    // the site icon: colleagues' own photos (the user's own organization), and one logo per other
+    // company, learned from a verified email from its shared mailbox or with a BIMI logo.
     { key: 'enableSenderAvatars',         managedKey: 'managedEnableSenderAvatars',         def: true, type: 'boolean' },
     // Row highlighter: the inbox row under the mouse (and selected rows) is highlighted, so it's clear
     // which email a click opens. A see-through color, so text stays readable in light and dark themes.
@@ -36,6 +36,8 @@ const SETTING_DEFS = [
     { key: 'rowHighlightColor',           managedKey: 'managedRowHighlightColor',           def: 'yellow', type: 'enum', values: ['yellow', 'blue', 'green', 'pink', 'purple', 'gray'] },
     { key: 'rowHighlightStyle',           managedKey: 'managedRowHighlightStyle',           def: 'both', type: 'enum', values: ['both', 'fill', 'outline'] },
     { key: 'rowHighlightSelected',        managedKey: 'managedRowHighlightSelected',        def: true, type: 'boolean' },
+    // Ticked emails get their own color (not the mouse's by default, so the two aren't confused).
+    { key: 'rowHighlightSelectedColor',   managedKey: 'managedRowHighlightSelectedColor',   def: 'blue', type: 'enum', values: ['yellow', 'blue', 'green', 'pink', 'purple', 'gray'] },
     // Warn when another installed extension does the same job in the webmail (two sender-icon or
     // row-highlight extensions can conflict), with one-click fixes. Administrators can switch it off.
     { key: 'enableConflictWarnings',      managedKey: 'managedEnableConflictWarnings',      def: true, type: 'boolean' },
@@ -1139,10 +1141,12 @@ const WEBMAIL_SITES = [
           openThread: 'h2[data-thread-perm-id], h2[data-legacy-thread-id]',
           message: { container: '.adn, [data-message-id], .gs', sender: '.gD[email]', senderAfter: '.go',
                      // The photo or logo Gmail shows beside the sender (its hovercard id is the address).
+                     // It sits in its own column of the whole message (scope: .adn), beside the box that
+                     // holds the body (.gs), so it is looked for in the whole message.
                      // Gmail embeds a verified brand logo (BIMI) in the page itself as a data: image;
-                     // a photo it loads from googleusercontent.com, in any address format (the "/a/…"
-                     // kind and the older "/-xxxx/AAAAAAAAAAI/…/photo.jpg"), is a person's photo.
-                     avatar: { img: 'img[data-hovercard-id]', addressAttr: 'data-hovercard-id',
+                     // it loads the picture of a Google account from googleusercontent.com, in any
+                     // address format (the "/a/…" kind and the older "/-xxxx/AAAAAAAAAAI/…/photo.jpg").
+                     avatar: { scope: '.adn, [data-message-id]', img: 'img[data-hovercard-id]', addressAttr: 'data-hovercard-id',
                                photoHost: /^https:\/\/[^/]*\.googleusercontent\.com\//,
                                embeddedLogo: /^data:image\/(png|gif|jpeg|webp|svg\+xml)[;,]/i,
                                placeholder: /default-user|\/ic_|anonymous/i } },
@@ -1219,7 +1223,7 @@ function mailCapabilities(site) {
         headers: !!(M && !M.generic && M.headers),            // signs in the original source; server country
         move: !!(M && !M.generic && M.list && M.toolbar && M.views),   // moving flagged emails to Spam
         compose: !!(M && !M.generic && M.compose),            // checking links before sending
-        avatars: !!(M && !M.generic && M.message && M.message.avatar),   // sender photos and verified logos
+        avatars: !!(M && !M.generic && M.message && M.message.avatar),   // sender photos and company logos
         attachments: !!(site && site.attachments)             // attachment checks
     };
 }
@@ -1279,9 +1283,28 @@ const OVERLAPPING_EXTENSIONS = [
 ];
 // The names of our features, as the conflict warnings say them.
 const FEATURE_NAMES = {
-    enableSenderIdentity: 'sender icons and labels', enableSenderAvatars: 'sender photos and verified logos',
+    enableSenderIdentity: 'sender icons and labels', enableSenderAvatars: 'sender photos and company logos',
     enableTrackingPixelBlocking: 'tracking-pixel blocking', enableRowHighlighter: 'the row highlighter'
 };
+
+// Turning off only some of our features that overlap with another extension settles that conflict:
+// the ones left on are remembered as kept (keptConflictFeatures: { key: [setting keys] }), and the
+// warning comes back only if an overlapping feature that is not kept is on (one turned back on).
+function conflictSettled(features, kept) {
+    const k = new Set(Array.isArray(kept) ? kept : []);
+    return (features || []).every(f => k.has(f));
+}
+// Turns off some of our features for a conflict, and remembers the rest of its features as kept.
+function turnOffForConflict(key, features, off, locked, done) {
+    const changes = {};
+    off.filter(k => !(locked && locked[k])).forEach(k => { changes[k] = false; });
+    chrome.storage.local.get({ keptConflictFeatures: {} }, r => {
+        const kept = r.keptConflictFeatures && typeof r.keptConflictFeatures === 'object' ? r.keptConflictFeatures : {};
+        kept[key] = features.filter(f => !(f in changes));
+        changes.keptConflictFeatures = kept;
+        chrome.storage.local.set(changes, () => done && done(Object.keys(changes).filter(k => k !== 'keptConflictFeatures')));
+    });
+}
 
 // Every feature, and what a site needs for it (null: works on every supported site). Shown as the
 // compatibility chart in Help → Which features work where.
@@ -1295,7 +1318,7 @@ const FEATURE_SUPPORT = [
     { name: 'Sender checks in opened emails (brand names, look-alike domains, company links)', needs: 'opened' },
     { name: 'Sender icon, country flag and label in opened emails', needs: 'opened' },
     { name: 'Sender icon, country flag and label in the inbox list', needs: 'list' },
-    { name: 'Colleagues\' photos and verified brand logos (BIMI) as sender icons', needs: 'avatars' },
+    { name: 'Colleagues\' photos and company logos as sender icons', needs: 'avatars' },
     { name: 'The webmail\'s own warnings about a sender counted in the email\'s verdict', needs: 'opened' },
     { name: 'Signs of forgery in the headers (DMARC, forged delivery records…)', needs: 'headers' },
     { name: 'Phishing-simulation emails recognized by their headers', needs: 'headers' },
@@ -1355,6 +1378,14 @@ const PERSONAL_MAIL_DOMAINS = new Set(['gmail.com', 'googlemail.com', 'outlook.c
 function isPersonalMailDomain(domain) {
     const d = String(domain || '').toLowerCase();
     return PERSONAL_MAIL_DOMAINS.has(d) || /^(hotmail|outlook|live|yahoo)\.[a-z.]{2,6}$/.test(d);
+}
+
+// A company's shared mailbox (contact@, info@, support@, news@, no-reply@…) rather than a person's.
+// The picture a company sets on such a mailbox is its own choice, so it serves as the company's logo.
+const SHARED_MAILBOX_RE = /^(contact|contactus|info|information|hello|hi|hey|support|help|helpdesk|service|services|customerservice|customercare|care|sales|marketing|news|newsletter|newsletters|updates?|notifications?|notify|alerts?|noreply|no-reply|donotreply|do-not-reply|mail|mailer|email|team|office|admin|billing|accounts?|orders?|shop|store|feedback|community|events?|press|media|jobs|careers|recruiting|reply|members?|membership|webmaster|enquiries|inquiries|general|welcome|offers|deals|promotions?|digest|reminders?|receipts?|invoices?|security|account-security|service-desk)([._+-].*)?$/i;
+function isSharedMailbox(address) {
+    const local = String(address || '').toLowerCase().split('@')[0];
+    return !!local && SHARED_MAILBOX_RE.test(local);
 }
 
 // The company a sending domain belongs to (null for personal mail and unknown domains).

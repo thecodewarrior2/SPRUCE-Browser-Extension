@@ -35,6 +35,9 @@
   "managedRowHighlightSelected": {
     "Value": true
   },
+  "managedRowHighlightSelectedColor": {
+    "Value": "blue"
+  },
   "managedEnableConflictWarnings": {
     "Value": true
   },
