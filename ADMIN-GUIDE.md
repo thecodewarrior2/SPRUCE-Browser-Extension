@@ -100,7 +100,10 @@ All of this is on by default and every part has its own key above. In short:
   label: neither a warning (most mail comes from providers like Gmail) nor a promise of safety. Also flagged: a sender domain that doesn't exist;
   a malformed address (encoded part, more than 64 characters before the @, two @, invalid domain); and an email
   that shows enough signs of forgery itself. Signs are weighted (strong ones flag on their own, weaker ones add
-  up): forged Gmail delivery records copied from older emails, headers claiming several unrelated sending services,
+  up): a failed DMARC check when the From domain's owner publishes quarantine or reject (Gmail's own result on
+  arrival; only a strong sign for real mailing lists and trusted forwarders), forged delivery records copied from
+  older emails (dated more than a week before arrival), MIME-Version other than 1.0, an encoding that doesn't
+  exist, a malformed List-ID, headers claiming several unrelated sending services,
   bulk-mail placeholders, repeated From/Subject/Date lines, a "To" line hiding the real recipient, a padded subject
   or sender name, an unnamed ("noname") or dangerous attachment, and links flagged as dangerous (all of them, or
   two or more, flag the email; one among several only makes it Caution). Headers are read for opened emails and
