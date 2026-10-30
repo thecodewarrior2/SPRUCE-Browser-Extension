@@ -146,6 +146,11 @@
       "description": "Show a short notice at the top of Gmail with the number of emails moved to Spam and a Review link to the Spam folder. It disappears after 15 seconds.",
       "type": "boolean"
     },
+    "managedEnableSpamFolderFlags": {
+      "title": "Flag Dangerous Emails in the Spam Folder (Gmail)",
+      "description": "In the Spam folder, mark red the emails the same checks would move to Spam, whether the extension moved them or not (with why), and read unread emails' headers there too. Emails without a red label were put in Spam by Gmail or the user. If reading an unread email's headers ever marks it read, the extension stops doing it and logs it.",
+      "type": "boolean"
+    },
     "managedEnableQrScanning": {
       "title": "Check QR Codes in Emails",
       "description": "Decode QR codes in email images on the device and check where they lead.",

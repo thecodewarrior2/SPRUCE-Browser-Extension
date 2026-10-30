@@ -20,7 +20,7 @@ function getConfig() {
 // Keys that never affect settings; changes to them don't invalidate the cache.
 const NON_CONFIG_KEYS = new Set(['errorLogs', 'recentActivity', 'resolutionHistory', 'lastSyncTime', 'listState', 'cacheSchema', 'welcomeDismissed', 'uiTheme',
     'detectedConflicts', 'ignoredConflicts', 'keptConflictFeatures', 'popularDomains', 'verifiedDomains', 'colleagueNameHashes', 'rdapBootstrap',
-    'senderDomainCache', 'geoCache', 'spamMovedThreads', 'spamRescuedThreads', 'senderMessageCache', 'senderResultCache', 'faviconCache', 'spamMoveLog']);
+    'senderDomainCache', 'geoCache', 'spamMovedThreads', 'spamRescuedThreads', 'senderMessageCache', 'senderResultCache', 'faviconCache', 'spamMoveLog', 'spamUnreadHeadersOff']);
 function invalidateConfig() {
     configPromise = null;
     domainSafetyCache.clear();      // e.g. a resolver was switched off: don't reuse its verdicts
@@ -34,6 +34,8 @@ chrome.storage.onChanged.addListener((changes, area) => {
         const caches = { senderResultCache, geoCache, senderDomainCache };
         for (const [k, c] of Object.entries(changes)) if (caches[k] && c.newValue === undefined) caches[k].forget();
     }
+    // The Spam folder setting turned on again: reading unread emails' headers there is tried again.
+    if (area === 'local' && changes.enableSpamFolderFlags && changes.enableSpamFolderFlags.newValue !== false) chrome.storage.local.remove('spamUnreadHeadersOff');
     // Stored link results removed by any path (Clear cache, expiry) leave the in-memory memo too.
     if (area === 'local' && typeof cacheMemo !== 'undefined') {
         for (const [k, c] of Object.entries(changes)) if (k.startsWith('http') && c.newValue === undefined) cacheMemo.delete(k);

@@ -1,0 +1,38 @@
+Delivered-To: user@example.org
+Received: by 2002:ab2:6a94:0:b0:212:de3:ab2a with SMTP id l20csp4279107lqo; Thu, 7 Nov 2024 11:52:24 -0800 (PST)
+X-Received: by 2002:a05:690c:6e13:b0:6e3:2ec1:457a with SMTP id 00721157ae682-6eaddf8dc49mr1954477b3.29.1731009144619; Thu, 07 Nov 2024 11:52:24 -0800 (PST)
+ARC-Seal: i=1; a=rsa-sha256; t=1731009144; cv=none; d=google.com; s=arc-20240605; b=U0SuyzrgOL0vm4oi
+ARC-Authentication-Results: i=1; mx.google.com; dkim=pass header.i=@relay-academic.example header.s=qx9 header.b=hXvRszER; spf=pass (google.com: domain of noreply_sedtbdnv@chariots.example designates 203.0.113.74 as permitted sender) smtp.mailfrom=noReply_sedtbdnv@chariots.example
+Return-Path: <noReply_sedtbdnv@chariots.example>
+Received: from helo.example (farm.relay-academic.example. [203.0.113.74]) by mx.google.com with ESMTPS id 00721157ae682-6eaceb7a260si20911377b3.454.2024.11.07.11.52.23 for <user@example.org> (version=TLS1 cipher=ECDHE-ECDSA-AES128-SHA bits=128/128); Thu, 07 Nov 2024 11:52:24 -0800 (PST)
+Received-SPF: pass (google.com: domain of noreply_sedtbdnv@chariots.example designates 203.0.113.74 as permitted sender) client-ip=203.0.113.74;
+Authentication-Results: mx.google.com; dkim=pass header.i=@relay-academic.example header.s=qx9 header.b=hXvRszER; spf=pass (google.com: domain of noreply_sedtbdnv@chariots.example designates 203.0.113.74 as permitted sender) smtp.mailfrom=noReply_sedtbdnv@chariots.example
+DKIM-Signature: v=1; a=rsa-sha1; c=relaxed/relaxed; s=qx9; d=relay-academic.example; h=List-Unsubscribe:From:Cc:Content-Type:Date:Message-Id:Sender:To:In-Reply-To:References:Subject:MIME-Version; i=support.V5mnHFxs3N@e.aqutukudaf.relay-academic.example; bh=y4l9UrNUrcpiBjgxJ92mvIMRKqY=; b=hXvRszERIIV2ek8F
+Received: from ea197.mta.exacttarget.com (mta.txn-email.account.sony.com. ) by mx.google.com with ESMTPS id o14-20020ac85a4e000000b00423e1af1776si9425548qta.555.2023.12.24.12.40.28 for <someone1@example.net> (version=TLS1_2 cipher=ECDHE-ECDSA-AES128-GCM-SHA256 bits=128/128); Sun, 24 Dec 2023 12:40:28 -0800 (PST)
+Received: from esa4.hc324-48.eu.iphmx.com (esa4.hc324-48.eu.iphmx.com. ) by mx.google.com with ESMTPS id q12-20020a2e914c000000b002cd1c068442si106067ljg.469.2024.01.08.11.19.57 for <someone2@example.net> (version=TLS1_2 cipher=ECDHE-ECDSA-CHACHA20-POLY1305 bits=256/256); Mon, 08 Jan 2024 11:19:58 -0800 (PST)
+Thread-Topic: Validez votre inscription sur newsletter.example
+X-Mailer: Microsoft CDO for Windows 2000
+Importance: High
+Priority: urgent
+List-Unsubscribe: <https://news-site.example/unsubscribe/?uuid=c62438df>
+From: ""Benefits Card""<contact_support.pum@chariots.example>
+X-MimeOLE: Produced By Microsoft MimeOLE V6.1.7601.23651
+Cc: <other@example.org>
+Content-Type: multipart/parallel;boundary="Nextpart_4Af7aQ8NsET3190767"
+Date: Thu, 07 Nov 2024 19:51:32 UTC
+Thread-index: AdPUFZLT3Wn5wqdiRhS9/Zz28HZYZA==
+Feedback-ID: 50670913:50670913.1642725:us12:mc
+Message-Id: <2024064Af7aQ8NsET21132602.2D5E25DF60@i-de-6.whitelist-service.example>
+Sender: support.V5mnHFxs3N@e.aqutukudaf.relay-academic.example
+To: <user@example.org>
+In-Reply-To: <8HOf2RNOg1V4_TJTVgql2S@mail.news.example>
+Content-Class: urn:content-classes:message
+References: <CADT5qSj0RE5cL27kFYMN9CKmQQpw4Af7aQ8NsET@mail.news.example>
+Subject: Login Verification -Verification 0428009
+MIME-Version: 1.0
+
+--Nextpart_4Af7aQ8NsET3190767
+Content-Type: text/html; charset=UTF-8
+
+<a href="https://bucket.storage.example/4.html#qs=r-x">Verify</a>
+--Nextpart_4Af7aQ8NsET3190767--

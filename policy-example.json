@@ -68,6 +68,9 @@
   "managedEnableSpamNotice": {
     "Value": true
   },
+  "managedEnableSpamFolderFlags": {
+    "Value": true
+  },
   "managedEnableQrScanning": {
     "Value": true
   },
