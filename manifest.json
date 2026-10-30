@@ -1,13 +1,13 @@
 {
   "manifest_version": 3,
   "name": "S.P.R.U.C.E+",
-  "version": "5.71",
+  "version": "5.72",
   "browser_specific_settings": {
     "safari": {
       "strict_min_version": "18.2"
     }
   },
-  "description": "Shows where links in your email really go, flags phishing, look-alike sites, risky QR codes and attachments, and blocks tracking pixels in Gmail and other webmail.",
+  "description": "Finds phishing and scams in Gmail and other webmail: links, senders, QR codes and attachments. Blocks trackers.",
   "permissions": [
     "activeTab",
     "alarms",
