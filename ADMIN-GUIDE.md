@@ -113,6 +113,7 @@ update can replace it. See <https://mozilla.github.io/policy-templates/>.
 | managedEnableSenderAddressCheck | boolean | true | Gmail: compare sender addresses with the community scam-sender list (sefinek/Blacklisted-Emails, MIT; downloaded with the phishing lists); malformed addresses are flagged too |
 | managedEnableAutoSpam | boolean | true | Gmail: move emails from **flagged** senders to Spam with Gmail's own Report spam (never unverified, unknown, caution or clean ones). Inbox only; never while the user types or has emails selected; never training emails, nor mail from the user's own organization domain never trusted senders; at most once per conversation (one taken back out of Spam stays) |
 | managedEnableSpamNotice | boolean | true | Gmail: a 15-second notice at the top of Gmail with the number moved and a **Review** link to Spam |
+| managedEnableSpamFolderFlags | boolean | true | Gmail: in the Spam folder, emails the same checks would move there are red, whether the extension moved them or not (with why); unread ones' headers are read there too (stops by itself, with a log line, if that ever marks an email read). Spam without a red label was put there by Gmail or the user |
 | managedEnableQrScanning | boolean | true | Decode QR codes in email images on the device and check their destinations |
 | managedEnableAttachmentScanning | boolean | true | Check attachments on the device (≤ 10 MB): QR codes in images/PDFs, scripts in SVG/HTML, links in calendar invites, encrypted archives, disguised file names |
 | managedEnableOutlookSupport, managedEnableProtonSupport, managedEnableYahooSupport, managedEnableAolSupport, managedEnableZohoSupport, managedEnableIcloudSupport, managedEnableFastmailSupport, managedEnableGmxSupport | boolean | true | Experimental support for each webmail app (Outlook on the web, Proton, Yahoo, AOL, Zoho, iCloud, Fastmail, GMX) |
@@ -184,6 +185,7 @@ extra sign-in, an app registration or an administrator-approved API.
 | Signs of forgery in the headers (DMARC, forged delivery records…) | ✓ | — | — | — | — | — | — | — | — |
 | Phishing-simulation emails recognized by their headers | ✓ | — | — | — | — | — | — | — | — |
 | Flagged emails moved to Spam | ✓ | — | — | — | — | — | — | — | — |
+| Dangerous emails marked red in the Spam folder (moved there by the extension or not) | ✓ | — | — | — | — | — | — | — | — |
 | Links checked before sending | ✓ | — | — | — | — | — | — | — | — |
 | Row highlighter (the email under the mouse, and selected ones) | ✓ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
 | Warnings about other extensions that do the same job *(every site)* | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
@@ -213,7 +215,7 @@ All of this is on by default and every part has its own key above. In short:
   bulk-mail placeholders, repeated From/Subject/Date lines, a "To" line hiding the real recipient, a padded subject
   or sender name, an unnamed ("noname") or dangerous attachment, and links flagged as dangerous (all of them, or
   two or more, flag the email; one among several only makes it Caution). Headers are read for opened emails and
-  read emails in the list, never for unread ones.
+  read emails in the list, and in the Spam folder for unread ones too; never for unread emails in the inbox.
 - **Trusted senders (the allow list):** users add their own in Settings → Senders → Trusted senders;
   `managedTrustedSenders` adds yours. They are never flagged or moved. Use it for your phishing-training
   provider (alongside `managedPhishSimulationDomains` / `managedPhishSimulationRules`) and for false positives.

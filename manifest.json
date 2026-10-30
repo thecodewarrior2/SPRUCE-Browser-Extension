@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Gmail Link Unshortener & Tracker Blocker",
-  "version": "5.64",
+  "version": "5.65",
   "description": "Shows where links in your email really go, flags phishing, look-alike sites, risky QR codes and attachments, and blocks tracking pixels in Gmail and other webmail.",
   "browser_specific_settings": {
     "gecko": {

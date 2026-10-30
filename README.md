@@ -39,6 +39,9 @@ Proton Mail, Yahoo Mail, AOL Mail, Zoho Mail, iCloud Mail, Fastmail and GMX.
   to Spam with Gmail's own Report spam, from the inbox only, never while you're typing or have emails
   selected, and never your organization's phishing-training emails. One you take back out of Spam
   stays out. A short notice says how many were moved, with a **Review** link to Spam.
+- **Red flags in the Spam folder (Gmail).** In Spam, emails the same checks would move there are red,
+  whether the extension moved them (the label says when and why) or Gmail did; unread ones are checked
+  too. A Spam email without a red label was put there by Gmail or by you, so it may be a mistake.
 - **Threat checks.** DNS-over-HTTPS threat filters (Cloudflare Security and Family, Quad9,
   Control D; AdGuard as a backup), community shortener lists, and local phishing lists (OpenPhish,
   Phishing Army), downloaded at most once a day.
@@ -87,6 +90,7 @@ sign-in, an app registration or an administrator-approved API.
 | Signs of forgery in the headers (DMARC, forged delivery records…) | ✓ | — | — | — | — | — | — | — | — |
 | Phishing-simulation emails recognized by their headers | ✓ | — | — | — | — | — | — | — | — |
 | Flagged emails moved to Spam | ✓ | — | — | — | — | — | — | — | — |
+| Dangerous emails marked red in the Spam folder (moved there by the extension or not) | ✓ | — | — | — | — | — | — | — | — |
 | Links checked before sending | ✓ | — | — | — | — | — | — | — | — |
 | Row highlighter (the email under the mouse, and selected ones) | ✓ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
 | Warnings about other extensions that do the same job *(every site)* | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
@@ -116,7 +120,7 @@ complete `policies.json` with every key.
 
 The sender features (Gmail) each have their own key (`managedEnableSenderIdentity`,
 `managedEnableSenderIconFallback`, `managedEnableSenderAvatars`, `managedEnableSenderBimi`, `managedSenderPictureSize`, `managedEnableCopyAddress`, `managedEnableLookalikeCheck`, `managedEnableSenderCountry`, the row highlighter (`managedEnableRowHighlighter`, `managedRowHighlightColor`, `managedRowHighlightStyle`, `managedRowHighlightSelected`, `managedRowHighlightSelectedColor`) and warnings about overlapping extensions (`managedEnableConflictWarnings`), `managedEnableSenderDomainCheck`, `managedEnableSenderAddressCheck`,
-`managedEnableAutoSpam`, `managedEnableSpamNotice`); `managedTrustedSenders` is the allow list of senders never to flag or move
+`managedEnableAutoSpam`, `managedEnableSpamNotice`, `managedEnableSpamFolderFlags`); `managedTrustedSenders` is the allow list of senders never to flag or move
 (addresses or whole domains), for example your phishing-training provider or a false positive. There is
 no sender block list: users report anything missed with Gmail's own Report spam.
 

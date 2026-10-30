@@ -2239,6 +2239,8 @@ function messageInfo(msgId) {
         messageInfos.set(msgId, (async () => {
             const cache = await loadSenderMessageCache();
             if (cache[msgId] && Array.isArray(cache[msgId].an) && cache[msgId].v === HEADER_SIGNS_VERSION) return cache[msgId];
+            headersFetched.add(msgId);
+            if (headersFetched.size > 2000) headersFetched.delete(headersFetched.values().next().value);
             const h = await withHeaderSlot(() => getMessageHeadersById(msgId));
             if (!h) return null;
             const headers = parseRawHeaders(h.raw);
@@ -2652,14 +2654,16 @@ function scanSenderRows(S) {
     if (!rows.length) return;
     const dark = isDarkSurface(rows[0]);
     const pictures = applyPictureMode(S);          // Gmail's density, read once per scan
+    const spamFolder = !!S.enableSpamFolderFlags && inSpamView();
     for (const row of rows) {
         const senders = rowSenders(row);
         if (!senders.length) continue;
         const thread = rowThreadKey(row);
         const msgId = rowLastMessageId(row);
         const unread = rowIsUnread(row);
+        noteReadState(thread, unread);
         if (S.enableLookalikeCheck) for (const s of senders) if (s.name && isOwnDomain(s.domain, ownOrgDomain())) learnColleagueName(s.name);
-        const key = [thread, msgId, unread ? 'u' : 'r', ...senders.map(s => s.raw), S.enableSenderIdentity ? 'id' : '', S.enableSenderCountry ? 'cc' : '', S.enableSenderAvatars ? 'av' : '', pictures].join('|');
+        const key = [thread, msgId, unread ? 'u' : 'r', ...senders.map(s => s.raw), S.enableSenderIdentity ? 'id' : '', S.enableSenderCountry ? 'cc' : '', S.enableSenderAvatars ? 'av' : '', pictures, spamFolder ? 'spam' : ''].join('|');
         // Unchanged since the last scan (and Gmail hasn't redrawn the row without our label).
         if (row.dataset.unshortenerSender === key && (!S.enableSenderIdentity || (row.querySelector('.unshortener-sender-chip') && !avatarLost(row)))) continue;
         removeSenderDecorations(row);
@@ -2681,9 +2685,12 @@ function scanSenderRows(S) {
             }
             else if (nameCell) nameCell.insertBefore(chip, icon.nextSibling);
         }
-        // A read email's own headers are read (once) for the server's country and signs of forgery.
-        const infoP = msgId && !unread ? messageInfo(msgId) : Promise.resolve(null);
-        const show = (results, info) => guarded('Showing who sent an email', () => {
+        // A read email's own headers are read (once) for the server's country and signs of forgery; in
+        // the Spam folder an unread one's too (unless that turned out to mark emails read).
+        const readHeaders = !!msgId && (!unread || (spamFolder && !unreadHeadersOff));
+        const infoP = readHeaders ? messageInfo(msgId) : Promise.resolve(null);
+        if (readHeaders && unread && thread) infoP.then(info => { if (info && headersFetched.has(msgId)) unreadHeaderReads.set(thread, Date.now()); });
+        const show = (results, info, ours) => guarded('Showing who sent an email', () => {
             if (!row.isConnected || row.dataset.unshortenerSender !== key) return;
             // Signs in this email: the names shown, and the headers when they belong to the last sender.
             const org = ownOrgDomain();
@@ -2698,10 +2705,17 @@ function scanSenderRows(S) {
             });
             let i = 0;
             finals.forEach((r, k) => { if (r && (STATUS_RANK[r.status] || 0) > (STATUS_RANK[finals[i] ? finals[i].status : 'pending'] || 0)) i = k; });
-            const r = finals[i], who = senders[i];
+            let r = finals[i], extra = null;
+            const who = senders[i];
+            // Spam folder: red for what the checks flag and for what the extension moved there (with why);
+            // anything else was put there by Gmail or the user, and says so.
+            if (spamFolder && r) {
+                if (ours) r = Object.assign({}, r, { status: 'flagged', reasons: [spamMovedText(ours), ...r.reasons] });
+                else if (r.status !== 'flagged') extra = [SPAM_NOT_FLAGGED_NOTE];
+            }
             if (chip) {
                 chip.querySelector('.unshortener-sender-domain').textContent = siteOfSender(who.domain);
-                setChipResult(chip, r, who.address);
+                setChipResult(chip, r, who.address, extra);
             }
             if (icon && S.enableSenderCountry && r) {
                 const own = info && info.fh === addressFingerprint(senders[0].address) ? info : null;
@@ -2715,11 +2729,56 @@ function scanSenderRows(S) {
                 ? { kind: 'row', address: senders[0].address, reason: finals[0].reasons.join(' '), msgId, unread, how: 'automatically, from the inbox list' } : null;
             if (row.unshortenerSpam && S.enableAutoSpam) queueSpamMove(thread, row.unshortenerSpam);
         });
-        senderResultsFor(senders.map(s => s.raw)).then(results => {
-            show(results, null);
-            infoP.then(info => { if (info) show(results, info); });
+        Promise.all([senderResultsFor(senders.map(s => s.raw)), spamFolder ? spamMovedReasons() : null]).then(([results, moved]) => {
+            const ours = moved && thread ? moved.get(thread) : null;
+            show(results, null, ours);
+            infoP.then(info => { if (info) show(results, info, ours); });
         });
     }
+}
+
+// --- Spam folder -----------------------------------------------------------------------------------
+const SPAM_NOT_FLAGGED_NOTE = 'None of this extension\'s checks flag it: Gmail put it in Spam, or you did.';
+function spamMovedText(m) {
+    const when = m.ts ? ` on ${new Date(m.ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}` : '';
+    return `This extension moved it to Spam${when}.${m.reason ? ` Why: ${m.reason}` : ''}`;
+}
+// The conversations the extension moved to Spam (and the user hasn't taken out since), with why: the
+// move log keeps the reason. Read once, again when they change.
+let spamMovedInfo = null;
+function spamMovedReasons() {
+    if (!spamMovedInfo) spamMovedInfo = new Promise(resolve => {
+        try {
+            chrome.storage.local.get({ spamMovedThreads: {}, spamRescuedThreads: {}, spamMoveLog: [] }, (st) => {
+                const map = new Map();
+                if (chrome.runtime.lastError || !st) return resolve(map);
+                const why = new Map();
+                for (const e of Array.isArray(st.spamMoveLog) ? st.spamMoveLog : []) if (e && e.action === 'moved' && e.thread && !why.has(e.thread)) why.set(e.thread, e.reason || '');
+                const rescued = st.spamRescuedThreads || {};
+                for (const [thread, ts] of Object.entries(st.spamMovedThreads || {})) if (!(rescued[thread] > ts)) map.set(thread, { ts, reason: why.get(thread) || '' });
+                resolve(map);
+            });
+        } catch (e) { resolve(new Map()); }
+    });
+    return spamMovedInfo;
+}
+// Reading an unread email's headers must never mark it read, and Gmail doesn't document whether its
+// original-message page does. So this watches: an email whose headers were read while unread that then
+// turns read without being opened means it does, and unread emails' headers aren't read any more (until
+// the Spam folder setting is turned off and on again).
+const unreadHeaderReads = new Map();          // conversation → when its headers were read while unread
+const headersFetched = new Set();              // message ids whose headers were downloaded (not cached)
+const openedThreads = new Set();               // conversations opened in this page
+let unreadHeadersOff = false;
+try { chrome.storage.local.get({ spamUnreadHeadersOff: 0 }, r => { unreadHeadersOff = !!(r && r.spamUnreadHeadersOff); }); } catch (e) { /* extension reloaded */ }
+function noteReadState(thread, unread) {
+    if (unread || !thread || !unreadHeaderReads.has(thread)) return;
+    const at = unreadHeaderReads.get(thread);
+    unreadHeaderReads.delete(thread);
+    if (unreadHeadersOff || openedThreads.has(thread) || currentThreadKey() === thread || Date.now() - at > 10 * 60e3) return;
+    unreadHeadersOff = true;
+    try { chrome.storage.local.set({ spamUnreadHeadersOff: Date.now() }); } catch (e) { /* extension reloaded */ }
+    reportEvent('warning', 'An email in Spam turned read after its headers were read, without being opened, so the extension no longer reads the headers of unread emails in Spam: they are checked from their sender until opened, as in the inbox. To try again, turn Settings → Senders → "Flag dangerous emails in the Spam folder" off and on.');
 }
 
 // --- Opened emails ---------------------------------------------------------------------------------
@@ -2793,6 +2852,8 @@ function updateOpenedVerdict(body) {
 
 function scanOpenedSenders(S) {
     if (!MAIL_CAN.opened) return;
+    const open = currentThreadKey();
+    if (open) openedThreads.add(open);
     for (const body of inBodies('')) {               // training emails are never in this list (phishSimGate)
         if (!isShown(body)) continue;
         const found = openedSenderElement(body);
@@ -3522,7 +3583,7 @@ window.addEventListener('hashchange', () => { scheduleBadgeUpdate(); if (MAIL) s
 window.addEventListener('popstate', scheduleBadgeUpdate);
 // Coming back to the tab: the webmail may have refreshed the list while it was hidden.
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { lastReported = ''; scheduleBadgeUpdate(); if (MAIL) scheduleScan(); if (spamQueue.size) scheduleSpamMoves(); } });
-const SENDER_SETTING_KEYS = ['enableLookalikeCheck', 'enableCopyAddress', 'senderPictureSize', 'enableSenderBimi', 'enableRowHighlighter', 'rowHighlightColor', 'rowHighlightStyle', 'rowHighlightSelected', 'rowHighlightSelectedColor', 'enableConflictWarnings',
+const SENDER_SETTING_KEYS = ['enableLookalikeCheck', 'enableSpamFolderFlags', 'enableCopyAddress', 'senderPictureSize', 'enableSenderBimi', 'enableRowHighlighter', 'rowHighlightColor', 'rowHighlightStyle', 'rowHighlightSelected', 'rowHighlightSelectedColor', 'enableConflictWarnings',
     'enableSenderIdentity', 'enableSenderAvatars', 'enableSenderIconFallback', 'enableSenderCountry', 'enableSenderDomainCheck', 'enableSenderAddressCheck', 'enableAutoSpam', 'customTrustedSenders', 'customAllowlist', 'enableDnsThreatCheck'];
 // Turning protection on or off in Settings or the popup takes effect on the icon immediately.
 chrome.storage.onChanged.addListener((changes, area) => {
@@ -3531,6 +3592,8 @@ chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
     if (changes.senderMessageCache && changes.senderMessageCache.newValue === undefined) senderMessageCache = null;   // cleared in Settings
     if (changes.spamMovedThreads || changes.spamRescuedThreads) spamMemory = null;   // read again when next needed
+    if (changes.spamMovedThreads || changes.spamRescuedThreads || changes.spamMoveLog) spamMovedInfo = null;
+    if (changes.spamUnreadHeadersOff) unreadHeadersOff = !!changes.spamUnreadHeadersOff.newValue;
     let relevant = false;
     for (const key of ['enableLinkUnmasking', 'enableTrackingPixelBlocking', SITE.settingKey]) {
         if (key && changes[key]) { lastSettings[key] = changes[key].newValue; relevant = true; }
