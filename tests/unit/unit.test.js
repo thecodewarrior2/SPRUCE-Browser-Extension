@@ -486,3 +486,45 @@ test('conflicts: settled only while every overlapping feature still on was kept 
   assert.equal(settled(['enableSenderAvatars'], undefined), false, 'never chosen');
   assert.equal(settled([], []), true);
 });
+
+test('BIMI logos: DMARC enforced, organization domain only, downloaded or kept by address, unsafe refused', async () => {
+  const { IDBFactory } = require('fake-indexeddb');
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" version="1.2" baseProfile="tiny-ps" viewBox="0 0 10 10"><title>Brand</title><rect width="10" height="10" fill="#c00"/></svg>';
+  const dns = {
+    'default._bimi.brand.example': 'v=BIMI1; l=https://logos.brand.example/logo.svg; a=;',
+    '_dmarc.brand.example': 'v=DMARC1; p=reject; rua=mailto:dmarc@brand.example',
+    'default._bimi.nocors.example': 'v=BIMI1; l=https://vmc.issuer.example/nocors.svg',
+    '_dmarc.nocors.example': 'v=DMARC1; p=quarantine',
+    'default._bimi.lax.example': 'v=BIMI1; l=https://logos.lax.example/logo.svg',
+    '_dmarc.lax.example': 'v=DMARC1; p=none',
+    'default._bimi.evil.example': 'v=BIMI1; l=https://logos.evil.example/logo.svg',
+    '_dmarc.evil.example': 'v=DMARC1; p=reject'
+  };
+  const asked = [];
+  const fetch = async (u) => {
+    u = String(u); asked.push(u);
+    const q = /dns-query\?name=([^&]+)&type=TXT/.exec(u);
+    if (q) { const name = decodeURIComponent(q[1]); const t = dns[name];
+      return { ok: true, status: 200, json: async () => ({ Status: t ? 0 : 3, Answer: t ? [{ type: 16, data: `"${t}"` }] : [] }) }; }
+    const body = (s) => ({ ok: true, status: 200, headers: { get: () => 'image/svg+xml' }, arrayBuffer: async () => new TextEncoder().encode(s).buffer });
+    if (u === 'https://logos.brand.example/logo.svg') return body(svg);
+    if (u === 'https://logos.evil.example/logo.svg') return body(svg.replace('<rect', '<rect onload="alert(1)"'));
+    if (u === 'https://vmc.issuer.example/nocors.svg') throw new TypeError('Failed to fetch');      // no CORS
+    throw new Error('unexpected ' + u);
+  };
+  const b = loadBackground({}, { indexedDB: new IDBFactory(), fetch });
+  const run = (c) => vm.runInContext(c, b);
+  assert.match(await run('bimiLogo("brand.example")'), /^data:image\/svg\+xml;base64,/, 'downloaded and kept');
+  assert.equal((await run('iconStore.get("bimi:brand.example")')).source, 'bimi');
+  // A subdomain sender: only the organization domain is looked up, never the subdomain.
+  asked.length = 0;
+  assert.match(await run('bimiLogo("mail.brand.example")'), /^data:image\/svg\+xml/);
+  assert.ok(!asked.some(u => /_bimi\.mail\.brand/.test(u)), 'subdomain never looked up');
+  assert.equal(asked.length, 0, 'cached: no lookup at all the second time');
+  assert.equal(await run('bimiLogo("nocors.example")'), 'https://vmc.issuer.example/nocors.svg', 'no CORS: kept by its address for the page');
+  assert.equal(await run('bimiLogo("lax.example")'), '', 'DMARC p=none: no logo');
+  assert.equal(await run('bimiLogo("evil.example")'), '', 'event handler in the SVG: refused');
+  assert.equal(await run('bimiLogo("nobimi.example")'), '', 'no record');
+  assert.equal(await run('bimiLogo("gmail.com")'), '', 'personal email service: never looked up');
+  assert.equal((await run('iconStore.get("bimi:nobimi.example")')).source, 'none', 'remembered as none');
+});

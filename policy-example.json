@@ -17,6 +17,7 @@
           "managedEnableSenderIdentity": true,
           "managedEnableSenderIconFallback": true,
           "managedEnableSenderAvatars": true,
+          "managedEnableSenderBimi": true,
           "managedEnableRowHighlighter": true,
           "managedRowHighlightColor": "yellow",
           "managedRowHighlightStyle": "both",

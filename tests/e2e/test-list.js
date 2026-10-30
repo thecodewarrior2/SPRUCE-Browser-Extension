@@ -23,7 +23,7 @@ const { launch, servePage, sleep, check, done } = require('./harness');
   const chips = await page.$$eval('tr.zA', rows => rows.map(r => {
     const c = r.querySelector('.unshortener-sender-chip');
     const f = r.querySelector('.unshortener-sender-flag');
-    return { thread: r.querySelector('[data-thread-id]').getAttribute('data-thread-id'), chip: c && c.textContent, status: c && c.dataset.status, flag: f && f.textContent, mono: !!r.querySelector('.unshortener-sender-blank'), img: !!r.querySelector('.unshortener-sender-icon img') };
+    return { thread: r.querySelector('[data-thread-id]').getAttribute('data-thread-id'), chip: c && c.textContent, status: c && c.dataset.status, flag: f && f.textContent, img: !!r.querySelector('.unshortener-sender-icon img'), circle: !!r.querySelector('.unshortener-row-avatar') };
   }));
   console.log(chips);
   const by = Object.fromEntries(chips.map(c => [c.thread, c]));
@@ -37,7 +37,7 @@ const { launch, servePage, sleep, check, done } = require('./harness');
   const neutral = look.filter(x => x.status === 'unverified' || x.status === 'clean');
   check('not verified / checked labels: no mark, neutral grey', neutral.length >= 2 && neutral.every(x => x.mark === '' && x.bg === 'rgb(241, 243, 244)'), look);
   check('flagged labels: ⛔ and red', look.filter(x => x.status === 'flagged').every(x => x.mark === '⛔' && x.bg === 'rgb(252, 232, 230)') && look.some(x => x.status === 'flagged'), look);
-  check('offline: no icon request (blank space)', chips.filter(c => c.chip).every(c => c.mono && !c.img));
+  check('offline: no icon fetched, and nothing drawn beside the sender or over the checkbox', chips.filter(c => c.chip).every(c => !c.img && !c.circle), chips);
   // Gmail rewrites the rows in place (tab shown again): the icons and labels come back.
   const before = await page.evaluate(() => document.querySelectorAll('tr.zA .unshortener-sender-chip').length);
   await page.evaluate(() => window.__rewriteRows());

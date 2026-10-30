@@ -1,5 +1,13 @@
 # Changelog
 
+## 5.59 — Pictures for every sender without opening emails, and BIMI logos (Firefox build, same as Chrome 5.59)
+
+- **Every inbox row now shows a circle over its checkbox**, with no email opened first. In order: a colleague's own photo (your organization; learned from emails you've opened, since Gmail offers no other way without signing in to Google's API); the company's **BIMI logo** (published in DNS, looked up when the row appears); a company logo learned from an opened email; otherwise the **site's own icon**, its parent domain's, or DuckDuckGo's stand-in. Your own organization gets the same order after colleagues' photos: its logo, else its icon.
+- **The icon next to the sender's country flag is gone** from inbox rows; the circle replaces it. Opened emails keep the small icon beside the sender (Gmail shows its own picture there).
+- **BIMI safety:** a logo is used only when the company's domain enforces DMARC (quarantine or reject), as BIMI requires, and only the company's main domain is looked up, never a subdomain, so a sender can't turn throwaway subdomains into a per-recipient "read receipt". The logo is downloaded and checked (SVG, at most 32 KB, no scripts) where its server allows; otherwise the inbox page loads it by its address with no referrer, which lets the company's logo server see your IP address. If it doesn't load, the site icon is shown. New setting **Company logos from BIMI** (on by default), policy `managedEnableSenderBimi`.
+- **A flagged or caution email never shows a company logo or photo** (its checkbox shows instead): before an email is opened its sender isn't verified, so a forged "paypal.com" email must not get PayPal's logo.
+- BIMI and DMARC lookups fall back to Cloudflare's security resolver when the address 1.1.1.1 is blocked (some school and company networks do), and remember which one answered.
+
 ## 5.58 — Sender pictures over the checkbox, a Spam-moving fix, and faster tests (Firefox build, same as Chrome 5.58)
 
 - **Sender photos and company logos now sit over the inbox row's checkbox**, as a circle (the way Gmail and Simplify Gmail draw avatars), instead of next to the site icon and flag. Point at the row, or tick it, and the checkbox is back and works as usual; the picture never takes a click. The icon next to the sender is always the site's own icon again.

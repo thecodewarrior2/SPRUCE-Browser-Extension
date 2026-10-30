@@ -1515,6 +1515,117 @@ async function avatarFor(address, site) {
     return '';
 }
 
+// BIMI LOGOS (Brand Indicators for Message Identification): a company publishes its logo in DNS
+// ("default._bimi.<domain>" TXT "v=BIMI1; l=https://…/logo.svg"), so it can be shown for every email
+// from that domain without opening one. Used only when the domain also enforces DMARC (p=quarantine
+// or p=reject, as BIMI itself requires), so a domain that doesn't stop others sending in its name
+// never gets a logo. Only the organization domain (example.com, not x.example.com) is looked up: a
+// sender can't make a lookup or a logo address per recipient out of throwaway subdomains (which
+// would work like a read receipt for an email nobody opened).
+// The logo is an SVG (BIMI's "Tiny PS" format), only ever shown as an image, where SVG can't run code.
+// Downloaded once per domain by the background (no cookies or referrer) where the logo's server
+// allows it: kept as it is if at most 32 KB with no scripts or event handlers. Most logo servers
+// don't allow that kind of download (vmc.digicert.com, valimail…): then only the logo's address is
+// kept, and the inbox page loads it as an image (no referrer), the way a web page shows a picture.
+// Either way the company's logo server sees the computer's IP address (Gmail fetches BIMI logos on
+// its own servers instead). Asked about again weekly; a domain without one is remembered ("none").
+// Stored in the icon store under "bimi:<domain>". Off with enableSenderBimi, and only when network
+// checks are allowed (privacy level).
+const BIMI_RECHECK_MS = 7 * 24 * 60 * 60 * 1000;
+const BIMI_MAX_BYTES = 32 * 1024;
+const bimiInFlight = new Map();
+// TXT records from Cloudflare (1.1.1.1; its security resolver when the address 1.1.1.1 itself is blocked,
+// as some school and company networks do).
+// The one that answered last is asked first, so a blocked one costs its wait only once.
+const TXT_HOSTS = ['1.1.1.1', 'security.cloudflare-dns.com'];
+async function dnsTxt(name) {
+    let data = null, lastError = null;
+    for (const host of TXT_HOSTS.slice()) {
+        try {
+            const res = await fetchWithTimeout(`https://${host}/dns-query?name=${encodeURIComponent(name)}&type=TXT`, { headers: { accept: 'application/dns-json' } }, 5000);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            data = await res.json();
+            if (TXT_HOSTS[0] !== host) TXT_HOSTS.sort((a, b) => (b === host) - (a === host));
+            break;
+        } catch (e) { lastError = e; }
+    }
+    if (!data) throw lastError;
+    // A TXT record can come in several quoted pieces: joined back together.
+    return (data.Answer || []).filter(r => r.type === 16).map(r => String(r.data || '').replace(/^"|"$/g, '').replace(/"\s*"/g, ''));
+}
+// The tags of a "v=BIMI1; l=…" or "v=DMARC1; p=…" record, lower-case names.
+function recordTags(txt) {
+    const tags = {};
+    for (const part of String(txt).split(';')) {
+        const m = /^\s*([a-z]+)\s*=\s*(.*?)\s*$/i.exec(part);
+        if (m) tags[m[1].toLowerCase()] = m[2];
+    }
+    return tags;
+}
+async function bimiRecordFor(org) {
+    const rec = (await dnsTxt(`default._bimi.${org}`)).map(recordTags).find(t => /^bimi1$/i.test(t.v || ''));
+    return rec ? { domain: org, logo: rec.l || '' } : null;
+}
+async function dmarcEnforced(org) {
+    const rec = (await dnsTxt(`_dmarc.${org}`)).map(recordTags).find(t => /^dmarc1$/i.test(t.v || ''));
+    return !!rec && /^(quarantine|reject)$/i.test(rec.p || '');
+}
+// A logo kept only by its address (its server didn't allow a download): stored as text.
+const BIMI_LINK_TYPE = 'text/uri-list';
+function bimiResult(rec) {
+    if (!rec || !rec.bytes) return '';
+    if (rec.type === BIMI_LINK_TYPE) { const u = new TextDecoder().decode(rec.bytes); return /^https:\/\/[^\s"'<>]+$/i.test(u) ? u : ''; }
+    return iconDataUrl(rec);
+}
+// A safe BIMI SVG, or null.
+function bimiSvg(bytes) {
+    if (!bytes.byteLength || bytes.byteLength > BIMI_MAX_BYTES) return null;
+    const text = new TextDecoder().decode(bytes);
+    if (!/<svg[\s>]/i.test(text) || /<script|\son[a-z]+\s*=|javascript:|<foreignObject/i.test(text)) return null;
+    return { type: 'image/svg+xml', bytes };
+}
+// The company's BIMI logo: a data: URL, an https: address for the page to load, or ''.
+async function bimiLogo(domain) {
+    const d = normalizeDomain(domain);
+    const org = registrableDomain(d) || d;
+    if (!SENDER_DOMAIN_RE.test(org) || isPersonalMailDomain(org)) return '';
+    const key = 'bimi:' + org;
+    const hit = await iconStore.get(key).catch(() => null);
+    if (hit && Date.now() - hit.ts < BIMI_RECHECK_MS) return bimiResult(hit);
+    if (bimiInFlight.has(key)) return bimiInFlight.get(key);
+    const p = (async () => {
+        try {
+            const rec = await bimiRecordFor(org);
+            const url = rec && /^https:\/\/[^\s"'<>]+$/i.test(rec.logo) ? rec.logo.slice(0, 500) : '';
+            if (!url || !await dmarcEnforced(org)) {
+                await iconStore.put(key, '', null, 'none');
+                return '';
+            }
+            let found = null, how = 'downloaded';
+            try {
+                const res = await fetchWithTimeout(url, { credentials: 'omit', referrerPolicy: 'no-referrer' }, 6000);
+                if (res.ok) found = bimiSvg(await res.arrayBuffer());
+                if (!found) { await iconStore.put(key, '', null, 'none'); logInfo(`The BIMI logo of ${org} isn't used: ${res.ok ? 'not a plain SVG image of at most 32 KB' : `its address answered HTTP ${res.status}`}.`, 'Sender checks'); return ''; }
+            } catch (e) {
+                // The logo's server doesn't allow a download from here (no CORS): the page loads it.
+                found = { type: BIMI_LINK_TYPE, bytes: new TextEncoder().encode(url).buffer };
+                how = 'shown from its address';
+            }
+            await iconStore.put(key, found.type, found.bytes, 'bimi', url);
+            if (!(hit && hit.bytes && hit.from === url)) logInfo(`BIMI logo for ${org}: ${hit && hit.bytes ? 'changed, replaced' : 'remembered'} (${how}).`, 'Sender checks');
+            return bimiResult({ type: found.type, bytes: found.bytes });
+        } catch (e) {
+            // A failed DNS lookup keeps what was known (a logo isn't lost to an outage).
+            logWarning(`The BIMI logo for ${org} couldn't be checked (${errorText(e)}).`, 'Sender checks');
+            return bimiResult(hit);
+        } finally {
+            bimiInFlight.delete(key);
+        }
+    })();
+    bimiInFlight.set(key, p);
+    return p;
+}
+
 // The sender's exact address on the community scam-sender list (downloaded with the phishing lists).
 async function phishingSenderHit(address, cfg) {
     if (!cfg.values.enablePhishingFeeds) return null;
@@ -2245,10 +2356,20 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         // network: they are only ever learned from opened emails), drawn over the row's checkbox.
         const address = typeof request.address === 'string' ? request.address.toLowerCase().slice(0, 320) : '';
         getConfig().then(async cfg => {
-            if (!cfg.values.enableSenderIdentity) return { d: '', a: '' };
-            const [a, d] = await Promise.all([cfg.values.enableSenderAvatars ? avatarFor(address, request.site) : '',
-                cfg.values.enableDnsThreatCheck ? senderIcon(request.site, { fallback: !!cfg.values.enableSenderIconFallback }) : '']);
-            return { d, a };
+            const V = cfg.values;
+            if (!V.enableSenderIdentity) return { d: '', a: '', k: '' };
+            // The picture, best first: a colleague's own photo (only ever learned from opened emails),
+            // the company's BIMI logo (DNS; no email has to be opened), a company logo learned from an
+            // opened email, then the site's icon (its own, its parent domain's, or DuckDuckGo's).
+            const domain = typeof request.domain === 'string' ? request.domain.toLowerCase().slice(0, 253) : request.site;
+            const icon = V.enableDnsThreatCheck ? senderIcon(request.site, { fallback: !!V.enableSenderIconFallback }) : Promise.resolve('');
+            const photo = V.enableSenderAvatars && address ? await avatarFor(address, '') : '';
+            if (photo) return { d: await icon, a: photo, k: 'photo' };
+            const bimi = V.enableSenderBimi && V.enableDnsThreatCheck ? await bimiLogo(domain).catch(() => '') : '';
+            if (bimi) return { d: await icon, a: bimi, k: 'logo' };
+            const learned = V.enableSenderAvatars ? await avatarFor('', request.site) : '';
+            if (learned) return { d: await icon, a: learned, k: 'logo' };
+            return { d: await icon, a: '', k: '' };
         }).then(r => sendResponse(r), () => sendResponse({ d: '' }));
         return true;
     }
