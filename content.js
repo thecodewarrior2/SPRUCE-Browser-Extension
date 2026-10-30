@@ -1436,13 +1436,16 @@ const NOTICE_PALETTE = {
              info: { bg: '#303134', fg: '#e8eaed', edge: '#9aa0a6' }, ok: { bg: '#1e3a2a', fg: '#a8dab5', edge: '#34a853' },
              card: { bg: '#2d2e30', fg: '#e8eaed', muted: '#bdc1c6', border: '#5f6368', link: '#8ab4f8' } }
 };
-function isDarkSurface(el) {
+// The color an element is drawn on: the first background up its ancestors that isn't see-through.
+function surfaceColor(el) {
     for (let e = el; e && e.nodeType === 1; e = e.parentElement) {
         const m = (getComputedStyle(e).backgroundColor || '').match(/[\d.]+/g);
-        if (m && m.length >= 3 && !(m.length === 4 && +m[3] === 0)) return (0.299 * m[0] + 0.587 * m[1] + 0.114 * m[2]) < 128;
+        if (m && m.length >= 3 && !(m.length === 4 && +m[3] === 0)) return [+m[0], +m[1], +m[2]];
     }
-    return false;
+    return [255, 255, 255];
 }
+const isDarkRgb = (c) => (0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]) < 128;
+function isDarkSurface(el) { return isDarkRgb(surfaceColor(el)); }
 function palette(el) { return NOTICE_PALETTE[isDarkSurface(el) ? 'dark' : 'light']; }
 function styleNotice(el, themeFrom, kind) {
     const c = palette(themeFrom)[kind] || palette(themeFrom).info;
@@ -2352,6 +2355,13 @@ function fillSenderIcon(wrap, S) {
         img.addEventListener('error', () => img.replaceWith(blank()), { once: true });
         img.src = r.d;
         slot.replaceWith(img);
+        // An icon that wouldn't show on the row (a black logo on the dark theme) gets a small plate.
+        iconLook(r.d).then(look => {
+            if (!img.isConnected) return;
+            const surface = surfaceColor(img.parentElement);
+            const plate = contrastingBackground(look, surface, [iconTintOver(look && look.tint, !isDarkRgb(surface)), ICON_MID_GREY]);
+            if (plate !== surface) { img.classList.add('unshortener-icon-plate'); img.style.backgroundColor = cssRgb(plate); }
+        });
     });
 }
 // The sender's picture in an inbox row: a circle over the row's checkbox (as Gmail's own avatars and
@@ -2397,45 +2407,40 @@ function placeRowAvatar(wrap, url, kind = 'logo', fallback = '') {
     cell.appendChild(img);
     row.dataset.unshortenerAvatar = '1';
     // A site's icon sits on a soft tint of its own main color (light or dark to suit the theme)
-    // instead of a white disc, so the circles look alike and the icon doesn't get lost.
-    if (kind === 'icon') iconTint(url).then(c => { if (img.isConnected) img.style.backgroundColor = tintFor(c, isDarkSurface(row)); });
+    // instead of a white disc, so the circles look alike and the icon doesn't get lost; on the other
+    // one when the icon wouldn't show on it (a black logo on the dark theme). A logo with see-through
+    // parts gets a dark circle instead of white when it's white itself.
+    if (kind === 'icon') iconLook(url).then(look => { if (img.isConnected) img.style.backgroundColor = cssRgb(iconCircleColor(look, isDarkSurface(row))); });
+    else if (kind === 'logo') iconLook(url).then(look => {
+        const bg = contrastingBackground(look, ICON_SURFACE.light, [[60, 64, 67], ICON_MID_GREY]);
+        if (img.isConnected && bg !== ICON_SURFACE.light) img.style.backgroundColor = cssRgb(bg);
+    });
 }
 
-// The main color of an icon (average of its solid, not-white pixels), or null when it has none
-// (a white or empty icon). Remembered per icon for the page.
-const iconTints = new Map();
-function iconTint(url) {
-    if (iconTints.has(url)) return iconTints.get(url);
+// How an icon looks (shared.js iconPixelLook: its main color, see-through parts, outline), read from
+// a 32 px copy; null when it can't be read. Only pictures the extension holds (data: URLs) are read:
+// a logo on another server is never fetched again for this. Remembered per icon for the page.
+const iconLooks = new Map();
+function iconLook(url) {
+    if (!/^data:image\//i.test(url || '')) return Promise.resolve(null);
+    if (iconLooks.has(url)) return iconLooks.get(url);
     const p = new Promise(resolve => {
         const im = new Image();
         im.onload = () => {
             try {
-                const c = document.createElement('canvas');
-                c.width = c.height = 16;
+                const size = 32, c = document.createElement('canvas');
+                c.width = c.height = size;
                 const g = c.getContext('2d', { willReadFrequently: true });
-                g.drawImage(im, 0, 0, 16, 16);
-                const d = g.getImageData(0, 0, 16, 16).data;
-                let r = 0, gr = 0, b = 0, n = 0;
-                for (let i = 0; i < d.length; i += 4) {
-                    if (d[i + 3] < 128 || (d[i] > 230 && d[i + 1] > 230 && d[i + 2] > 230)) continue;
-                    r += d[i]; gr += d[i + 1]; b += d[i + 2]; n++;
-                }
-                resolve(n >= 8 ? [r / n, gr / n, b / n] : null);
+                g.drawImage(im, 0, 0, size, size);
+                resolve(iconPixelLook(g.getImageData(0, 0, size, size).data, size));
             } catch (e) { resolve(null); }
         };
         im.onerror = () => resolve(null);
         im.src = url;
     });
-    if (iconTints.size > 500) iconTints.delete(iconTints.keys().next().value);
-    iconTints.set(url, p);
+    if (iconLooks.size > 500) iconLooks.delete(iconLooks.keys().next().value);
+    iconLooks.set(url, p);
     return p;
-}
-// The circle's color for an icon's main color: 16% of it over white (light theme), 30% over Gmail's
-// dark surface (dark theme); a plain grey when the icon has no color of its own.
-function tintFor(rgb, dark) {
-    if (!rgb) return dark ? '#3c4043' : '#f1f3f4';
-    const base = dark ? [32, 33, 36] : [255, 255, 255], k = dark ? 0.3 : 0.16;
-    return `rgb(${base.map((v, i) => Math.round(v + (rgb[i] - v) * k)).join(', ')})`;
 }
 
 // Photos and logos (the profile's message.avatar): the picture the webmail shows beside the sender of
