@@ -1094,8 +1094,8 @@ function riskyScheme(href) {
 //   message       container of one opened message, its sender element, and the element after which
 //                 the sender's label goes (senderAfter; else right after the sender); avatar: the photo
 //                 or logo the webmail shows for the sender (img, the attribute holding its address,
-//                 allowed image host, placeholder images to ignore, and the address pattern of
-//                 personal account photos as opposed to brand logos)
+//                 photoHost: where people's photos are loaded from, embeddedLogo: a logo the webmail
+//                 writes into the page itself, placeholder: generic images to ignore)
 //   toolbar       the toolbar that acts on selected or open conversations; spamAction: an attribute
 //                 that marks the Report spam button whatever its language
 //   views         inbox: views (address after "#") where emails may be moved to Spam; spam: the Spam
@@ -1129,9 +1129,13 @@ const WEBMAIL_SITES = [
           openThread: 'h2[data-thread-perm-id], h2[data-legacy-thread-id]',
           message: { container: '.adn, [data-message-id], .gs', sender: '.gD[email]', senderAfter: '.go',
                      // The photo or logo Gmail shows beside the sender (its hovercard id is the address).
+                     // Gmail embeds a verified brand logo (BIMI) in the page itself as a data: image;
+                     // a photo it loads from googleusercontent.com, in any address format (the "/a/…"
+                     // kind and the older "/-xxxx/AAAAAAAAAAI/…/photo.jpg"), is a person's photo.
                      avatar: { img: 'img[data-hovercard-id]', addressAttr: 'data-hovercard-id',
-                               host: /^https:\/\/[^/]*\.googleusercontent\.com\//, placeholder: /default-user|\/ic_|anonymous/i,
-                               personal: /\.googleusercontent\.com\/a-?\// } },
+                               photoHost: /^https:\/\/[^/]*\.googleusercontent\.com\//,
+                               embeddedLogo: /^data:image\/(png|gif|jpeg|webp|svg\+xml)[;,]/i,
+                               placeholder: /default-user|\/ic_|anonymous/i } },
           toolbar: '[gh="mtb"], [gh="tm"]',
           spamAction: { attr: 'act', value: '9' },
           views: { inbox: /^(inbox(\/.*)?|category\/[a-z]+(\/.*)?)?$/, spam: /^(spam(\/|$)|search\/.*in(:|%3A)spam)/i, spamHref: '#spam' },

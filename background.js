@@ -1470,9 +1470,36 @@ async function rememberAvatar(address, url, kind) {
     avatarInFlight.set(key, p);
     return p;
 }
-// Only from an image host a webmail entry names for its avatars (Gmail: googleusercontent.com).
+// Only from an image host a webmail entry names for people's photos (Gmail: googleusercontent.com).
 function avatarHostAllowed(url) {
-    return WEBMAIL_SITES.some(w => w.mail && w.mail.message && w.mail.message.avatar && w.mail.message.avatar.host.test(url));
+    return WEBMAIL_SITES.some(w => w.mail && w.mail.message && w.mail.message.avatar && w.mail.message.avatar.photoHost && w.mail.message.avatar.photoHost.test(url));
+}
+// A logo the webmail embedded in the page (data: image): stored directly, nothing is downloaded. Its
+// change is detected by a short fingerprint of the image (FNV-1a), kept with it. SVG logos (BIMI's
+// format) are kept as they are, at most 32 KB: shown only as an image, where SVG can't run code.
+const EMBEDDED_LOGO_MAX_BYTES = 32 * 1024;
+function fingerprint(bytes) {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < bytes.length; i++) { h ^= bytes[i]; h = Math.imul(h, 0x01000193) >>> 0; }
+    return h.toString(16).padStart(8, '0') + ':' + bytes.length;
+}
+async function rememberEmbeddedLogo(address, dataUrl) {
+    const m = /^data:(image\/(?:png|gif|jpeg|webp|svg\+xml))(;base64)?,(.*)$/is.exec(dataUrl);
+    if (!m) return 'refused';
+    let bytes;
+    try { bytes = m[2] ? Uint8Array.from(atob(m[3]), c => c.charCodeAt(0)) : new TextEncoder().encode(decodeURIComponent(m[3])); }
+    catch (e) { return 'unusable'; }
+    const type = m[1].toLowerCase();
+    if (!bytes.length || bytes.length > EMBEDDED_LOGO_MAX_BYTES) return 'unusable';
+    const key = '@' + address, print = 'embedded:' + fingerprint(bytes);
+    const hit = await iconStore.get(key).catch(() => null);
+    if (hit && hit.from === print && hit.bytes) return 'same';
+    let found = { type, bytes: bytes.buffer };
+    if (type !== 'image/svg+xml') found = await normalizeIcon(found);
+    if (!found) return 'unusable';
+    await iconStore.put(key, found.type, found.bytes, 'avatar-logo', print);
+    logInfo(`Sender verified logo for ${address}: ${hit && hit.bytes ? 'changed, replaced' : 'remembered'} (embedded by the webmail; nothing downloaded).`, 'Sender checks');
+    return hit && hit.bytes ? 'updated' : 'saved';
 }
 async function avatarFor(address) {
     const rec = await iconStore.get('@' + address).catch(() => null);
@@ -2239,10 +2266,20 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         return true;
     }
     if (request.action === 'senderAvatar') {
-        if (!sender || sender.id !== chrome.runtime.id || typeof request.address !== 'string' || typeof request.url !== 'string'
-            || !avatarHostAllowed(request.url) || !['personal', 'logo'].includes(request.kind)) { sendResponse('refused'); return false; }
+        if (!sender || sender.id !== chrome.runtime.id || typeof request.address !== 'string' || typeof request.url !== 'string') { sendResponse('refused'); return false; }
+        const address = request.address.toLowerCase().slice(0, 320);
+        // A logo embedded in the page: stored directly (no network needed, so not tied to the privacy level).
+        if (request.kind === 'logo' && /^data:image\//i.test(request.url)) {
+            if (request.url.length > 64 * 1024) { sendResponse('unusable'); return false; }
+            getConfig().then(cfg => cfg.values.enableSenderIdentity && cfg.values.enableSenderAvatars ? rememberEmbeddedLogo(address, request.url) : 'off')
+                .then(r => sendResponse(r), () => sendResponse('failed'));
+            return true;
+        }
+        // A person's photo: downloaded here from the webmail's own image host (the background isn't
+        // subject to the webmail page's own rules for loading images).
+        if (request.kind !== 'personal' || !avatarHostAllowed(request.url)) { sendResponse('refused'); return false; }
         getConfig().then(cfg => cfg.values.enableSenderIdentity && cfg.values.enableSenderAvatars && cfg.values.enableDnsThreatCheck
-            ? rememberAvatar(request.address.toLowerCase().slice(0, 320), request.url.slice(0, 2000), request.kind) : 'off')
+            ? rememberAvatar(address, request.url.slice(0, 2000), 'personal') : 'off')
             .then(r => sendResponse(r), () => sendResponse('failed'));
         return true;
     }

@@ -41,7 +41,7 @@
     },
     "managedEnableSenderAvatars": {
       "title": "Sender Photos and Verified Logos (Gmail)",
-      "description": "Show, in place of the site icon, the photo or logo Gmail itself shows beside a sender in an opened email, remembered per address so the inbox list shows it too: profile photos of people in the user's own organization (its domain), and brand logos Gmail showed for an email that passed its sender verification (BIMI, DMARC pass). Personal photos of outside senders are never used. Fetched once from Gmail's own image host and checked again weekly; a changed photo replaces the old one. Requires managedEnableSenderIdentity and managedEnableDnsThreatCheck.",
+      "description": "Show, in place of the site icon, the photo or logo Gmail itself shows beside a sender in an opened email, remembered per address so the inbox list shows it too: profile photos of people in the user's own organization (its domain; fetched from Gmail's image host googleusercontent.com, checked again weekly), and brand logos Gmail embeds in the page for an email that passed its sender verification (BIMI, DMARC pass; kept as they are, nothing downloaded). Personal photos of outside senders are never used. A changed photo or logo replaces the old one. Requires managedEnableSenderIdentity.",
       "type": "boolean"
     },
     "managedEnableSenderCountry": {
