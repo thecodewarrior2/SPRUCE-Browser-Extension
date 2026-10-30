@@ -1,0 +1,6 @@
+# Tests are not part of the extension package (git archive builds the zips).
+tests export-ignore
+.gitignore export-ignore
+.gitattributes export-ignore
+# Logos for documents and the project page; the extension uses icons/.
+branding export-ignore

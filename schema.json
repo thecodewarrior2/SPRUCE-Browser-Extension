@@ -1,0 +1,455 @@
+{
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "title": "S.P.R.U.C.E+ Policy",
+  "description": "Configuration policy for the S.P.R.U.C.E+ (Spam & Phishing Risk URL Checker Extension+) Chrome extension. Any setting defined here is locked for users.",
+  "type": "object",
+  "properties": {
+    "managedEnableLinkUnmasking": {
+      "title": "Unmask Links",
+      "description": "Scan links in opened emails: unwrap security-gateway and tracking redirects offline, resolve public URL shorteners, and show the real destination.",
+      "type": "boolean"
+    },
+    "managedEnableTrackerReveal": {
+      "title": "Offer to Reveal Hidden Destinations",
+      "description": "Show a 🔍 on email tracking links that, after the user confirms, sends the link to the lookup service (unshorten.me or your custom unshortener) to reveal its destination. The sender sees this as a click. Set to false to never send tracking links anywhere. Also offers to read (never run) the code of cloud-storage pages, downloaded directly from the storage service, to find where they redirect.",
+      "type": "boolean"
+    },
+    "managedEnablePhishingFeeds": {
+      "title": "Check Links Against Phishing Lists",
+      "description": "Download the OpenPhish community feed and the Phishing Army list (CC BY-NC 4.0) and match links on the device.",
+      "type": "boolean"
+    },
+    "managedEnableSenderChecks": {
+      "title": "Check Who Sent the Email (Gmail)",
+      "description": "Read Gmail's own sender verification for an email when it contains a company-only short link or a sender name claiming a brand; trust company links only in mail verified as sent by that company directly to the user, and warn about impersonating senders.",
+      "type": "boolean"
+    },
+    "managedEnableSendCheck": {
+      "title": "Check Links Before Sending (Gmail)",
+      "description": "When the user presses Send in Gmail, check the links they wrote (typos, websites that do not exist or answer, look-alike, phishing and malware sites) and list any problems before sending.",
+      "type": "boolean"
+    },
+    "managedEnableSenderIdentity": {
+      "title": "Sender Icons and Domain Labels (Gmail)",
+      "description": "Show each sender's site icon and a label with its domain, colored by the sender checks, in the Gmail inbox list and in opened emails. Icons are fetched once by the extension from Google's icon service (only the site name is sent) and remembered for 30 days; a site without an icon, or managedEnableDnsThreatCheck false, gets a blank space.",
+      "type": "boolean"
+    },
+    "managedEnableSenderIconFallback": {
+      "title": "Sender Icon Fallback (Gmail)",
+      "description": "When a sender's site has no icon of its own: use its parent domain's icon (alerts.brand.com -> brand.com, through Google's icon service as usual), else ask DuckDuckGo's icon service (icons.duckduckgo.com; only the site name is sent, only for such sites, at most once a week per site). Such icons are re-checked weekly and replaced by the site's own icon as soon as it has one. False: a blank space instead. Requires managedEnableSenderIdentity and managedEnableDnsThreatCheck.",
+      "type": "boolean"
+    },
+    "managedEnableSenderAvatars": {
+      "title": "Sender Photos and Company Logos (Gmail)",
+      "description": "Show, as a circle over each inbox row's checkbox (the checkbox comes back on hover), the picture Gmail itself shows beside a sender in an opened email, remembered so the inbox list shows it too: colleagues' own photos for the user's own organization (never its logo), and for another company one logo for all its addresses, learned only from an email that passed sender verification (DMARC pass) sent from a shared mailbox (contact@, info@, support@…) or carrying a verified BIMI logo. A person's own photo at another company is never used (the company logo is shown); personal email services keep the site icon. Pictures are fetched from Gmail's image host googleusercontent.com and checked again weekly. A changed photo or logo replaces the old one. Requires managedEnableSenderIdentity.",
+      "type": "boolean"
+    },
+    "managedEnableSenderBimi": {
+      "title": "Company Logos from BIMI (Gmail)",
+      "description": "Show the logo a company publishes in DNS for its email (BIMI, default._bimi.<domain>) over the checkbox of each inbox row from that company, with no email opened. Only for organization domains (never subdomains) that enforce DMARC (p=quarantine or p=reject). DNS lookups go to Cloudflare (1.1.1.1, or its security resolver when 1.1.1.1 is blocked); the logo is downloaded by the extension where the logo's server allows it, otherwise loaded by the inbox page from its address with no referrer, so the company's logo server sees the user's IP address. Checked again weekly. Requires managedEnableSenderIdentity and network checks.",
+      "type": "boolean"
+    },
+    "managedSenderPictureSize": {
+      "title": "Size of Sender Pictures (Gmail)",
+      "description": "auto (default) follows Gmail's display density: Default gets 36-pixel circles over each inbox row's checkbox, Comfortable 32-pixel circles, Compact small icons beside the country flag (no circles). large, medium or inline set one size for everyone. A sender with no photo, logo or site icon gets a colored circle with their initial (not inline).",
+      "type": "string",
+      "enum": [
+        "auto",
+        "large",
+        "medium",
+        "inline"
+      ]
+    },
+    "managedEnableCopyAddress": {
+      "title": "Copy Button for the Sender's Address (Gmail)",
+      "description": "Show a button after the sender's address in opened emails that copies the address to the clipboard (keyboard accessible, with a brief confirmation). Independent of the sender checks. Inspired by Copy Button for Gmail.",
+      "type": "boolean"
+    },
+    "managedEnableLookalikeCheck": {
+      "title": "Catch Look-alike Senders",
+      "description": "In the inbox list, without opening anything: flag senders whose domain imitates a popular site (the Chrome UX Report and Tranco top 10,000 lists, downloaded monthly; only domains that enforce DMARC), a built-in well-known brand, the user's own organization or a domain whose mail passed DMARC in the mailbox (look-alike characters, a brand plus a scare word, a brand domain worn as a prefix: red, moved to Spam; one letter off: red only when the sender's domain was registered under 90 days ago, per its public RDAP record; amber for built-in brands otherwise). Also a brand's name on an address that isn't the brand's (red) and a colleague's name on an outside address (amber; names kept only as one-way hashes). Trusted senders are never judged.",
+      "type": "boolean"
+    },
+    "managedEnableOwnNameCheck": {
+      "title": "Catch Senders Using the User's Own Name",
+      "description": "In the inbox list, without opening anything: flag (red, moved to Spam) an email whose sender name is the user's own email address or mailbox name (the part before the @, written as in the address; in any case for addresses at Gmail, Outlook.com and other big providers) but which comes from someone else's address. Shared mailbox names (info, office, support...), the user's own organization's senders and addresses containing the user's mailbox name are left alone.",
+      "type": "boolean"
+    },
+    "managedEnableCallbackScamCheck": {
+      "title": "Catch \"Call This Number\" Scams",
+      "description": "Flag (red, moved to Spam) an email whose subject gives a phone number to call about a purchase or charge the user didn't make, whoever sent it (attackers put such text into names that companies' own systems mail out); a number with only call or support wording is a caution. In opened emails, 'call this number if you didn't make this purchase' and look-alike mathematical letters are cautions. Also works in opened emails on the other webmail sites.",
+      "type": "boolean"
+    },
+    "managedEnableRowHighlighter": {
+      "title": "Row Highlighter",
+      "description": "Highlight the inbox row under the mouse (and selected rows) in Gmail and the other supported webmail, so users can see exactly which email a click opens. A see-through color and/or an outline, readable in light and dark themes. Inspired by Row Highlighter for Gmail.",
+      "type": "boolean"
+    },
+    "managedRowHighlightColor": {
+      "title": "Row Highlighter Color",
+      "description": "Highlight color: yellow (default), blue, green, pink, purple or gray.",
+      "type": "string",
+      "enum": [
+        "yellow",
+        "blue",
+        "green",
+        "pink",
+        "purple",
+        "gray"
+      ]
+    },
+    "managedRowHighlightStyle": {
+      "title": "Row Highlighter Style",
+      "description": "both (color and outline, default), fill (color only) or outline (outline only).",
+      "type": "string",
+      "enum": [
+        "both",
+        "fill",
+        "outline"
+      ]
+    },
+    "managedRowHighlightSelected": {
+      "title": "Row Highlighter: Selected Emails",
+      "description": "Also highlight emails the user has selected (ticked), so they can see what an action will apply to.",
+      "type": "boolean"
+    },
+    "managedRowHighlightSelectedColor": {
+      "title": "Row Highlighter: Color for Selected Emails",
+      "description": "Highlight color for emails the user has selected (ticked): yellow, blue (default), green, pink, purple or gray. Different from the color under the mouse by default, so the two aren't confused; if both are set to the same color the user sees a warning in Settings.",
+      "type": "string",
+      "enum": [
+        "yellow",
+        "blue",
+        "green",
+        "pink",
+        "purple",
+        "gray"
+      ]
+    },
+    "managedEnableConflictWarnings": {
+      "title": "Warnings About Overlapping Extensions",
+      "description": "Warn users when another extension does the same job in their webmail (for example Gmail Sender Icons, Simplify Gmail, Contact Avatars for Gmail or Row Highlighter for Gmail), with one-click fixes: turn the other extension off (Chrome; asks the user for permission first) or turn this extension's matching feature off. Set to false to suppress these warnings completely: nothing is shown, logged or listed in Settings.",
+      "type": "boolean"
+    },
+    "managedEnableSenderCountry": {
+      "title": "Sender Country Flags (Gmail)",
+      "description": "Show a country flag for each sender: the country of the server that delivered the email (from Gmail's own Received header, read emails only; the server's IP address is looked up at api.country.is, at most once a month per address), else the country named by the domain ending, else where the sender's website is hosted. With managedEnableDnsThreatCheck false only the domain ending is used.",
+      "type": "boolean"
+    },
+    "managedEnableSenderDomainCheck": {
+      "title": "Check Sender Domains for Threats (Gmail)",
+      "description": "Check each sender's domain with the DNS threat-check services (domain name only) and against the phishing lists. Personal-mail providers (gmail.com, outlook.com…), major companies' domains and the user's own organization domain are never judged as a whole.",
+      "type": "boolean"
+    },
+    "managedEnableSenderAddressCheck": {
+      "title": "Check Sender Addresses Against Phishing Lists (Gmail)",
+      "description": "Compare each sender's address, on the device, with the community scam-sender list (sefinek/Blacklisted-Emails, downloaded with the phishing lists when managedEnablePhishingFeeds is true). Malformed addresses (encoded parts, more than 64 characters before the @, two @, invalid domain) are flagged too.",
+      "type": "boolean"
+    },
+    "managedEnableAutoSpam": {
+      "title": "Move Emails From Flagged Senders to Spam (Gmail)",
+      "description": "Move flagged emails to Spam using Gmail's own Report spam. An email is flagged when its sender's exact address is on the community scam-sender list, its domain is on a phishing list, blocked by a security service or doesn't exist, its address is malformed, or the email itself shows enough signs of forgery (forged delivery headers, links or attachments flagged as dangerous…). Never unverified, caution or clean ones; only from the inbox and from search results (see managedEnableAutoSpamInSearch); never while the user is typing or has emails selected; never phishing-simulation emails (managedPhishSimulationDomains / managedPhishSimulationRules), trusted senders, or mail from the user's own organization domain. A conversation is moved at most once: one the user takes back out of Spam stays in the inbox.",
+      "type": "boolean"
+    },
+    "managedEnableAutoSpamInSearch": {
+      "title": "Also Move Flagged Emails Found by a Search (Gmail)",
+      "description": "With managedEnableAutoSpam, also move flagged emails shown in search results (mail archived or under a label, not only the inbox). Never from a search in Spam, Trash, Sent, Drafts, chats or everywhere (in:spam, in:trash, in:sent, in:anywhere...), and never conversations the user wrote in. False: only from the inbox.",
+      "type": "boolean"
+    },
+    "managedEnableSpamNotice": {
+      "title": "Notice When Emails Are Moved to Spam (Gmail)",
+      "description": "Show a short notice at the top of Gmail with the number of emails moved to Spam and a Review link to the Spam folder. It disappears after 15 seconds.",
+      "type": "boolean"
+    },
+    "managedEnableSpamFolderFlags": {
+      "title": "Flag Dangerous Emails in the Spam Folder (Gmail)",
+      "description": "In the Spam folder, mark red the emails the same checks would move to Spam, whether the extension moved them or not (with why), and read unread emails' headers there too. Emails without a red label were put in Spam by Gmail or the user. If reading an unread email's headers ever marks it read, the extension stops doing it and logs it.",
+      "type": "boolean"
+    },
+    "managedEnableQrScanning": {
+      "title": "Check QR Codes in Emails",
+      "description": "Decode QR codes in email images on the device and check where they lead.",
+      "type": "boolean"
+    },
+    "managedEnableAttachmentScanning": {
+      "title": "Check Attachments",
+      "description": "Scan image and PDF attachments (up to 10 MB, first 10 pages) on the device for QR codes and links.",
+      "type": "boolean"
+    },
+    "managedEnableOutlookSupport": {
+      "title": "Outlook on the Web Support (Experimental)",
+      "description": "Run link checking and pixel blocking in Outlook on the web.",
+      "type": "boolean"
+    },
+    "managedEnableProtonSupport": {
+      "title": "Proton Mail Support (Experimental)",
+      "description": "Run link checking and pixel blocking in Proton Mail.",
+      "type": "boolean"
+    },
+    "managedEnableYahooSupport": {
+      "title": "Yahoo Mail Support (Experimental)",
+      "description": "Run link checking, pixel blocking and QR checks in Yahoo Mail (mail.yahoo.com).",
+      "type": "boolean"
+    },
+    "managedEnableAolSupport": {
+      "title": "AOL Mail Support (Experimental)",
+      "description": "Run link checking, pixel blocking and QR checks in AOL Mail (mail.aol.com).",
+      "type": "boolean"
+    },
+    "managedEnableZohoSupport": {
+      "title": "Zoho Mail Support (Experimental)",
+      "description": "Run link checking, pixel blocking and QR checks in Zoho Mail (mail.zoho.com and regional sites).",
+      "type": "boolean"
+    },
+    "managedEnableIcloudSupport": {
+      "title": "iCloud Mail Support (Experimental)",
+      "description": "Run link checking, pixel blocking and QR checks in iCloud Mail (icloud.com/mail).",
+      "type": "boolean"
+    },
+    "managedEnableFastmailSupport": {
+      "title": "Fastmail Support (Experimental)",
+      "description": "Run link checking, pixel blocking and QR checks in Fastmail (app.fastmail.com).",
+      "type": "boolean"
+    },
+    "managedEnableGmxSupport": {
+      "title": "GMX Support (Experimental)",
+      "description": "Run link checking, pixel blocking and QR checks in GMX (gmx.com, gmx.net, gmx.de and others).",
+      "type": "boolean"
+    },
+    "managedEnableOneTimeLinkProtection": {
+      "title": "Protect One-Time and Unsubscribe Links",
+      "description": "Never request, cache or log links that look like password resets, verification, login or unsubscribe links, so they cannot be used up or triggered by accident.",
+      "type": "boolean"
+    },
+    "managedEnableMismatchWarnings": {
+      "title": "Warn on Misleading Links",
+      "description": "Warn when the link text shows one domain but the link goes to another, or the destination is a raw IP address, a punycode lookalike, or uses a user:password@ trick.",
+      "type": "boolean"
+    },
+    "managedEnableHiddenLinkProtection": {
+      "title": "Disable Hidden Links",
+      "description": "Disable links that are deliberately hidden with zero font size or near-zero opacity.",
+      "type": "boolean"
+    },
+    "managedEnableClickConfirmation": {
+      "title": "Confirm Before Opening Flagged Links",
+      "description": "Ask for confirmation before a flagged link opens (click and middle-click).",
+      "type": "boolean"
+    },
+    "managedVisualOverrides": {
+      "title": "Rewrite Link Appearance",
+      "description": "Show warnings, destinations and red highlights directly on links. When this policy is set, users cannot change it in the toolbar popup.",
+      "type": "boolean"
+    },
+    "managedEnableTrackingPixelBlocking": {
+      "title": "Block Tracking Pixels",
+      "description": "Detect and neutralize invisible tracking pixels in opened emails.",
+      "type": "boolean"
+    },
+    "managedRemoveTrackingPixels": {
+      "title": "Remove Tracking Pixels Completely",
+      "description": "If true, tracking pixel <img> elements are removed from the email. If false, they are replaced with an invisible image.",
+      "type": "boolean"
+    },
+    "managedEnableThirdPartyResolution": {
+      "title": "Resolve Public Shorteners with unshorten.me",
+      "description": "Allow sending the URL of links on public URL shorteners (never one-time or email-provider tracking links) to unshorten.me so the real destination can be shown.",
+      "type": "boolean"
+    },
+    "managedEnableDnsThreatCheck": {
+      "title": "DNS Threat Checks",
+      "description": "Check the destination hostname (only the hostname) against filtering DNS resolvers to flag malware and phishing domains.",
+      "type": "boolean"
+    },
+    "managedDnsQuad9": {
+      "title": "Use Quad9",
+      "description": "Include Quad9 in DNS threat checks.",
+      "type": "boolean"
+    },
+    "managedDnsCloudflareSecurity": {
+      "title": "Use Cloudflare Security",
+      "description": "Include Cloudflare Security (1.1.1.2) in DNS threat checks.",
+      "type": "boolean"
+    },
+    "managedDnsCloudflareFamily": {
+      "title": "Use Cloudflare Family",
+      "description": "Include Cloudflare Family (adult content filter) in DNS checks. Adult sites are flagged. On by default.",
+      "type": "boolean"
+    },
+    "managedDnsControlD": {
+      "title": "Use Control D (malware) Resolver",
+      "description": "Free, account-less security resolver queried alongside Quad9 and Cloudflare.",
+      "type": "boolean"
+    },
+    "managedDnsDns4eu": {
+      "title": "Use DNS4EU Protective Resolver",
+      "description": "EU public security resolver (intended for individuals). Off by default.",
+      "type": "boolean"
+    },
+    "managedDnsAdGuard": {
+      "title": "Use AdGuard DNS",
+      "description": "Use AdGuard DNS as a backup resolver. It is only queried when none of the security resolvers (Quad9, Cloudflare Security, custom) can be reached; a match then flags the link.",
+      "type": "boolean"
+    },
+    "managedEnableRemoteListSync": {
+      "title": "Sync Public Shortener Lists",
+      "description": "Download community shortener lists from raw.githubusercontent.com once a day.",
+      "type": "boolean"
+    },
+    "managedEnableResultCache": {
+      "title": "Cache Results Locally",
+      "description": "Remember resolved links on this device to avoid repeat lookups. One-time links are never cached.",
+      "type": "boolean"
+    },
+    "managedEnableHistoryLog": {
+      "title": "Keep Local History",
+      "description": "Keep a local history and recent-activity log of resolved and flagged links.",
+      "type": "boolean"
+    },
+    "managedRetentionDays": {
+      "title": "Local Data Retention (days)",
+      "description": "Number of days cached results and history are kept before being deleted automatically.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 365
+    },
+    "managedDohEndpoint": {
+      "title": "Custom Threat Resolver Address",
+      "description": "HTTPS DNS-over-HTTPS server or threat API queried alongside the public resolvers. {hostname} is replaced by the link's domain, {url} by the full link (one-time links only ever send their domain).",
+      "type": "string"
+    },
+    "managedDohMethod": {
+      "title": "Custom Threat Resolver Method",
+      "description": "GET or POST.",
+      "type": "string",
+      "enum": [
+        "GET",
+        "POST"
+      ]
+    },
+    "managedDohBody": {
+      "title": "Custom Threat Resolver Request Body",
+      "description": "Body for POST requests. Supports {hostname} and {url}. A body starting with { or [ is sent as JSON, anything else as a form.",
+      "type": "string"
+    },
+    "managedDohHeaders": {
+      "title": "Custom Threat Resolver Request Headers",
+      "description": "One \"Name: value\" per line, e.g. an API key. Hidden from users in the Options page and never included in backups.",
+      "type": "string"
+    },
+    "managedDohFlagField": {
+      "title": "Custom Threat Resolver Flag Field",
+      "description": "Optional. Reply field (dotted path) that indicates a threat, for APIs whose reply format is not recognized automatically.",
+      "type": "string"
+    },
+    "managedUnshortenerEndpoint": {
+      "title": "Custom Unshortener Address",
+      "description": "HTTPS service that returns where a short link goes. Tried before unshorten.me. Supports {url}, {url_noscheme} and {hostname}.",
+      "type": "string"
+    },
+    "managedUnshortenerMethod": {
+      "title": "Custom Unshortener Method",
+      "description": "GET or POST.",
+      "type": "string",
+      "enum": [
+        "GET",
+        "POST"
+      ]
+    },
+    "managedUnshortenerBody": {
+      "title": "Custom Unshortener Request Body",
+      "description": "Body for POST requests. Supports {url}, {url_noscheme} and {hostname}.",
+      "type": "string"
+    },
+    "managedUnshortenerHeaders": {
+      "title": "Custom Unshortener Request Headers",
+      "description": "One \"Name: value\" per line, e.g. an API token. Hidden from users in the Options page and never included in backups.",
+      "type": "string"
+    },
+    "managedUnshortenerField": {
+      "title": "Custom Unshortener Destination Field",
+      "description": "Optional. Reply field (dotted path) that holds the destination, if it is not found automatically.",
+      "type": "string"
+    },
+    "managedUseUnshortenMeFallback": {
+      "title": "Fall Back to unshorten.me",
+      "description": "When a custom unshortener is set and gives no answer, try unshorten.me. Set to false to keep short links away from unshorten.me entirely.",
+      "type": "boolean"
+    },
+    "managedAllowlist": {
+      "title": "Managed Allowlist",
+      "description": "Trusted domains that bypass scanning. Redirect wrappers on these domains (for example google.com/url?q=) are still unwrapped and the destination is scanned unless it is also allowlisted.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "description": "Domain name (e.g., internal.mycompany.com)"
+      }
+    },
+    "managedBlocklist": {
+      "title": "Managed Blocklist",
+      "description": "Domains to flag. Links on these domains are shown as dangerous with their destination hidden; nothing about them is decoded or sent anywhere unless the user clicks the reveal icon and confirms. Links whose destination is on this list are flagged too. The blocklist wins over the allowlist.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "description": "Domain name (e.g., click.marketing.com)"
+      }
+    },
+    "managedTrustedSenders": {
+      "title": "Managed Trusted Senders (Gmail)",
+      "description": "The allow list: senders that are never flagged or moved to Spam, for example your phishing-training provider or false positives. Full addresses or whole domains (subdomains included). Merged with the user's own trusted senders (Settings → Senders → Trusted senders); users can't remove these entries. There is no sender block list.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "description": "Email address or domain (e.g., office@partner.org or partner.org)"
+      }
+    },
+    "managedHidePopupSettingsButton": {
+      "title": "Hide the Settings button in the toolbar popup (administrator only)",
+      "description": "true removes the \"Open Settings\" button from the toolbar popup. There is no matching setting in the extension. Settings can still be opened by typing chrome-extension://<extension ID>/options.html in the address bar, for example by IT staff. Default: false.",
+      "type": "boolean"
+    },
+    "managedHideRecentActivity": {
+      "title": "Hide recent activity in the toolbar popup (administrator only)",
+      "description": "true removes the \"Recent activity\" list and its Clear button from the toolbar popup. There is no matching setting in the extension; activity is still recorded in Settings → Logging. Default: false.",
+      "type": "boolean"
+    },
+    "managedPhishSimulationRules": {
+      "title": "Phishing simulation emails to leave unchecked (administrator only, Gmail)",
+      "description": "Rules that identify your organization's phishing simulation (security awareness training) emails, such as KnowBe4 or Wizer. An email matching a rule is not checked at all: no link is looked up (a lookup could be recorded by the vendor as a click), no tracking pixel is blocked (the vendor's open tracking keeps working) and no warning is shown. A rule matches when the email has the header; if \"value\" is set, the header must contain it; if \"ips\" is set, Gmail must have received the email from one of those addresses. Use a secret value (such as KnowBe4's X-KB4TOKEN) or the vendor's sending addresses: a public header name alone could be copied by a real phishing email. Gmail only. See ADMIN-GUIDE.md.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Label for the application log, e.g. \"KnowBe4\"."
+          },
+          "header": {
+            "type": "string",
+            "description": "Header name the vendor adds, e.g. \"X-PHISHTEST\", \"X-KB4TOKEN\" or \"X-TestPhish\"."
+          },
+          "value": {
+            "type": "string",
+            "description": "Optional: text the header's value must contain (case-insensitive), ideally a secret token from the vendor's console."
+          },
+          "ips": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Optional: the vendor's sending addresses or ranges (IPv4/IPv6, CIDR such as 147.160.167.0/26). Leave out when the vendor delivers by direct injection (KnowBe4 DMI, Wizer DED)."
+          }
+        }
+      }
+    },
+    "managedPhishSimulationDomains": {
+      "title": "Phishing simulation link domains (administrator only, every webmail)",
+      "description": "Domains your phishing-simulation (security training) vendor uses for its links, such as KnowBe4's or Wizer's landing domains. An email is treated as a training email, and left completely unchecked, only if it has links and EVERY link (after unwrapping SafeLinks, Proofpoint and similar rewrites) goes to one of these domains or their subdomains. One link anywhere else and the email is checked as usual, so a phishing email can't hide behind a training link. Works in Gmail and every supported webmail. Can be combined with managedPhishSimulationRules. See ADMIN-GUIDE.md.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "description": "Domain name, e.g. ssuport.com"
+      }
+    }
+  }
+}

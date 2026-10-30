@@ -1,0 +1,1463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>S.P.R.U.C.E+ Dashboard</title>
+    <link rel="stylesheet" href="theme.css">
+    <script src="theme.js"></script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; background-color: var(--surface-2); color: var(--text); }
+        header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 15px 30px; display: flex; align-items: center; justify-content: space-between; }
+        h1 { margin: 0; font-size: 20px; color: var(--accent); display: flex; align-items: center; gap: 10px; }
+        .container { max-width: 1400px; margin: 25px auto; padding: 0 20px; }
+        
+        .nav-tabs { display: flex; border-bottom: 2px solid var(--border-subtle); margin-bottom: 20px; gap: 10px; }
+        .tab-btn { background: none; border: none; padding: 10px 20px; font-size: 14px; font-weight: 600; color: var(--text-muted); cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -2px; }
+        .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+        
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        .card { background: var(--surface); border-radius: 8px; border: 1px solid var(--border); padding: 20px; margin-bottom: 20px; box-shadow: 0 1px 2px rgba(60,64,67,0.1); }
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+        h3 { margin: 0; font-size: 16px; }
+
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+        th, td { text-align: left; padding: 12px 15px; border-bottom: 1px solid var(--border-subtle); vertical-align: top; word-break: normal; }
+        th { background: var(--surface-3); color: var(--text-2); font-weight: 600; }
+        
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: bold; }
+        .badge-safe { background: var(--success-bg); color: var(--success-text); }
+        .badge-unsafe { background: var(--danger-bg); color: var(--danger-text); }
+        .badge-neutral { background: var(--surface-3); color: var(--text-2); }
+
+        .btn-action { background: var(--neutral-solid); color: var(--on-solid); border: none; padding: 6px 12px; border-radius: 4px; font-size: 12px; cursor: pointer; }
+        .btn-action:hover { background: var(--neutral-solid-hover); }
+        .btn-primary { background: var(--accent-solid); color: var(--on-solid); border: none; padding: 6px 12px; border-radius: 4px; font-size: 12px; cursor: pointer; font-weight: bold; }
+        .btn-primary:hover { background: var(--accent-solid-hover); }
+        .btn-secondary { background: var(--success-solid); color: var(--on-solid); border: none; padding: 6px 12px; border-radius: 4px; font-size: 12px; cursor: pointer; font-weight: bold; }
+        .btn-secondary:hover { background: var(--success-solid); }
+        .btn-warning { background: var(--warn-solid); color: var(--on-warn); border: none; padding: 6px 12px; border-radius: 4px; font-size: 12px; cursor: pointer; font-weight: bold; }
+        .btn-warning:hover { filter: brightness(0.92); }
+
+        .search-bar { width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 4px; font-size: 13px; margin-bottom: 12px; box-sizing: border-box; }
+        
+        .copy-btn { background: var(--surface-3); color: var(--text); border: 1px solid var(--border); padding: 2px 6px; border-radius: 3px; font-size: 10px; cursor: pointer; margin-left: 4px; display: inline-block; vertical-align: middle; text-decoration: none;}
+        .copy-btn:hover { background: var(--info-bg-strong); color: var(--info-text); }
+
+        .input-group { display: flex; margin-bottom: 15px; }
+        .input-group input { flex-grow: 1; font-size: 13px; padding: 8px; border: 1px solid var(--border); border-radius: 4px 0 0 4px; }
+        .input-group button { background: var(--accent-solid); color: var(--on-solid); border: none; padding: 8px 15px; border-radius: 0 4px 4px 0; cursor: pointer; font-weight: bold;}
+
+        ul.simple-list { padding-left: 20px; line-height: 1.6; font-size: 14px; color: var(--text-2); }
+        code { background: var(--surface-3); padding: 4px 6px; border-radius: 4px; font-family: monospace; word-break: break-all; display: inline-block; }
+        .del-btn { color: var(--danger-text); background: var(--danger-bg); border: 1px solid var(--danger-border); font-weight: bold; cursor: pointer; font-size: 11px; padding: 2px 8px; border-radius: 3px; }
+
+        /* Switch Styling */
+        .switch { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--control-off); transition: .3s; border-radius: 24px; }
+        .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: #ffffff; transition: .3s; border-radius: 50%; }
+        input:checked + .slider { background-color: var(--switch-on); }
+        input:checked + .slider:before { transform: translateX(20px); }
+
+        /* Modal Styles */
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000; }
+        .modal-overlay.active { display: flex; }
+        .modal-box { background: var(--surface); border-radius: 8px; max-width: 500px; width: 90%; padding: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
+        .modal-header { font-size: 18px; font-weight: bold; color: var(--text); margin-bottom: 15px; display: flex; align-items: center; gap: 8px; }
+        .modal-body { font-size: 13px; color: var(--text-2); line-height: 1.6; margin-bottom: 20px; }
+        .modal-summary { background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; padding: 12px; margin: 12px 0; }
+        .modal-summary div { margin-bottom: 6px; }
+        .modal-summary div:last-child { margin-bottom: 0; }
+        .mode-selection { margin-top: 15px; padding-top: 12px; border-top: 1px solid var(--border-subtle); }
+        .mode-selection label { display: block; margin-bottom: 8px; cursor: pointer; font-weight: 500; }
+        .modal-footer { display: flex; justify-content: flex-end; gap: 10px; }
+
+        .large-modal-box { background: var(--surface); border-radius: 8px; max-width: 800px; width: 95%; max-height: 85vh; padding: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); display: flex; flex-direction: column; }
+        .modal-scroll-body { flex-grow: 1; overflow-y: auto; margin-bottom: 15px; border: 1px solid var(--border); border-radius: 4px; }
+        
+        .managed-box { background-color: var(--info-bg); border-left: 4px solid var(--accent); padding: 10px; margin-bottom: 15px; font-size: 13px;}
+        
+        .resolver-test-box { display: flex; align-items: center; gap: 10px; margin-top: 5px; }
+        .test-result { font-size: 11px; font-weight: bold; padding: 3px 6px; border-radius: 4px; display: none; }
+        .result-pass { background: var(--success-bg); color: var(--success-text); display: inline-block; }
+        .result-fail { background: var(--danger-bg); color: var(--danger-text); display: inline-block; }
+        
+        .code-example { background: var(--surface-3); padding: 8px; border-radius: 4px; font-family: monospace; font-size: 11px; color: var(--text-2); margin-top: 5px; word-break: break-all; border-left: 3px solid var(--accent);}
+
+        /* Step-by-Step Inspector Styles */
+        .step-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 15px; margin-bottom: 12px; position: relative; border-left: 4px solid var(--accent); }
+        .step-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-weight: bold; font-size: 13px; color: var(--accent); }
+        .step-label { background: var(--info-bg); color: var(--accent); padding: 2px 8px; border-radius: 4px; font-size: 11px; }
+        .step-arrow { text-align: center; color: var(--text-muted); font-size: 16px; margin: -4px 0 8px 0; }
+        .url-box { background: var(--surface-2); border: 1px solid var(--border-subtle); border-radius: 4px; padding: 8px 10px; font-family: monospace; font-size: 12px; word-break: break-all; color: var(--text); }
+        .final-dest-card { background: var(--success-bg); border: 1px solid var(--success-solid); border-radius: 8px; padding: 16px; margin-top: 15px; border-left: 5px solid var(--success-solid); }
+        .final-dest-card.unverified { background: var(--surface-2); border-color: var(--control-border); border-left-color: var(--control-border); }
+        .final-dest-card.unsafe { background: var(--danger-bg); border-color: var(--danger-solid); border-left-color: var(--danger-solid); }
+
+
+        /* Settings rows, lock notes, privacy tab */
+        .setting-row { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 12px 0; border-bottom: 1px solid var(--border-subtle); }
+        .setting-row:last-child { border-bottom: none; }
+        .setting-text { flex: 1; font-size: 13px; line-height: 1.5; }
+        .setting-desc { color: var(--text-muted); font-size: 12px; margin-top: 2px; }
+        .setting-desc.warning-text { color: var(--danger-text); font-weight: 600; }
+        .setting-desc[hidden] { display: none; }
+        .lock-note { font-size: 11px; font-weight: bold; color: var(--accent); margin-left: 8px; white-space: nowrap; }
+        .callout-warn { background: var(--warn-bg); border-left: 4px solid var(--warn-solid); border-radius: 6px; padding: 12px 14px; font-size: 13px; line-height: 1.6; color: var(--text-2); }
+        .endpoint-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; margin-bottom: 10px; font-size: 12px; color: var(--text-2); }
+        .endpoint-grid label { display: flex; flex-direction: column; gap: 4px; font-weight: 600; }
+        .endpoint-grid label.wide { grid-column: 1 / -1; }
+        .endpoint-grid input, .endpoint-grid select, .endpoint-grid textarea { font: 12px monospace; padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; font-weight: normal; }
+        .endpoint-grid textarea { resize: vertical; }
+        .badge-warning { background: var(--warn-bg); color: var(--warn-text); }
+        .badge-info { background: var(--info-bg); color: var(--info-text); }
+        .log-count { font-size: 11px; color: var(--text-muted); margin-left: 6px; white-space: nowrap; }
+        .number-input { width: 80px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; font-size: 13px; }
+    
+        /* ---- 5.15 redesign ---- */
+        .card-intro { font-size: 13px; color: var(--text-muted); margin: 6px 0 12px 0; line-height: 1.5; }
+        .card > h3 { margin-bottom: 4px; }
+        .card h4 { margin: 0 0 4px 0; font-size: 14px; }
+        details.more { margin-top: 6px; border-top: 1px solid var(--border-subtle); padding-top: 6px; }
+        details.more > summary, details.more-card > summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--accent); padding: 6px 0; list-style: none; }
+        details.more > summary::before, details.more-card > summary::before { content: '▸ '; }
+        details[open].more > summary::before, details[open].more-card > summary::before { content: '▾ '; }
+        details.more-card > summary { color: var(--text); font-size: 16px; }
+        details.more .card { box-shadow: none; margin: 10px 0; }
+        .status-card { display: flex; gap: 14px; align-items: center; background: var(--surface); border: 1px solid var(--border); border-left: 5px solid var(--success-solid); border-radius: 8px; padding: 16px 20px; margin-bottom: 20px; }
+        .status-card.warn { border-left-color: var(--warn-solid); } .status-card.bad { border-left-color: var(--danger-solid); } .status-card.off { border-left-color: var(--control-border); }
+        .status-icon { font-size: 28px; }
+        .status-title { font-size: 16px; font-weight: 600; }
+        .status-details { font-size: 13px; color: var(--text-muted); margin-top: 3px; }
+        .welcome-banner { display: flex; justify-content: space-between; align-items: center; background: var(--info-bg); color: var(--info-text); border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; font-size: 13px; }
+        .icon-btn { background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 14px; }
+        .preset-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+        .preset { display: flex; flex-direction: column; gap: 6px; border: 2px solid var(--border); border-radius: 8px; padding: 12px 14px; cursor: pointer; font-size: 13px; }
+        .preset input { position: absolute; opacity: 0; pointer-events: none; }
+        .preset.selected { border-color: var(--accent); background: var(--surface-2); }
+        .preset.disabled { opacity: 0.5; cursor: not-allowed; }
+        .preset-name { font-weight: 700; font-size: 14px; }
+        .preset-tag { font-size: 10px; background: var(--success-bg); color: var(--success-text); padding: 2px 6px; border-radius: 8px; margin-left: 4px; font-weight: 600; vertical-align: middle; }
+        .preset-desc { color: var(--text-muted); line-height: 1.45; }
+        .preset-note { font-size: 12px; color: var(--text-muted); margin-top: 10px; min-height: 1em; }
+        /* Two lists side by side on one shared grid: heading, description, input and table rows line
+           up across both columns however long either description is (CSS subgrid). */
+        .two-col { display: grid; grid-template-columns: 1fr 1fr; column-gap: 28px; margin-top: 16px; }
+        .two-col > div { display: grid; grid-row: span 4; grid-template-rows: subgrid; row-gap: 0; align-content: start; }
+        .two-col h4 { margin: 0 0 4px; font-size: 14px; }
+        .two-col .card-intro { margin: 0 0 12px; align-self: start; }
+        .two-col .input-group { margin-bottom: 0; align-self: end; }
+        .two-col table { margin-top: 12px; }
+        .reset-row { text-align: center; margin: 10px 0 30px; }
+        .link-btn { background: none; border: none; color: var(--text-muted); text-decoration: underline; cursor: pointer; font-size: 12px; }
+        header .version { font-size: 12px; color: var(--text-muted); font-weight: normal; }
+        header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+        .theme-picker { font-size: 12px; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
+        .theme-picker select { font-size: 12px; padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: inherit; }
+        .deploy-code { white-space: pre; overflow-x: auto; font: 11px/1.5 monospace; background: var(--surface-2); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 10px; }
+
+        /* Logging */
+        .log-body { min-width: 0; }
+        .log-section { display: none; }
+        .log-section.active { display: block; }
+        .log-section .card { margin-bottom: 0; }
+        .stat-row { display: flex; flex-wrap: wrap; gap: 10px; margin: 4px 0 16px; }
+        .stat { background: var(--surface-2); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 8px 14px; min-width: 90px; }
+        .stat b { display: block; font-size: 18px; color: var(--text); }
+        .stat span { font-size: 11px; color: var(--text-muted); }
+        .stat.good b { color: var(--success-text); } .stat.bad b { color: var(--danger-text); } .stat.warn b { color: var(--warn-text); }
+        .same-as { color: var(--text-muted); font-style: italic; font-size: 12px; }
+        /* Help */
+        .help-layout { display: grid; grid-template-columns: 220px 1fr; gap: 20px; align-items: start; }
+        .help-nav { position: sticky; top: 10px; display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px; }
+        .help-nav button { text-align: left; background: none; border: none; padding: 9px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; color: var(--text-2); }
+        .help-nav button.active { background: var(--info-bg); color: var(--accent); font-weight: 600; }
+        .help-subnav { display: flex; flex-direction: column; margin: 0 0 4px 14px; padding-left: 8px; border-left: 2px solid var(--border); }
+        .help-nav button.sub { font-size: 13px; padding: 7px 10px; }
+        .help-body { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 24px 30px; min-width: 0; }
+        .help-section { display: none; font-size: 14px; line-height: 1.6; color: var(--text-2); }
+        .help-section.active { display: block; }
+        .help-section h2 { margin: 0 0 10px; font-size: 20px; color: var(--text); }
+        .help-section h3 { margin: 26px 0 8px; font-size: 16px; color: var(--text); scroll-margin-top: 10px; }
+        .lead { font-size: 15px; color: var(--text); }
+        .help-table th, .help-table td { font-size: 13px; padding: 9px 12px; }
+        .flow { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin: 16px 0; }
+        .flow-step { background: var(--surface-2); border: 1px solid var(--border-subtle); border-top: 3px solid var(--accent); border-radius: 6px; padding: 10px; font-size: 12px; display: flex; flex-direction: column; gap: 4px; }
+        .demo-danger { background: var(--danger-solid); color: var(--on-solid); font-weight: bold; padding: 2px 6px; border-radius: 4px; font-size: 12px; white-space: nowrap; }
+        .demo-icon { font-size: 14px; }
+        .live-tag { font-size: 10px; background: var(--success-bg); color: var(--success-text); padding: 2px 6px; border-radius: 8px; vertical-align: middle; font-weight: 700; letter-spacing: 0.5px; }
+        .toc { columns: 2; font-size: 13px; background: var(--surface-2); border-radius: 6px; padding: 10px 16px; }
+        .toc a { display: block; color: var(--accent); text-decoration: none; padding: 2px 0; }
+        .pipeline li { margin-bottom: 10px; }
+        .fn { display: inline-block; font-family: monospace; font-size: 11px; background: var(--surface-3); color: var(--text-muted); padding: 1px 6px; border-radius: 4px; margin: 0 4px; }
+        .diagram-wrap { overflow-x: auto; margin: 10px 0 16px; }
+        .arch-diagram { width: 100%; min-width: 700px; max-width: 900px; font-family: inherit; }
+        .arch-diagram rect { stroke-width: 1.5; }
+        .box-gmail { fill: var(--danger-bg); stroke: var(--danger-solid); } .box-ui { fill: var(--warn-bg); stroke: var(--warn-solid); } .box-sw { fill: var(--info-bg); stroke: var(--accent); }
+        .box-store { fill: var(--surface-3); stroke: var(--control-border); } .box-ext { fill: var(--success-bg); stroke: var(--success-solid); }
+        .t-title { font-size: 14px; font-weight: 700; fill: var(--text); } .t-body { font-size: 12px; fill: var(--text-2); }
+        .t-mono { font-size: 11px; font-family: monospace; fill: var(--text-muted); } .t-small { font-size: 10px; fill: var(--text-muted); }
+        .arrow { stroke: var(--control-border); stroke-width: 1.5; }
+        .arch-table td, .arch-table th { font-size: 12px; padding: 7px 10px; }
+        .arch-table code { font-size: 11px; padding: 1px 4px; word-break: normal; overflow-wrap: break-word; }
+        .arch-table td:last-child { white-space: nowrap; }
+        .compat-wrap { overflow-x: auto; margin: 12px 0; }
+        .compat-table th, .compat-table td { font-size: 12px; padding: 7px 5px; text-align: center; }
+        .compat-table th:first-child, .compat-table td:first-child { text-align: left; min-width: 200px; }
+        .compat-table .status td { font-size: 10px; }
+        .compat-table .yes { color: var(--success-text); font-weight: 700; }
+        .compat-table .no { color: var(--text-muted); }
+        .compat-table .basic { color: var(--warn-text, var(--text-2)); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; }
+        .compat-table .status td { color: var(--text-muted); }
+        .row-hl-preview { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 3px; color: var(--text); }
+        .conflict-item { border: 1px solid var(--border-subtle); border-left: 4px solid var(--warn-solid, #f9ab00); border-radius: 6px; padding: 10px 12px; margin: 10px 0; }
+        .conflict-item .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+        .regex { font-family: monospace; font-size: 11px; background: var(--surface-2); border: 1px solid var(--border-subtle); border-radius: 4px; padding: 8px; word-break: break-all; display: block; }
+        @media (max-width: 900px) { .preset-grid, .two-col, .flow { grid-template-columns: 1fr; } .help-layout { grid-template-columns: 1fr; } .help-nav { position: static; } }
+    </style>
+</head>
+<body>
+    <header>
+        <h1><img src="icons/icon48.png" width="32" height="32" alt=""> S.P.R.U.C.E+ <span class="version" id="headerVersion"></span></h1>
+        <label class="theme-picker" title="Appearance">Appearance
+            <select id="themeSelect">
+                <option value="system">🖥 Follow system</option>
+                <option value="light">☀ Light</option>
+                <option value="dark">🌙 Dark</option>
+            </select>
+        </label>
+    </header>
+    <div class="container">
+        <div class="nav-tabs" role="tablist" aria-label="Sections">
+            <button class="tab-btn active" data-tab="settings">⚙️ Settings</button>
+            <button class="tab-btn" data-tab="tester">🔍 Link Inspector</button>
+            <button class="tab-btn" data-tab="logging">📋 Logging</button>
+            <button class="tab-btn" data-tab="help">❓ Help</button>
+        </div>
+        <!-- ===================================================== SETTINGS -->
+        <div id="tab-settings" class="tab-content active">
+            <h2 class="sr-only">Settings</h2>
+            <div id="welcomeBanner" class="welcome-banner" style="display: none;">
+                <span>👋 New here? Everything works out of the box; nothing needs changing. <a href="#" data-help-link="overview">See how it works</a></span>
+                <button id="dismissWelcomeBtn" class="icon-btn" title="Dismiss" aria-label="Dismiss this message">✕</button>
+            </div>
+
+            <div id="statusCard" class="status-card">
+                <div id="statusIcon" class="status-icon">⏳</div>
+                <div>
+                    <div id="statusTitle" class="status-title">Checking protection status…</div>
+                    <div id="statusDetails" class="status-details"></div>
+                </div>
+            </div>
+
+            <div class="managed-box" id="managedAnyNotice" style="display: none;">
+                🔒 <strong>Some settings are managed by your organization.</strong> They are marked with a lock and can't be changed here.
+            </div>
+
+            <div class="card">
+                <h3>Privacy level</h3>
+                <p class="card-intro">Choose how much information may leave your browser. Links are always decoded on your device first; these choices only control the online lookups. <a href="#" data-help-link="privacy">What each one sends</a></p>
+                <div class="preset-grid">
+                    <label class="preset" data-preset="standard">
+                        <input type="radio" name="privacyPreset" value="standard">
+                        <span class="preset-name">Standard <span class="preset-tag">Recommended</span></span>
+                        <span class="preset-desc">Full protection. Short links are looked up online, and site names are checked against security services.</span>
+                    </label>
+                    <label class="preset" data-preset="private">
+                        <input type="radio" name="privacyPreset" value="private">
+                        <span class="preset-name">Private</span>
+                        <span class="preset-desc">No link is ever sent to a lookup service. Only site names (never full links) are checked for threats.</span>
+                    </label>
+                    <label class="preset" data-preset="offline">
+                        <input type="radio" name="privacyPreset" value="offline">
+                        <span class="preset-name">Offline only</span>
+                        <span class="preset-desc">Nothing leaves your browser. Links are still decoded and checked for tricks on your device, but sites are not checked for threats.</span>
+                    </label>
+                </div>
+                <div id="presetNote" class="preset-note"></div>
+            </div>
+
+            <div class="card">
+                <h3>🔗 Links</h3>
+                <div class="setting-row"><div class="setting-text">Reveal where links really go<div class="setting-desc">Decode tracking and security wrappers, look up short links and check destinations in the emails you open.</div></div>
+                    <label class="switch"><input type="checkbox" data-setting="enableLinkUnmasking"><span class="slider"></span></label></div>
+                <div class="setting-row"><div class="setting-text">Show results on links<div class="setting-desc">Point links at their real destination and mark dangerous ones in red. When off, links look exactly as the sender wrote them (also switchable from the toolbar button).</div></div>
+                    <label class="switch"><input type="checkbox" data-setting="visualOverridesActive"><span class="slider"></span></label></div>
+                <details class="more"><summary>More options</summary>
+                    <div class="setting-row"><div class="setting-text">Ask before opening a flagged link<div class="setting-desc">A confirmation appears when you click or middle-click a link marked dangerous.</div></div>
+                        <label class="switch"><input type="checkbox" data-setting="enableClickConfirmation"><span class="slider"></span></label></div>
+                    <div class="setting-row"><div class="setting-text">Offer to reveal hidden destinations<div class="setting-desc">Also lets you inspect pages hosted in cloud storage (🔍 on those links) to see where they redirect. Newsletters route links through their email provider, which hides the destination. When you point at such a link, a 🔍 appears; clicking it asks before sending the link to the lookup service to find where it goes. The sender sees this as a click.</div></div>
+                        <label class="switch"><input type="checkbox" data-setting="enableTrackerReveal"><span class="slider"></span></label></div>
+                    <div class="setting-row"><div class="setting-text">Protect one-time and unsubscribe links<div class="setting-desc">Password-reset, sign-in, verification and unsubscribe links are never sent anywhere, cached or logged in full, so they can't be used up or triggered by accident.</div></div>
+                        <label class="switch"><input type="checkbox" data-setting="enableOneTimeLinkProtection"><span class="slider"></span></label></div>
+                    <div class="setting-row"><div class="setting-text">Warn about misleading links<div class="setting-desc">Link text that shows one site but goes to another, raw IP addresses, look-alike (punycode) domains and user:password@ tricks.</div></div>
+                        <label class="switch"><input type="checkbox" data-setting="enableMismatchWarnings"><span class="slider"></span></label></div>
+                    <div class="setting-row"><div class="setting-text">Check who sent the email (Gmail)<div class="setting-desc">When an email contains a company-only link such as Google's c.gle, or the sender's name claims a well-known brand, Gmail's own verification of the sender is read from the message (on this device, from Gmail itself). Company links in email verified as sent by that company directly to you are left unmarked; otherwise, and for senders impersonating brands, one banner at the top of the email explains what's wrong. <a href="#" data-help-link="warnings">What the warnings mean</a></div></div>
+                        <label class="switch"><input type="checkbox" data-setting="enableSenderChecks"><span class="slider"></span></label></div>
+                    <div class="setting-row"><div class="setting-text">Check links before sending (Gmail)<div class="setting-desc">When you press Send, the links you wrote are checked first: typos (such as “.con”), whether the website exists and works, and whether it's a look-alike, phishing or malware site. If something's wrong, you see the links and choose to fix them or send anyway. Emails without links send at once. <a href="#" data-help-link="warnings">Learn more</a></div></div>
+                        <label class="switch"><input type="checkbox" data-setting="enableSendCheck"><span class="slider"></span></label></div>
+                    <div class="setting-row"><div class="setting-text">Disable hidden links<div class="setting-desc">Links made invisible on purpose (zero-size text or full transparency) are switched off.</div></div>
+                        <label class="switch"><input type="checkbox" data-setting="enableHiddenLinkProtection"><span class="slider"></span></label></div>
+                </details>
+            </div>
+
+            <div class="card">
+                <h3>✉️ Senders (Gmail)</h3>
+                <p class="card-intro">Who each email is from, at a glance, in your inbox and in opened emails, and automatic protection from known phishing senders. <a href="#" data-help-link="senders">How sender checks work</a></p>
+                <div class="setting-row"><div class="setting-text">Show sender icons and domain labels<div class="setting-desc">Each sender gets its site's icon and a label with its domain, colored only when it matters: ⛔ red when flagged, ⚠ amber for caution, ✓ green for senders you trust. Every other label is plain: no check can prove an email safe, and most mail comes from providers like Gmail that can't be judged by their domain. Point at a label for the details. Icons are fetched once from Google's icon service (only the site name is sent) and remembered for 30 days; a site without an icon gets a blank space, and in <em>Offline only</em> nothing is requested.</div></div>
+                    <label class="switch"><input type="checkbox" data-setting="enableSenderIdentity"><span class="slider"></span></label></div>
+                <div class="setting-row"><div class="setting-text">Stand-in icon for sites without their own<div class="setting-desc">When a sender's site has no icon, its parent domain's is used (for <code>alerts.brand.com</code>, <code>brand.com</code>'s), else one from DuckDuckGo's icon service (only the site name is sent, and only for such sites). They're checked again every week and replaced by the site's own icon as soon as it has one. Off: a blank space instead. Logging → Senders shows where each icon came from.</div></div>
+                    <label class="switch"><input type="checkbox" data-setting="enableSenderIconFallback"><span class="slider"></span></label></div>
+                <div class="setting-row"><div class="setting-text">Sender photos and company logos<div class="setting-desc">The picture Gmail itself shows beside a sender when you open an email, remembered and shown in your inbox list as a circle over the email's checkbox (point at the row, or tick it, and the checkbox is back). Your own organization: each colleague's own photo (never your company's logo). Another company: one logo for the whole company, shown for everyone there, learned from one email that passed Gmail's sender verification (DMARC) and came from one of its shared mailboxes (contact@, info@, support@, news@…) or carried a verified BIMI logo. A person's own photo at another company is never used; their company's logo is shown instead. Personal email services (Gmail, Outlook.com…) keep the site icon. A changed photo or logo replaces the old one; pictures are also checked again weekly.</div></div>
+                    <label class="switch"><input type="checkbox" data-setting="enableSenderAvatars"><span class="slider"></span></label></div>
+                <div class="setting-row"><div class="setting-text">Company logos from BIMI<div class="setting-desc">The logo a company publishes for its email (BIMI), shown over the checkbox of every email from it in your inbox list, without opening any. Only for companies whose domain stops others sending in its name (DMARC quarantine or reject), and looked up for the company's main domain only. The logo is loaded from the company's own logo server, which sees your computer's address (as when a web page shows a picture); checked again weekly.</div></div>
+                    <label class="switch"><input type="checkbox" data-setting="enableSenderBimi"><span class="slider"></span></label></div>
+                <div class="setting-row"><div class="setting-text">Size of sender pictures<div class="setting-desc">Automatic follows Gmail's display density (Settings → Density): Default gets 36-pixel circles over each email's checkbox, Comfortable 32-pixel ones, and Compact a small icon beside the country flag instead. A sender with no photo, logo or site icon gets a colored circle with their initial (not in Compact).</div></div>
+                    <select data-setting="senderPictureSize" aria-label="Size of sender pictures"><option value="auto">Automatic (Gmail's density)</option><option value="large">Large circles (36 px)</option><option value="medium">Medium circles (32 px)</option><option value="inline">Small, beside the flag</option></select></div>
+                <div class="setting-row"><div class="setting-text">Copy button for the sender's address<div class="setting-desc">A small button after the sender's address in an opened email that copies the address, for example to report it or add it to a list. Works whatever the sender checks are set to.</div></div>
+                    <label class="switch"><input type="checkbox" data-setting="enableCopyAddress"><span class="slider"></span></label></div>
+                <div class="setting-row"><div class="setting-text">Catch look-alike senders<div class="setting-desc">In your inbox list, without opening anything: a sender whose domain imitates a popular site, a well-known brand, your own organization or a company your mail has verified (look-alike letters; a well-known brand plus a word like "billing"; on a brand-new domain, one letter off or a popular site's name plus such a word), and a brand's or a colleague's name on an address that isn't theirs. Clear imitations are flagged red and moved to Spam; weaker ones get amber. Uses two public lists of popular sites (Chrome UX Report and Tranco, updated monthly) and, for near matches only, the domain's public registration date.</div></div>
+                    <label class="switch"><input type="checkbox" data-setting="enableLookalikeCheck"><span class="slider"></span></label></div>
+                <div class="setting-row"><div class="setting-text">Catch senders using your own name<div class="setting-desc">In your inbox list, without opening anything: an email whose sender name is your own email address, or your mailbox name (the part before the @: written exactly as in your address, or in any case if your address is at Gmail, Outlook.com or another big provider, where it's nobody's real name), but which comes from someone else's address. Scams do this so the email looks like a notice about your own account. Flagged red and moved to Spam. Shared mailbox names (info, office, support…), your own organization's senders, and an address that contains your mailbox name (likely your other account) are left alone.</div></div>
+                    <label class="switch"><input type="checkbox" data-setting="enableOwnNameCheck"><span class="slider"></span></label></div>
+                <div class="setting-row"><div class="setting-text">Catch “call this number” scams<div class="setting-desc">A subject with a phone number to call about a purchase or charge you didn't make (“If this purchase was not made by you, contact support at…”) is flagged red from the inbox list and moved to Spam, whoever sent it: attackers type such text into names that companies' own systems mail out, so it can arrive from Microsoft, PayPal or Apple's real addresses. A number with only “call” or “support” is a caution. In an opened email, “call this number if you didn't make this purchase” is a caution too, as are look-alike “mathematical” letters (𝐔𝐒𝐃). Works in Outlook too, in opened emails.</div></div>
+                    <label class="switch"><input type="checkbox" data-setting="enableCallbackScamCheck"><span class="slider"></span></label></div>
+                <div class="setting-row"><div class="setting-text">Show the sender's country<div class="setting-desc">A flag for the country of the server that sent the email, from Gmail's own delivery record (read emails only, and unread ones in the Spam folder; inbox emails are never opened to look; at most two at a time). Otherwise the country the sender's domain ending names (such as .de), or where its website is hosted. Only the server's address is looked up, at country.is, once a month at most; in <em>Offline only</em> only the domain ending is used.</div></div>
+                    <label class="switch"><input type="checkbox" data-setting="enableSenderCountry"><span class="slider"></span></label></div>
+                <div class="setting-row"><div class="setting-text">Check sender domains for threats<div class="setting-desc">The sender's domain is checked with the same security services as links (only its name, for example <code>example.com</code>) and against the phishing lists. Gmail, Outlook.com and other big providers' domains, and your own organization's, are never judged as a whole.</div></div>
+                    <label class="switch"><input type="checkbox" data-setting="enableSenderDomainCheck"><span class="slider"></span></label></div>
+                <div class="setting-row"><div class="setting-text">Check sender addresses against phishing lists<div class="setting-desc">The address is compared on this device with a community list of scam and phishing senders (<a href="https://github.com/sefinek/Blacklisted-Emails" target="_blank" rel="noopener noreferrer">sefinek/Blacklisted-Emails</a>, downloaded with the phishing lists, at most once a day). A malformed address (a disguised encoded part, more than 64 characters before the @, two @) is flagged too.</div></div>
+                    <label class="switch"><input type="checkbox" data-setting="enableSenderAddressCheck"><span class="slider"></span></label></div>
+                <div class="setting-row"><div class="setting-text">Move emails from flagged senders to Spam<div class="setting-desc">Only <strong>flagged</strong> emails (sender's exact address on the community scam-sender list; domain blocked by a security service or nonexistent; malformed address; or enough signs of forgery in the email itself), never ones that are unverified, caution, trusted or clean. Gmail's own Report spam is used, only for emails in your inbox (and search results, below), and never while you're typing or have emails selected. If you take an email back out of Spam, it stays where you put it. Your organization's phishing-training emails, trusted senders and mail from your own organization's domain are never moved.</div></div>
+                    <label class="switch"><input type="checkbox" data-setting="enableAutoSpam"><span class="slider"></span></label></div>
+                <div class="setting-row"><div class="setting-text">Also move flagged emails found by a search<div class="setting-desc">Flagged emails in search results are moved to Spam too, as in the inbox: a search shows your mail wherever it's filed (archived or under a label), not only the inbox. Never a search in Spam, Trash, Sent, Drafts, chats or everywhere (<code>in:spam</code>, <code>in:trash</code>, <code>in:sent</code>, <code>in:anywhere</code>…), and never conversations you wrote in. Needs <b>Move emails from flagged senders to Spam</b>.</div></div>
+                    <label class="switch"><input type="checkbox" data-setting="enableAutoSpamInSearch"><span class="slider"></span></label></div>
+                <div class="setting-row"><div class="setting-text">Tell me when emails are moved<div class="setting-desc">A short notice at the top of Gmail says how many emails were moved, with a <strong>Review</strong> link to your Spam folder. Moves are also listed in the toolbar popup's recent activity and in Logging.</div></div>
+                    <label class="switch"><input type="checkbox" data-setting="enableSpamNotice"><span class="slider"></span></label></div>
+                <div class="setting-row"><div class="setting-text">Flag dangerous emails in the Spam folder<div class="setting-desc">In Spam, emails the same checks would move there are marked red, whether this extension moved them or not, with the reason; unread ones are checked too (their headers are read). Anything not red there was put in Spam by Gmail or by you. If reading an unread email's headers ever marks it read, the extension stops doing it and says so in Logging.</div></div>
+                    <label class="switch"><input type="checkbox" data-setting="enableSpamFolderFlags"><span class="slider"></span></label></div>
+                <details class="more"><summary>Trusted senders</summary>
+                    <p class="card-intro">Emails from these addresses (<code>name@example.com</code>) or whole domains (<code>example.com</code>, which includes its subdomains) are never flagged or moved to Spam, and their label shows ✓ Trusted. Links in them are still checked. Entries from your organization are marked and can't be removed here; your organization's own list of phishing senders still wins.</p>
+                    <div class="input-group">
+                        <input type="text" id="trustedSenderInput" aria-label="Trusted sender address or domain" placeholder="e.g. office@myschool.org or myschool.org">
+                        <button id="addTrustedSenderBtn" style="background: var(--success-solid);">Add</button>
+                    </div>
+                    <table id="trustedSenderTable"><thead><tr><th>Address or domain</th><th style="width: 90px;"></th></tr></thead><tbody></tbody></table>
+                </details>
+            </div>
+
+            <div class="card">
+                <h3>👁️ Tracking pixels</h3>
+                <div class="setting-row"><div class="setting-text">Block tracking pixels<div class="setting-desc">Invisible images senders use to see when you open an email. Known open-tracking addresses are blocked at any size; otherwise only tiny or hidden images are, so real pictures (including from email providers' image servers) are never removed. <a href="#" data-help-link="privacy">What this can and can't do</a></div></div>
+                    <label class="switch"><input type="checkbox" data-setting="enableTrackingPixelBlocking"><span class="slider"></span></label></div>
+                <details class="more"><summary>More options</summary>
+                    <div class="setting-row"><div class="setting-text">Remove pixels completely<div class="setting-desc">On: the pixel is deleted from the email. Off: it is replaced with a blank, invisible image.</div></div>
+                        <label class="switch"><input type="checkbox" data-setting="removeTrackingPixels"><span class="slider"></span></label></div>
+                </details>
+            </div>
+
+            <div class="card">
+                <h3>🖍️ Row highlighter</h3>
+                <p class="card-intro">Makes it clear which email you're about to open: the row under your mouse gets a soft color and an outline. Works in light and dark themes.</p>
+                <div class="setting-row"><div class="setting-text">Highlight the email under the mouse<div class="setting-desc">The inbox row your mouse is over is highlighted, so a click opens the email you meant. <span class="row-hl-preview" id="rowHlPreview" aria-hidden="true">Example row</span></div></div>
+                    <label class="switch"><input type="checkbox" data-setting="enableRowHighlighter"><span class="slider"></span></label></div>
+                <div class="setting-row"><div class="setting-text">Color under the mouse</div>
+                    <select data-setting="rowHighlightColor" aria-label="Row highlight color"><option value="yellow">Yellow</option><option value="blue">Blue</option><option value="green">Green</option><option value="pink">Pink</option><option value="purple">Purple</option><option value="gray">Gray</option></select></div>
+                <div class="setting-row"><div class="setting-text">Style</div>
+                    <select data-setting="rowHighlightStyle" aria-label="Row highlight style"><option value="both">Color and outline</option><option value="fill">Color only</option><option value="outline">Outline only</option></select></div>
+                <div class="setting-row"><div class="setting-text">Also highlight selected emails<div class="setting-desc">Emails you've ticked stay highlighted in their own color, so you can see what an action will apply to, and tell them apart from the row under your mouse. <span class="row-hl-preview" id="rowHlSelPreview" aria-hidden="true">Ticked row</span></div></div>
+                    <label class="switch"><input type="checkbox" data-setting="rowHighlightSelected"><span class="slider"></span></label></div>
+                <div class="setting-row"><div class="setting-text">Color for ticked emails<div class="setting-desc warning-text" id="rowHlSameWarning" hidden>Same color as the row under the mouse: you may not be able to tell a ticked email from the one your mouse is over. A different color is recommended.</div></div>
+                    <select data-setting="rowHighlightSelectedColor" aria-label="Highlight color for ticked emails"><option value="yellow">Yellow</option><option value="blue">Blue</option><option value="green">Green</option><option value="pink">Pink</option><option value="purple">Purple</option><option value="gray">Gray</option></select></div>
+            </div>
+
+            <div class="card" id="conflicts">
+                <h3>🧩 Other extensions</h3>
+                <p class="card-intro">Two extensions doing the same job in your webmail (both drawing sender icons, both highlighting rows) can conflict: doubled icons, flicker, a slower page. When one is found, you're warned and can turn the other one off, or turn off only our settings that overlap with it (one at a time, or all of them). Once you have, you aren't warned about it again unless one you turned off is turned back on. We recommend keeping this extension on: it also checks senders and links for phishing.</p>
+                <div class="setting-row"><div class="setting-text">Warn me about extensions that do the same job<div class="setting-desc">Checked from what other extensions add to the webmail page. Nothing about them is sent anywhere.</div></div>
+                    <label class="switch"><input type="checkbox" data-setting="enableConflictWarnings"><span class="slider"></span></label></div>
+                <div id="conflictList" aria-live="polite"></div>
+                <div style="margin-top: 10px;"><button type="button" class="btn-primary" id="checkExtensionsBtn">Check installed extensions</button>
+                    <span class="setting-desc" id="checkExtensionsNote" style="margin-left: 8px;">Lists installed extensions that do the same job, so you can turn them off with one click. Your browser asks you first to let this extension see and manage your extensions; nothing is sent anywhere.</span></div>
+            </div>
+
+            <div class="card">
+                <h3>🔳 QR codes &amp; attachments</h3>
+                <div class="setting-row"><div class="setting-text">Check QR codes in emails<div class="setting-desc">QR codes in email images, and QR codes drawn with tables or text characters to dodge image scanners, are read on this device and their destination is checked like a link. A bar under the image shows where the code leads; dangerous ones are marked "DO NOT SCAN". Images are read from Google's image proxy, never from the sender.</div></div>
+                    <label class="switch"><input type="checkbox" data-setting="enableQrScanning"><span class="slider"></span></label></div>
+                <div class="setting-row"><div class="setting-text">Check attachments<div class="setting-desc">Attachments (up to 10 MB) are opened on this device: images and PDFs for QR codes and links; SVG and HTML files for hidden scripts, redirects and fake login forms; calendar invites for links; archives for password protection; and file names for disguised file types. Nothing is uploaded.</div></div>
+                    <label class="switch"><input type="checkbox" data-setting="enableAttachmentScanning"><span class="slider"></span></label></div>
+            </div>
+
+            <div class="card">
+                <h3>🌐 Lookups &amp; threat checks</h3>
+                <div class="setting-row"><div class="setting-text">Look up short links online<div class="setting-desc">Short links (bit.ly and similar) are sent to unshorten.me, or to your own service if one is set below, to find where they go.</div></div>
+                    <label class="switch"><input type="checkbox" data-setting="enableThirdPartyResolution"><span class="slider"></span></label></div>
+                <div class="setting-row"><div class="setting-text">Check sites for threats<div class="setting-desc">Only the site's name (for example <code>example.com</code>) is checked against the security services below.</div></div>
+                    <label class="switch"><input type="checkbox" data-setting="enableDnsThreatCheck"><span class="slider"></span></label></div>
+                <div class="setting-row"><div class="setting-text">Keep the shortener list up to date<div class="setting-desc">Downloads two public lists of URL-shortener sites once a day. <a href="#" id="showRemoteTrackersBtn">View the current list</a> · <a href="#" id="forceSyncBtn">Update now</a> <span id="forceSyncResult"></span></div></div>
+                    <label class="switch"><input type="checkbox" data-setting="enableRemoteListSync"><span class="slider"></span></label></div>
+                <div class="setting-row"><div class="setting-text">Check links against phishing lists<div class="setting-desc">Downloads two public phishing lists (the <a href="https://openphish.com" target="_blank" rel="noopener noreferrer">OpenPhish</a> community feed and <a href="https://phishing.army" target="_blank" rel="noopener noreferrer">Phishing Army</a>, at most once a day) and checks links against them on this device. Nothing about you is sent. <a href="#" id="syncFeedsBtn">Update now</a> <span id="feedStatus"></span></div></div>
+                    <label class="switch"><input type="checkbox" data-setting="enablePhishingFeeds"><span class="slider"></span></label></div>
+                <details class="more"><summary>Threat-check services</summary>
+                    <p class="card-intro">All enabled services are asked at the same time; a link is flagged if any of them blocks it. AdGuard is only asked when none of the security services can be reached.</p>
+                    <table style="margin-top: 0;">
+                    <thead><tr><th style="width: 250px;">Provider & Purpose</th><th>DoH Endpoint URL</th><th style="width: 120px;">Connection test</th><th style="width: 80px;">Enabled</th></tr></thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>AdGuard Public DNS</strong><br><span style="font-size:11px; font-weight:normal; color: var(--text-muted);">Backup: only used when the security resolvers cannot be reached</span></td>
+                            <td><code>https://dns.adguard-dns.com/resolve</code></td>
+                            <td><button class="btn-action test-builtin-btn" data-url="https://dns.adguard-dns.com/resolve?name={hostname}&type=A">Test</button></td>
+                            <td><label class="switch"><input type="checkbox" data-setting="dnsAdGuard"><span class="slider"></span></label></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Control D (malware)</strong><br><span style="font-size:11px; font-weight:normal; color: var(--text-muted);">Security resolver, no account, blocklists rebuilt every 30 minutes (RFC 8484)</span></td>
+                            <td><code>https://freedns.controld.com/p1</code></td>
+                            <td><button class="btn-action test-builtin-btn" data-url="https://freedns.controld.com/p1">Test</button></td>
+                            <td><label class="switch"><input type="checkbox" data-setting="dnsControlD"><span class="slider"></span></label></td>
+                        </tr>
+                        <tr>
+                            <td><strong>DNS4EU Protective</strong><br><span style="font-size:11px; font-weight:normal; color: var(--text-muted);">EU public security resolver; optional, for individuals (RFC 8484)</span></td>
+                            <td><code>https://protective.joindns4.eu/dns-query</code></td>
+                            <td><button class="btn-action test-builtin-btn" data-url="https://protective.joindns4.eu/dns-query">Test</button></td>
+                            <td><label class="switch"><input type="checkbox" data-setting="dnsDns4eu"><span class="slider"></span></label></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Quad9 Security</strong><br><span style="font-size:11px; font-weight:normal; color: var(--text-muted);">Malware/Phishing sinkhole (RFC 8484)</span></td>
+                            <td><code>https://dns.quad9.net/dns-query</code></td>
+                            <td><button class="btn-action test-builtin-btn" data-url="https://dns.quad9.net/dns-query">Test</button></td>
+                            <td><label class="switch"><input type="checkbox" data-setting="dnsQuad9"><span class="slider"></span></label></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Cloudflare Security</strong><br><span style="font-size:11px; font-weight:normal; color: var(--text-muted);">Malware/Phishing sinkhole</span></td>
+                            <td><code>https://security.cloudflare-dns.com/dns-query</code></td>
+                            <td><button class="btn-action test-builtin-btn" data-url="https://security.cloudflare-dns.com/dns-query?name={hostname}&type=A">Test</button></td>
+                            <td><label class="switch"><input type="checkbox" data-setting="dnsCloudflareSecurity"><span class="slider"></span></label></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Cloudflare Family</strong><br><span style="font-size:11px; font-weight:normal; color: var(--text-muted);">Adult content filter: flags adult sites (on by default)</span></td>
+                            <td><code>https://family.cloudflare-dns.com/dns-query</code></td>
+                            <td><button class="btn-action test-builtin-btn" data-url="https://family.cloudflare-dns.com/dns-query?name={hostname}&type=A">Test</button></td>
+                            <td><label class="switch"><input type="checkbox" data-setting="dnsCloudflareFamily"><span class="slider"></span></label></td>
+                        </tr>
+                    </tbody>
+                </table>
+                </details>
+                <details class="more"><summary>Your own services (advanced)</summary>
+                    <p class="card-intro">For organizations or tinkerers with their own threat-intelligence API or link-expansion service. Both are optional and off until an address is entered.</p>
+                    <p class="card-intro"><b>Recommended for organizations:</b> the free public lookup service (unshorten.me) can't expand links longer than 100 characters, such as Google's c.gle links, limits how many links it looks up and may be blocked by firewalls. Your own lookup service removes these limits and keeps links inside your organization. For threat checks, Google Workspace organizations can use Google's Web Risk API. <a href="#" data-help-link="limitations">Limitations and recommendations</a></p>
+            <div class="managed-box" id="managedDohNotice" style="display: none;">
+                <strong>🛡️ Managed Policy Active:</strong> Your Custom DoH Endpoint is locked and managed by your administrator.
+            </div>
+
+
+            <div class="card">
+                <h3>Custom threat resolver</h3>
+                <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">Optional. Your own DNS-over-HTTPS server or threat-intelligence API, queried alongside the public resolvers; if it flags a link, the link is flagged. In the address or body, <code>{hostname}</code> is replaced by the link's domain and <code>{url}</code> by the full link (one-time links only ever send their domain). Saving asks your browser for permission to contact that one host.</p>
+                <div class="input-group" style="margin-bottom: 8px;">
+                    <input type="text" id="customDohInput" aria-label="Threat resolver address" placeholder="e.g. https://dns.corp.internal/dns-query?name={hostname}&amp;type=A">
+                    <button id="saveDohBtn">Save service</button>
+                </div>
+                <div class="endpoint-grid">
+                    <label>Method <select data-setting="customDohMethod"><option>GET</option><option>POST</option></select></label>
+                    <label>Flag field <input type="text" data-setting="customDohFlagField" placeholder="optional, e.g. data.is_malicious"></label>
+                    <label class="wide">Request body (POST) <textarea data-setting="customDohBody" rows="3" placeholder='host={hostname}   or   {"url":"{url}"}'></textarea></label>
+                    <label class="wide">Request headers, one per line <textarea data-setting="customDohHeaders" rows="2" placeholder="Auth-Key: your-key"></textarea></label>
+                </div>
+                <div class="resolver-test-box">
+                    <button id="testCustomDohBtn" class="btn-warning">Test resolver</button>
+                    <span id="customDohResult" class="test-result"></span>
+                </div>
+                <details style="margin-top: 12px; font-size: 12px;">
+                    <summary style="cursor: pointer; font-weight: bold;">Example configurations</summary>
+                    <div class="code-example"><strong>DNS-over-HTTPS (JSON) filtering server</strong><br>
+                        Address: https://dns.example.com/dns-query?name={hostname}&amp;type=A<br>Method: GET</div>
+                    <div class="code-example"><strong>URLhaus by abuse.ch</strong> (free API key from abuse.ch)<br>
+                        Address: https://urlhaus-api.abuse.ch/v1/host/<br>Method: POST<br>Body: host={hostname}<br>Headers: Auth-Key: YOUR_KEY</div>
+                    <div class="code-example"><strong>Google Safe Browsing v4</strong> (API key from Google Cloud; check the API's terms of use, as the free API is for non-commercial use and Google's commercial equivalent is Web Risk)<br>
+                        Address: https://safebrowsing.googleapis.com/v4/threatMatches:find?key=YOUR_KEY<br>Method: POST<br>
+                        Body: {"client":{"clientId":"gmail-link-unshortener","clientVersion":"1"},"threatInfo":{"threatTypes":["MALWARE","SOCIAL_ENGINEERING","UNWANTED_SOFTWARE"],"platformTypes":["ANY_PLATFORM"],"threatEntryTypes":["URL"],"threatEntries":[{"url":"{url}"}]}}</div>
+                    <p style="color: var(--text-muted);">Replies are understood automatically for DNS-over-HTTPS (<code>Answer</code>), Safe Browsing (<code>matches</code>), URLhaus (<code>query_status</code>) and simple APIs returning <code>malicious</code>, <code>blocked</code> or similar. For anything else, set <strong>Flag field</strong> to the reply field that indicates a threat. A reply that is not understood (for example an invalid-key error) counts as "no answer", never as "safe".</p>
+                </details>
+            </div>
+
+
+            <div class="managed-box" id="managedUnshortenerNotice" style="display: none;">
+                <strong>🛡️ Managed Policy Active:</strong> Your custom unshortener is set by your administrator.
+            </div>
+            <div class="card">
+                <h3>Custom unshortener</h3>
+                <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">Optional. Your own service for finding where short links go, tried <strong>before</strong> unshorten.me. It receives the same links unshorten.me would (never one-time, email-provider or unrevealed blocklisted links). Placeholders: <code>{url}</code> the full short link, <code>{url_noscheme}</code> the link without <code>https://</code>, <code>{hostname}</code> its domain. Saving asks your browser for permission to contact that one host.</p>
+                <div class="input-group" style="margin-bottom: 8px;">
+                    <input type="text" id="customUnshortenerInput" aria-label="Unshortener address" placeholder="e.g. https://unshorten.yourcompany.com/?url={url}">
+                    <button id="saveUnshortenerBtn">Save service</button>
+                </div>
+                <div class="endpoint-grid">
+                    <label>Method <select data-setting="customUnshortenerMethod"><option>GET</option><option>POST</option></select></label>
+                    <label>Destination field <input type="text" data-setting="customUnshortenerField" placeholder="optional, e.g. data.long_url"></label>
+                    <label class="wide">Request body (POST) <textarea data-setting="customUnshortenerBody" rows="2" placeholder='{"bitlink_id":"{url_noscheme}"}'></textarea></label>
+                    <label class="wide">Request headers, one per line <textarea data-setting="customUnshortenerHeaders" rows="2" placeholder="Authorization: Bearer your-token"></textarea></label>
+                </div>
+                <div class="setting-row" style="padding: 8px 0;">
+                    <div class="setting-text">Fall back to unshorten.me<div class="setting-desc">If your unshortener gives no answer, try unshorten.me. Turn off to keep short links away from unshorten.me entirely.</div></div>
+                    <label class="switch"><input type="checkbox" data-setting="useUnshortenMeFallback"><span class="slider"></span></label>
+                </div>
+                <div class="resolver-test-box">
+                    <input type="text" id="unshortenerTestLink" aria-label="Short link to test the unshortener with" placeholder="Short link to test with" style="padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; min-width: 240px;">
+                    <button id="testUnshortenerBtn" class="btn-warning">Test unshortener</button>
+                    <span id="unshortenerResult" class="test-result"></span>
+                </div>
+                <details style="margin-top: 12px; font-size: 12px;">
+                    <summary style="cursor: pointer; font-weight: bold;">Example configurations</summary>
+                    <div class="code-example"><strong>Your own service</strong> (for example a small script on a server or cloud function that follows redirects)<br>
+                        Address: https://unshorten.yourcompany.com/?url={url}<br>Method: GET</div>
+                    <div class="code-example"><strong>Bitly</strong> (expands Bitly links only, without visiting them; free Bitly account token; other links fall back to unshorten.me)<br>
+                        Address: https://api-ssl.bitly.com/v4/expand<br>Method: POST<br>Body: {"bitlink_id":"{url_noscheme}"}<br>Headers: Authorization: Bearer YOUR_TOKEN</div>
+                    <p style="color: var(--text-muted);">The destination is found automatically in replies that use fields such as <code>resolved_url</code>, <code>long_url</code>, <code>final_url</code>, <code>destination</code> or <code>url</code> (also one level down, e.g. <code>data.long_url</code>), or in a plain-text reply. Otherwise set <strong>Destination field</strong>.</p>
+                </details>
+            </div>
+
+
+                </details>
+            </div>
+
+            <div class="card">
+                <h3>🚦 Allowed &amp; blocked sites</h3>
+                <div class="managed-box" id="managedPolicyNotice" style="display: none;">🔒 Some entries are set by your organization and can't be removed here.</div>
+                <div class="two-col">
+                    <div>
+                        <h4>Always allowed</h4>
+                        <p class="card-intro">Links on these sites are left alone (unless they redirect somewhere that isn't allowed).</p>
+                        <div class="input-group">
+                            <input type="text" id="domainAllowInput" aria-label="Site to allow" placeholder="e.g. intranet.mycompany.com">
+                            <button id="addAllowBtn" style="background: var(--success-solid);">Add</button>
+                        </div>
+                        <table id="allowTable"><thead><tr><th>Site</th><th style="width: 90px;"></th></tr></thead><tbody></tbody></table>
+                    </div>
+                    <div>
+                        <h4>Always blocked</h4>
+                        <p class="card-intro">Links on these sites are marked "DO NOT CLICK" with their destination hidden; a 🔍 icon lets you reveal it. Blocking wins over allowing.</p>
+                        <div class="input-group">
+                            <input type="text" id="domainBlockInput" aria-label="Site to block" placeholder="e.g. tracking.newsletter.com">
+                            <button id="addBlockBtn">Add</button>
+                        </div>
+                        <table id="blockTable"><thead><tr><th>Site</th><th style="width: 90px;"></th></tr></thead><tbody></tbody></table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>📬 Other webmail <span class="preset-tag" style="background: var(--warn-bg);color: var(--warn-text);">Experimental</span></h3>
+                <p class="card-intro">Link checking, pixel blocking, QR checks and sender labels and checks (basic) also work in these webmail apps. QR scanning there only reads images the webmail itself hosts; attachments are checked, emails moved to Spam and links checked before sending in Gmail only. Switching an app off here stops everything the extension does on it. Each app's layout was mapped from public information, so please report anything that doesn't work. <a href="#" data-help-link="compat">Which features work where</a></p>
+                <div class="setting-row"><div class="setting-text">Outlook on the web<div class="setting-desc">outlook.live.com, outlook.office.com, outlook.office365.com and outlook.cloud.microsoft.</div></div>
+                    <label class="switch"><input type="checkbox" data-setting="enableOutlookSupport"><span class="slider"></span></label></div>
+                <div class="setting-row"><div class="setting-text">Proton Mail<div class="setting-desc">mail.proton.me (messages are read from Proton's protected message frames).</div></div>
+                    <label class="switch"><input type="checkbox" data-setting="enableProtonSupport"><span class="slider"></span></label></div>
+                <div class="setting-row"><div class="setting-text">Yahoo Mail<div class="setting-desc">mail.yahoo.com.</div></div>
+                    <label class="switch"><input type="checkbox" data-setting="enableYahooSupport"><span class="slider"></span></label></div>
+                <div class="setting-row"><div class="setting-text">AOL Mail<div class="setting-desc">mail.aol.com.</div></div>
+                    <label class="switch"><input type="checkbox" data-setting="enableAolSupport"><span class="slider"></span></label></div>
+                <div class="setting-row"><div class="setting-text">Zoho Mail<div class="setting-desc">mail.zoho.com and Zoho's regional sites (.eu, .in, .com.au, .jp, .sa, zohocloud.ca).</div></div>
+                    <label class="switch"><input type="checkbox" data-setting="enableZohoSupport"><span class="slider"></span></label></div>
+                <div class="setting-row"><div class="setting-text">iCloud Mail<div class="setting-desc">icloud.com/mail.</div></div>
+                    <label class="switch"><input type="checkbox" data-setting="enableIcloudSupport"><span class="slider"></span></label></div>
+                <div class="setting-row"><div class="setting-text">Fastmail<div class="setting-desc">app.fastmail.com.</div></div>
+                    <label class="switch"><input type="checkbox" data-setting="enableFastmailSupport"><span class="slider"></span></label></div>
+                <div class="setting-row"><div class="setting-text">GMX<div class="setting-desc">gmx.com, gmx.net, gmx.de, gmx.at, gmx.ch, gmx.co.uk, gmx.fr and gmx.es.</div></div>
+                    <label class="switch"><input type="checkbox" data-setting="enableGmxSupport"><span class="slider"></span></label></div>
+            </div>
+
+            <div class="card">
+                <h3>💾 Data on this device</h3>
+                <p class="card-intro">Stored only in this browser. Nothing is synced or uploaded.</p>
+                <div class="setting-row"><div class="setting-text">Remember results<div class="setting-desc">Avoids looking up the same link twice. One-time links are never remembered.</div></div>
+                    <label class="switch"><input type="checkbox" data-setting="enableResultCache"><span class="slider"></span></label></div>
+                <div class="setting-row"><div class="setting-text">Keep history<div class="setting-desc">A list of links that were checked, unmasked or flagged, shown under Logging → History.</div></div>
+                    <label class="switch"><input type="checkbox" data-setting="enableHistoryLog"><span class="slider"></span></label></div>
+                <div class="setting-row"><div class="setting-text">Delete automatically after (days)<div class="setting-desc">Cached results, history, logs and activity older than this are removed daily.</div></div>
+                    <input type="number" class="number-input" min="1" max="365" data-setting="retentionDays"></div>
+                <div class="setting-row"><div class="setting-text">Delete everything now<div class="setting-desc">Clears cached results, history, activity and sender data. Settings and lists are kept, and so is the list of conversations moved to or taken out of Spam (so they're never moved again).</div></div>
+                    <button id="clearAllLocalDataBtn" class="btn-warning">Delete now</button></div>
+            </div>
+
+            <details class="card more-card">
+                <summary><h3 style="display: inline;">🏢 Backup &amp; Google Workspace</h3></summary>
+                <div class="setting-row"><div class="setting-text">Back up your settings<div class="setting-desc">Saves the settings you changed and your lists to a file. API keys are never included.</div></div>
+                    <button id="downloadSettingsBtn" class="btn-primary">Back up</button></div>
+                <div class="setting-row"><div class="setting-text">Restore from a backup<div class="setting-desc">You'll see exactly what will be restored before anything changes.</div></div>
+                    <button id="importSettingsBtn" class="btn-secondary">Restore…</button>
+                    <input type="file" id="importFileInput" accept=".json" style="display: none;"></div>
+                <div class="setting-row"><div class="setting-text">Manage with Google Workspace<div class="setting-desc">Every setting and list can be set and locked by your administrator (Admin console → Devices → Chrome → Apps &amp; extensions → this extension → Policy for extensions). This button copies your current settings in that format. <a href="#" data-help-link="deploy">Administrator guide</a><div id="copyPolicyResult" style="margin-top: 4px; color: var(--success-text);"></div></div></div>
+                    <button id="copyPolicyJsonBtn" class="btn-action">Copy as policy JSON</button></div>
+                <div class="setting-row"><div class="setting-text">Manage with Microsoft Intune (Edge or Chrome on Windows)<div class="setting-desc">Copies a PowerShell script that writes your current settings as extension policy in the Windows registry, for an Intune platform script (or Group Policy / any device-management tool). <a href="#" data-help-link="deploy">Deployment guide</a><div id="copyRegResult" style="margin-top: 4px; color: var(--success-text);"></div></div></div>
+                    <button id="copyRegScriptBtn" class="btn-action">Copy registry script</button></div>
+            </details>
+
+            <div class="reset-row">
+                <button id="resetDefaultsBtn" class="link-btn">Reset my settings to defaults</button>
+            </div>
+        </div>
+
+        <div id="tab-tester" class="tab-content">
+            <h2 class="sr-only">Link Inspector</h2>
+            <div class="card">
+                <div class="card-header">
+                    <h3>Link Inspector</h3>
+                </div>
+                <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 15px;">
+                    Paste any complex, multi-wrapped, shortened, or enterprise-rewritten URL below to watch the engine deconstruct each hop, unwrap enterprise gateways (SafeLinks, Proofpoint, SES), and inspect threat status in real time.
+                </p>
+                <div class="input-group" style="margin-bottom: 15px;">
+                    <input type="text" id="inspectorInput" aria-label="Link to inspect" placeholder="Paste wrapped link (e.g., Proofpoint, SafeLinks, Amazon SES, or tracking redirect)...">
+                    <button id="inspectLinkBtn" class="btn-primary" style="padding: 8px 20px;">Inspect link</button>
+                </div>
+                
+                <div id="inspectorResultsArea" style="display: none;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <strong style="font-size: 14px; color: var(--text);">Deconstruction Pipeline:</strong>
+                        <span id="layersCountBadge" class="badge badge-neutral">0 Layer(s) Unwrapped</span>
+                    </div>
+                    <div id="inspectorStepsContainer"></div>
+                    <div id="finalDestinationContainer"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 3: DNS Resolvers & Security Chain -->
+
+
+        <!-- TAB: Link Inspector Lab -->
+
+        <!-- TAB 2: Resolution History -->
+
+        <!-- TAB 6: Architecture -->
+        <!-- ===================================================== LOGGING -->
+        <div id="tab-logging" class="tab-content">
+            <h2 class="sr-only">Logging</h2>
+            <div class="help-layout">
+                <nav class="help-nav" id="logNav" aria-label="Logging sections">
+                    <button data-log="applog" class="active">Application log</button>
+                    <button data-log="history">History</button>
+                    <button data-log="cache">URL cache</button>
+                    <button data-log="senders">Senders: icons &amp; flags</button>
+                    <button data-log="spam">Moved to Spam</button>
+                </nav>
+                <div class="log-body">
+                    <section id="log-applog" class="log-section active">
+            <div class="card">
+                <div class="card-header">
+                    <h3>Application log</h3>
+                    <div>
+                        <button id="exportErrorsBtn" class="btn-action" style="background-color: var(--warn-solid); color: var(--on-warn); margin-right: 8px;">📥 Export log</button>
+                        <button id="clearErrorsBtn" class="btn-action">Clear log</button>
+                    </div>
+                </div>
+                <div class="stat-row" id="applogStats"></div>
+                <p style="font-size: 12px; color: var(--text-muted); margin: 0 0 10px 0;"><strong>Errors</strong> need attention; <strong>warnings</strong> are problems the extension worked around (for example an unreachable resolver); <strong>info</strong> records routine events such as list updates and cleanup. Repeats within 10 minutes are counted instead of listed again. Only a link's site (never its full address) is written here. Errors also appear in the toolbar popup.</p>
+                <div style="display: flex; gap: 10px; margin-bottom: 12px;">
+                    <input type="text" id="errorsSearch" aria-label="Search the application log" class="search-bar" style="margin-bottom: 0; flex: 1;" placeholder="Search the application log...">
+                    <select id="errorsLevelFilter" style="padding: 6px 10px; border: 1px solid var(--border); border-radius: 4px; font-size: 13px;">
+                        <option value="">All levels</option>
+                        <option value="error">Errors</option>
+                        <option value="warning">Warnings</option>
+                        <option value="info">Info</option>
+                    </select>
+                </div>
+                <table id="errorsTable">
+                    <thead>
+                        <tr>
+                            <th style="width: 15%; white-space: nowrap;">Time</th>
+                            <th style="width: 9%;">Level</th>
+                            <th style="width: 16%;">Source</th>
+                            <th>Message</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+                    </section>
+                    <section id="log-history" class="log-section">
+            <div class="card">
+                <div class="card-header">
+                    <h3>History</h3>
+                    <div>
+                        <button id="exportHistoryCsvBtn" class="btn-action" style="background-color: var(--accent-solid); margin-right: 8px;">📥 Export CSV</button>
+                        <button id="clearHistoryBtn" class="btn-action">Clear history</button>
+                    </div>
+                </div>
+                <div class="stat-row" id="historyStats"></div>
+                <div style="display: flex; gap: 10px; margin-bottom: 12px; align-items: center; flex-wrap: wrap;">
+                    <input type="text" id="historySearch" aria-label="Search the history" class="search-bar" style="margin-bottom: 0; flex: 1; min-width: 250px;" placeholder="Search history...">
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <label for="historyDatePicker" style="font-size: 13px; font-weight: 600; color: var(--text-muted); white-space: nowrap;">Filter Date:</label>
+                        <input type="date" id="historyDatePicker" style="padding: 6px 10px; border: 1px solid var(--border); border-radius: 4px; font-size: 13px; color: var(--text); background: var(--surface); height: 35px;">
+                        <button id="clearHistoryDateBtn" class="btn-action" title="Clear date filter" style="padding: 6px 12px; height: 35px;">Clear date</button>
+                    </div>
+                </div>
+                <table id="historyTable">
+                    <thead>
+                        <tr>
+                            <th style="width: 10%; white-space: nowrap;">Time</th>
+                            <th style="width: 31%;">Original URL</th>
+                            <th style="width: 31%;">Destination</th>
+                            <th style="width: 11%;">Resolved IP</th>
+                            <th style="width: 17%;">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+                    </section>
+                    <section id="log-cache" class="log-section">
+            <div class="card">
+                <div class="card-header">
+                    <h3>URL Cache</h3>
+                    <div>
+                        
+                        <button id="clearCacheBtn" class="btn-action">Clear cache</button>
+                    </div>
+                </div>
+                <div class="stat-row" id="cacheStats"></div>
+                <div style="display: flex; gap: 10px; margin-bottom: 12px; align-items: center; flex-wrap: wrap;">
+                    <input type="text" id="cacheSearch" aria-label="Search the cache" class="search-bar" style="margin-bottom: 0; flex: 1; min-width: 250px;" placeholder="Search cached links...">
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <label for="cacheDatePicker" style="font-size: 13px; font-weight: 600; color: var(--text-muted); white-space: nowrap;">Filter Date:</label>
+                        <input type="date" id="cacheDatePicker" style="padding: 6px 10px; border: 1px solid var(--border); border-radius: 4px; font-size: 13px; color: var(--text); background: var(--surface); height: 35px;">
+                        <button id="clearCacheDateBtn" class="btn-action" title="Clear date filter" style="padding: 6px 12px; height: 35px;">Clear date</button>
+                    </div>
+                </div>
+                <table id="cacheTable">
+                    <thead>
+                        <tr>
+                            <th style="width: 30%;">Original URL</th>
+                            <th style="width: 30%;">Destination</th>
+                            <th style="width: 12%;">Resolved by</th>
+                            <th style="width: 18%;">Status</th>
+                            <th style="width: 10%; white-space: nowrap;">Cached on</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+                    </section>
+                    <section id="log-senders" class="log-section">
+            <div class="card">
+                <div class="card-header">
+                    <h3>Senders: icons &amp; flags</h3>
+                    <div><button id="clearSenderCacheBtn" class="btn-action">Clear sender data</button></div>
+                </div>
+                <p class="card-intro">Every sender checked recently (Gmail), with the icon and country shown, the verdict and why. Results are remembered so the inbox shows them at once without new lookups: verdicts for 6 hours, icons and countries for 30 days.</p>
+                <div class="stat-row" id="senderStats"></div>
+                <input type="text" id="senderSearch" aria-label="Search the senders" class="search-bar" placeholder="Search senders, domains, reasons...">
+                <table id="senderTable">
+                    <thead><tr><th style="width: 26%;">Sender</th><th style="width: 13%;">Icon &amp; country</th><th style="width: 12%;">Status</th><th>Why, and what was checked</th><th style="width: 12%; white-space: nowrap;">Checked on</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+                    </section>
+                    <section id="log-spam" class="log-section">
+            <div class="card">
+                <div class="card-header">
+                    <h3>Moved to Spam</h3>
+                    <div><button id="clearSpamLogBtn" class="btn-action">Clear this list</button></div>
+                </div>
+                <p class="card-intro">Emails the extension moved to Spam, moves that didn't work, and conversations you took out of Spam (never moved again). Clearing this list doesn't forget which conversations were moved.</p>
+                <div class="stat-row" id="spamLogStats"></div>
+                <input type="text" id="spamLogSearch" aria-label="Search the moved emails" class="search-bar" placeholder="Search senders and reasons...">
+                <table id="spamLogTable">
+                    <thead><tr><th style="width: 14%; white-space: nowrap;">Time</th><th style="width: 13%;">What happened</th><th style="width: 24%;">Sender</th><th>Why</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+                    </section>
+                </div>
+            </div>
+        </div>
+        <!-- ===================================================== HELP -->
+        <div id="tab-help" class="tab-content">
+            <h2 class="sr-only">Help</h2>
+            <div class="help-layout">
+                <nav class="help-nav" id="helpNav" aria-label="Help topics">
+                    <button data-help="overview" class="active">How it works</button>
+                    <div class="help-subnav" role="group" aria-label="How it works topics">
+                        <button data-help="warnings" class="sub">What the warnings mean</button>
+                        <button data-help="senders" class="sub">Sender icons &amp; Spam</button>
+                        <button data-help="compat" class="sub">Which features work where</button>
+                        <button data-help="privacy" class="sub">Your privacy</button>
+                        <button data-help="limitations" class="sub">Limitations</button>
+                        <button data-help="permissions" class="sub">Permissions</button>
+                        <button data-help="architecture" class="sub">Architecture deep dive</button>
+                    </div>
+                    <button data-help="troubleshooting">Troubleshooting</button>
+                    <button data-help="deploy">Deploying in organizations</button>
+                    <button data-help="about">About &amp; credits</button>
+                </nav>
+                <div class="help-body">
+
+<section id="help-overview" class="help-section active">
+<h2>How it works</h2>
+<p class="lead">When you open an email in Gmail (or another supported webmail: Outlook, Proton, Yahoo, AOL, Zoho, iCloud, Fastmail or GMX), the extension looks at every link and works out where it really goes, warns you about dangerous or misleading ones, and quietly removes invisible tracking images. It needs no setup.</p>
+<div class="flow">
+  <div class="flow-step"><b>1. Email opened</b><span>Links and images in the message are read in your browser.</span></div>
+  <div class="flow-step"><b>2. Decoded on your device</b><span>Security and tracking wrappers (Proofpoint, Microsoft SafeLinks, Barracuda, Google, Facebook, ad and affiliate trackers and 50+ more) are unpacked locally.</span></div>
+  <div class="flow-step"><b>3. Short links looked up</b><span>If the destination is still hidden behind a short link (bit.ly…), it is looked up online. Never for one-time or email-provider links.</span></div>
+  <div class="flow-step"><b>4. Checked</b><span>The destination's site name is checked against security services, and the link is checked for tricks such as text that shows a different site.</span></div>
+  <div class="flow-step"><b>5. Shown</b><span>Safe links point straight to their destination. Dangerous ones are marked in red and ask before opening.</span></div>
+</div>
+<p><strong>When you send an email</strong> (Gmail), the links you wrote are checked before it goes: typos such as “.con” or “http//”, whether each website exists and works, and whether it's a look-alike, phishing or malware site. If something's wrong, you see which links and why, and choose <b>Go back and fix</b> or <b>Send anyway</b>.</p>
+<p><strong>In your Gmail inbox</strong>, every sender gets its site's icon, a country flag and a label with its domain, colored by a check of the sender: its address against phishing-sender lists and its domain against the same security services as links. Emails from a <b>flagged</b> sender are moved to Spam for you, once, with a short notice to review them. See <a href="#" data-help-link="senders">Sender icons &amp; Spam</a>.</p>
+<p><strong>The row highlighter</strong> marks the email under your mouse with a soft color and an outline, so a click opens the email you meant, and the emails you've ticked in a second color (blue by default), so the two are never confused. Both colors can be changed in Settings → Row highlighter. If another extension does the same job (for example another sender-icon or row-highlighter extension), you're warned and can turn one of them off with one click: see Settings → Other extensions.</p>
+<p><strong>Which of these work on which webmail</strong> is shown in <a href="#" data-help-link="compat">Which features work where</a>. Link, QR-code and tracking-pixel checks work on every supported webmail, and so do sender labels and checks (basic on sites without an entry of their own). Moving to Spam and the Send check run on Gmail today and reach other sites as their entries are filled in and tested.</p>
+<p>Everything you see is also available in this window: the <strong>Link Inspector</strong> shows each step for any link you paste, and <strong>Logging</strong> holds the application log (every problem and event), the history of checked links and the URL cache. Technical readers will find every detail in the <a href="#" data-help-link="architecture">architecture deep dive</a>.</p>
+</section>
+
+<section id="help-warnings" class="help-section">
+<h2>What the warnings mean</h2>
+<table class="help-table">
+<tr><th style="width: 32%;">You see</th><th>Meaning and what to do</th></tr>
+<tr><td><span class="demo-danger">DO NOT CLICK: Malware or Phishing</span> <span class="demo-icon">⛔</span></td><td>A security service flagged the destination, or the link is on your blocklist. Don't open it. Hover for the reason and destination; clicking asks for confirmation first.</td></tr>
+<tr><td><span style="background: #fef7e0; color: #5f3b00; border: 1px solid #f9ab00; padding: 1px 4px; border-radius: 4px;">Amber link</span> with ⚠️</td><td><b>Caution:</b> something about the link is unusual, but it's also common in legitimate mail: the text shows one website but the link goes to another, the link uses a raw IP address, or international characters. Check the destination (hover the link) before opening it. Clicking asks first.</td></tr>
+<tr><td>Red link that keeps its text, with 🛑</td><td><b>Danger:</b> the link is built to deceive: it imitates a well-known brand (a look-alike domain, or text showing a brand's address while going elsewhere) or hides its destination behind a user name. The text is kept so you can see what it claimed.</td></tr>
+<tr><td>No warning on a short link from a big company</td><td>Google (c.gle, g.co), Microsoft (aka.ms), Amazon (amzn.to), LinkedIn (lnkd.in) and others use their own short-link domains. They are looked up like any short link, and their text and destination are compared by company, so a Google short link labelled with a Google address is not flagged.</td></tr>
+<tr><td><span class="demo-danger">DO NOT CLICK: On your blocklist</span> <span class="demo-icon">🔍</span></td><td>A blocklisted link. Its destination is hidden and nothing about it has been sent anywhere. Click 🔍 to reveal where it goes (this never opens the link).</td></tr>
+<tr><td>Red outline around an image</td><td>The image is a flagged link.</td></tr>
+<tr><td>Link text replaced by its real address</td><td>The email showed a short or tracking link as text; you now see the real destination.</td></tr>
+<tr><td>Tooltip: "Not verified"</td><td>The destination could not be checked (for example, threat checks are off or a firewall blocks them). It isn't known to be dangerous, but it hasn't been confirmed safe either.</td></tr>
+<tr><td>Tooltip: "One-time / unsubscribe link"</td><td>The link was deliberately not looked up so it can't be used up or trigger an unsubscribe.</td></tr>
+<tr><td>Tooltip: "Mimecast URL Protect link"</td><td>Some security gateways hide the destination on their own servers; it can't be decoded, but the gateway checks it when you click.</td></tr>
+<tr><td>Small blue <span class="demo-icon">🔍</span> when pointing at a link</td><td>An email tracking link. Newsletters route links through their email provider (Brevo, SendGrid, Klaviyo, Mailchimp…), which keeps the destination on its own servers, so it can't be read from the link. Click the 🔍 to reveal it: you're asked first, the link is sent to the lookup service, and the sender sees a click. Revealing never opens the link. Until then, History shows these as "Not revealed". Not offered for unsubscribe or sign-in links, or when the privacy level doesn't allow online lookups.</td></tr>
+<tr><td><span class="demo-danger">⛔ DO NOT SCAN</span> bar under an image or attachment</td><td>A QR code (or a link inside a PDF) leads to a flagged site. Don't scan it with your phone. A grey or green bar shows where a QR code leads and whether it was checked.</td></tr>
+<tr><td><span class="demo-danger">DO NOT CLICK: Web page hosted in public cloud storage</span></td><td>The link opens a page stored in Google Cloud Storage, Firebase, S3, Azure or similar. Phishing kits use these because the domains are trusted; real companies almost never link to them. "Pre-targeted" means the link also carries hidden data about you after "#". Click 🔍 to have the page's code read (not run) to find where it redirects.</td></tr>
+<tr><td><span class="demo-danger">⛔ DO NOT OPEN</span> under an SVG or HTML attachment</td><td>The attachment contains scripts, redirects or a fake login form. SVG "images" with scripts are one of the fastest-growing phishing techniques; real pictures never contain code.</td></tr>
+<tr><td>⚠️ Password-protected archive</td><td>Email security can't look inside encrypted ZIP/RAR files, which is why attackers send them with the password in the message. Only open one you were expecting.</td></tr>
+<tr><td>⛔ Hidden characters in a file name</td><td>Invisible text-direction characters can make "invoice‮fdp.exe" look like "invoiceexe.pdf". Don't open the file.</td></tr>
+<tr><td>Red link: "look-alike domain"</td><td>The site name imitates a well-known brand: look-alike letters (pаypal with a Cyrillic "а", paypa1), a one-letter typo (amazom), "paypal.com.something.xyz", or the brand plus words like "login" or "secure".</td></tr>
+<tr><td>Red link: "Listed as phishing by …"</td><td>The link is on a public phishing list (OpenPhish or Phishing Army) downloaded to this computer.</td></tr>
+<tr><td>Red, disabled link</td><td>A <code>javascript:</code> or <code>data:</code> link that would run code or open embedded content instead of a web page; it has been switched off.</td></tr>
+<tr><td>Toolbar icon in <b>color</b> with a number</td><td>An email is open and being checked. The number counts the links fixed or flagged plus the tracking pixels blocked in the email(s) on screen.</td></tr>
+<tr><td>Toolbar icon <b>greyed out</b></td><td>Nothing to check right now: no email is open (inbox, other labels, other websites) or protection is switched off. The icon lights up again as soon as you open an email.</td></tr>
+<tr><td>Red <b>ERR</b> on the toolbar icon</td><td>Something needs attention (for example the shortener list couldn't be updated). It shows on every tab until resolved; see Settings → Logging → Application log.</td></tr>
+<tr><td><span style="background: #fce8e6; color: #5c0b07; border-left: 4px solid #c5221f; padding: 2px 6px;">⛔ Red banner</span> at the top of an email (Gmail)</td><td>The sender's name claims a well-known brand but the address isn't the brand's, the sender's domain imitates a brand, or the email claims to come from a brand but failed that brand's sender verification. Treat its links, attachments and phone numbers as untrusted.</td></tr>
+<tr><td><span style="background: #fef7e0; color: #3c2a00; border-left: 4px solid #f9ab00; padding: 2px 6px;">⚠️ Amber banner</span> at the top of an email</td><td>Something about the email as a whole deserves care, explained in one sentence per finding. For example, company links (Google's c.gle…) that can't be checked are counted and described once, such as "12 Google links (c.gle) in a forwarded part of this email can't be checked", instead of marking every link. Or: the email really comes from the company, but contains a phone number and payment wording. Attackers can make company systems (account alerts, invoices, sharing notices) send their text; don't call numbers or pay from an unexpected message.</td></tr>
+<tr><td>“Check the links before sending” when you press Send (Gmail)</td><td>A link you wrote has a problem: a typo in its ending (“.con”) or beginning (“http//”), a website that doesn't exist, doesn't answer or has an invalid security certificate, text that shows a different site than the link goes to, or a look-alike, phishing or malware site (“Dangerous link in this email”). <b>Go back and fix</b> returns to your email; <b>Send anyway</b> sends it as it is. Links in the quoted original you're replying to aren't checked. Emails without links send at once. Results are remembered for 10 minutes, so the links in your signature aren't re-checked on every email, and links you send aren't added to History (it lists links you received).</td></tr>
+<tr><td>Pointing at a checked link</td><td>A small card shows the verdict, where the link really goes and any notes, with a <b>Copy address</b> button. It also appears when you move to a link with the keyboard (Tab); Escape closes it.</td></tr>
+<tr><td>Banner buttons: <b>Show details</b> and <b>What should I do?</b></td><td>The banner at the top of an email stays short. <b>Show details</b> lists the links it's about; pointing at one highlights it in the email, and clicking scrolls to it. <b>What should I do?</b> shows brief advice. Both stay closed until you click them.</td></tr>
+<tr><td>Many unusual links in one email</td><td>When an email has five or more links marked Caution (for example, text that shows one website but goes to another), they're no longer marked one by one: the banner says it once ("6 links in this email show one website but go to another"). Dangerous links are always marked in red and also listed in the banner.</td></tr>
+<tr><td>QR codes</td><td>A bar under the QR code shows what it contains. A web address is a link you can open (unless it's flagged as dangerous); anything else, such as a one-time code, is plain text. <b>Copy</b> copies the content so you can paste it into a password or text field.</td></tr>
+<tr><td>Company links (such as c.gle)</td><td>They are never highlighted or given an icon, however many an email contains; hovering one shows its address. If Gmail verified that the email was sent by that company directly to you, nothing else is shown (it's noted in the application log). Otherwise the banner at the top of the email explains, once, why they can't be checked; a red banner means don't trust them, and those links ask before opening.</td></tr>
+<tr><td>🛡️ after a link</td><td>The site is on your allowlist and was left alone.</td></tr>
+<tr><td>Number on the toolbar button</td><td>How many links were changed or flagged and tracking pixels blocked in the open email. <b>ERR</b> means the shortener list could not be updated (see Logging → Application log).</td></tr>
+</table>
+</section>
+
+<section id="help-senders" class="help-section">
+<h2>Sender icons &amp; Spam (Gmail)</h2>
+<p class="lead">See who an email is really from before you open it, and let emails from known phishing senders go straight to Spam. Every part can be switched off in <a href="#" data-goto-tab="settings">Settings → Senders</a>, or set by your organization.</p>
+<h3>What you see</h3>
+<table class="help-table">
+<tr><th style="width: 32%;">You see</th><th>Meaning</th></tr>
+<tr><td>The site's icon before the sender's name</td><td>The icon of the sender's website, so a familiar company is easy to spot and an imitation looks wrong. A site without an icon gets a blank space (never a generic globe), as does every sender at the <b>Offline only</b> privacy level (nothing is requested then). Icons are remembered for 30 days.</td></tr>
+<tr><td>A round photo, logo, icon or initial over the checkbox</td><td>In your inbox list, over the email's checkbox (point at the row and the checkbox is back, ready to tick); 36 px in Gmail's Default density, 32 px in Comfortable, and in Compact a small icon beside the flag instead (Settings → Senders → <b>Size of sender pictures</b>). No photo, logo or site icon: a colored circle with the sender's initial. A site's icon sits on a soft tint of its own color, light in Gmail's light theme and dark in the dark theme; an icon that wouldn't show on it (a black logo in the dark theme, a white or yellow one in the light theme) gets the other one, and in Compact a small plate of that color, so every icon keeps at least 3:1 contrast. A colleague's own photo (your own organization), or a company's logo, learned from the picture Gmail showed beside the sender of an opened email. A company's logo is learned once (from an email that passed Gmail's sender verification and came from one of its shared mailboxes such as contact@ or info@, or carried a verified BIMI logo) and then shown for every address at that company, also in your inbox list, so other people there show the company logo, never their own photo. It is updated when it changes. If one doesn't appear, Logging → application log says why. Settings → Senders → <b>Sender photos and company logos</b>.</td></tr>
+<tr><td>A flag 🇩🇪 next to the icon</td><td>Where the email came from. Point at it to see which: <b>Sent from a server in…</b> (from Gmail's own delivery record; read emails and opened emails only), <b>registered under…</b> (the domain ending, such as .de or .uk), or <b>website hosted in…</b>. Generic endings sold worldwide (.io, .co, .tv…) give no country. On some Windows computers flags appear as two letters (DE).</td></tr>
+<tr><td><span style="background:#f1f3f4;color:#3c4043;border:1px solid #dadce0;padding:0 6px;border-radius:4px;">example.com</span></td><td><b>Nothing to act on</b> (most emails). Either the checks found nothing, or the sender can't be judged by its domain (Gmail, Yahoo, Outlook and other providers anyone can sign up at, big companies, your own organization) or wasn't checked. A plain label is neither a warning nor a promise of safety: no check can prove an email is safe. Point at it to see what was checked. Never moved to Spam.</td></tr>
+<tr><td><span style="background:#e6f4ea;color:#0d652d;border:1px solid #81c995;padding:0 6px;border-radius:4px;">✓ example.com</span></td><td><b>Trusted:</b> the sender is on your trusted senders (or your organization's), or its domain is on your Always allowed list. The only green label, because a person chose it.</td></tr>
+<tr><td><span style="background:#fef7e0;color:#5c3c00;border:1px solid #f9ab00;padding:0 6px;border-radius:4px;">⚠ example.com</span></td><td><b>Caution:</b> the domain is blocked only by a content filter (Cloudflare Family) or by the backup service, or the email shows some signs of forgery but not enough to flag it (for example one dangerous link among several). Shown, never moved.</td></tr>
+<tr><td><span style="background:#fce8e6;color:#a50e0e;border:1px solid #c5221f;padding:0 6px;border-radius:4px;">⛔ example.com</span></td><td><b>Flagged:</b> the sender's exact address is on the community scam-sender list; its domain is on a phishing list, blocked by a security service as malware or phishing, or doesn't exist at all; its address is malformed; or the email itself shows enough signs of forgery (see below). Point at the label for every reason. Opened, the email also gets a red banner.</td></tr>
+<tr><td>A red label in your Spam folder</td><td>The same checks that move emails to Spam flag it: either this extension moved it there (the label says when and why), or Gmail or you did and it is dangerous anyway. A Spam email without a red label was checked, and no check flags it (that doesn't prove it's safe): Gmail put it there, or you did, so it may be a mistake. Point at the label for the reasons. Settings → Senders → <b>Flag dangerous emails in the Spam folder</b>.</td></tr>
+<tr><td>🛡️ “2 emails from flagged senders were moved to Spam.” at the top of Gmail</td><td>The extension moved them. <b>Review</b> opens your Spam folder. The notice goes away by itself after 15 seconds (not while you point at it), or with ×. Moves are also listed in the toolbar popup's recent activity and in Logging.</td></tr>
+</table>
+<h3>Signs of a forged email</h3>
+<p>Besides the sender's lists and domain, each email is looked at for signs that genuine mail systems never produce. Each sign has a weight; strong signs flag an email on their own, weaker ones add up (enough of them flag it, a few make it Caution). The label and banner list every sign found.</p>
+<ul class="simple-list">
+  <li><b>A malformed sender address</b> (strong): a disguised encoded part such as <code>=?UTF-8?B?…?=</code>, more than 64 characters before the @, two @, or an invalid domain.</li>
+  <li><b>A sender domain that doesn't exist</b> (strong): genuine mail can't come from it, and replies can't reach it. A company subdomain with no DNS records of its own (some companies send from one, such as hello.blink.com) counts only when the company's own domain doesn't exist either; otherwise the company's domain is checked instead.</li>
+  <li><b>Its links</b> (opened emails): when all its links, or two or more, are flagged as dangerous (for example phishing pages in cloud storage), the email is flagged; one dangerous link among others makes it Caution. So a red-linked email no longer shows a green ✓ sender.</li>
+  <li><b>Its attachments</b> (opened emails): an attachment flagged as dangerous (strong); an attachment without a name (“noname”).</li>
+  <li><b>Its headers</b> (opened emails, and read emails in the list): a failed sender verification (DMARC) when the sender's domain asks for such mail to be treated as spam or rejected, fake delivery records copied from older emails (dated more than a week before it arrived), a MIME version other than 1.0, an encoding that doesn't exist, a made-up mailing-list ID, a misspelled “Recived” line, web-page code in the address lines, an “In-Reply-To” line holding an address, a fake Gmail (or other big provider's) signature, a mark from another mail system that already found it was spam, an unsubscribe link or tracking image on the sender's own computer (127.0.0.1), headers claiming several unrelated sending services at once, unfilled bulk-mail placeholders, repeated From/Subject/Date lines, two different Content-Length sizes, a “To” line that shows one address but is addressed to another, a subject padded with blank space or random capitals, or ending in filler and random letters (“_______kvksrphdly”).</li>
+  <li><b>“Call this number” text</b>: a phone number to call about a purchase you didn't make, in the subject (strong) or in an opened email (caution), even in an email genuinely sent by a company; look-alike “mathematical” letters (𝐔𝐒𝐃). Setting <b>Catch “call this number” scams</b>.</li>
+  <li><b>Its sender name</b>: padded with symbols, rows of quotes, blank space or invisible characters; or your own email address or mailbox name on someone else's address (strong, seen in the inbox list without opening; setting <b>Catch senders using your own name</b>).</li>
+</ul>
+<h3>When an email is moved to Spam</h3>
+<ul class="simple-list">
+  <li>Only when it's <b>flagged</b>. Unverified, caution, trusted and clean ones are never moved. A conversation is moved only if <b>every</b> other sender in it is flagged, so one flagged reply never sends your colleagues' messages to Spam.</li>
+  <li>Only from your <b>inbox</b> (including its category tabs) and from <b>search results</b>, as a list or opened. Never from a search in Spam, Trash, Sent, Drafts, chats or everywhere, and never from Spam, Trash, Sent, labels or All mail. Moving from search results can be switched off: Settings → Senders → <b>Also move flagged emails found by a search</b>. With <b>Multiple Inboxes</b> or <b>Priority Inbox</b> sections, or the conversation open beside the list (split view), emails are moved only when you open them in the normal view.</li>
+  <li>Gmail's own <b>Report spam</b> is used, exactly as if you clicked it; if Gmail asks “Report spam and unsubscribe?”, only plain <b>Report spam</b> is chosen (unsubscribing would confirm your address to a phisher). Anything unexpected is cancelled.</li>
+  <li><b>Never while you're busy:</b> not while you're typing, have a menu or dialog open, or have selected emails yourself (they would be reported too). It waits and tries again.</li>
+  <li><b>Once per conversation.</b> A conversation is remembered just before it's moved. If you take an email out of Spam (<b>Not spam</b> or <b>Move to Inbox</b>, or <b>Undo</b> right away), whether the extension or Gmail put it there, it's never moved again (those you take out are kept in their own list, so later moves never push them out). To stop a sender being flagged, add it to <b>Settings → Senders → Trusted senders</b>. There is no list of senders to block: report anything missed with Gmail's own <b>Report spam</b>. Every move, failed move and rescue is listed in <b>Logging → Moved to Spam</b>.</li>
+  <li><b>Never</b> your organization's phishing-training emails. With simulation link domains set, emails are moved only once opened (their links show whether they're training); with header rules, an unread email, whose headers aren't read, is left alone, and never emails from your own organization's domain, unless you or your organization listed that exact address (for example a hacked account).</li>
+  <li>Gmail, Outlook.com, Yahoo and other big providers' domains, and big companies' own domains, are never judged as a whole: there, only exact addresses on a list count.</li>
+</ul>
+<h3>Phishing senders and trusted senders</h3>
+<p>Sender addresses are compared on this device with the community scam-sender list <a href="https://github.com/sefinek/Blacklisted-Emails" target="_blank" rel="noopener noreferrer">sefinek/Blacklisted-Emails</a> (MIT license), downloaded with the phishing lists at most once a day. From the community list only exact addresses count, never whole domains, and never addresses at big companies' own domains.</p>
+<p><b>Trusted senders</b> (Settings → Senders → Trusted senders, and your organization's <code>managedTrustedSenders</code>) are the opposite: addresses or whole domains that are never flagged or moved to Spam. Their links are still checked, and your organization's phishing-sender list still wins.</p>
+<h3>Logging</h3>
+<p><b>Logging → Senders: icons &amp; flags</b> lists every sender checked recently with its icon, country, verdict, every reason and what was checked. <b>Logging → Moved to Spam</b> lists each email moved, each move that didn't work and why, and each conversation you took out of Spam. The application log has a readable line for each sender check, country and icon lookup, and move.</p>
+<h3>Privacy</h3>
+<p>Nothing about your emails is sent anywhere. The checks send only: each sender's <b>domain</b> to the threat-check services (as for links), its <b>site name</b> to Google's icon service (and, for a site without an icon of its own, to DuckDuckGo's), and a sending server's <b>IP address</b> to country.is. Results are remembered (verdicts 6 hours, icons and countries 30 days), so the inbox shows them at once without new requests. Emails' headers are read from Gmail itself (your own session). Unread emails' headers are read only in the Spam folder; if that ever marks one read, the extension stops doing it, so nothing changes what Gmail shows as unread in your inbox. At <b>Offline only</b> none of these requests are made. Details: <a href="#" data-help-link="privacy">Your privacy</a>.</p>
+</section>
+
+<section id="help-compat" class="help-section">
+<h2>Which features work where <span class="live-tag">LIVE</span></h2>
+<p class="lead">The extension has one engine for every webmail. What it can do on each site depends only on what that site's entry in its table of webmail sites describes, and this chart is generated from that table, so it always matches the version you're running.</p>
+<div class="compat-wrap" id="compatTable"></div>
+<ul class="simple-list">
+  <li><b>✓</b> works on that site; <b>Basic</b>: see below; <b>—</b> not yet. Features marked “every site” need nothing site-specific: they read the opened email itself.</li>
+  <li><b>Basic</b>: on a site without an entry of its own, the extension finds inbox rows and senders through the page's accessibility labels, the markup screen readers use, which well-built webmail share. It only <b>reads</b> the page: it never clicks anything there, so moving to Spam and the Send check wait for a site's own entry, tested on a real account. A row that doesn't show the sender's address gets no label.</li>
+  <li><b>Gmail</b> is fully supported and tested. The other sites are <b>experimental</b>: their page layouts were mapped from public information, and each gains the remaining features as its entry is filled in (no new code is needed).</li>
+  <li>Features that read an email's <b>headers</b> need a page the webmail itself offers with the email's original source (Gmail's “Show original”). Proton Mail encrypts messages, so it can't offer one.</li>
+  <li>Nothing here needs an extra sign-in, an app registration or an administrator-approved API: only the webmail page you already have open, and the public services listed in <a href="#" data-help-link="privacy">Your privacy</a>.</li>
+</ul>
+</section>
+
+<section id="help-privacy" class="help-section">
+<h2>Your privacy</h2>
+<p class="lead">The extension has no account, no analytics and no server of its own. Your email's text, subject, sender's address, recipients and attachments are never sent anywhere. (In Gmail, the sender's <i>domain</i> can be checked like a link's site name; see below.)</p>
+<h3>Never leaves your browser</h3>
+<ul class="simple-list">
+  <li><b>Email content.</b> Only link addresses, link text and image addresses are examined, locally.</li>
+  <li><b>One-time links</b> (password reset, sign-in, verification, unsubscribe): never sent, cached or logged in full.</li>
+  <li><b>Email-provider tracking links</b> (Mailchimp, SendGrid, Klaviyo…): they identify you personally, so they are never sent to anyone.</li>
+  <li><b>Full links to threat-check services:</b> they receive only the site name.</li>
+</ul>
+<h3>What can be sent, and to whom</h3>
+<div id="privacySendsTable"></div>
+<h3>Choosing a privacy level</h3>
+<table class="help-table">
+<tr><th style="width: 38%;">If you want…</th><th>Do this</th></tr>
+<tr><td>Full protection (most people)</td><td>Keep <b>Standard</b>.</td></tr>
+<tr><td>No third party to ever see a link</td><td>Choose <b>Private</b>. Short links then show as "destination unknown".</td></tr>
+<tr><td>Nothing to leave the browser at all</td><td>Choose <b>Offline only</b>. Wrapped links are still decoded and tricks still detected, but sites are not checked for threats.</td></tr>
+<tr><td>Short links expanded by a service you trust</td><td>Set <b>Your own services → Custom unshortener</b>, and optionally turn off the unshorten.me fallback.</td></tr>
+<tr><td>No adult-content filtering</td><td>Turn off <b>Cloudflare Family</b> under Threat-check services.</td></tr>
+<tr><td>No record kept on this computer</td><td>Turn off <b>Remember results</b> and <b>Keep history</b>, or shorten the auto-delete period.</td></tr>
+</table>
+<div class="callout-warn"><b>About tracking pixels.</b> Gmail already loads images through Google's proxy, which hides your IP address and device from the sender. The extension removes pixels after Gmail displays the message, so the proxy may already have fetched one and a sender can still learn the message was opened. For stronger protection also set Gmail → Settings → See all settings → General → Images → "Ask before displaying external images".</div>
+</section>
+
+<section id="help-troubleshooting" class="help-section">
+<h2>Troubleshooting</h2>
+<p>Every problem the extension meets is recorded in <strong>Logging → Application log</strong> with a plain explanation. Common situations:</p>
+<table class="help-table">
+<tr><th style="width: 34%;">What you notice</th><th>Likely cause and fix</th></tr>
+<tr><td>Links say "Not verified"</td><td>The threat-check services can't be reached, often because a company firewall or web filter blocks DNS-over-HTTPS. Ask IT to allow the services listed under <a href="#" data-help-link="privacy">Your privacy</a>, or set your organization's own resolver.</td></tr>
+<tr><td>An email shows a banner about company links (c.gle, g.co, aka.ms)</td><td>Their destination couldn't be looked up, so they're trusted only when Gmail verified the email as sent by that company directly to you. The banner appears when they're in a forwarded part, in a re-sent or mailing-list copy, from another sender, or when the email's verification couldn't be read (see the application log). Outside Gmail the sender can't be verified, so such links are always mentioned.</td></tr>
+<tr><td>A link in History says “can't work”</td><td>Its domain doesn't exist, or exists without any website address (for example test.com), so nobody can reach it. It isn't dangerous, but it won't open.</td></tr>
+<tr><td>Send is held up by “Check the links before sending”, but the link is fine</td><td>The website may have been briefly unreachable, or be reachable only inside your company network. Choose <b>Send anyway</b>. To stop checking, turn off <b>Check links before sending</b> in Settings.</td></tr>
+<tr><td>A short link is amber: "its destination couldn't be looked up"</td><td>The lookup failed and the reason is in the tooltip. Common reasons: the link is longer than unshorten.me accepts (100 characters; Google's c.gle links usually are), the service is blocked or busy, or it simply can't expand that link. A failed link is tried again after 30 minutes (temporary problems) or a day. Your organization's own lookup service (Settings → Your own services) has no length limit. At the Private and Offline levels short links aren't looked up at all.</td></tr>
+<tr><td>A link wasn't changed</td><td>It may be allowlisted, already direct, a one-time link, or a wrapper that can't be decoded. Paste it into the <b>Link Inspector</b> to see exactly why.</td></tr>
+<tr><td>Toolbar button shows ERR</td><td>Something needs attention, usually a list that couldn't be downloaded. The extension keeps using its current list and retries the next day. Details are in the application log.</td></tr>
+<tr><td>The toolbar icon is grey</td><td>No email is open in this tab, or protection is switched off. It lights up when you open an email.</td></tr>
+<tr><td>"Update now" says the lists are already up to date</td><td>Third-party lists are downloaded at most once a day, out of respect for the free projects that publish them.</td></tr>
+<tr><td>Nothing happens in Outlook, Yahoo, Zoho, iCloud, Fastmail, GMX or Proton</td><td>Support for these apps is experimental. Check that the app is switched on under Settings → Other webmail, reload the tab, and if links are still not checked please report it with the application log.</td></tr>
+<tr><td>An email you trust was moved to Spam</td><td>Open Spam and click <b>Not spam</b>: it won't be moved again. <b>Logging → Moved to Spam</b> (or pointing at its sender label) shows why it was flagged. To trust the sender from now on, add the address or domain to <b>Settings → Senders → Trusted senders</b>.</td></tr>
+<tr><td>A sender has no icon</td><td>Neither its site, its parent domain nor DuckDuckGo's icon service has one (or <b>Stand-in icon for sites without their own</b> is off), so a blank space is shown; it's asked about again in a week. At <b>Offline only</b> no icon is requested.</td></tr>
+<tr><td>Emails from a flagged sender stay in the inbox</td><td>Moves happen only in the inbox, while you aren't typing and have no emails selected, and only for <b>flagged</b> senders (not unverified or caution). Check that <b>Move emails from flagged senders to Spam</b> is on. If Gmail doesn't respond to Report spam, moving pauses (15 seconds, then longer each time, up to 10 minutes) and tries again by itself; the application log says so. No reload is needed.</td></tr>
+<tr><td>No flag next to a sender</td><td>The country is known only for read emails (from Gmail's delivery record), for domain endings that name a country, or where the sender's website is hosted. At <b>Offline only</b> only the domain ending is used.</td></tr>
+<tr><td>A setting is greyed out with 🔒</td><td>Your organization manages it.</td></tr>
+<tr><td>Your own resolver doesn't work</td><td>Use its <b>Test</b> button; it shows the exact reply. Make sure you clicked <b>Save service</b> (this grants the browser access) and that the API key header is correct.</td></tr>
+<tr><td>Nothing happens in Gmail</td><td>Reload the Gmail tab after installing or updating the extension.</td></tr>
+<tr><td>"Reset my settings to defaults" left some settings unchanged</td><td>Those settings are managed by your organization; reset never changes them.</td></tr>
+</table>
+</section>
+
+
+<section id="help-limitations" class="help-section">
+<h2>Limitations and recommendations</h2>
+<p class="lead">What the extension can't do on its own, and how your own services fill the gaps. Which features run on which webmail is in <a href="#" data-help-link="compat">Which features work where</a>.</p>
+<table class="help-table">
+<tr><th style="width: 22%;">Area</th><th>Limitation</th><th style="width: 30%;">What helps</th></tr>
+<tr><td>Short-link lookups</td><td>The free public service (unshorten.me) rejects links longer than 100 characters (for example Google's c.gle links and many marketing links), limits how many new links it looks up per hour, may be blocked by company firewalls, can't expand links that need a sign-in, and sees each link it looks up. Google offers no API to expand short links.</td><td><b>Your own lookup service</b> (Settings → Your own services → Custom unshortener). It has no length limit and keeps links inside your organization.</td></tr>
+<tr><td>Company short links</td><td>Links like Google's c.gle can't be decoded offline. In Gmail they're trusted only when the email verifiably came from that company directly to you; otherwise, and in other webmail, they're mentioned in the banner at the top of the email (never marked one by one).</td><td>Your own lookup service, which can expand them.</td></tr>
+<tr><td>Threat checks</td><td>The built-in checks judge whole websites by name, not individual pages, so phishing pages on shared hosting (Google Docs, Firebase, Weebly…) aren't detected by them. Each service blocks different sites, and a network that blocks these services leaves links "not verified".</td><td>Your own threat resolver, for example <a href="#" data-help-link="deploy" data-help-anchor="deploy-webrisk">Google Web Risk</a>, which checks full addresses.</td></tr>
+<tr><td>Security-gateway links</td><td>Mimecast, Hornetsecurity, SpamTitan LinkLock, Vade, Intermedia/Proofpoint Essentials and Zix keep the destination on their own servers; it can't be read from the link. The gateway checks it when you click.</td><td>—</td></tr>
+<tr><td>Phishing simulations</td><td>Training emails (KnowBe4, Wizer…) are recognized only when your administrator has set rules for them: by their link domains in every webmail, or by header in Gmail. Otherwise they're checked like any email, so their links may be marked.</td><td>Your administrator: <code>managedPhishSimulationDomains</code>, <code>managedPhishSimulationRules</code>.</td></tr>
+<tr><td>Checking links before sending</td><td>Gmail only. A website that answers with an error page (such as “page not found”) still counts as working: only sites that don't answer at all, or have an invalid certificate, are reported. At the Offline only level just typos and look-alikes are checked. One-time links are never visited.</td><td>—</td></tr>
+<tr><td>Sender checks</td><td>Full in Gmail; basic on the other webmail (the sender is found through the page's accessibility labels, and checks that need the email's headers, such as DMARC, need Gmail). They prove which company's servers sent an email, not that its content is safe: attackers can make company systems send their text, and compromised accounts send genuine mail.</td><td>Stay alert to unexpected requests even from real companies.</td></tr>
+<tr><td>Phishing lists</td><td>Updated once a day, so brand-new phishing sites may not be listed yet.</td><td>—</td></tr>
+<tr><td>Sender icons and moving to Spam</td><td>Sender icons and labels: every supported webmail (basic outside Gmail; a row that doesn't show the sender's address gets none). Moving to Spam: Gmail only, in the web version; on other webmail a flagged email is marked and explained but never moved, because the extension doesn't click anything on a page it hasn't been tested on. Moving uses Gmail's own Report spam button, recognized by its label in English and several other languages or by Gmail's internal action number; if Gmail changes its page so the button can't be found, moving keeps pausing and retrying (and says so in the log) while the icons and warnings keep working. A phishing sender that is on no list and whose domain no security service blocks yet isn't flagged. Report spam also tells Google about the sender and teaches Gmail to send that sender's mail to Spam, as it does when you click it; <b>Not spam</b> undoes that. Moves wait until you've been idle in Gmail for 10 seconds.</td><td>Trusted senders (<code>managedTrustedSenders</code>) for false positives; Gmail's own Report spam for anything missed.</td></tr>
+<tr><td>Look-alike domains</td><td>Compared with about 65 commonly impersonated brands.</td><td>Your own blocklist for local brands.</td></tr>
+<tr><td>QR codes and attachments</td><td>Attachments are checked in Gmail only (up to 10 MB; PDFs up to 10 pages). In other webmail, only images the webmail hosts are read. Badly damaged QR codes may not decode.</td><td>—</td></tr>
+<tr><td>Other webmail</td><td>Outlook, Proton, Yahoo, AOL, Zoho, iCloud, Fastmail and GMX support is experimental: their layouts were mapped from public information. All sites share one engine; each gets the sender, Spam and Send features once its entry describes its inbox list, toolbar and compose window (see <a href="#" data-help-link="compat">Which features work where</a>). Proton Mail encrypts messages, so header checks can't run there.</td><td>Report problems with the application log.</td></tr>
+<tr><td>Tracking pixels</td><td>Clicking a tracked link still tells the sender you clicked; images inside attachments aren't checked.</td><td>—</td></tr>
+<tr><td>Private and Offline levels</td><td>Short links aren't looked up at all, not even by your own lookup service, so their destination stays unknown; at Offline the threat checks are off too.</td><td>To keep lookups inside your organization, use the Standard level with your own lookup service and turn off the unshorten.me fallback (Settings → Your own services).</td></tr>
+</table>
+</section>
+
+<section id="help-deploy" class="help-section">
+<h2>Deploying in organizations</h2>
+<p class="lead">Install the extension for everyone automatically and set (or lock) its settings centrally: with Google Workspace for Chrome, and with Microsoft Intune for Microsoft Edge (or Chrome on Windows).</p>
+<div class="callout-warn"><b>Before you start.</b> Admin consoles change their menus from time to time; the paths below describe the 2026 consoles and may be worded slightly differently in yours. Always test with a small pilot group first and check the result at <code>chrome://policy</code> or <code>edge://policy</code>.</div>
+
+<h3 id="deploy-prepare">1. Choose how the extension is distributed</h3>
+<ul class="simple-list">
+  <li><b>Chrome Web Store</b> (recommended for Chrome): publish it as <i>Public</i>, <i>Unlisted</i>, or <i>Private</i> (visible only to your Google Workspace domain). Its <b>extension ID</b> is the 32-letter code in the store address.</li>
+  <li><b>Microsoft Edge Add-ons</b> (recommended for Edge): publish it there (it can be hidden from search). It gets a different extension ID from the Chrome Web Store version.</li>
+  <li><b>Chrome Web Store version in Edge:</b> Edge can also force-install the Chrome Web Store version by its Chrome ID and the Chrome update address below.</li>
+  <li><b>Self-hosting</b> (packed .crx plus an update manifest on your own web server) works only on managed devices; the stores are simpler and update automatically.</li>
+</ul>
+<p>Update addresses used in install policies:</p>
+<div class="deploy-code">Chrome Web Store:  https://clients2.google.com/service/update2/crx
+Edge Add-ons:      https://edge.microsoft.com/extensionwebstorebase/v1/crx</div>
+<p>The extension's settings are delivered as <b>extension policy</b>: every setting has a policy key (listed in the <a href="#" data-help-link="architecture" data-help-anchor="arch-settings">settings reference</a> and in <code>schema.json</code>). A policy value always wins and appears with 🔒 to the user; anything you don't set stays under the user's control.</p>
+
+<h3 id="deploy-workspace">2. Google Workspace (Chrome browser and ChromeOS)</h3>
+<ol class="simple-list">
+  <li>In the Google Admin console, go to <b>Devices → Chrome → Apps &amp; extensions → Users &amp; browsers</b>. (To manage Chrome on computers where users don't sign in, enroll the browsers with Chrome Enterprise Core and use the <b>Managed browsers</b> tab instead.)</li>
+  <li>Select the <b>organizational unit</b> (or group) to deploy to; start with a pilot group.</li>
+  <li>Click <b>+ (Add)</b> → <b>Add from Chrome Web Store</b> and search for the extension, or <b>Add Chrome app or extension by ID</b> and enter its ID (for a self-hosted package also enter its update address).</li>
+  <li>Set the <b>Installation policy</b> to <b>Force install</b> (or <b>Force install + pin to browser toolbar</b>) so users can't remove it.</li>
+  <li>In the extension's settings panel, paste your settings into <b>Policy for extensions</b> as JSON. Generate it from <b>Settings → Backup &amp; Google Workspace → Copy as policy JSON</b> and delete the lines you don't want to lock. The format is:
+    <div class="deploy-code">{
+  "managedEnableThirdPartyResolution": { "Value": true },
+  "managedDnsCloudflareFamily":        { "Value": true },
+  "managedBlocklist":                  { "Value": ["tracking.example.com"] }
+}</div></li>
+  <li><b>Save</b>. Browsers pick up the change at their next policy refresh (usually within a few hours; users can speed it up at <code>chrome://policy</code> → <b>Reload policies</b>).</li>
+  <li><b>Check</b>: <code>chrome://extensions</code> shows "Installed by your administrator", <code>chrome://policy</code> lists the extension's policies, and Settings shows 🔒 on the locked options.</li>
+</ol>
+
+<h3 id="deploy-intune">3. Microsoft Edge with Microsoft Intune</h3>
+<p><b>A. Install the extension automatically.</b></p>
+<ol class="simple-list">
+  <li>In the Microsoft Intune admin center, go to <b>Devices → Configuration → Create → New policy</b>; platform <b>Windows 10 and later</b>, profile type <b>Settings catalog</b>.</li>
+  <li>Click <b>Add settings</b>, search for <b>Microsoft Edge</b> and open the <b>Extensions</b> category.</li>
+  <li>Enable <b>Control which extensions are installed silently</b> (the <code>ExtensionInstallForcelist</code> policy) and add one entry in the form <code>extension-ID;update-address</code>, for example:
+    <div class="deploy-code">&lt;Edge Add-ons ID&gt;;https://edge.microsoft.com/extensionwebstorebase/v1/crx
+&lt;Chrome Web Store ID&gt;;https://clients2.google.com/service/update2/crx</div>
+    (Use one of the two. Choose the device-level, not user-level, setting so it applies to everyone on the device.)</li>
+  <li>Alternatively, configure <b>Extension management settings</b> (<code>ExtensionSettings</code>) with JSON such as <code>{"&lt;ID&gt;": {"installation_mode": "force_installed", "update_url": "&lt;update address&gt;"}}</code>.</li>
+  <li><b>Assign</b> the profile to a pilot device or user group, then to everyone.</li>
+</ol>
+<p><b>B. Deliver the extension's settings.</b> Edge reads extension policy from the registry under <code>HKLM\SOFTWARE\Policies\Microsoft\Edge\3rdparty\extensions\&lt;ID&gt;\policy</code>. The Settings catalog doesn't cover third-party extension policy, so use a script:</p>
+<ol class="simple-list">
+  <li>In this extension, choose <b>Settings → Backup &amp; Google Workspace → Copy registry script</b>. It produces a PowerShell script with your current settings for both Edge and Chrome; replace the extension ID at the top with the ID you deploy.</li>
+  <li>In Intune, go to <b>Devices → Scripts and remediations → Platform scripts → Add → Windows 10 and later</b>, upload the .ps1 file, and set <b>Run this script using the logged on credentials: No</b> (runs as system) and <b>Run script in 64 bit PowerShell host: Yes</b>.</li>
+  <li><b>Assign</b> it to the same groups. To change settings later, upload a new version of the script (or use a <b>Remediation</b> that re-applies it on a schedule).</li>
+  <li><b>Check</b>: <code>edge://policy</code> lists the extension's policies; <code>edge://extensions</code> shows the extension as managed; Settings shows 🔒 on locked options.</li>
+</ol>
+<p>How values are written (the script does this for you): on/off settings as <code>REG_DWORD</code> 1/0, numbers as <code>REG_DWORD</code>, text as <code>REG_SZ</code>, and the allowed/blocked site lists as a subkey (for example <code>...\policy\managedBlocklist</code>) with values named <code>1</code>, <code>2</code>, <code>3</code>… each holding one site.</p>
+
+<h3 id="deploy-chrome-windows">4. Chrome on Windows with Intune (optional)</h3>
+<p>The same approach works for Google Chrome: in the Settings catalog choose <b>Google Chrome → Extensions → Configure the list of force-installed apps and extensions</b> (<code>ExtensionInstallForcelist</code>, entry <code>&lt;Chrome Web Store ID&gt;;https://clients2.google.com/service/update2/crx</code>). If the Google Chrome settings aren't listed, import Google's Chrome ADMX templates first. The registry script above already writes the settings for Chrome too (<code>HKLM\SOFTWARE\Policies\Google\Chrome\3rdparty\extensions\&lt;ID&gt;\policy</code>).</p>
+
+<h3 id="deploy-webrisk">5. Threat checks with Google Web Risk (Google Workspace)</h3>
+<p>Google's Web Risk API checks full addresses against Google's lists of phishing and malware pages (the data behind Google Safe Browsing). It needs a Google Cloud project with billing enabled; check Google's current Web Risk pricing first. <b>Note:</b> unlike the built-in checks, which only send site names, Web Risk receives the full link (one-time links are never sent).</p>
+<ol class="simple-list">
+  <li>In the Google Cloud console, sign in with your Google Workspace account and create or choose a project.</li>
+  <li><b>APIs &amp; Services → Library</b>: find <b>Web Risk API</b> and click <b>Enable</b>.</li>
+  <li><b>APIs &amp; Services → Credentials → Create credentials → API key</b>. Open the key, choose <b>Restrict key</b>, and under API restrictions allow only the Web Risk API.</li>
+  <li>In this extension: <b>Settings → Your own services → Custom threat resolver</b>:
+    <div class="deploy-code">Address:         https://webrisk.googleapis.com/v1/uris:search?threatTypes=MALWARE&amp;threatTypes=SOCIAL_ENGINEERING&amp;threatTypes=UNWANTED_SOFTWARE&amp;uri={url}
+Method:          GET
+Request headers: X-Goog-Api-Key: YOUR_API_KEY
+Flag field:      (leave empty: Google's replies are recognized automatically)</div>
+    Click <b>Save service</b>, then <b>Test resolver</b>. Matches show as, for example, "Phishing (Google Web Risk)".</li>
+  <li>To deploy it to everyone, add it to your policy (the key is hidden from users and never included in backups):
+    <div class="deploy-code">"managedDohEndpoint": { "Value": "https://webrisk.googleapis.com/v1/uris:search?threatTypes=MALWARE&amp;threatTypes=SOCIAL_ENGINEERING&amp;threatTypes=UNWANTED_SOFTWARE&amp;uri={url}" },
+"managedDohMethod":   { "Value": "GET" },
+"managedDohHeaders":  { "Value": "X-Goog-Api-Key: YOUR_API_KEY" }</div></li>
+</ol>
+<p>Google Safe Browsing (v4, <code>threatMatches:find</code>) is also understood, but Google limits it to non-commercial use; organizations should use Web Risk. <b>Short links:</b> Google has no API to expand them; use your own lookup service (<a href="#" data-help-link="limitations">Limitations</a>).</p>
+
+<h3 id="deploy-settings">6. What can be managed</h3>
+<p>Every setting, both site lists (allowed and blocked) and both custom services can be set and locked. Anything you don't set stays under the user's control, and <b>Reset my settings to defaults</b> never changes managed settings.</p>
+<ul class="simple-list">
+  <li><b>Settings and lists:</b> all keys are in the <a href="#" data-help-link="architecture" data-help-anchor="arch-settings">settings reference</a> (generated from the code), in <code>schema.json</code> and in <code>ADMIN-GUIDE.md</code> in the extension package.</li>
+  <li><b>Your own services:</b> <code>managedUnshortenerEndpoint</code> and <code>managedDohEndpoint</code> with their method, body and header keys. Headers (API keys) set by policy are masked from users and never included in backups.</li>
+  <li><b>Host access for your own services:</b> Chrome can't grant access to a custom service by policy, so the service should send CORS headers, or users approve a one-time prompt.</li>
+  <li><b>Senders (Gmail):</b> sender icons, country flags, sender checks, moving flagged emails to Spam and the notice can each be set and locked (<code>managedEnableSenderIdentity</code>, <code>managedEnableSenderIconFallback</code>, <code>managedEnableSenderAvatars</code>, <code>managedEnableSenderCountry</code>, <code>managedEnableSenderDomainCheck</code>, <code>managedEnableSenderAddressCheck</code>, <code>managedEnableAutoSpam</code>, <code>managedEnableSpamNotice</code>), and <code>managedTrustedSenders</code> is the allow list of senders never flagged or moved (addresses or domains). Training emails matched by <code>managedPhishSimulationDomains</code> or <code>managedPhishSimulationRules</code> are never moved.</li>
+  <li><b>Webmail apps:</b> each supported webmail can be switched on or off (<code>managedEnableOutlookSupport</code>, <code>managedEnableYahooSupport</code> and so on).</li>
+  <li><b>Changes</b> to policy apply without reinstalling, from the next message opened.</li>
+</ul>
+
+<h3 id="deploy-admin-only">7. Administrator-only policies</h3>
+<p>These exist only in the policy; there's no setting for them here, and they aren't in backups or in <b>Copy as policy JSON</b>. Full details and examples are in <code>ADMIN-GUIDE.md</code>.</p>
+<ul class="simple-list">
+  <li><code>managedHidePopupSettingsButton</code> and <code>managedHideRecentActivity</code> remove the <b>Open Settings</b> button and the <b>Recent activity</b> list from the toolbar popup. Settings stays reachable by typing <code>chrome-extension://<span class="ext-id">nnbeoijlicodfplamcelmdlkjggddfla</span>/options.html</code> in the address bar.</li>
+  <li><code>managedPhishSimulationDomains</code> (every webmail) lists your training vendor's link domains. An email whose links <b>all</b> go to those domains (after unwrapping SafeLinks, Proofpoint and similar) is left completely unchecked; one link anywhere else and it's checked as usual, so real phishing can't hide behind a training link. Shared platforms (such as <code>docs.google.com</code>, <code>sharepoint.com</code>, <code>bit.ly</code> or cloud hosting) are refused, with a warning in the log.</li>
+  <li><code>managedPhishSimulationRules</code> (Gmail) lists your phishing-simulation (security training) emails, for example from KnowBe4 or Wizer, by the header the vendor adds, a secret value in it, and/or the vendor's sending addresses. In Gmail, a matching email is left completely unchecked: no link is looked up (which the vendor could record as a click), no tracking pixel is blocked and no warning is shown. Use a secret value or the sending addresses: a public header name alone could be copied by real phishing.</li>
+</ul>
+<div class="deploy-code">"managedPhishSimulationDomains": { "Value": ["ssuport.com", "the-verification.com"] },
+"managedPhishSimulationRules": { "Value": [
+  { "name": "KnowBe4", "header": "X-KB4TOKEN", "value": "YOUR-KSAT-TOKEN" },
+  { "name": "Wizer", "header": "X-TestPhish", "ips": ["&lt;Wizer's sending addresses&gt;"] }
+] }</div>
+
+<p><b>Best practice:</b> use both identifiers: the vendor's link domains (every webmail) and a header rule with a secret value (Gmail). List only domains the vendor owns, and keep the list current. <code>ADMIN-GUIDE.md</code> has a best-practice checklist and step-by-step setups for KnowBe4 and Wizer, with links to their documentation.</p>
+
+<h3 id="deploy-tips">8. Tips</h3>
+<ul class="simple-list">
+  <li><b>Lock only what matters.</b> Settings you leave out of the policy keep their defaults and remain adjustable by users.</li>
+  <li><b>API keys</b> for your own resolver or unshortener can be delivered by policy (<code>managedDohHeaders</code>, <code>managedUnshortenerHeaders</code>); users see them masked and they are never included in backups.</li>
+  <li><b>No third-party requests at all:</b> set <code>managedEnableThirdPartyResolution</code>, <code>managedEnableDnsThreatCheck</code>, <code>managedEnableRemoteListSync</code> and <code>managedEnablePhishingFeeds</code> to <code>false</code>; nothing then leaves the browser.</li>
+  <li><b>Network filters:</b> allow the services listed under <a href="#" data-help-link="architecture" data-help-anchor="arch-network">every network request</a>, or deliver your own resolver and unshortener by policy.</li>
+  <li><b>Troubleshooting:</b> if a setting isn't applied, compare its name with the settings reference (names are case-sensitive) and look at <code>chrome://policy</code> / <code>edge://policy</code>, which marks invalid values.</li>
+</ul>
+</section>
+
+<section id="help-architecture" class="help-section">
+<h2>Architecture deep dive</h2>
+<p class="lead">How the extension is built and what it does with every link, in full. Tables marked <span class="live-tag">LIVE</span> are generated from the running code, so they always match the version installed.</p>
+<div class="toc" id="archToc"></div>
+
+<h3 id="arch-features">Features</h3>
+<p>Everything the extension does, by area. The sections after this one explain how each part works.</p>
+<h4>Links</h4>
+<ul class="simple-list">
+  <li><b>Offline decoding</b> of 50+ link wrappers on your device, up to 6 layers deep: email security gateways (Microsoft Safe Links, Proofpoint, Mimecast (domain only), Barracuda, Sophos, Trend Micro, Symantec, Cisco, Check Point Avanan, Libraesva, Forcepoint), search and social redirects (Google, Bing, Yahoo, DuckDuckGo, Facebook, Instagram, LinkedIn, Slack, YouTube, Google Meet…), ad and affiliate trackers, and links that carry their destination as encoded data.</li>
+  <li><b>Short links</b> (bit.ly and 1,700+ other shorteners) looked up with your organization's own service if configured, otherwise unshorten.me; skipped for one-time links and at the Private and Offline levels.</li>
+  <li><b>One-time link protection:</b> password-reset, sign-in and unsubscribe links are never sent anywhere, cached or logged in full, so they can't be used up.</li>
+  <li><b>Email click trackers</b> (SendGrid, Brevo, Klaviyo, Mailchimp, HubSpot…) recognized and never sent anywhere automatically; 🔍 reveals the destination on request.</li>
+  <li><b>Threat checks</b> of every destination with free filtering resolvers: Quad9, Cloudflare Security and Family, Control D, optionally DNS4EU, with AdGuard as backup, or your own service.</li>
+  <li><b>Phishing lists</b> (OpenPhish community feed, Phishing Army) downloaded once a day and matched on your device.</li>
+  <li><b>Look-alike domains</b> that imitate well-known brands: look-alike letters, one-letter typos, "brand.com.something.xyz" and brand names next to words like "login".</li>
+  <li><b>Misleading links</b> in two levels: <i>Caution</i> (amber) for text that shows a different site, raw IP addresses and unusual characters; <i>Danger</i> (red) for look-alike brand domains, text showing a brand's address while going elsewhere, and hidden user names (<code>user@site</code>). Companies' own domains count as one (Gmail and Google, Microsoft and aka.ms…), and file names such as "meson.build" or "README.md" in link text are recognized as files, not websites.</li>
+  <li><b>Cloud-storage phishing pages</b> (Google Cloud Storage, Firebase, S3, Azure, R2, IPFS) flagged, with hidden "#" data decoded; 🔍 reads the page's code (without running it) to find where it redirects.</li>
+  <li><b>Checking links before sending (Gmail):</b> when you press Send (or Ctrl/⌘+Enter), the links you wrote are checked for typos in their ending or beginning, websites that don't exist or don't answer, text showing another site, and look-alike, phishing or malware sites. Problems are listed with <b>Go back and fix</b> or <b>Send anyway</b>; emails without links send at once.</li>
+  <li><b>Sender checks (Gmail):</b> company-only links (c.gle…) whose destination is unknown are trusted only in email Gmail verified as sent by that company directly to you; sender names impersonating brands, brand domains failing verification, look-alike sender domains and scam text in genuine company notifications are flagged. Gmail's verdict is read from the message itself, only when needed.</li>
+  <li><b>Sign-in links that redirect elsewhere</b> (real Microsoft or Google sign-in pages used as redirectors) are marked Caution.</li>
+  <li><b>Code links</b> (<code>javascript:</code>, <code>data:</code>, <code>vbscript:</code>, <code>blob:</code>, <code>file:</code>) disabled.</li>
+  <li><b>Your own lists:</b> sites you always trust (allowed) or always block, with the destination of blocked links hidden until you choose to reveal it.</li>
+  <li><b>Tracking parameters</b> (utm_… and similar) removed from destinations.</li>
+</ul>
+<h4>QR codes and attachments</h4>
+<ul class="simple-list">
+  <li><b>QR codes in email images</b> read on your device (Chrome's built-in reader where available, otherwise the bundled decoder) and checked like links; "DO NOT SCAN" when dangerous.</li>
+  <li><b>QR codes drawn without an image</b> (HTML tables or block characters) found and decoded.</li>
+  <li><b>Attachments</b> (Gmail, up to 10 MB): QR codes and links in images and PDFs (first 10 pages); scripts, redirects and fake login forms in SVG and HTML files; links in calendar invites; password-protected archives; file names disguised with hidden characters.</li>
+</ul>
+<h4>Tracking pixels</h4>
+<ul class="simple-list">
+  <li>Known open-tracking addresses blocked at any size; otherwise only tiny or hidden images, so real pictures stay.</li>
+  <li>Choice between removing pixels and just neutralizing them.</li>
+</ul>
+<h4>Where it works</h4>
+<ul class="simple-list">
+  <li>Gmail (full support), plus Outlook on the web, Proton Mail, Yahoo Mail, AOL Mail, Zoho Mail, iCloud Mail, Fastmail and GMX (experimental, each can be switched off).</li>
+  <li>Chrome and Microsoft Edge.</li>
+</ul>
+<h4>Privacy and control</h4>
+<ul class="simple-list">
+  <li>Three privacy levels: Standard, Private (only site names are checked) and Offline only (nothing leaves the browser).</li>
+  <li>Results cached for a set time; history, cache and logs deleted automatically after a period you choose.</li>
+  <li>Backup and restore of settings (API keys are never included).</li>
+  <li>Application log of every problem and event, with export for support.</li>
+</ul>
+<h4>For organizations</h4>
+<ul class="simple-list">
+  <li>Every setting, list and custom service can be set and locked by policy (Google Workspace, Microsoft Intune, Group Policy); managed settings show 🔒 and are never changed by a reset.</li>
+  <li>One-click export as Google Workspace policy JSON or as a Windows registry script for Intune.</li>
+  <li>Your own short-link and threat-check services, with API keys hidden from users.</li>
+</ul>
+<h4>Using it</h4>
+<ul class="simple-list">
+  <li>Toolbar icon in color with a count while an email is being checked, grey otherwise; the popup shows the open email's links (scanned, safe, unsafe, not verified, unscanned) and pixels.</li>
+  <li>Light and dark appearance (follows the system by default).</li>
+  <li>Link Inspector: paste any link to see every decoding step and the check result.</li>
+  <li>Help that explains every warning, and this deep dive with tables generated from the running code.</li>
+</ul>
+<h4>Accessibility</h4>
+<ul class="simple-list">
+  <li>Designed to meet WCAG 2.1 level AA: text contrast of at least 4.5:1 (3:1 for controls) in both light and dark appearance, checked automatically on every page.</li>
+  <li>Fully usable with the keyboard: visible focus outline, arrow keys between tabs, Escape closes dialogs.</li>
+  <li>Screen-reader names for every switch, field and button; tabs, menus and dialogs announce what they are.</li>
+  <li>Follows the system's "reduce motion" setting.</li>
+</ul>
+<h4>Efficiency and reliability</h4>
+<ul class="simple-list">
+  <li>Links to the same site share one set of checks; results and settings are cached in memory; log and history writes are batched (an email with 100 links costs about 100 storage reads and 2 writes).</li>
+  <li>QR and PDF scanning runs in a hidden page only when needed, at most two at a time, and closes when idle; only likely QR images are scanned.</li>
+  <li>Third-party lists at most once a day, with safeguards against broken or tampered downloads and a bundled fallback list.</li>
+</ul>
+
+
+<h3 id="arch-principles">Design principles</h3>
+<ul class="simple-list">
+  <li><b>Local first.</b> Everything that can be worked out on the device is: 50+ wrapper formats are decoded offline before any network request is considered.</li>
+  <li><b>The destination is never contacted.</b> The extension never requests a link's own server. Short links are expanded by a lookup service; threat checks send only a hostname to DNS resolvers.</li>
+  <li><b>Fail safe, never fail "safe".</b> Anything that can't be checked is "not verified", never "safe". Unreadable replies count as no answer. A decoder that doesn't recognize a format leaves the link unchanged.</li>
+  <li><b>One-time links are protected.</b> One-time links are never sent anywhere, cached or logged in full, and only gateway decoders that return the complete original URL may touch them.</li>
+  <li><b>Untrusted input stays untrusted.</b> Email content, community lists, backup files and custom-service replies are validated, size-limited and parsed defensively.</li>
+  <li><b>No third-party code.</b> No libraries, no build step, no remote code, no analytics. Every line that runs is in the package.</li>
+  <li><b>Efficient by design.</b> Nothing runs in the background on a timer except the daily list update and cleanup. Settings are read once and kept in memory until they change; each site is checked once even when many links point to it; log, history and cache writes for a whole email are combined into one storage write; the toolbar badge updates once per burst; and state for messages Gmail has closed is released.</li>
+</ul>
+
+<h3 id="arch-components">Components</h3>
+<div class="diagram-wrap">
+<svg viewBox="0 0 860 400" class="arch-diagram" role="img" aria-label="Component diagram">
+  <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill: var(--text-muted)"/></marker></defs>
+  <rect x="10" y="20" width="250" height="150" rx="10" class="box-gmail"/>
+  <text x="25" y="45" class="t-title">Gmail tab</text>
+  <text x="25" y="68" class="t-mono">content script (isolated world)</text>
+  <text x="25" y="90" class="t-body">shared.js · content.js</text>
+  <text x="25" y="112" class="t-body">• watches for opened messages</text>
+  <text x="25" y="132" class="t-body">• rewrites / marks links, pixels</text>
+  <text x="25" y="152" class="t-body">• misleading-link checks</text>
+  <rect x="10" y="230" width="250" height="150" rx="10" class="box-ui"/>
+  <text x="25" y="255" class="t-title">Options page · Popup</text>
+  <text x="25" y="278" class="t-mono">extension pages</text>
+  <text x="25" y="300" class="t-body">options.js · help.js · popup.js</text>
+  <text x="25" y="322" class="t-body">• settings, Inspector, logs</text>
+  <text x="25" y="342" class="t-body">• visual toggle, counts</text>
+  <rect x="320" y="20" width="250" height="250" rx="10" class="box-sw"/>
+  <text x="335" y="45" class="t-title">Service worker</text>
+  <text x="335" y="68" class="t-mono">background (MV3)</text>
+  <text x="335" y="90" class="t-body">background.js · decoders.js</text>
+  <text x="335" y="110" class="t-body">custom-endpoints.js · shared.js</text>
+  <text x="335" y="136" class="t-body">• link pipeline (resolveLink)</text>
+  <text x="335" y="156" class="t-body">• offline decoders</text>
+  <text x="335" y="176" class="t-body">• threat checks, lookups</text>
+  <text x="335" y="196" class="t-body">• list sync, safeguards</text>
+  <text x="335" y="216" class="t-body">• logging, cleanup alarms</text>
+  <text x="335" y="236" class="t-body">• badge</text>
+  <rect x="320" y="310" width="250" height="78" rx="10" class="box-store"/>
+  <text x="335" y="335" class="t-title">chrome.storage</text>
+  <text x="335" y="356" class="t-body">local: settings, cache, logs</text>
+  <text x="335" y="373" class="t-body">managed: Workspace policy</text>
+  <rect x="630" y="20" width="220" height="80" rx="10" class="box-ext"/>
+  <text x="645" y="45" class="t-title">Link lookup</text>
+  <text x="645" y="68" class="t-body">custom unshortener</text>
+  <text x="645" y="88" class="t-body">unshorten.me (fallback)</text>
+  <rect x="630" y="120" width="220" height="120" rx="10" class="box-ext"/>
+  <text x="645" y="145" class="t-title">Threat checks (DoH)</text>
+  <text x="645" y="168" class="t-body">1.1.1.1 reference · Quad9</text>
+  <text x="645" y="188" class="t-body">Cloudflare Security / Family</text>
+  <text x="645" y="208" class="t-body">AdGuard (backup) · custom</text>
+  <text x="645" y="228" class="t-mono">hostname only*</text>
+  <rect x="630" y="260" width="220" height="60" rx="10" class="box-ext"/>
+  <text x="645" y="285" class="t-title">Shortener lists</text>
+  <text x="645" y="305" class="t-body">raw.githubusercontent.com</text>
+  <line x1="262" y1="85" x2="318" y2="85" class="arrow" marker-start="url(#ah)" marker-end="url(#ah)"/>
+  <text x="268" y="78" class="t-small">messages</text>
+  <line x1="262" y1="300" x2="318" y2="230" class="arrow" marker-start="url(#ah)" marker-end="url(#ah)"/>
+  <line x1="445" y1="272" x2="445" y2="308" class="arrow" marker-start="url(#ah)" marker-end="url(#ah)"/>
+  <line x1="262" y1="350" x2="318" y2="350" class="arrow" marker-end="url(#ah)"/>
+  <line x1="135" y1="228" x2="135" y2="172" class="arrow" marker-end="url(#ah)"/>
+  <text x="142" y="204" class="t-small">popup → Gmail tab</text>
+  <line x1="572" y1="60" x2="628" y2="60" class="arrow" marker-end="url(#ah)"/>
+  <line x1="572" y1="180" x2="628" y2="180" class="arrow" marker-end="url(#ah)"/>
+  <line x1="572" y1="250" x2="628" y2="290" class="arrow" marker-end="url(#ah)"/>
+  <text x="630" y="345" class="t-small">* a custom threat resolver may be</text>
+  <text x="630" y="360" class="t-small">configured to receive {url}; one-time</text>
+  <text x="630" y="375" class="t-small">links still send only their origin</text>
+</svg>
+</div>
+<div id="archFiles"></div>
+
+<h3 id="arch-engine">The mail engine and webmail entries <span class="live-tag">LIVE</span></h3>
+<p>One engine in <code>content.js</code> handles every webmail. Everything that differs between sites is data in that site's entry of <code>WEBMAIL_SITES</code> (<code>shared.js</code>): where message bodies are; how the image proxy keeps original addresses; and, in the entry's <code>mail</code> profile, how the inbox list, conversation and message ids, the opened email's sender, the toolbar and Report spam, the inbox and Spam views, the signed-in account, the original source and the compose window are found. <span class="fn">mailCapabilities</span> turns an entry into what the engine may do there; the same function draws the <a href="#" data-help-link="compat">compatibility chart</a>. Header lines are trusted only from the receiving mail system the entry names; with none, no header line is trusted. A site without a profile still gets every check inside opened emails.</p>
+<div id="archEngine"></div>
+
+<h3 id="arch-pipeline">The link pipeline, step by step</h3>
+<p>From the moment a message opens to the moment a link is marked. Function names refer to the source files.</p>
+<ol class="pipeline">
+  <li><b>Detect</b> <span class="fn">content.js · MutationObserver</span> A single observer on <code>document.body</code> watches for the webmail inserting a message body (its entry's <code>body</code> selector; Gmail's is <code>.ii.gt</code>) and, where the entry describes one, inbox rows. Bursts of changes are debounced (350 ms), then the scan runs once.</li>
+  <li><b>Prepare</b> <span class="fn">unshortenLinks</span> Settings are fetched from the service worker (<code>getSettings</code>). Hidden links are disabled, tracking pixels handled, then every <code>&lt;a&gt;</code> with an http(s) host other than mail.google.com is sent once per unique address (<code>resolveUrl</code>), together with its visible text, image alt text and aria-label (used for one-time detection).</li>
+  <li><b>Blocklist</b> <span class="fn">resolveLink · blocklistHit</span> If the link's own host is blocklisted, the answer is immediate: flagged, destination hidden, nothing decoded, checked or sent. A later reveal re-enters the pipeline with <code>reveal: true</code> (as does revealing an email tracking link).</li>
+  <li><b>Allowlist</b> The link is decoded offline; if both it and its destination are allowlisted, it is left untouched.</li>
+  <li><b>Cache</b> Ordinary links are answered from the local cache when possible; the blocklist is re-applied to cached destinations.</li>
+  <li><b>Decode offline</b> <span class="fn">decoders.js · unwrapNestedUrl</span> Up to six layers are peeled, trying gateway decoders first, then the redirect table, JSON payloads, base64, query parameters and path-embedded URLs. For one-time links only gateway decoders run.</li>
+  <li><b>One-time check</b> <span class="fn">isSingleUseToken</span> The outer link, the decoded link (twice URL-decoded) and the link text are matched against the patterns listed <a href="#" data-help-anchor="arch-onetime">below</a>. A one-time link skips straight to the threat check with its full address withheld from every service.</li>
+  <li><b>Eligibility</b> <span class="fn">networkEligibility</span> If the destination is still hidden, the rules below decide whether it may be looked up online.</li>
+  <li><b>Look up</b> <span class="fn">lookupShortLink</span> Custom unshortener first (if set), then unshorten.me (if allowed). The result is re-checked for one-time patterns.</li>
+  <li><b>Clean</b> <span class="fn">cleanTrackingParams</span> <code>utm_*</code>, <code>fbclid</code>, <code>gclid</code>, <code>mc_cid</code>, <code>mc_eid</code> and <code>_bta_tid</code> are removed, only when present (the URL is otherwise left byte-for-byte).</li>
+  <li><b>Assess</b> <span class="fn">assessSafety · checkDomainSafety</span> Blocklist first, then the destination and (if different) the link's own host are checked in parallel; the worse result wins, so the verdict is valid whichever address the click actually reaches.</li>
+  <li><b>Record</b> Conclusive results are cached; inconclusive, blocklisted and revealed ones never are. History and the activity feed are updated; problems go to the error log.</li>
+  <li><b>Show</b> <span class="fn">content.js · detectLinkProblem · applyLinkStyles</span> Misleading-link checks run against the visible text, then the link is rewritten or marked. The sender's original styling and markup are saved and restored exactly when highlights are switched off.</li>
+</ol>
+
+<h3 id="arch-decoders">Offline decoders <span class="live-tag">LIVE</span></h3>
+<p>Each decoder recognizes its format by the <b>parsed hostname</b> (exact host or real subdomain) plus the path, never by text elsewhere in the URL, so <code>https://evil.example/?x=urldefense.com</code> is not treated as Proofpoint. Decoded results must be valid http(s) URLs. Order matters: the first decoder that matches wins, then the loop repeats on the result.</p>
+<div id="archDecoders"></div>
+
+<h3 id="arch-onetime">One-time link detection <span class="live-tag">LIVE</span></h3>
+<p>A link is treated as one-time if any of these regular expressions match. The patterns deliberately err on the side of caution: a false positive only means a link isn't looked up.</p>
+<div id="archOneTime"></div>
+
+<h3 id="arch-lookup">Short-link lookup rules</h3>
+<p>Evaluated in order by <code>networkEligibility</code>; the first rule that applies decides.</p>
+<ol class="simple-list">
+  <li>"Look up short links online" off → never.</li>
+  <li>Email-provider tracker → only when the user reveals it with its 🔍 (and "Offer to reveal email tracking links" is on). Never automatically: it is unique to the recipient, following it registers a click, and it may wrap an unsubscribe or sign-in link.</li>
+  <li>Blocklisted host → only when the user reveals it.</li>
+  <li>Built-in public shortener → yes.</li>
+  <li>Domain only on a synced community list → only if the URL has a short-link shape (no query or fragment, one or two path segments of up to 32 characters).</li>
+  <li>Unknown domain that looks like a short link (two-label domain with a two-letter country ending, one 4–12 character code with digits or mixed case) → yes.</li>
+  <li>Anything else → no request.</li>
+</ol>
+<p>The lookup chain is the custom unshortener (if configured), then unshorten.me unless its fallback is switched off. Custom replies are read from the configured field or common fields (<code>resolved_url</code>, <code>long_url</code>, <code>final_url</code>, <code>destination</code>…, one level deep) or a plain-text URL; a reply that merely echoes the request is ignored.</p>
+
+<h3 id="arch-threats">Threat-check engine <span class="live-tag">LIVE</span></h3>
+<p>For each hostname, a non-filtering reference lookup and all enabled services run in parallel. Filtering resolvers signal a block by answering with a sinkhole address (<code>0.0.0.0</code>, <code>127.0.0.1</code>); Quad9 answers NXDOMAIN, which is told apart from a genuinely missing domain by the reference lookup.</p>
+<div id="archResolvers"></div>
+<ul class="simple-list">
+  <li><b>unsafe</b> if any security or content service blocks it; <b>unknown</b> ("not verified") if no security service answered or the domain doesn't exist; otherwise <b>safe</b>.</li>
+  <li>The AdGuard backup is asked only when no primary security service answered; its blocks are ignored for known email-tracker and shortener hosts, which it blocks by design.</li>
+  <li>Conclusive verdicts (<b>safe</b> from the primary services, or <b>unsafe</b>) are kept in memory for <span data-live="SAFE_CACHE_MS" data-format="hours"></span> (at most 1,000 sites, cleared whenever settings change); <b>unknown</b> is never kept. Links to the same site checked at the same moment share one round of requests. A custom resolver that receives full URLs is cached per URL rather than per host.</li>
+  <li>Custom-resolver replies are understood for DNS-over-HTTPS JSON, Safe Browsing (<code>matches</code>, <code>{}</code> = clean), URLhaus (<code>query_status</code>), simple <code>malicious</code>/<code>blocked</code> fields, or a configured flag field. Anything else (e.g. an invalid-key error) counts as no answer.</li>
+  <li>Timeouts: 6 s per DNS request, 10 s per link lookup, 15 s per list download. Requests are made without cookies.</li>
+</ul>
+
+<h3 id="arch-checks">Misleading-link and pixel heuristics</h3>
+<ul class="simple-list">
+  <li><b>Misleading links</b> (<code>detectLinkProblem</code>): <code>user:password@</code> hosts; IPv4 or IPv6 literal hosts; any <code>xn--</code> (punycode) label; and link text that names a domain whose registrable domain differs from the destination's. Registrable domains are approximated without the full public-suffix list (two-letter country endings with common second levels such as <code>co.uk</code>). Text that ends in a file extension (<code>report.pdf</code>), equals the link's own domain, or points through an unresolved built-in tracker is not compared.</li>
+  <li><b>Hidden links</b>: inline <code>font-size</code> that parses to 0, or <code>opacity</code> ≤ 0.01.</li>
+  <li><b>Tracking pixels</b>: the original image URL is recovered from Gmail's proxy (after <code>#</code>). An image is a pixel if its host is a built-in tracker or blocklisted, its host or path follows tracker conventions, or its size marks it as a beacon: any dimension over 20 px is never a pixel; ≤ 3×8, area ≤ 24 px², a single dimension ≤ 3 px, inline-hidden or inside a collapsed zero-height box is. Images whose size is unknown are re-checked when they finish loading. Allowlisted hosts are skipped.</li>
+</ul>
+
+<h3 id="arch-lists">Community shortener lists <span class="live-tag">LIVE</span></h3>
+<p>Synced daily and treated as untrusted. Each list is tracked separately so one failing never removes the other's domains.</p>
+<div id="archLists"></div>
+
+<h3 id="arch-network">Every network request <span class="live-tag">LIVE</span></h3>
+<p>This is the complete list. Nothing else is ever contacted.</p>
+<div id="archNetwork"></div>
+
+<h3 id="arch-messages">Internal messages</h3>
+<p>Components talk over <code>chrome.runtime</code> messaging; the service worker accepts log entries only from this extension's own pages and scripts.</p>
+<div id="archMessages"></div>
+
+<h3 id="arch-storage">Storage layout</h3>
+<div id="archStorage"></div>
+
+<h3 id="arch-logging">Logging model <span class="live-tag">LIVE</span></h3>
+<div id="archLogging"></div>
+
+<h3 id="arch-settings">Settings and policy reference <span class="live-tag">LIVE</span></h3>
+<p>Every setting, its Workspace policy key, type and default. A policy value always wins and locks the setting; an empty policy string counts as "not set".</p>
+<div id="archSettings"></div>
+
+<h3 id="arch-platform">Platform APIs and resources</h3>
+<div id="archPlatform"></div>
+
+<h3 id="arch-state">This installation right now <span class="live-tag">LIVE</span></h3>
+<div id="archState"></div>
+</section>
+
+<section id="help-permissions" class="help-section">
+<h2>Permissions</h2>
+<p>Chrome shows these when the extension is installed or updated. Each one is used only for what is listed here.</p>
+<table class="help-table">
+<tr><th style="width: 32%;">Permission</th><th>Why it's needed</th></tr>
+<tr><td>Gmail and the supported webmail sites<br><span style="font-size: 11px;">mail.google.com, Outlook, Proton, Yahoo, AOL, Zoho, iCloud, Fastmail, GMX</span></td><td>Read the links, images and attachments of the message you have open, in your browser only.</td></tr>
+<tr><td><code>*.googleusercontent.com</code></td><td>Read email images through Google's image proxy (which Gmail already uses) to look for QR codes. The sender's server is never contacted.</td></tr>
+<tr><td>unshorten.me, Cloudflare, Quad9, Control D, DNS4EU, AdGuard</td><td>Short-link lookups and threat checks (see <a href="#" data-help-anchor="arch-network" data-help-link="architecture">every network request</a>).</td></tr>
+<tr><td>raw.githubusercontent.com, openphish.com, phishing.army</td><td>The shortener, phishing and scam-sender lists, downloaded at most once a day.</td></tr>
+<tr><td>raw.githubusercontent.com, tranco-list.eu</td><td>Look-alike senders: two public lists of popular sites (the Chrome UX Report top list and Tranco), their top 10,000 each, downloaded once a month. Nothing about you is sent. Off with <b>Catch look-alike senders</b>.</td></tr>
+<tr><td><code>data.iana.org</code> and the domain registries</td><td>Look-alike senders: only for a sender whose domain is one letter away from a protected one, or adds a word like "billing" to a popular site's name, its public registration date (RDAP), from that domain's registry, once a month per domain. Only the domain name is sent.</td></tr>
+<tr><td><code>www.google.com/s2</code>, <code>*.gstatic.com</code></td><td>Sender icons: Google's icon service, asked once per site (only the site name is sent) and remembered for 30 days; a site without one is asked about again weekly. Google's generic globe is never shown.</td></tr>
+<tr><td><code>*.googleusercontent.com</code></td><td>Sender photos and company logos: a colleague's photo, or the picture on a company's shared mailbox, that Gmail shows beside the sender in an opened email, fetched once from Google's image host (the same address Gmail loads it from) and checked again weekly. Verified BIMI logos are embedded in Gmail's page and are kept as they are, with no request at all. Off with <b>Sender photos and company logos</b>.</td></tr>
+<tr><td><code>1.1.1.1</code> and the company's logo server</td><td>Company logos from BIMI: the company's BIMI and DMARC records (its main domain name only, to Cloudflare's 1.1.1.1), then its logo, shown by the inbox page from the address the company publishes (records checked at most once a week per company; the browser keeps a copy of the picture as usual). The logo server sees your computer's IP address, as for any picture a web page shows (no cookies, no referrer). Off with <b>Company logos from BIMI</b>.</td></tr>
+<tr><td><code>icons.duckduckgo.com</code></td><td>Stand-in sender icons: asked only for a site that has no icon of its own (and whose parent domain has none either), at most once a week per site; only the site name is sent. Off with <b>Stand-in icon for sites without their own</b>.</td></tr>
+<tr><td><code>api.country.is</code></td><td>The country of a sending server for the sender flag (only its IP address is sent; at most once a month per address).</td></tr>
+<tr><td>Manage your extensions <span style="font-size: 11px;">(optional, <code>management</code>)</span></td><td>Not asked at install. Only when you press <b>Check installed extensions</b> or <b>Turn off …</b> in Settings → Other extensions does your browser ask you to allow it. It's used only to list installed extensions that do the same job as this one and to turn off the one you choose. Nothing about your extensions is sent anywhere. Firefox doesn't let extensions turn others off, so there you get the steps instead.</td></tr>
+<tr><td><code>storage.googleapis.com</code>, <code>firebasestorage.googleapis.com</code></td><td>Only when you click 🔍 on a cloud-storage link: reads that page's code to see where it redirects.</td></tr>
+<tr><td><code>storage</code> and <code>unlimitedStorage</code></td><td>Settings, cache, history, logs and the phishing lists (several MB), kept in this browser.</td></tr>
+<tr><td><code>alarms</code></td><td>The daily list updates and data cleanup.</td></tr>
+<tr><td><code>offscreen</code></td><td>A hidden page that reads QR codes and PDF attachments on this device; it closes itself when idle.</td></tr>
+<tr><td><code>activeTab</code></td><td>Lets the toolbar popup show the statistics of the tab you're looking at.</td></tr>
+<tr><td>Optional: any https site</td><td>Requested only when you save your own lookup or threat-check service, and only for that one host.</td></tr>
+</table>
+</section>
+
+<section id="help-about" class="help-section">
+<h2>About &amp; credits</h2>
+<p><b>S.P.R.U.C.E+</b> (Spam &amp; Phishing Risk URL Checker Extension+) · version <span id="aboutVersion"></span></p>
+                <p style="font-size: 14px; line-height: 1.6; color: var(--text-2);">
+                    <strong>Lead developer &amp; author:</strong> Darrell Swafford<br>
+                    <strong>Development assistance:</strong> AI Assisted using Google Gemini<br>
+                    <strong>Code review, security hardening &amp; redesign (v5.9 onward):</strong> Claude (Anthropic)<br>
+                    <strong>Inspiration &amp; pixel heuristics:</strong> <a href="https://github.com/trockerapp/trocker" target="_blank" rel="noopener noreferrer">Trocker</a> and the open-source privacy community.
+                </p>
+<h3>License</h3>
+<p>Licensed under the Apache License 2.0. Source code: <a href="https://github.com/thecodewarrior2/Gmail-Link-Scanner" target="_blank" rel="noopener noreferrer">github.com/thecodewarrior2/Gmail-Link-Scanner</a>. Bundled third-party components keep their own licenses (pdf.js: Apache-2.0); the downloaded lists are used under their publishers' terms (see below).</p>
+<h3>Accessibility</h3>
+<p>The extension aims to meet WCAG 2.1 level AA in both light and dark appearance: sufficient color contrast, full keyboard use with a visible focus outline, labels for screen readers, and reduced motion when your system asks for it. If something is hard to read or use, please report it.</p>
+<h3>Built on</h3>
+<p>Third-party lists are downloaded at most once a day and used as published. Thank you to everyone who maintains them.</p>
+<ul class="simple-list">
+  <li><a href="https://github.com/PeterDaveHello/url-shorteners" target="_blank" rel="noopener noreferrer">PeterDaveHello/url-shorteners</a> and <a href="https://github.com/boutetnico/url-shorteners" target="_blank" rel="noopener noreferrer">boutetnico/url-shorteners</a>: community-maintained lists of URL shorteners (see each project for its license). The bundled starter list (<code>shortener-snapshot.txt</code>) is a copy of them.</li>
+  <li><a href="https://openphish.com" target="_blank" rel="noopener noreferrer">OpenPhish</a> community phishing feed, used under the OpenPhish Terms of Use.</li>
+  <li><a href="https://phishing.army" target="_blank" rel="noopener noreferrer">Phishing Army</a> blocklist (phishing.army project), licensed <a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noopener noreferrer">CC BY-NC 4.0</a>; used unmodified apart from leaving out major sites.</li>
+  <li><a href="https://unshorten.me" target="_blank" rel="noopener noreferrer">unshorten.me</a>: short-link expansion.</li>
+  <li><a href="https://quad9.net" target="_blank" rel="noopener noreferrer">Quad9</a>, <a href="https://developers.cloudflare.com/1.1.1.1/" target="_blank" rel="noopener noreferrer">Cloudflare 1.1.1.1 for Families</a>, <a href="https://controld.com/free-dns" target="_blank" rel="noopener noreferrer">Control D free DNS</a>, <a href="https://joindns4.eu" target="_blank" rel="noopener noreferrer">DNS4EU</a> and <a href="https://adguard-dns.io" target="_blank" rel="noopener noreferrer">AdGuard DNS</a>: free public threat-filtering resolvers.</li>
+  <li><a href="https://mozilla.github.io/pdf.js/" target="_blank" rel="noopener noreferrer">pdf.js</a> by Mozilla (Apache-2.0), bundled for reading PDF attachments (license in <code>lib/PDFJS-LICENSE</code>).</li>
+  <li><a href="https://github.com/trockerapp/trocker" target="_blank" rel="noopener noreferrer">Trocker</a> (Apache-2.0): inspiration for tracking-pixel detection.</li>
+  <li>Tracking-pixel patterns informed by the <a href="https://github.com/OneClickLab/ugly-email-trackers" target="_blank" rel="noopener noreferrer">Ugly Email</a> and <a href="https://github.com/leavemealone-app/email-trackers" target="_blank" rel="noopener noreferrer">Leave Me Alone</a> tracker lists and <a href="https://easylist.to" target="_blank" rel="noopener noreferrer">EasyPrivacy</a> (patterns re-written, no lists copied).</li>
+  <li>The QR decoder is original code following ISO/IEC 18004, with techniques described by the <a href="https://github.com/zxing/zxing" target="_blank" rel="noopener noreferrer">ZXing</a> project.</li>
+  <li>Phishing-technique research from public reports by security researchers (SANS ISC, Barracuda, Trustwave, Hoxhunt, KnowBe4, Malware on Tap and others).</li>
+</ul>
+<p style="font-size: 12px; color: var(--text-muted);">Gmail is a trademark of Google LLC. Outlook is a trademark of Microsoft Corporation. Other product names are trademarks of their respective owners. This extension is not affiliated with or endorsed by any of them.</p>
+</section>
+
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Import Modal -->
+    <div id="importModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="importModalTitle">
+        <div class="modal-box">
+            <div class="modal-header" id="importModalTitle">📥 Restore settings</div>
+            <div class="modal-body">
+                Please review the JSON payload before applying:
+                <div class="modal-summary">
+                    <div><strong>Custom Allowlist:</strong> <span id="modalAllowCount">0</span> rules</div>
+                    <div><strong>Custom Blocklist:</strong> <span id="modalBlockCount">0</span> rules</div>
+                    <div><strong>Custom DoH Resolver:</strong> <span id="modalDohEndpoint">None</span></div>
+                    <div><strong>Feature settings:</strong> <span id="modalSettingsCount">0</span> values</div>
+                    <div><strong>Pixel Handling:</strong> <span id="modalPixelAction">Replace with Badge</span></div>
+                    <div><strong>Cached links in file:</strong> <span id="modalOtherCount">0</span> (not restored; rebuilt automatically)</div>
+                </div>
+                <ul id="modalNotes" class="simple-list" style="display: none; font-size: 12px; color: var(--text-2); margin: 8px 0 0 0;"></ul>
+
+                <div class="mode-selection">
+                    <strong>Select Strategy:</strong>
+                    <label style="margin-top: 8px;">
+                        <input type="radio" name="importMode" value="merge" checked>
+                        <strong>Merge Data:</strong> Combine with existing lists.
+                    </label>
+                    <label>
+                        <input type="radio" name="importMode" value="overwrite">
+                        <strong>Overwrite Data:</strong> Replace your lists with the backup's; settings not in the backup return to their defaults.
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="modalCancelBtn" class="btn-action">Cancel</button>
+                <button id="modalConfirmBtn" class="btn-primary">Confirm & Import</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Trackers Modal -->
+    <div id="trackersModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="trackersModalTitle">
+        <div class="large-modal-box">
+            <div class="modal-header" id="trackersModalTitle">🌐 Synced shortener list</div>
+            <input type="text" id="trackersSearch" aria-label="Search the synced shortener list" class="search-bar" placeholder="Search synced shorteners/trackers...">
+            <div class="modal-scroll-body">
+                <table id="remoteTrackersTable">
+                    <thead>
+                        <tr>
+                            <th>Domain</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            <div class="modal-footer">
+                <button id="closeTrackersModalBtn" class="btn-action">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="shared.js"></script>
+    <script src="decoders.js"></script>
+    <script src="icon-store.js"></script>
+    <script src="options.js"></script>
+    <script src="help.js"></script>
+</body>
+</html>

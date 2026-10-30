@@ -1,0 +1,40 @@
+Delivered-To: sample_user@gmail.com
+Received: by 2002:a17:504:54cf:b0:1f02:c896:91f5 with SMTP id s15csp1013676njk; Thu, 29 Oct 2026 09:42:12 -0700 (PDT)
+X-Received: by 2002:a05:600c:3b1e:b0:4a2:e0c:2b0a with SMTP id 5b1f17b1804b1-4a966774f22mr155359195e9.16.1793292131781; Thu, 29 Oct 2026 09:42:11 -0700 (PDT)
+ARC-Authentication-Results: i=1; mx.google.com; dkim=pass header.i=@gmx-sample.example header.s=s31663417 header.b=PoquH7tb; spf=pass (google.com: domain of promo__f000000000001@gmx-sample.example designates 198.51.100.40 as permitted sender) smtp.mailfrom=promo__f000000000001@gmx-sample.example; dmarc=pass (p=QUARANTINE sp=QUARANTINE dis=NONE) header.from=gmx-sample.example
+Return-Path: <promo__f000000000001@gmx-sample.example>
+Received: from mout-xforward.gmx-sample.example (mout-xforward.gmx-sample.example. [198.51.100.40]) by mx.google.com with ESMTPS id ffacd0b85a97d-48e6df34deesi311391f8f.154.2026.10.29.09.42.11 for <sample_user@gmail.com> (version=TLS1_3 cipher=TLS_AES_256_GCM_SHA384 bits=256/256); Thu, 29 Oct 2026 09:42:11 -0700 (PDT)
+Received-SPF: pass (google.com: domain of promo__f000000000001@gmx-sample.example designates 198.51.100.40 as permitted sender) client-ip=198.51.100.40;
+Authentication-Results: mx.google.com; dkim=pass header.i=@gmx-sample.example header.s=s31663417 header.b=PoquH7tb; spf=pass (google.com: domain of promo__f000000000001@gmx-sample.example designates 198.51.100.40 as permitted sender) smtp.mailfrom=promo__f000000000001@gmx-sample.example; dmarc=pass (p=QUARANTINE sp=QUARANTINE dis=NONE) header.from=gmx-sample.example
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=gmx-sample.example; s=s31663417; t=1793292131; x=1793896931; i=promo__f000000000001@gmx-sample.example; bh=WYnyNIXR1MOVXQIfsnZ3htG/3ZPgzwpAvllIMCrDsLk=; h=X-UI-Sender-Class:Date:From:To:Message-ID:Subject:MIME-Version:Content-Type:List-Unsubscribe; b=PoquH7tb
+Received: from client.hidden.invalid by mail.gmx-sample.example (mrgmx104 [198.51.100.174]) with ESMTPSA (Nemesis) id 1Mq2jC-1wiPHk45ys-00loDH for <sample_user@gmail.com>; Thu, 29 Oct 2026 17:42:11 +0100
+Return-Path: <promo__f000000000001@gmx-sample.example>
+Date: Thu, 29 Oct 2026 17:42:10 +0100 (CET)
+From: IPTV PREMUIM <promo__f000000000001@gmx-sample.example>
+To: sample_user@gmail.com
+Message-ID: <1793292130670.yxupyc0coy4x@gmx-sample.example>
+Subject: GET NOW BEST IPTV SUBSCRIPTION 1 YEAR LOW PRICE
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="----=_Part_358853_1365346953.1793292130679"
+List-Unsubscribe: <http://127.0.0.1:3000/unsubscribe?s=4&email=sample_user%40gmail.com>
+X-Spam-Flag: YES
+UI-OutboundReport: junk:10;M01:P0:qO2L9vCEXW0=;OO/afuo9S81L/lm6qne1VnvYEcbFt
+
+------=_Part_358853_1365346953.1793292130679
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+
+Unlimited Entertainment with an IPTV service. 21,000+ Live TV Channels.
+Visit: iptv-sample.example
+WhatsApp: wa.me/0000000000
+
+Unsubscribe: http://127.0.0.1:3000/unsubscribe?s=3D4&email=3Dsample_user%40gm=
+ail.com
+------=_Part_358853_1365346953.1793292130679
+Content-Type: text/html; charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+
+<p>Unlimited Entertainment with an IPTV service</p><img src=3D"http://127.0.0.1:3000/r/4/o=
+pen?e=3Dsample_user%40gmail.com" width=3D"1" height=3D"1" alt=3D"" style=3D"display:none"><p><a href=3D"http://127.0.0.1:3000/unsubscribe?s=3D4&am=
+p;email=3Dsample_user%40gmail.com">Unsubscribe</a></p>
+------=_Part_358853_1365346953.1793292130679--

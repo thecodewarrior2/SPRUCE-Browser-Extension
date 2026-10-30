@@ -1,0 +1,271 @@
+/* Injected into Gmail by the extension. Only affects elements the extension itself adds. */
+
+/* The 🔍 next to an email tracking link stays out of the way until the link is pointed at
+   (or the icon itself is hovered or focused with the keyboard). */
+.unshortener-icon.unshortener-hover-reveal {
+    opacity: 0;
+    transition: opacity 0.12s ease-in-out;
+}
+a:hover + .unshortener-icon.unshortener-hover-reveal,
+a:focus + .unshortener-icon.unshortener-hover-reveal,
+.unshortener-icon.unshortener-hover-reveal:hover,
+.unshortener-icon.unshortener-hover-reveal:focus {
+    opacity: 1;
+}
+.unshortener-icon.unshortener-hover-reveal:focus {
+    outline: 2px solid #1a73e8;
+    outline-offset: 1px;
+    border-radius: 50%;
+}
+
+/* Sender identity (Gmail): site icon, country flag and domain label in the inbox and opened emails.
+   Only flagged (red), caution (yellow) and trusted (green) are colored; every other label is neutral.
+   Colors keep at least 4.5:1 contrast in Gmail's light and dark themes. */
+.unshortener-sender-icon {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    margin-right: 6px;
+    vertical-align: middle;
+    flex: none;
+}
+/* A sender's photo or company logo: a circle over the inbox row's checkbox, as the webmail draws its
+   own avatars. Never takes clicks; out of the way while the row is under the mouse, focused or
+   ticked, so the checkbox shows and works as usual. */
+.unshortener-avatar-cell {
+    position: relative;
+}
+.unshortener-row-avatar {
+    --unshortener-circle: 36px;
+    --unshortener-icon-pad: 6px;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: var(--unshortener-circle);
+    height: var(--unshortener-circle);
+    margin: calc(var(--unshortener-circle) / -2) 0 0 calc(var(--unshortener-circle) / -2);
+    border-radius: 50%;
+    object-fit: cover;
+    background: #fff;
+    pointer-events: none;
+    z-index: 1;
+}
+/* Beside the sender only the country flag remains in inbox rows; nothing at all leaves no gap. */
+.unshortener-sender-icon:empty {
+    display: none;
+}
+/* A flagged or caution email (a failed sender verification included) gets no picture at all, not
+   even an icon or initial: its plain checkbox and red or amber label stand out, and a forged
+   "paypal.com" email can't borrow PayPal's logo. */
+.unshortener-avatar-row:has(.unshortener-sender-chip[data-status="flagged"]) .unshortener-row-avatar,
+.unshortener-avatar-row:has(.unshortener-sender-chip[data-status="caution"]) .unshortener-row-avatar,
+tr:has(.unshortener-sender-chip[data-status="flagged"]) .unshortener-sender-icon img.unshortener-flag-size,
+tr:has(.unshortener-sender-chip[data-status="caution"]) .unshortener-sender-icon img.unshortener-flag-size {
+    display: none;
+}
+/* Sizes follow Gmail's display density (content.js applyPictureMode): 36 px circles for Default,
+   32 px for Comfortable. Compact has no circles (the icon goes in line with the flag). */
+html[data-unshortener-pictures="medium"] .unshortener-row-avatar {
+    --unshortener-circle: 32px;
+    --unshortener-icon-pad: 5px;
+}
+/* A site's icon (no photo or logo): 24 px in a 36 px circle (22 px in 32), on a soft tint of the
+   icon's own color (set by content.js; light grey until it's known), with no border, so the circles
+   look alike and the icon fills them. */
+.unshortener-row-avatar.unshortener-row-icon {
+    box-sizing: border-box;
+    padding: var(--unshortener-icon-pad);
+    object-fit: contain;
+    background-color: #f1f3f4;
+}
+/* No picture and no icon: the sender's initial on a color of their own, so every row looks alike. */
+.unshortener-row-avatar.unshortener-row-initial {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font: 500 calc(var(--unshortener-circle) * 0.47) / 1 "Google Sans", Roboto, Helvetica, Arial, sans-serif;
+    text-transform: uppercase;
+    user-select: none;
+}
+/* Compact density: the site's icon in line with the country flag, at the flag's size. */
+.unshortener-sender-icon img.unshortener-flag-size {
+    width: 15px;
+    height: 15px;
+}
+.unshortener-avatar-row:hover .unshortener-row-avatar,
+/* Only when the checkbox itself has keyboard focus: Gmail focuses the whole row of the email you came
+   back from (Back), and the picture must stay then. */
+.unshortener-avatar-cell:focus-within .unshortener-row-avatar,
+.unshortener-avatar-cell:has([aria-checked="true"]) .unshortener-row-avatar {
+    display: none;
+}
+.unshortener-sender-icon img,
+.unshortener-sender-blank {
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    flex: none;
+}
+/* An icon that wouldn't show on the row (a black logo on the dark theme, a white one on the light
+   theme) sits on a small plate of a contrasting color (set by content.js). */
+.unshortener-sender-icon img.unshortener-icon-plate {
+    box-sizing: border-box;
+    padding: 1px;
+}
+/* A site without an icon gets an empty space of the same size (never a generic globe). */
+.unshortener-sender-blank {
+    display: inline-block;
+}
+.unshortener-sender-flag {
+    font-size: 13px;
+    line-height: 1;
+}
+.unshortener-sender-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 16em;
+    margin-right: 6px;
+    padding: 0 6px;
+    border: 1px solid #dadce0;
+    border-radius: 4px;
+    background: #f1f3f4;
+    color: #3c4043;
+    font: 500 11.5px/18px Arial, sans-serif;
+    vertical-align: middle;
+    white-space: nowrap;
+    flex: none;
+}
+.unshortener-sender-chip .unshortener-sender-domain {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.unshortener-sender-chip[data-status="flagged"] { background: #fce8e6; color: #a50e0e; border-color: #c5221f; }
+.unshortener-sender-chip[data-status="caution"] { background: #fef7e0; color: #5c3c00; border-color: #f9ab00; }
+.unshortener-sender-chip[data-status="trusted"] { background: #e6f4ea; color: #0d652d; border-color: #81c995; }
+.unshortener-sender-chip.unshortener-dark { background: #303134; color: #e8eaed; border-color: #5f6368; }
+.unshortener-sender-chip.unshortener-dark[data-status="flagged"] { background: #3c1f1f; color: #f6aea9; border-color: #ee675c; }
+.unshortener-sender-chip.unshortener-dark[data-status="caution"] { background: #3a3220; color: #fde293; border-color: #f9ab00; }
+.unshortener-sender-chip.unshortener-dark[data-status="trusted"] { background: #1e3a2a; color: #a8dab5; border-color: #34a853; }
+
+/* Opened emails: the webmail's own "<address>" beside the sender's name is the label. Neutral
+   senders look unchanged (the explanation shows on pointing at it); flagged, caution and trusted ones
+   get the label's colors and mark, in the same accessible colors. */
+.unshortener-sender-address {
+    border-radius: 4px;
+    cursor: help;
+}
+.unshortener-sender-address[data-status="flagged"],
+.unshortener-sender-address[data-status="caution"],
+.unshortener-sender-address[data-status="trusted"] {
+    padding: 1px 5px;
+    font-weight: 500;
+}
+.unshortener-sender-address[data-mark]:not([data-mark=""])::before {
+    content: attr(data-mark) " ";
+}
+.unshortener-sender-address[data-status="flagged"] { background: #fce8e6; color: #a50e0e !important; box-shadow: inset 0 0 0 1px #c5221f; }
+.unshortener-sender-address[data-status="caution"] { background: #fef7e0; color: #5c3c00 !important; box-shadow: inset 0 0 0 1px #f9ab00; }
+.unshortener-sender-address[data-status="trusted"] { background: #e6f4ea; color: #0d652d !important; box-shadow: inset 0 0 0 1px #81c995; }
+.unshortener-sender-address.unshortener-dark[data-status="flagged"] { background: #3c1f1f; color: #f6aea9 !important; box-shadow: inset 0 0 0 1px #ee675c; }
+.unshortener-sender-address.unshortener-dark[data-status="caution"] { background: #3a3220; color: #fde293 !important; box-shadow: inset 0 0 0 1px #f9ab00; }
+.unshortener-sender-address.unshortener-dark[data-status="trusted"] { background: #1e3a2a; color: #a8dab5 !important; box-shadow: inset 0 0 0 1px #34a853; }
+
+/* Copy the sender's address: a small button after the address in opened emails. */
+.unshortener-copy-address {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    margin-left: 4px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: #1a73e8;
+    vertical-align: middle;
+    cursor: pointer;
+}
+.unshortener-copy-address:hover { background: rgba(26, 115, 232, 0.1); }
+.unshortener-copy-address:focus-visible { outline: 2px solid #1a73e8; outline-offset: 1px; }
+.unshortener-copy-address.unshortener-copied { color: #137333; }
+.unshortener-copy-address.unshortener-dark { color: #8ab4f8; }
+.unshortener-copy-address.unshortener-dark:hover { background: rgba(138, 180, 248, 0.15); }
+.unshortener-copy-address.unshortener-dark.unshortener-copied { color: #81c995; }
+/* "Copied", for screen readers only. */
+.unshortener-copy-status {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+}
+
+/* Notice shown when emails were moved to Spam: top of the page, above Gmail's own bars. */
+.unshortener-spam-notice {
+    position: fixed;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 2147483000;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    max-width: calc(100vw - 32px);
+    box-sizing: border-box;
+    padding: 8px 10px 8px 14px;
+    border-radius: 8px;
+    border-left: 4px solid #c5221f;
+    background: #fce8e6;
+    color: #5c0b07;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+    font: 13.5px/1.4 Arial, sans-serif;
+}
+.unshortener-spam-notice.unshortener-dark { background: #3c1f1f; color: #f6aea9; border-left-color: #ee675c; }
+.unshortener-spam-notice a { color: inherit; font-weight: bold; text-decoration: underline; }
+.unshortener-spam-notice button {
+    all: unset;
+    cursor: pointer;
+    padding: 0 6px;
+    font-size: 18px;
+    line-height: 1;
+    color: inherit;
+}
+.unshortener-spam-notice a:focus-visible,
+.unshortener-spam-notice button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+
+/* Notice when another extension does the same job: bottom left, out of the way of Gmail's own toasts. */
+.unshortener-conflict-notice {
+    position: fixed;
+    left: 16px;
+    bottom: 16px;
+    z-index: 2147483000;
+    max-width: min(520px, calc(100vw - 32px));
+    box-sizing: border-box;
+    padding: 12px 14px;
+    border-radius: 8px;
+    border-left: 4px solid #f9ab00;
+    background: #fef7e0;
+    color: #3c2a00;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+    font: 13.5px/1.45 Arial, sans-serif;
+}
+.unshortener-conflict-notice.unshortener-dark { background: #3a3220; color: #fde293; }
+.unshortener-conflict-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.unshortener-conflict-buttons button {
+    font: inherit;
+    font-weight: bold;
+    padding: 5px 10px;
+    border-radius: 6px;
+    border: 1px solid currentColor;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+}
+.unshortener-conflict-buttons button.primary { background: #8a4b00; border-color: #8a4b00; color: #fff; }
+.unshortener-conflict-notice.unshortener-dark .unshortener-conflict-buttons button.primary { background: #fdd663; border-color: #fdd663; color: #202124; }
+.unshortener-conflict-buttons button:disabled { opacity: 0.5; cursor: not-allowed; }
+.unshortener-conflict-buttons button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }

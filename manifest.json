@@ -1,0 +1,124 @@
+{
+  "manifest_version": 3,
+  "name": "S.P.R.U.C.E+",
+  "version": "5.72",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAo7NhlZzYX6/vPOfI44XoeVyZmvGTXm/Tm2YR6jDcJP6wGR2LNqZUYF5RiiKGyfDiCBhGqHrXDm+JPNvHZhDJ2zRwOXwGNvCxJjeOkXQ5+C0c5u3SyGj/ICarRHUCCqYT5MTXsUj7bYecoHQNJnj/FJhhSbw/bWoRhdJYZ4J2Zp4YEyDyQSeAv3WHBfDp6IF+ebOwitrqcxo9v+0mi1SCYlzhTt0v8cJrulYbRa/p02XswSXbuud+C9Vtxt/BX2Y1KcD8G8fry9PmHaTlqnnoymnTFmtt35OayF1LPSDp/V63wn/cqOy73r1HvmcPOupoRVyQ3kd/oOfWG5fDPop9mwIDAQAB",
+  "description": "Finds phishing and scams in Gmail and other webmail: links, senders, QR codes and attachments. Blocks trackers.",
+  "permissions": [
+    "activeTab",
+    "alarms",
+    "offscreen",
+    "storage",
+    "unlimitedStorage"
+  ],
+  "optional_permissions": [
+    "management"
+  ],
+  "host_permissions": [
+    "https://mail.google.com/*",
+    "https://unshorten.me/*",
+    "https://security.cloudflare-dns.com/*",
+    "https://family.cloudflare-dns.com/*",
+    "https://dns.adguard-dns.com/*",
+    "https://dns.quad9.net/*",
+    "https://1.1.1.1/*",
+    "https://raw.githubusercontent.com/*",
+    "https://*.googleusercontent.com/*",
+    "https://storage.googleapis.com/*",
+    "https://firebasestorage.googleapis.com/*",
+    "https://freedns.controld.com/*",
+    "https://protective.joindns4.eu/*",
+    "https://openphish.com/*",
+    "https://phishing.army/*",
+    "https://api.country.is/*",
+    "https://www.google.com/s2/*",
+    "https://icons.duckduckgo.com/*",
+    "https://tranco-list.eu/*",
+    "https://*.gstatic.com/*"
+  ],
+  "optional_host_permissions": [
+    "https://*/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16-off.png",
+      "32": "icons/icon32-off.png",
+      "48": "icons/icon48-off.png",
+      "128": "icons/icon128-off.png"
+    },
+    "default_title": "S.P.R.U.C.E+: not active here. Open an email to have it checked."
+  },
+  "storage": {
+    "managed_schema": "schema.json"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://mail.google.com/*"
+      ],
+      "js": [
+        "shared.js",
+        "content.js"
+      ],
+      "run_at": "document_idle",
+      "css": [
+        "content.css"
+      ]
+    },
+    {
+      "matches": [
+        "https://outlook.live.com/*",
+        "https://outlook.office.com/*",
+        "https://outlook.office365.com/*",
+        "https://outlook.cloud.microsoft/*",
+        "https://mail.proton.me/*",
+        "https://mail.yahoo.com/*",
+        "https://mail.aol.com/*",
+        "https://mail.zoho.com/*",
+        "https://mail.zoho.eu/*",
+        "https://mail.zoho.in/*",
+        "https://mail.zoho.com.au/*",
+        "https://mail.zoho.jp/*",
+        "https://mail.zoho.sa/*",
+        "https://mail.zohocloud.ca/*",
+        "https://www.icloud.com/*",
+        "https://app.fastmail.com/*",
+        "https://www.fastmail.com/*",
+        "https://beta.fastmail.com/*",
+        "https://*.gmx.com/*",
+        "https://*.gmx.net/*",
+        "https://*.gmx.de/*",
+        "https://*.gmx.at/*",
+        "https://*.gmx.ch/*",
+        "https://*.gmx.co.uk/*",
+        "https://*.gmx.fr/*",
+        "https://*.gmx.es/*"
+      ],
+      "js": [
+        "shared.js",
+        "content.js"
+      ],
+      "css": [
+        "content.css"
+      ],
+      "run_at": "document_idle",
+      "all_frames": true,
+      "match_about_blank": true,
+      "match_origin_as_fallback": true
+    }
+  ],
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

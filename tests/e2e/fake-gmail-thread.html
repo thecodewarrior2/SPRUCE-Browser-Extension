@@ -1,0 +1,35 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Your password expires - teacher@school.org - Gmail</title>
+<style>body{font:14px Arial;background:#fff}[gh=mtb] [role=button]{display:inline-block;padding:4px 8px;border:1px solid #ccc;margin:2px}</style></head>
+<body>
+<div gh="mtb">
+  <div role="button" aria-label="Back to Inbox">Back</div>
+  <div role="button" aria-label="Archive" act="7">Archive</div>
+  <div role="button" aria-label="Report spam" data-tooltip="Report spam" act="9" id="spamBtn">Spam</div>
+</div>
+<div role="main" id="main"></div>
+<script>
+window.__spammed = [];
+const P = new URLSearchParams(location.search);
+const sender = P.get('from') || 'phisher@evil-scam.test';
+const tid = P.get('t') || '2001';
+const sname = P.get('name') || 'IT Support';
+const cloud = P.get('links') === 'cloud';
+const linkHtml = cloud ? [1,2,3,4].map(i => `<a href="https://oyl6s96s2xyr5tq6mj36.blob.core.windows.net/oyl6s96s2xyr5tq6mj36/link.html#qs=r-${i}ageikagdefbjkd">Message ${i}</a>`).join(' ') : 'Please sign in at <a href="https://example.com/login">example.com</a> today.';
+setTimeout(() => {
+  document.getElementById('main').innerHTML = `<h2 class="hP" data-thread-perm-id="thread-f:${tid}" data-legacy-thread-id="${Number(tid).toString(16)}">${P.get('subj') || 'Your password expires'}</h2>
+  <div class="nH"><div class="adn ads" data-message-id="#msg-f:3001" data-legacy-message-id="${(3001).toString(16)}">
+    <div class="aju"><div class="aCi">${P.get('avatar') ? `<img class="ajn" data-hovercard-id="${sender}" src="${P.get('avatar')}" width="40" height="40">` : ''}</div></div>
+    <div class="gs">
+    <h3 class="iw"><span class="qu"><span class="gD" email="${sender}" name="${sname}">${sname}</span> <span class="go">&lt;${sender.replace(/</g,'&lt;')}&gt;</span></span></h3>
+    <div class="a3s aiL"><div class="ii gt"><div>${linkHtml}</div></div></div>
+  </div></div>${P.get('with') ? `<div class="adn ads" data-message-id="#msg-f:3002" data-legacy-message-id="${(3002).toString(16)}">
+    <h3 class="iw"><span class="qu"><span class="gD" email="${P.get('with')}" name="Colleague">Colleague</span> <span class="go">&lt;${P.get('with')}&gt;</span></span></h3>
+    <div class="a3s aiL"><div class="ii gt"><div>My reply.</div></div></div></div>` : ''}</div>`;
+}, 300);
+document.getElementById('spamBtn').addEventListener('click', () => {
+  window.__spammed.push('thread-f:' + tid);
+  document.getElementById('main').innerHTML = '';
+  location.hash = '#inbox';
+});
+</script></body></html>

@@ -1,0 +1,6 @@
+tests/node_modules/
+tests/logs/
+tests/.timings.json
+# The private key that signs releases (never commit it), and built packages.
+*.pem
+build/

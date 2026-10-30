@@ -1,0 +1,30 @@
+Delivered-To: user@example.org
+Received: by 2002:a05:7208:552c:b0:63:5ce:42fd with SMTP id t44csp3620733rbf; Mon, 13 Feb 2023 12:46:47 -0800 (PST)
+X-Google-Smtp-Source: AK7set8+y7IkJ0vmZ6jpA/fG2tJqbxGz9ILEBLOpw9Vx/HyYM2kMzrNE6oOcoqjdfXMLVxhgn/QR
+X-Received: by 2002:a05:6512:4d0:b0:4cd:adad:fd9 with SMTP id w16-20020a05651204d000b004cdadad0fd9mr6290582lfq.38.1676321207086; Mon, 13 Feb 2023 12:46:47 -0800 (PST)
+ARC-Authentication-Results: i=1; mx.google.com; spf=pass (google.com: domain of mail-r6qdowtjt46q.moahn@zyotbzhgsk.bulk-sender.example designates 166.0.164.136 as permitted sender) smtp.mailfrom=mail-r6QdoWTJT46Q.moAhN@zyotbzhgsk.bulk-sender.example; dmarc=fail (p=QUARANTINE sp=NONE dis=NONE) header.from=newsletter-tool.example
+Return-Path: <mail-r6QdoWTJT46Q.moAhN@zyotbzhgsk.bulk-sender.example>
+Received: from mitula.it (buds.bulk-sender.example. [166.0.164.136]) by mx.google.com with ESMTP id 8-20020ac24848000000b004db0884b67esi5822478lfy.141.2023.02.13.12.46.46 for <user@example.org>; Mon, 13 Feb 2023 12:46:46 -0800 (PST)
+Received-SPF: pass (google.com: domain of mail-r6qdowtjt46q.moahn@zyotbzhgsk.bulk-sender.example designates 166.0.164.136 as permitted sender) client-ip=166.0.164.136;
+Authentication-Results: mx.google.com; spf=pass (google.com: domain of mail-r6qdowtjt46q.moahn@zyotbzhgsk.bulk-sender.example designates 166.0.164.136 as permitted sender) smtp.mailfrom=mail-r6QdoWTJT46Q.moAhN@zyotbzhgsk.bulk-sender.example; dmarc=fail (p=QUARANTINE sp=NONE dis=NONE) header.from=newsletter-tool.example
+Received: from app19.muc.ec-messenger.com (app19.muc.ec-messenger.com ) (envelope-from <g-3851351679-7322-354668012-1559235622088@bounce.news.mapp.com>) by gp13mtaq123 (mtaq-receiver/2.20190311.1) with ESMTP id yA3jJ-_S5g8Z for <other1@example.net>; Thu, 30 May 2019 19:00:22 +0200
+Received: from www.takataka.gr (realshop.gr ) by uat.atnet.gr (Postfix) with ESMTPA id 24BF957C2E58 for <other2@example.net>; Wed, 29 May 2019 20:27:11 +0300 (EEST)
+Received: from rvirapvdc00.net.ravensburger.ag () by mx01.ravensburger.ag (SMTP DAEMON FROM RAVENSBURGER AG) with SMTP ID 555; Mon, 15 Jan 2018 03:52:48 +0100 (CET)
+In-Reply-To: <CADT5qSj0REQQpwKiW6P5cL27kFYMN9CK4Af7aQX8Iom46NH1Cu5OuqVwXww@tbu.random-host.example>
+List-ID: <.7289367.xt.local>
+Feedback-ID: 325-anexp#nret-fa:account-notifier
+Date: Mon, 13 Feb 2023 20:44:45 UTC
+To: <other3@example.net>
+Message-ID: <ZF3lf1bGTw-Ct-Y9ADdP4Af7aQX8IoHg-166.0.164.136@kvqwq.college-sample.example>
+From: """"'""AHS Warranty"""'""" <email_4Af7aQX8Io@zowfxdlzyhpb.newsletter-tool.example>
+CC: <other4@example.net>
+MIME-Version: 2.0
+Subject: Verification
+Content-Type: multipart/digest; boundary="----=_Part_uUQEOvUrbmh_1145812586906.S98Q38EU1RT"
+References: <4211984487.9982398.7011685923319.JavaMail.app@mail-zowfxdlzyhpb.newsletter-tool.example.io>
+
+------=_Part_uUQEOvUrbmh_1145812586906.S98Q38EU1RT
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: Hexa
+
+body

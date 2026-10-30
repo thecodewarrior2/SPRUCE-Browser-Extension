@@ -1,0 +1,61 @@
+Delivered-To: sample_user@gmail.com
+Received: by 2002:ab2:7054:0:b0:345:212:701e with SMTP id x20csp747052lql; Tue, 27 Oct 2026 13:51:34 -0700 (PDT)
+X-Received: by 2002:a17:903:1a67:b0:2e9:8ef0:cf6c with SMTP id d9443c01a7336-2eb004fc790mr3662815ad.26.1793134293762; Tue, 27 Oct 2026 13:51:33 -0700 (PDT)
+Return-Path: <contact@vps-sample.example>
+Received: from vps-sample.example (vps-host.vps-sample.example. [198.51.100.120]) by mx.google.com with ESMTPS id d9443c01a7336-2eae61fc9f0si65185945ad.0.2026.10.27.13.51.32 for <sample_user@gmail.com> (version=TLS1 cipher=ECDHE-ECDSA-AES128-SHA bits=128/128); Tue, 27 Oct 2026 13:51:33 -0700 (PDT)
+Received-SPF: pass (google.com: domain of contact@vps-sample.example designates 198.51.100.120 as permitted sender) client-ip=198.51.100.120;
+Authentication-Results: mx.google.com; dkim=permerror (no key for signature) header.i=@gmail.com header.s=smtp header.b=GOaN7dlA; dkim=pass header.i=@parkmail.registrar-sample.example header.s=default header.b=MzGcXcCc; dkim=pass header.i=@relay-sample.example header.s=default header.b=QfGQ7N7g; dkim=permerror (no key for signature) header.i=@gmail.com header.s=smtp header.b=K7UMiiRr; dkim=fail header.i=@parkmail.registrar-sample.example header.s=default header.b=fUFL8z5I; arc=fail (signature failed); spf=pass (google.com: domain of contact@vps-sample.example designates 198.51.100.120 as permitted sender) smtp.mailfrom=contact@vps-sample.example; dmarc=fail (p=NONE sp=QUARANTINE dis=NONE) header.from=gmail.com; dara=neutral header.i=@gmail.com
+Message-ID: <6ae10ed5.6d07e9b2.16cf37.4b55SMTPIN_ADDED_MISSING@mx.google.com>
+DKIM-Signature: v=1; a=rsa-sha1; c=relaxed/relaxed; s=smtp; d=gmail.com; h=MIME-Version:From:Date:Subject:To:Content-Type; i=casino_sender@gmail.com; bh=8X9BqHMGMPdEuMG02Fc2PHGBO10=; b=GOaN7dlA
+x-contact: 36-606928
+DKIM-Signature: v=1; a=rsa-sha256; q=dns/txt; c=relaxed/relaxed; t=1793115397; s=default; d=parkmail.registrar-sample.example; h=Content-Type:To:Subject:Date:From:MIME-Version; l=9789; bh=CDA4pgoEtmIPWx1eNb1hTw4I3P0P3dx/k5rov8zSRa4=; b=MzGcXcCc
+ARC-Seal: i=4; a=rsa-sha256; c=relaxed/relaxed; s=default; d=parkmail.registrar-sample.example; cv=fail; b=YC/NifmS
+ARC-Authentication-Results: i=4; parkmail.registrar-sample.example; dkim=fail; arc=fail; spf=pass
+X-Forwarded-To: stock-treated@test-inbox.example
+X-Forwarded-For: recipient@relay-sample.example stock-treated@test-inbox.example
+Received: from relay2-sample.example (relay2.relay2-sample.example [198.51.100.97]) by parkmail.registrar-sample.example with SMTP; 27 Oct 2026 16:08:35 +0000
+Received-SPF: pass (spfCheck: domain of relay2-sample.example designates 198.51.100.97 as permitted sender)
+  client-ip=198.51.100.97; envelope-from=2281833790@relay2-sample.example; helo=;
+Authentication-Results: parkmail.registrar-sample.example; dkim=fail (found 7 invalid signatures); spf=pass
+DKIM-Signature: v=1; a=rsa-sha1; c=relaxed/relaxed; s=smtp; d=gmail.com; h=MIME-Version:From:Date:Subject:To:Content-Type; i=casino_sender@gmail.com; bh=8X9BqHMGMPdEuMG02Fc2PHGBO10=; b=K7UMiiRr
+X-Forwarded-To: stock-treated@test-inbox.example
+X-Forwarded-For: recipient@relay-sample.example stock-treated@test-inbox.example
+Received: from relay2-sample.example (relay2.relay2-sample.example [198.51.100.97]) by parkmail.registrar-sample.example with SMTP; 27 Oct 2026 16:03:12 +0000
+Authentication-Results: parkmail.registrar-sample.example; dkim=fail (found 4 invalid signatures); spf=pass
+DomainKey-Signature: a=rsa-sha1; c=nofws; q=dns; s=smtp; d=gmail.com; b=s6mgkI5a
+ARC-Authentication-Results: i=2; parkmail.registrar-sample.example; dkim=none; arc=pass; spf=none
+X-Forwarded-To: stock-treated@test-inbox.example
+X-Forwarded-For: recipient@relay-sample.example stock-treated@test-inbox.example
+Received: from mail-vk1-f179.google.com (mail-vk1-f179.google.com [209.85.221.179]) by parkmail.registrar-sample.example with SMTP; 27 Oct 2026 15:36:51 +0000
+Received-SPF: pass (spfCheck: domain of _spf.google.com designates 209.85.221.179 as permitted sender)
+  client-ip=209.85.221.179; envelope-from=env_sender@gmail.com; helo=;
+Received: by mail-vk1-f179.google.com with SMTP id 71dfb90a1353d-5eab93a9862so20422e0c.0 for <recipient@relay-sample.example>; Tue, 27 Oct 2026 08:36:51 -0700 (PDT)
+ARC-Authentication-Results: i=1; mx.google.com; arc=none
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=gmail.com; s=20260707; t=1793115410; x=1793720210; darn=relay-sample.example; h=content-type:to:subject:message-id:date:from:mime-version; bh=CDA4pgoEtmIPWx1eNb1hTw4I3P0P3dx/k5rov8zSRa4=; b=C/PoBTMH
+X-Received: by 2002:a05:6122:78c:b0:5ea:9218:eac1 with SMTP id 71dfb90a1353d-5ec232ff8abmr4043657e0c.20.1793115409999; Tue, 27 Oct 2026 08:36:49 -0700 (PDT)
+MIME-Version: 1.0
+From: =?UTF-8?B?4q2QQ2FzaW5vIEZvciBZb3XirZA=?= <casino_sender@gmail.com>
+Date: Tue, 27 Oct 2026 15:36:37 +0000
+Subject: =?UTF-8?B?8J+SsPCfjoHwn46wMTI1JCBFWFRSQSBDQVNIIEZPUiBZT1Uh8J+OsF9fX19fX18=?=kvksrphdly
+To: recipient@relay-sample.example
+Content-Type: multipart/alternative; boundary="0000000000000decce065ed437fc"
+
+--0000000000000decce065ed437fc
+Content-Type: text/plain; charset="UTF-8"
+Content-Transfer-Encoding: quoted-printable
+
+=EF=BB=BF The Ultimate Welcome Bonus at an online casino - Your Gateway to=
+ BIG Wins!
+* GET BONUS >>*
+<https://storage.googleapis.com/sample-bucket-public-123/casino.html>
+
+--0000000000000decce065ed437fc
+Content-Type: text/html; charset="UTF-8"
+Content-Transfer-Encoding: quoted-printable
+
+<div dir=3D"ltr"><h1><strong>125$ EXTRA CASH FOR YOU!</strong></h1>
+<td class=3D"button-td"><a href=3D"https://storage.googleapis.com/sample-bu=
+cket-public-123/casino.html" class=3D"button-a"><strong>GET BONUS &gt;&gt;<=
+/strong></a></td></div>
+
+--0000000000000decce065ed437fc--
