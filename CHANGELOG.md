@@ -1,5 +1,11 @@
 # Changelog
 
+## 5.55 — Sender photos and logos as Gmail's real page shows them (Firefox build, same as Chrome 5.55)
+
+- **Verified brand logos now work:** Gmail embeds a verified BIMI logo in the page itself (a `data:` image) rather than loading it from an address. Such a logo is kept as it is, with nothing downloaded, and only when Gmail's own sender verification passed for that email (DMARC). SVG logos are kept as SVG (at most 32 KB) and shown only as an image.
+- **People's photos in any address format:** any photo Gmail loads from `googleusercontent.com`, including the older `/-xxxx/AAAAAAAAAAI/…/photo.jpg` format, counts as a person's photo, used only for people in your own organization. Outside senders' photos are never used, whatever their format.
+- **Changes are picked up:** a logo is compared by a short fingerprint of the image and replaced when it changes; a photo by its address, plus the weekly check. Colleagues' photos are downloaded by the extension's background part, so they still work when Gmail's page itself is blocked from showing them; if Gmail never puts a photo's address in the page, the site icon is shown.
+
 ## 5.54 — Fix: sender icons and labels disappearing from some inbox rows (Firefox build, same as Chrome 5.54)
 
 - **Fixed:** when Gmail refreshed the inbox list in place (for example on coming back to the tab), it rewrote the top rows' contents and their sender icons, flags and labels disappeared until the page was reloaded. The extension only noticed new rows, not rows whose contents were replaced. Now a row that lost them gets them back right away, and the list is checked again whenever the tab is shown.

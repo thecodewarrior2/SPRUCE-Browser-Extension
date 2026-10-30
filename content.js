@@ -2264,12 +2264,16 @@ function fillSenderIcon(wrap, S) {
 }
 
 // Photos and logos (the profile's message.avatar): the one the webmail shows beside the sender of an
-// opened email is remembered for the address, so the inbox list shows it too. Only two kinds are used:
-// a personal photo of someone in the user's own organization (its directory), and a logo for an email
-// that passed the webmail's own sender verification (DMARC; the webmail shows a brand's BIMI logo only
-// then). Personal photos of outside senders are never used: anyone can make their profile photo look
-// like a bank's logo. The webmail loads the image late, so it's looked for again after 0.5, 1.5 and 3 s.
-// A changed photo replaces the old one, and every icon of that sender on the page is redrawn.
+// opened email is remembered for the address, so the inbox list shows it too. Two kinds:
+//   - a brand logo the webmail embedded in the page (Gmail writes verified BIMI logos in as data:
+//     images): used only when the webmail's own sender verification passed for this email (DMARC);
+//     stored directly, nothing downloaded; a changed logo is spotted by its fingerprint;
+//   - a person's photo, loaded from the webmail's photo host in any address format: used only for
+//     people in the user's own organization (its directory), downloaded by the background part
+//     (which the page's own image-loading rules don't affect); a changed photo has a new address.
+// Personal photos of outside senders are never used: anyone can make their profile photo look like a
+// bank's logo. The webmail fills the image in late, so it's looked for again after 0.5, 1.5 and 3 s.
+// A changed photo or logo replaces the old one, and every icon of that sender on the page is redrawn.
 // Why a photo or logo wasn't used is logged once per sender on the page (Logging → application log),
 // with the image's host and kind but never its full address.
 const avatarSkipLogged = new Set();
@@ -2288,18 +2292,21 @@ function harvestAvatar(body, who, auth) {
         const container = messageContainerOf(body);
         const imgs = container ? [...container.querySelectorAll(A.img)] : [];
         const img = imgs.find(i => (i.getAttribute(A.addressAttr) || '').trim().toLowerCase() === who.address);
-        const url = img ? (img.currentSrc || img.getAttribute('src') || '') : '';
-        if (!url || !A.host.test(url) || A.placeholder.test(url)) {
+        const url = img ? (img.getAttribute('src') || img.currentSrc || '') : '';
+        const embedded = !!url && !!A.embeddedLogo && A.embeddedLogo.test(url);
+        const photo = !!url && !!A.photoHost && A.photoHost.test(url);
+        if (!url || !(embedded || photo) || A.placeholder.test(url)) {
             if (n < 3) { setTimeout(() => guarded('Reading a sender photo', () => attempt(n + 1)), [500, 1500, 3000][n]); return; }
             let host = '';
-            try { host = url ? new URL(url, location.href).hostname : ''; } catch (e) { /* ignore */ }
+            try { host = url && !url.startsWith('data:') ? new URL(url, location.href).hostname : ''; } catch (e) { /* ignore */ }
             logAvatarSkip(who.address, !img ? (imgs.length ? `${SITE.name} showed ${imgs.length} photo${imgs.length === 1 ? '' : 's'} in the email, none marked as this sender's.` : `${SITE.name} showed no photo or logo beside the sender.`)
                 : !url ? 'the image had no address yet.'
                 : A.placeholder.test(url) ? `${SITE.name} showed its generic placeholder (no photo).`
+                : url.startsWith('data:') ? 'it\'s an image embedded in the page, of a type that isn\'t used.'
                 : `the image comes from ${host || 'an unknown host'}, not ${SITE.name}'s own image host.`);
             return;
         }
-        const kind = A.personal.test(url) ? 'personal' : 'logo';
+        const kind = embedded ? 'logo' : 'personal';
         if (kind === 'personal' && !own) { logAvatarSkip(who.address, `it's a personal profile photo of someone outside ${org || 'your organization'} (never used: anyone can make their photo look like a company's logo).`); return; }
         if (kind === 'logo' && !(auth && auth.dmarc === 'pass')) { logAvatarSkip(who.address, `it's a logo, and ${SITE.name}'s sender verification for this email was ${auth ? `DMARC ${auth.dmarc}` : 'not available'} (a logo is used only after DMARC pass).`); return; }
         safeSend({ action: 'senderAvatar', address: who.address, url, kind }, (r) => guarded('Showing a sender photo', () => {
