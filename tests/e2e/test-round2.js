@@ -23,12 +23,12 @@ global.RAW_MESSAGES = {
   let page = await ctx.newPage();
   page.on('pageerror', e => console.log('pageerror:', e.message));
   await page.goto('https://mail.google.com/mail/u/0/?links=cloud&from=' + encodeURIComponent('contact_support.adi@=?UTF-8?B?cmVsaWVmLXNhbXBsZS5leGFtcGxl?=') + '&name=' + encodeURIComponent('"""National Debt Relief"""') + '#label/x/abc');
-  let r = await until(() => page.evaluate(() => ({ chip: (document.querySelector('.unshortener-sender-chip') || {}).textContent, title: (document.querySelector('.unshortener-sender-chip') || {}).title,
+  let r = await until(() => page.evaluate(() => ({ chip: (document.querySelector('.unshortener-sender-address') || {}).textContent, status: (document.querySelector('.unshortener-sender-address') || { dataset: {} }).dataset.status, title: (document.querySelector('.unshortener-sender-address') || {}).title,
     banner: (document.querySelector('.unshortener-email-banner') || {}).textContent || '', danger: [...document.querySelectorAll('.ii.gt a')].filter(a => a.dataset.unshortened === 'true').length })),
-    r => /Flagged/.test(r.chip || '') && /This email is flagged/.test(r.banner) && /links? (is|are) flagged/.test(r.title || ''));
+    r => r.status === 'flagged' && /This email is flagged/.test(r.banner) && /links? (is|are) flagged/.test(r.title || ''));
   console.log(r);
-  check('sample 1: sender badge shown for the encoded address, with the decoded domain', /relief-sample\.example/.test(r.chip || ''), r.chip);
-  check('sample 1 opened: flagged (no more "checked" next to red links)', /Flagged/.test(r.chip || ''), r.chip);
+  check('sample 1: the encoded address\'s label names the decoded domain', /relief-sample\.example/.test(r.title || ''), r.title);
+  check('sample 1 opened: flagged (no more "checked" next to red links)', r.status === 'flagged', r.status);
   check('sample 1: reasons name the forged headers and the dangerous links', /fake Gmail delivery/.test(r.title) && /links? (is|are) flagged/.test(r.title) && /encoded/.test(r.title), r.title);
   check('sample 1: email banner says it is flagged', /This email is flagged/.test(r.banner), r.banner.slice(0, 200));
   await page.close();

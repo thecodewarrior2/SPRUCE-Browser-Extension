@@ -2252,14 +2252,17 @@ function applyPictureMode(S) {
 
 // The density can change while the inbox is open (Settings → Density) without the list being rebuilt,
 // so it's looked at again every 3 seconds while the tab is shown (one element and two sizes); the
-// rows are redrawn only when the picture size changes. Stopped while the tab is in the background.
+// rows are redrawn only when the picture size changes or a row lost its picture. Stopped while the tab
+// is in the background.
 let densityTimer = null;
 function setDensityWatch() {
     const on = MAIL_CAN.avatars && !document.hidden;
     if (on && !densityTimer) densityTimer = setInterval(() => guarded('Following Gmail\'s density', () => {
         if (!lastSettings.enableSenderIdentity) return;
+        harvestPagePhotos(lastSettings);
         const before = document.documentElement.dataset.unshortenerPictures;
-        if (applyPictureMode(lastSettings) !== before) scheduleScan();
+        // …and a picture Gmail took away while redrawing a row (coming back from an email) is put back.
+        if (applyPictureMode(lastSettings) !== before || listRows().some(r => isShown(r) && avatarLost(r))) scheduleScan();
     }), 3000);
     else if (!on && densityTimer) { clearInterval(densityTimer); densityTimer = null; }
 }
@@ -2360,6 +2363,46 @@ function placeRowAvatar(wrap, url, kind = 'logo', fallback = '') {
     img.src = url;
     cell.appendChild(img);
     row.dataset.unshortenerAvatar = '1';
+    // A site's icon sits on a soft tint of its own main color (light or dark to suit the theme)
+    // instead of a white disc, so the circles look alike and the icon doesn't get lost.
+    if (kind === 'icon') iconTint(url).then(c => { if (img.isConnected) img.style.backgroundColor = tintFor(c, isDarkSurface(row)); });
+}
+
+// The main color of an icon (average of its solid, not-white pixels), or null when it has none
+// (a white or empty icon). Remembered per icon for the page.
+const iconTints = new Map();
+function iconTint(url) {
+    if (iconTints.has(url)) return iconTints.get(url);
+    const p = new Promise(resolve => {
+        const im = new Image();
+        im.onload = () => {
+            try {
+                const c = document.createElement('canvas');
+                c.width = c.height = 16;
+                const g = c.getContext('2d', { willReadFrequently: true });
+                g.drawImage(im, 0, 0, 16, 16);
+                const d = g.getImageData(0, 0, 16, 16).data;
+                let r = 0, gr = 0, b = 0, n = 0;
+                for (let i = 0; i < d.length; i += 4) {
+                    if (d[i + 3] < 128 || (d[i] > 230 && d[i + 1] > 230 && d[i + 2] > 230)) continue;
+                    r += d[i]; gr += d[i + 1]; b += d[i + 2]; n++;
+                }
+                resolve(n >= 8 ? [r / n, gr / n, b / n] : null);
+            } catch (e) { resolve(null); }
+        };
+        im.onerror = () => resolve(null);
+        im.src = url;
+    });
+    if (iconTints.size > 500) iconTints.delete(iconTints.keys().next().value);
+    iconTints.set(url, p);
+    return p;
+}
+// The circle's color for an icon's main color: 16% of it over white (light theme), 30% over Gmail's
+// dark surface (dark theme); a plain grey when the icon has no color of its own.
+function tintFor(rgb, dark) {
+    if (!rgb) return dark ? '#3c4043' : '#f1f3f4';
+    const base = dark ? [32, 33, 36] : [255, 255, 255], k = dark ? 0.3 : 0.16;
+    return `rgb(${base.map((v, i) => Math.round(v + (rgb[i] - v) * k)).join(', ')})`;
 }
 
 // Photos and logos (the profile's message.avatar): the picture the webmail shows beside the sender of
@@ -2393,12 +2436,41 @@ function avatarImagesFor(body, A, address) {
     const scope = A.scope ? body.closest(A.scope) : null;
     let box = scope || messageContainerOf(body), all = [];
     for (let i = 0; box && i < (scope ? 1 : 5); i++, box = box.parentElement) {
-        all = [...box.querySelectorAll(A.img)];
+        // Never a picture inside the email itself: only the webmail's own ones count.
+        all = [...box.querySelectorAll(A.img)].filter(el => !el.closest(SITE.body));
         const img = all.find(el => (el.getAttribute(A.addressAttr) || '').trim().toLowerCase() === address);
         if (img) return { img, count: all.length };
         if (box === document.body) break;
     }
     return { img: null, count: all.length };
+}
+// Colleagues' photos from anywhere the webmail shows them, without opening their emails: hover
+// cards, the chat panel, recipient chips and opened emails mark them the same way (message.avatar.img,
+// whose addressAttr is the address). Only addresses of the user's own organization, only from the
+// webmail's profile-photo host, never from inside an email. Looked at on each 3-second check while
+// the tab is shown; each picture is sent to the background once per page.
+const pagePhotosSeen = new Set();
+function harvestPagePhotos(S) {
+    const A = MAIL_CAN.avatars ? MAIL.message.avatar : null;
+    const org = ownOrgDomain();
+    if (!A || !org || !S.enableSenderAvatars || !S.enableSenderIdentity || !S.enableDnsThreatCheck) return;
+    for (const img of document.querySelectorAll(A.img)) {
+        const address = (img.getAttribute(A.addressAttr) || '').trim().toLowerCase();
+        if (!/^[^@\s]+@[^@\s]+$/.test(address)) continue;
+        const domain = domainOfAddress(address);
+        if (!domain || !(domain === org || domain.endsWith('.' + org))) continue;
+        const url = img.getAttribute('src') || '';
+        if (!A.photoHost.test(url) || A.placeholder.test(url) || img.closest(SITE.body)) continue;
+        const key = address + '|' + url;
+        if (pagePhotosSeen.has(key)) continue;
+        pagePhotosSeen.add(key);
+        if (pagePhotosSeen.size > 2000) pagePhotosSeen.delete(pagePhotosSeen.values().next().value);
+        safeSend({ action: 'senderAvatar', address, url, kind: 'personal' }, (r) => guarded('Showing a sender photo', () => {
+            if (r !== 'saved' && r !== 'updated') return;
+            for (const k of [...senderIcons.keys()]) if (k.endsWith('|' + address)) senderIcons.delete(k);
+            document.querySelectorAll('.unshortener-sender-icon').forEach(w => { if (w.dataset.address === address) fillSenderIcon(w, lastSettings); });
+        }));
+    }
 }
 function harvestAvatar(body, who, auth) {
     const A = MAIL_CAN.avatars ? MAIL.message.avatar : null;
@@ -2475,7 +2547,9 @@ function senderChipEl(domain, dark, address) {
 function setChipResult(chip, r, address, extra) {
     const status = r ? r.status : 'pending';
     chip.dataset.status = status;
-    chip.querySelector('.unshortener-sender-mark').textContent = STATUS_MARK[status] || '';
+    const mark = chip.querySelector('.unshortener-sender-mark');
+    if (mark) mark.textContent = STATUS_MARK[status] || '';
+    else chip.dataset.mark = STATUS_MARK[status] || '';
     const lines = [`${STATUS_TEXT[status] || status}: ${address}`];
     if (r) lines.push(...r.reasons);
     if (extra) lines.push(...extra);
@@ -2483,7 +2557,21 @@ function setChipResult(chip, r, address, extra) {
     chip.setAttribute('aria-label', lines.join('. '));
 }
 
+// The webmail's own address element used as the sender's label (opened emails): our class, colors and
+// explanation added, and taken off again exactly (the element itself is the webmail's).
+function markAddress(el, dark, address) {
+    el.classList.add('unshortener-sender-address');
+    el.classList.toggle('unshortener-dark', dark);
+    el.setAttribute('role', 'note');
+    setChipResult(el, null, address);
+    return el;
+}
+function unmarkAddress(el) {
+    el.classList.remove('unshortener-sender-address', 'unshortener-dark');
+    for (const a of ['data-status', 'data-mark', 'title', 'aria-label', 'role']) el.removeAttribute(a);
+}
 function removeSenderDecorations(root = document) {
+    root.querySelectorAll('.unshortener-sender-address').forEach(unmarkAddress);
     root.querySelectorAll('.unshortener-sender-icon, .unshortener-sender-chip, .unshortener-row-avatar').forEach(e => e.remove());
     root.querySelectorAll('[data-unshortener-avatar]').forEach(r => { delete r.dataset.unshortenerAvatar; });
     root.querySelectorAll('[data-unshortener-sender]').forEach(e => { delete e.dataset.unshortenerSender; e.unshortenerSpam = null; });
@@ -2625,7 +2713,9 @@ function updateOpenedVerdict(body) {
     logEmailVerdict(st.msgId || st.address, st.address, st.base, final);
     if (st.chip) {
         setChipResult(st.chip, final, st.address, st.authLine);
-        st.chip.querySelector('.unshortener-sender-domain').textContent = STATUS_SHOWN.has(final.status) ? `${siteOfSender(st.domain)} · ${STATUS_TEXT[final.status]}` : siteOfSender(st.domain);
+        // A label of our own spells out the status; the webmail's address shows it by its mark and colors.
+        const domainEl = st.chip.querySelector('.unshortener-sender-domain');
+        if (domainEl) domainEl.textContent = STATUS_SHOWN.has(final.status) ? `${siteOfSender(st.domain)} · ${STATUS_TEXT[final.status]}` : siteOfSender(st.domain);
     }
     const banner = bannerState(body);
     const line = final.status === 'flagged' ? { severity: 'danger', message: `This email is flagged. ${final.reasons.join(' ')} Don't open its links or attachments or reply with personal details.` }
@@ -2649,17 +2739,22 @@ function scanOpenedSenders(S) {
         if (!who || who.address === accountAddress()) continue;
         const key = `${who.raw}|${S.enableSenderIdentity ? 'id' : ''}|${S.enableSenderCountry ? 'cc' : ''}`;
         const holder = nameEl.parentElement;
-        if (nameEl.dataset.unshortenerSender === key && (!S.enableSenderIdentity || !holder || holder.querySelector('.unshortener-sender-chip'))) continue;
-        if (holder) holder.querySelectorAll('.unshortener-sender-icon, .unshortener-sender-chip').forEach(e => e.remove());
+        if (nameEl.dataset.unshortenerSender === key && (!S.enableSenderIdentity || !holder || holder.querySelector('.unshortener-sender-chip, .unshortener-sender-address'))) continue;
+        if (holder) { holder.querySelectorAll('.unshortener-sender-icon, .unshortener-sender-chip').forEach(e => e.remove()); holder.querySelectorAll('.unshortener-sender-address').forEach(unmarkAddress); }
         nameEl.dataset.unshortenerSender = key;
         let icon = null, chip = null;
         if (S.enableSenderIdentity && holder) {
             icon = senderIconEl(who.domain, S, who.address);
-            chip = senderChipEl(who.domain, isDarkSurface(nameEl), who.address);
-            chip.style.marginLeft = '6px';
             nameEl.insertAdjacentElement('beforebegin', icon);
-            const after = (MAIL.message.senderAfter && holder.querySelector(MAIL.message.senderAfter)) || nameEl;
-            after.insertAdjacentElement('afterend', chip);
+            // The webmail's own "<address>" beside the sender's name carries the label (its colors and
+            // explanation), so no extra label is drawn there; elsewhere a label goes after the name.
+            const addressEl = MAIL.message.senderAfter && holder.querySelector(MAIL.message.senderAfter);
+            if (addressEl) chip = markAddress(addressEl, isDarkSurface(nameEl), who.address);
+            else {
+                chip = senderChipEl(who.domain, isDarkSurface(nameEl), who.address);
+                chip.style.marginLeft = '6px';
+                nameEl.insertAdjacentElement('afterend', chip);
+            }
         }
         const msgId = messageIdOf(body);
         const st = { nameEl, chip, icon, address: who.address, domain: who.domain, name: who.name, msgId, thread: currentThreadKey(), base: null, info: null, authLine: [] };
@@ -3221,6 +3316,61 @@ function showSpamNotice(n) {
 }
 
 // One pass over the inbox list and the opened emails.
+// --- Copy the sender's address -------------------------------------------------------------------
+// A button beside the sender of each opened email (after their address) that copies the address, with
+// a brief "Copied" confirmation (announced to screen readers too). Works on its own, whatever the
+// sender checks are set to. Inspired by Copy Button for Gmail.
+const COPY_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>';
+const COPIED_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/></svg>';
+function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(text).then(() => true, () => copyTextFallback(text));
+    return Promise.resolve(copyTextFallback(text));
+}
+function copyTextFallback(text) {
+    const t = document.createElement('textarea');
+    t.value = text;
+    t.setAttribute('readonly', '');
+    t.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
+    document.body.appendChild(t);
+    t.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    t.remove();
+    return ok;
+}
+function addCopyButtons(S) {
+    const sel = MAIL_CAN.opened === true && MAIL.message && MAIL.message.sender;
+    if (!sel || !S.enableCopyAddress) { document.querySelectorAll('.unshortener-copy-address').forEach(b => b.remove()); return; }
+    for (const nameEl of document.querySelectorAll(sel)) {
+        const holder = nameEl.parentElement;
+        const who = senderOf(nameEl);
+        if (!holder || !who || !who.address || holder.querySelector('.unshortener-copy-address')) continue;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'unshortener-copy-address' + (isDarkSurface(nameEl) ? ' unshortener-dark' : '');
+        btn.title = `Copy ${who.address}`;
+        btn.setAttribute('aria-label', `Copy the sender's address, ${who.address}`);
+        btn.innerHTML = COPY_ICON;
+        const status = document.createElement('span');
+        status.className = 'unshortener-copy-status';
+        status.setAttribute('role', 'status');
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();                         // not a click on the email header (it would collapse it)
+            guarded('Copying an address', () => copyText(who.address).then(ok => {
+                btn.innerHTML = ok ? COPIED_ICON : COPY_ICON;
+                btn.classList.toggle('unshortener-copied', ok);
+                status.textContent = ok ? 'Copied' : 'Couldn\'t copy';
+                clearTimeout(btn.unshortenerTimer);
+                btn.unshortenerTimer = setTimeout(() => { btn.innerHTML = COPY_ICON; btn.classList.remove('unshortener-copied'); status.textContent = ''; }, 1500);
+            }));
+        });
+        const after = (MAIL.message.senderAfter && holder.querySelector(MAIL.message.senderAfter)) || holder.querySelector('.unshortener-sender-chip') || nameEl;
+        after.insertAdjacentElement('afterend', btn);
+        btn.insertAdjacentElement('afterend', status);
+    }
+}
+
 function scanSenderIdentity() {
     if (!MAIL_CAN.list && !MAIL_CAN.opened) return;
     safeSend({ action: 'getSettings' }, (cfg) => guarded('Checking senders', () => {
@@ -3229,6 +3379,7 @@ function scanSenderIdentity() {
         lastPolicy = cfg.policy || {};
         lastLocked = cfg.locked || {};
         const S = cfg.values;
+        if (MAIL_CAN.opened === true) addCopyButtons(S);
         applyRowHighlighter(S);
         detectConflicts(S);
         if (!senderFeaturesOn(S)) {
@@ -3236,7 +3387,7 @@ function scanSenderIdentity() {
             spamQueue.clear();
             return;
         }
-        if (!S.enableSenderIdentity && document.querySelector('.unshortener-sender-icon, .unshortener-sender-chip')) removeSenderDecorations();
+        if (!S.enableSenderIdentity && document.querySelector('.unshortener-sender-icon, .unshortener-sender-chip, .unshortener-sender-address')) removeSenderDecorations();
         scanSenderRows(S);
         scanOpenedSenders(S);
         if (spamQueue.size) scheduleSpamMoves();
@@ -3297,7 +3448,7 @@ window.addEventListener('hashchange', () => { scheduleBadgeUpdate(); if (MAIL) s
 window.addEventListener('popstate', scheduleBadgeUpdate);
 // Coming back to the tab: the webmail may have refreshed the list while it was hidden.
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { lastReported = ''; scheduleBadgeUpdate(); if (MAIL) scheduleScan(); if (spamQueue.size) scheduleSpamMoves(); } });
-const SENDER_SETTING_KEYS = ['senderPictureSize', 'enableSenderBimi', 'enableRowHighlighter', 'rowHighlightColor', 'rowHighlightStyle', 'rowHighlightSelected', 'rowHighlightSelectedColor', 'enableConflictWarnings',
+const SENDER_SETTING_KEYS = ['enableCopyAddress', 'senderPictureSize', 'enableSenderBimi', 'enableRowHighlighter', 'rowHighlightColor', 'rowHighlightStyle', 'rowHighlightSelected', 'rowHighlightSelectedColor', 'enableConflictWarnings',
     'enableSenderIdentity', 'enableSenderAvatars', 'enableSenderIconFallback', 'enableSenderCountry', 'enableSenderDomainCheck', 'enableSenderAddressCheck', 'enableAutoSpam', 'customTrustedSenders', 'customAllowlist', 'enableDnsThreatCheck'];
 // Turning protection on or off in Settings or the popup takes effect on the icon immediately.
 chrome.storage.onChanged.addListener((changes, area) => {

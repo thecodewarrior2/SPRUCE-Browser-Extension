@@ -19,16 +19,17 @@ global.RAW_MESSAGES = {
   let page = await ctx.newPage();
   page.on('pageerror', e => console.log('pageerror:', e.message));
   await page.goto('https://mail.google.com/mail/u/0/#label/work/FMfcgz');
-  const read1 = () => page.evaluate(() => ({ spammed: window.__spammed, chip: (document.querySelector('.unshortener-sender-chip') || {}).textContent, title: (document.querySelector('.unshortener-sender-chip') || {}).title,
+  // In an opened Gmail email the sender's own address is the label (no separate label is drawn).
+  const read1 = () => page.evaluate(() => ({ spammed: window.__spammed, status: (document.querySelector('.unshortener-sender-address') || { dataset: {} }).dataset.status, chip: (document.querySelector('.unshortener-sender-address') || {}).textContent, title: (document.querySelector('.unshortener-sender-address') || {}).title, pills: document.querySelectorAll('.unshortener-sender-chip').length,
     flag: document.querySelector('.unshortener-sender-flag') && document.querySelector('.unshortener-sender-flag').title, link: (document.querySelector('.ii.gt a') || {dataset:{}}).dataset.unshortened, banner: (document.querySelector('.unshortener-email-banner') || {}).textContent, img: !!document.querySelector('.unshortener-sender-icon img'), blank: !!document.querySelector('.unshortener-sender-blank') }));
-  let r = await until(read1, r => r.link === 'true' && /Flagged sender/.test(r.chip || '') && /This email is flagged/.test(r.banner || '') && /Sent from a server in/.test(r.flag || '') && r.blank, 15000);
+  let r = await until(read1, r => r.link === 'true' && r.status === 'flagged' && /This email is flagged/.test(r.banner || '') && /Sent from a server in/.test(r.flag || '') && r.blank, 15000);
   await sleep(2000);                                 // long enough for a (wrong) move to have happened
   r = Object.assign(await read1(), { });
   console.log(r);
   check('regression: links in the opened email are still checked', r.link === 'true', r.link);
   check('label view: opened flagged email not moved', r.spammed.length === 0, r.spammed);
-  check('opened email: chip says flagged', /evil-scam\.test · Flagged sender/.test(r.chip || ''), r.chip);
-  check('opened email: chip tooltip has DMARC result', /DMARC fail/.test(r.title || ''), r.title);
+  check('opened email: the sender\'s address itself is the label, marked flagged (no separate label)', r.status === 'flagged' && /evil-scam\.test/.test(r.chip || '') && r.pills === 0, r);
+  check('opened email: the address\'s explanation has the DMARC result', /DMARC fail/.test(r.title || ''), r.title);
   check('opened email: banner explains flagged email', /This email is flagged/.test(r.banner || ''), r.banner);
   check('online: a site without an icon gets a blank space (no globe)', !r.img && r.blank, r);
   check('server country from Gmail delivery header (8.8.8.8 → US)', /Sent from a server in United States/.test(r.flag || ''), r.flag);
@@ -37,7 +38,7 @@ global.RAW_MESSAGES = {
   // A conversation where a colleague also wrote: not moved, even from the inbox.
   page = await ctx.newPage();
   await page.goto('https://mail.google.com/mail/u/0/?with=colleague@example.com&t=2009#inbox/mixed');
-  await until(() => page.evaluate(() => (document.querySelector('.unshortener-sender-chip') || { dataset: {} }).dataset.status), st => st && st !== 'pending', 10000);
+  await until(() => page.evaluate(() => (document.querySelector('.unshortener-sender-address') || { dataset: {} }).dataset.status), st => st && st !== 'pending', 10000);
   await sleep(3000);                                 // long enough for a (wrong) move to have happened
   r = await page.evaluate(() => window.__spammed);
   check('open conversation with a non-flagged sender too: not moved', r.length === 0, r);
@@ -55,20 +56,20 @@ global.RAW_MESSAGES = {
   // The user took it back out of Spam: opening it again from the inbox leaves it there.
   page = await ctx.newPage();
   await page.goto('https://mail.google.com/mail/u/0/#inbox/FMfcgz');
-  await until(() => page.evaluate(() => (document.querySelector('.unshortener-sender-chip') || {}).textContent || ''), t => /Flagged/.test(t), 10000);
+  await until(() => page.evaluate(() => (document.querySelector('.unshortener-sender-address') || { dataset: {} }).dataset.status), st => st === 'flagged', 10000);
   await sleep(3000);                                 // long enough for a (wrong) move to have happened
-  r = await page.evaluate(() => ({ spammed: window.__spammed, chip: (document.querySelector('.unshortener-sender-chip') || {}).textContent }));
-  check('rescued conversation not moved again', r.spammed.length === 0 && /Flagged/.test(r.chip || ''), r);
+  r = await page.evaluate(() => ({ spammed: window.__spammed, status: (document.querySelector('.unshortener-sender-address') || { dataset: {} }).dataset.status }));
+  check('rescued conversation not moved again (still marked flagged)', r.spammed.length === 0 && r.status === 'flagged', r);
   await page.close();
 
   // A clean sender, online: real DNS threat checks.
   page = await ctx.newPage();
   await page.goto('https://mail.google.com/mail/u/0/?from=someone@example.com&t=2002#inbox/abc');
-  r = await until(() => page.evaluate(() => { const c = document.querySelector('.unshortener-sender-chip'); return c && c.dataset.status; }), st => st === 'clean', 15000);
-  r = await page.evaluate(() => { const c = document.querySelector('.unshortener-sender-chip'); return { spammed: window.__spammed, status: c && c.dataset.status, chip: c && c.textContent, title: c && c.title, bg: c && getComputedStyle(c).backgroundColor }; });
+  r = await until(() => page.evaluate(() => { const c = document.querySelector('.unshortener-sender-address'); return c && c.dataset.status; }), st => st === 'clean', 15000);
+  r = await page.evaluate(() => { const c = document.querySelector('.unshortener-sender-address'); return { spammed: window.__spammed, status: c && c.dataset.status, mark: c && c.dataset.mark, title: c && c.title, bg: c && getComputedStyle(c).backgroundColor }; });
   console.log(r);
   check('online clean domain (example.com): checked, not moved', r.status === 'clean' && /Checked/.test(r.title || '') && r.spammed.length === 0, r);
-  check('checked sender: plain label (domain only, no mark, neutral color)', r.chip === 'example.com' && r.bg === 'rgb(241, 243, 244)', r);
+  check('checked sender: the address looks unchanged (no mark, no color); the explanation shows on pointing', r.mark === '' && r.bg === 'rgba(0, 0, 0, 0)' && /Checked/.test(r.title || ''), r);
   await page.close();
 
   const logs = await sw.evaluate(() => new Promise(res => chrome.storage.local.get(['errorLogs', 'geoCache', 'senderDomainCache'], res)));

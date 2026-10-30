@@ -29,6 +29,9 @@
   "managedSenderPictureSize": {
     "Value": "auto"
   },
+  "managedEnableCopyAddress": {
+    "Value": true
+  },
   "managedEnableRowHighlighter": {
     "Value": true
   },

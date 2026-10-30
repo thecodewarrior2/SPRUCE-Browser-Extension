@@ -60,6 +60,11 @@
         "inline"
       ]
     },
+    "managedEnableCopyAddress": {
+      "title": "Copy Button for the Sender's Address (Gmail)",
+      "description": "Show a button after the sender's address in opened emails that copies the address to the clipboard (keyboard accessible, with a brief confirmation). Independent of the sender checks. Inspired by Copy Button for Gmail.",
+      "type": "boolean"
+    },
     "managedEnableRowHighlighter": {
       "title": "Row Highlighter",
       "description": "Highlight the inbox row under the mouse (and selected rows) in Gmail and the other supported webmail, so users can see exactly which email a click opens. A see-through color and/or an outline, readable in light and dark themes. Inspired by Row Highlighter for Gmail.",

@@ -236,7 +236,7 @@ test('header signs: DMARC failing a quarantine policy, records forged years earl
   assert.equal(score(base + 'Received: from a by b; Fri, 10 Feb 2023 12:00:00 -0800\nMIME-Version: 1.0\n\nx'), 0, 'mail retried for 3 days');
   // A genuine mailing list breaking DMARC: only a strong sign (caution), never a flag on its own.
   assert.equal(score(base.replace('dmarc=pass', 'dmarc=fail') + 'List-ID: <staff.lists.school.org>\n\nx'), 3);
-  assert.equal(score(base.replace('dmarc=pass (p=REJECT', 'dmarc=fail (p=NONE') + '\nx'), 2);
+  assert.equal(score(base.replace('dmarc=pass (p=REJECT', 'dmarc=fail (p=NONE') + '\nx'), 3);   // a failure is at least amber (5.61)
   // Only Gmail's own topmost result counts: a "pass" the sender added lower down changes nothing.
   assert.equal(score('Received: from e by mx.google.com; Mon, 13 Feb 2023 12:46:47 -0800\nAuthentication-Results: mx.google.com; dmarc=fail (p=REJECT) header.from=paypal.com\nAuthentication-Results: mx.google.com; dmarc=pass header.from=paypal.com\nFrom: P <s@paypal.com>\n\nx'), 5);
 });
@@ -543,4 +543,24 @@ test('initials: letter from the name (else the address), steady color per sender
   for (const h of colors) assert.ok(1.05 / (lum(h) + 0.05) >= 4.5, `${h} too light for white text`);
   const used = new Set(Array.from({ length: 200 }, (_, i) => run(`initialColor("user${i}@example.org")`)));
   assert.equal(used.size, colors.length, 'senders spread over all colors');
+});
+
+test('DMARC: failures always get at least amber; pictures only for domains that enforce DMARC', async () => {
+  const RX = S('WEBMAIL_SITES').find(w => w.id === 'gmail').mail.headers.receiver;
+  const raw = (policy, extra = '') => `Received: from mail.sender.example by mx.google.com; Mon, 13 Feb 2023 12:46:46 -0800\nAuthentication-Results: mx.google.com; dkim=none; spf=fail; dmarc=fail (p=${policy} sp=${policy} dis=NONE) header.from=sender.example\n${extra}From: A <a@sender.example>\nMIME-Version: 1.0\n\nx`;
+  const dmarcWeight = (r) => (S('headerAnomalies')(r, '', RX).find(x => /DMARC/.test(x.text)) || {}).weight;
+  assert.equal(dmarcWeight(raw('NONE')), 3, 'p=none failure: amber (caution)');
+  assert.equal(dmarcWeight(raw('NONE', 'List-ID: Team news <news.lists.sender-list.org>\n')), 2, 'real mailing list: weak sign only');
+  assert.equal(dmarcWeight(raw('REJECT')), 5, 'p=reject failure: red');
+  const { IDBFactory } = require('fake-indexeddb');
+  const dns = { '_dmarc.full.example': 'v=DMARC1;p=reject;sp=none', '_dmarc.half.example': 'v=DMARC1; p=quarantine; pct=50', '_dmarc.watch.example': 'v=DMARC1; p=none' };
+  const fetch = async (u) => { const q = /name=([^&]+)&type=TXT/.exec(String(u)); const t = q && dns[decodeURIComponent(q[1])];
+    return { ok: true, status: 200, json: async () => ({ Status: t ? 0 : 3, Answer: t ? [{ type: 16, data: `"${t}"` }] : [] }) }; };
+  const b = loadBackground({}, { indexedDB: new IDBFactory(), fetch });
+  const run = (c) => vm.runInContext(c, b);
+  assert.equal(await run('dmarcEnforced("full.example")'), true, 'p=reject');
+  assert.equal(await run('dmarcEnforced("mail.full.example")'), false, 'subdomain with sp=none: not enforced');
+  assert.equal(await run('dmarcEnforced("half.example")'), false, 'pct=50: not enforced');
+  assert.equal(await run('dmarcEnforced("watch.example")'), false, 'p=none: not enforced');
+  assert.equal(await run('dmarcEnforced("none.example")'), false, 'no DMARC record');
 });
