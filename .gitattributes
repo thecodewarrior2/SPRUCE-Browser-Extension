@@ -8,3 +8,4 @@ branding export-ignore
 store export-ignore
 STORE-LISTING.md export-ignore
 .github export-ignore
+docs export-ignore

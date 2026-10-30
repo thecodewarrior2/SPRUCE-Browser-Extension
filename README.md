@@ -189,6 +189,8 @@ Some policies exist for administrators only, with no setting in the extension:
 
 ## Documentation
 
+- [**Architecture deep dive**](docs/ARCHITECTURE.md), with diagrams: what runs where, how links and
+  senders are judged, how emails are moved to Spam, and what leaves the device.
 - [CHANGELOG.md](CHANGELOG.md) — every version, what changed and why.
 - [INSTALL-FOR-TESTERS.md](INSTALL-FOR-TESTERS.md) — install and update steps.
 - [ADMIN-GUIDE.md](ADMIN-GUIDE.md) — deployment and policy keys.
