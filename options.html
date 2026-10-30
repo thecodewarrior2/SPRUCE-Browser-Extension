@@ -216,7 +216,9 @@
         .conflict-item .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
         .regex { font-family: monospace; font-size: 11px; background: var(--surface-2); border: 1px solid var(--border-subtle); border-radius: 4px; padding: 8px; word-break: break-all; display: block; }
         @media (max-width: 900px) { .preset-grid, .two-col, .flow { grid-template-columns: 1fr; } .help-layout { grid-template-columns: 1fr; } .help-nav { position: static; } }
-    </style>
+            .donate-btn { display: inline-block; padding: 4px 12px; border-radius: 14px; background: #0070ba; color: #fff !important; font-size: 13px; font-weight: 600; text-decoration: none; }
+        .donate-btn:hover, .donate-btn:focus-visible { background: #005ea6; text-decoration: none; }
+</style>
 </head>
 <body>
     <header>
@@ -1308,6 +1310,7 @@ Flag field:      (leave empty: Google's replies are recognized automatically)</d
                     <strong>Code review, security hardening &amp; redesign (v5.9 onward):</strong> Claude (Anthropic)<br>
                     <strong>Inspiration &amp; pixel heuristics:</strong> <a href="https://github.com/trockerapp/trocker" target="_blank" rel="noopener noreferrer">Trocker</a> and the open-source privacy community.
                 </p>
+<p id="donateRow" hidden><a class="donate-btn" href="https://www.paypal.com/donate/?hosted_button_id=NA8SK5RBLWGW6" target="_blank" rel="noopener noreferrer">♥ Donate</a> <span style="color: var(--text-muted); font-size: 13px;">S.P.R.U.C.E+ is free, with no ads and no tracking. Donations support its development.</span></p>
 <h3>License</h3>
 <p>Licensed under the Apache License 2.0. Source code: <a href="https://github.com/thecodewarrior2/SPRUCE-Browser-Extension" target="_blank" rel="noopener noreferrer">github.com/thecodewarrior2/SPRUCE-Browser-Extension</a>. Bundled third-party components keep their own licenses (pdf.js: Apache-2.0); the downloaded lists are used under their publishers' terms (see below).</p>
 <h3>Accessibility</h3>

@@ -1,5 +1,10 @@
 # Changelog
 
+## 5.76 — Donate button (Safari build, same as Chrome 5.76)
+
+- **A small Donate button** in Settings → Help → About, opening the project's PayPal donation page. (Safari has no extension policies, so it can't be hidden by an administrator there.)
+- The README has a Donate badge and the donation QR code.
+
 ## 5.75 — First public release (Safari build, same as Chrome 5.75)
 
 - **First public release** of S.P.R.U.C.E+, and its first publication in the App Store (the app's default bundle identifier is `org.example.SPRUCE`; use your own domain).
