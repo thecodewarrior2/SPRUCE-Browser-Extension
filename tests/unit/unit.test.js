@@ -708,6 +708,9 @@ test('look-alike senders: strong imitations, young near-misses, protected only w
   assert.equal(await v('paypal.com.verify-acct.net'), 'strong', 'a brand domain worn at the start');
   assert.equal(await v('example-k12.org', 'example.k12.fl.us'), 'strong', 'your organization run together');
   assert.equal(await v('example.k12.f1.us', 'example.k12.fl.us'), 'strong', 'your organization one letter off');
+  assert.equal(await v('lincolnschools-support.example', 'lincolnschools.example'), 'strong', 'your organization\'s name plus "support"');
+  assert.equal(await v('examplek12-login.org', 'example.k12.fl.us'), 'strong', 'your organization run together, plus "login"');
+  assert.equal(await v('lincolnschools-foundation.example', 'lincolnschools.example'), null, 'its name with an ordinary word');
   // Near: by age.
   assert.equal(await v('brandsitte.example'), 'strong', 'one letter off a popular domain, 10 days old');
   assert.equal(await v('brandsitee.example'), null, 'one letter off, but years old (real companies with similar names)');

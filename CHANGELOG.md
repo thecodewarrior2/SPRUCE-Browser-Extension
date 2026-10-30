@@ -1,14 +1,19 @@
 # Changelog
 
+## 5.74 — Store listing material; two fixes found while making it (Safari build, same as Chrome 5.74)
+
+- **Fixed: an opened email was amber where the inbox showed it red.** A sender using a brand's name on another address ("PayPal Service" from an address that isn't PayPal's) was red in the inbox list but only "be careful" once opened, because the opened email's verdict didn't count the name. It now counts the same signs as the list (a brand's name, or a colleague's, on another address), and the warning appears once, in the verdict.
+- **New: your organization's name plus a word like "support"** on a domain that isn't yours (lincolnschools-support.org, for lincolnschools.org) is flagged red as a look-alike, as a well-known brand's name with such a word already was: the classic "IT Help Desk: your password expires" phish. Your organization's name with an ordinary word (a foundation's domain) isn't.
+- **Privacy policy** ([PRIVACY.md](PRIVACY.md)), for the App Store listing. The Chrome Web Store listing text and images are on the project's `main` branch.
+
 ## 5.73 — New home: SPRUCE-Browser-Extension (Safari build, same as Chrome 5.73)
 
 - The project moved to its own repository, [github.com/thecodewarrior2/SPRUCE-Browser-Extension](https://github.com/thecodewarrior2/SPRUCE-Browser-Extension), with the Chrome build on `main` and the Firefox and Safari builds on the `firefox` and `safari` branches. Settings → About links there. Nothing else changes.
 
-## 5.72 — Ready for the Chrome Web Store (Safari build, same as Chrome 5.72)
+## 5.72 — Store-ready description (Safari build, same as Chrome 5.72)
 
-- **Shorter description** (111 characters): the Chrome Web Store refuses one over 132, and Safari shows at most 112.
-- **New: `tools/build-webstore.sh`** builds the zip to upload to the Chrome Web Store or Edge Add-ons: the release files without the manifest's `key`, which the stores refuse on a new item's first upload. The key stays in the project, so the test version keeps its ID.
-- The private signing key (`*.pem`) and built packages are now left out of the project by `.gitignore`.
+- **Shorter description** (111 characters), the same in every build: Safari shows at most 112, and the Chrome Web Store refuses one over 132.
+- The private signing key (`*.pem`) is now left out of the project by `.gitignore`.
 
 ## 5.71 — New name: S.P.R.U.C.E+ (Safari build, same as Chrome 5.71)
 
