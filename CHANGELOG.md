@@ -1,5 +1,14 @@
 # Changelog
 
+## 5.49 — More signs of forged email in the headers (Firefox build, same as Chrome 5.49)
+
+From a phishing sample that wasn't caught (a fake "AHS Warranty" email): it now scores 13 (5 flags an email).
+
+- **Failed sender verification (DMARC) against the sender's own policy:** when Gmail records that an email failed DMARC and the domain in its From line publishes "quarantine" or "reject", the domain's owner is saying the email isn't theirs. That alone flags the email (5). Only Gmail's own result on arrival counts, never one the sender wrote lower in the headers. Genuine mailing lists (a well-formed List-ID) and trusted forwarders (ARC) can break DMARC, so for them it's a strong sign (3) that flags only together with others. A failure under a "none" policy is a medium sign (2).
+- **Forged delivery records from any server:** a "Received" line dated more than a week before the email arrived (longer than any mail server keeps retrying) was copied from older emails (3). Previously only fake Gmail records were caught.
+- **Format markers that only exist in one form:** MIME-Version other than 1.0 (2), a transfer encoding that doesn't exist such as "Hexa" (2), a made-up mailing-list ID such as `<.7289367.xt.local>` (1). Apple Mail's `MIME-Version: 1.0 (Mac OS X Mail …)` is recognized as normal.
+- Header results saved by earlier versions are worked out again, so emails already in the inbox get the new checks.
+
 ## 5.48 — Stand-in icons for sites without their own (Firefox build, same as Chrome 5.48)
 
 - **A sender site without its own icon gets a stand-in:** its parent domain's icon (for `alerts.brand.com`, `brand.com`'s, through Google's icon service as before), else one from DuckDuckGo's icon service (`icons.duckduckgo.com`; only the site name is sent, and only for such sites). New setting **Stand-in icon for sites without their own** (on by default; policy `managedEnableSenderIconFallback`). Off: a blank space, as before.

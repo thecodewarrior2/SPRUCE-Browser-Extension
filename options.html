@@ -814,7 +814,7 @@
   <li><b>A sender domain that doesn't exist</b> (strong): genuine mail can't come from it, and replies can't reach it.</li>
   <li><b>Its links</b> (opened emails): when all its links, or two or more, are flagged as dangerous (for example phishing pages in cloud storage), the email is flagged; one dangerous link among others makes it Caution. So a red-linked email no longer shows a green ✓ sender.</li>
   <li><b>Its attachments</b> (opened emails): an attachment flagged as dangerous (strong); an attachment without a name (“noname”).</li>
-  <li><b>Its headers</b> (opened emails, and read emails in the list): fake Gmail delivery records copied from older emails, a misspelled “Recived” line, headers claiming several unrelated sending services at once, unfilled bulk-mail placeholders, repeated From/Subject/Date lines, a “To” line that shows one address but is addressed to another, a subject padded with blank space or random capitals.</li>
+  <li><b>Its headers</b> (opened emails, and read emails in the list): a failed sender verification (DMARC) when the sender's domain asks for such mail to be treated as spam or rejected, fake delivery records copied from older emails (dated more than a week before it arrived), a MIME version other than 1.0, an encoding that doesn't exist, a made-up mailing-list ID, a misspelled “Recived” line, headers claiming several unrelated sending services at once, unfilled bulk-mail placeholders, repeated From/Subject/Date lines, a “To” line that shows one address but is addressed to another, a subject padded with blank space or random capitals.</li>
   <li><b>Its sender name</b>: padded with symbols, rows of quotes or blank space.</li>
 </ul>
 <h3>When an email is moved to Spam</h3>

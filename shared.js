@@ -1250,9 +1250,13 @@ function parseAuthResults(raw, isReceiver = (id) => id === 'mx.google.com') {
     const fm = /^\s*"?([^"<]*?)"?\s*<([^>]+)>/.exec(fromHeader);
     const addrs = (name) => headers.filter(([n]) => n === name).map(([, x]) => x).join(', ').match(EMAIL_IN_TEXT_RE) || [];
     const hf = /header\.from=([^\s;]+)/i.exec(v);
+    // The sender domain's own published DMARC policy, as Gmail reports it: "dmarc=fail (p=QUARANTINE …)".
+    const dp = /\bdmarc=[a-z]+\s*\(([^)]*)\)/i.exec(v);
+    const dmarcPolicy = dp && (/\bp=([a-z]+)/i.exec(dp[1]) || [])[1];
     const mf = /smtp\.mailfrom=([^\s;]+)/i.exec(v);
     return {
         dmarc: result('dmarc'), spf: result('spf'), dkim: result('dkim'), arc: result('arc'),
+        dmarcPolicy: dmarcPolicy ? dmarcPolicy.toLowerCase() : '',
         headerFrom: hf ? domainOfAddress(hf[1]) : domainOfAddress(fm ? fm[2] : fromHeader),
         spfDomain: mf ? domainOfAddress(mf[1]) : '',
         dkimDomains: Array.from(v.matchAll(/dkim=pass[^;]*?header\.(?:i=@?|d=)([^\s;]+)/gi), m => domainOfAddress(m[1])),
@@ -1734,18 +1738,56 @@ const ESP_HEADER_MARKERS = [
     ['ActiveCampaign', /^x-report-abuse$/], ['250ok', /^x-250ok-/], ['MDaemon', /^x-mdaemon-|^x-md(arrival|helo)/], ['Postmark', /^x-pmmail-/],
     ['Cisco IronPort', /^x-ironport-/], ['Mailchimp', /^x-mc-user$/], ['Amazon SES', /^x-ses-/]
 ];
+// Bumped whenever headerAnomalies learns new signs, so results saved by an older version are worked
+// out again (see messageInfo in content.js).
+const HEADER_SIGNS_VERSION = 2;
 function headerAnomalies(raw, accountAddress) {
     const headers = parseRawHeaders(raw);
     const out = [];
     const get = (n) => headers.filter(([h]) => h === n).map(([, v]) => v);
-    // Gmail writes exactly one "Received: … by mx.google.com" line when it accepts an email. Extra
-    // ones dated days earlier were written by the sender to look like other deliveries.
-    const gmailHops = get('received').filter(v => /\bby mx\.google\.com\b/i.test(v));
-    if (gmailHops.length > 1) {
-        const first = receivedTime(gmailHops[0]);
-        const forged = gmailHops.slice(1).filter(v => { const t = receivedTime(v); return Number.isFinite(first) && Number.isFinite(t) && first - t > 2 * 864e5; });
-        if (forged.length) out.push({ weight: 3, text: `Its headers contain ${forged.length} fake Gmail delivery record${forged.length === 1 ? '' : 's'} (copied from other, older emails).` });
+    // Delivery records ("Received:") are written as an email travels, minutes apart, newest on top
+    // (the one Gmail writes on arrival). One dated long before that was written by the sender, copied
+    // from other, older emails to look like a normal delivery: an extra Gmail record more than 2 days
+    // older (Gmail writes one per arrival), or any record more than a week older (longer than any mail
+    // server keeps retrying).
+    const received = get('received');
+    const newest = received.map(receivedTime).find(Number.isFinite);
+    if (Number.isFinite(newest)) {
+        const gmailHop = (v) => /\bby mx\.google\.com\b/i.test(v);
+        let gmailSeen = 0;
+        const forged = received.filter(v => {
+            const t = receivedTime(v), first = gmailHop(v) && gmailSeen++ === 0;
+            return Number.isFinite(t) && (newest - t > 7 * 864e5 || (gmailHop(v) && !first && newest - t > 2 * 864e5));
+        });
+        if (forged.length) {
+            const years = [...new Set(forged.map(v => new Date(receivedTime(v)).getUTCFullYear()))].sort();
+            const n = forged.length, gm = forged.every(gmailHop);
+            out.push({ weight: 3, text: `Its headers contain ${n} fake ${gm ? 'Gmail ' : ''}delivery record${n === 1 ? '' : 's'} (copied from other, older emails${gm ? '' : `; dated ${years.join(', ')}`}).` });
+        }
     }
+    // The sender's own verification (DMARC), as Gmail itself recorded it on arrival. When the domain
+    // in the From line publishes "quarantine" or "reject", its owner says mail that fails is not
+    // theirs. A mailing list or forwarder can break DMARC for genuine mail, so a real mailing list
+    // (a well-formed List-ID) or a trusted forwarding chain (ARC) only makes it a strong sign.
+    const auth = parseAuthResults(raw);
+    const listId = get('list-id')[0] || '';
+    const realList = /<[a-z0-9][^<>\s]*\.[a-z]{2,}>/i.test(listId) && !/\.(local|localhost|invalid|test|example)>/i.test(listId);
+    if (auth && auth.dmarc === 'fail') {
+        const d = auth.headerFrom || 'its domain';
+        if (auth.dmarcPolicy === 'quarantine' || auth.dmarcPolicy === 'reject') {
+            out.push({ weight: auth.arc === 'pass' || realList ? 3 : 5,
+                text: `It failed its sender's verification (DMARC): it wasn't sent by ${d}, whose owner asks for such mail to be ${auth.dmarcPolicy === 'reject' ? 'rejected' : 'treated as spam'}.` });
+        } else {
+            out.push({ weight: 2, text: `It failed its sender's verification (DMARC), so it may not have been sent by ${d}.` });
+        }
+    }
+    if (listId && !realList) out.push({ weight: 1, text: 'Its mailing-list ID is malformed (made up to look like a newsletter).' });
+    // Format markers that only exist in one form: MIME-Version is always 1.0, and the transfer
+    // encodings are a fixed set. Anything else is hand-made.
+    const mime = (get('mime-version')[0] || '').trim();             // "1.0", maybe with a comment: "1.0 (Mac OS X Mail …)"
+    if (mime && !/^1\.0(\s|\(|$)/.test(mime)) out.push({ weight: 2, text: `Its headers claim MIME version ${mime.split(/[\s(]/)[0].slice(0, 10)}, which doesn't exist (it is always 1.0).` });
+    const cte = (get('content-transfer-encoding')[0] || '').trim().toLowerCase();
+    if (cte && !/^(7bit|8bit|binary|quoted-printable|base64)$/.test(cte)) out.push({ weight: 2, text: `Its headers name an encoding that doesn't exist (“${cte.slice(0, 20)}”).` });
     if (headers.some(([h]) => /^re(c|s)i?v?ed$/.test(h) && h !== 'received')) out.push({ weight: 2, text: 'Its headers contain a misspelled delivery record (“Recived”), a sign of hand-made headers.' });
     // From
     const from = (get('from')[0] || '');

@@ -2085,7 +2085,7 @@ function messageInfo(msgId) {
         if (messageInfos.size >= SENDER_RESULTS_MAX) messageInfos.delete(messageInfos.keys().next().value);
         messageInfos.set(msgId, (async () => {
             const cache = await loadSenderMessageCache();
-            if (cache[msgId] && Array.isArray(cache[msgId].an)) return cache[msgId];
+            if (cache[msgId] && Array.isArray(cache[msgId].an) && cache[msgId].v === HEADER_SIGNS_VERSION) return cache[msgId];
             const h = await withHeaderSlot(() => getMessageHeadersById(msgId));
             if (!h) return null;
             const headers = parseRawHeaders(h.raw);
@@ -2093,7 +2093,7 @@ function messageInfo(msgId) {
             const fm = /<([^>]*)>\s*$/.exec(from);
             const parsed = parseSenderAddress(fm ? fm[1] : ((from.match(EMAIL_IN_TEXT_RE) || [])[0] || from));
             const an = headerAnomalies(h.raw, gmailAccountAddress());
-            const info = { fh: parsed ? addressFingerprint(parsed.address) : '', ip: gmailDeliveringIp(headers) || '', an, t: Date.now() };
+            const info = { fh: parsed ? addressFingerprint(parsed.address) : '', ip: gmailDeliveringIp(headers) || '', an, v: HEADER_SIGNS_VERSION, t: Date.now() };
             cache[msgId] = info;
             saveSenderMessageCache();
             return info;
