@@ -21,6 +21,7 @@
           "managedSenderPictureSize": "auto",
           "managedEnableCopyAddress": true,
           "managedEnableLookalikeCheck": true,
+          "managedEnableOwnNameCheck": true,
           "managedEnableRowHighlighter": true,
           "managedRowHighlightColor": "yellow",
           "managedRowHighlightStyle": "both",

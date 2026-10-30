@@ -2698,6 +2698,8 @@ function scanSenderRows(S) {
                 const signals = displayNameAnomalies(senders[k].name);
                 // The name doesn't belong with the address (a brand's name, or a colleague's, outside).
                 if (S.enableLookalikeCheck && r && r.status !== 'trusted') signals.push(...nameAddressSigns(senders[k].name, senders[k].address, org, loadColleagueHashes()));
+                // The name is the user's own address or mailbox name, on someone else's address.
+                if (S.enableOwnNameCheck && r && r.status !== 'trusted') signals.push(...ownNameSigns(senders[k].name, senders[k].address, accountAddress()));
                 if (info && info.fh === addressFingerprint(senders[k].address)) signals.push(...info.an);
                 const f = applyEmailSignals(r, signals);
                 if (r && f) logEmailVerdict(`${thread}|${senders[k].address}`, senders[k].address, r, f);
@@ -2738,7 +2740,7 @@ function scanSenderRows(S) {
 }
 
 // --- Spam folder -----------------------------------------------------------------------------------
-const SPAM_NOT_FLAGGED_NOTE = 'None of this extension\'s checks flag it: Gmail put it in Spam, or you did.';
+const SPAM_NOT_FLAGGED_NOTE = 'Checked: none of this extension\'s checks flag it (that doesn\'t prove it\'s safe). Gmail put it in Spam, or you did.';
 function spamMovedText(m) {
     const when = m.ts ? ` on ${new Date(m.ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}` : '';
     return `This extension moved it to Spam${when}.${m.reason ? ` Why: ${m.reason}` : ''}`;
@@ -2829,7 +2831,8 @@ function updateOpenedVerdict(body) {
     const st = openedStates.get(body);
     if (!st || !st.base || !st.nameEl.isConnected) return;
     const signals = [...displayNameAnomalies(st.name), ...(st.info && st.info.fh === addressFingerprint(st.address) ? st.info.an : []), ...emailContentSignals(body),
-                     ...serviceWarningSigns(webmailTextAround(body), SITE.name)];
+                     ...serviceWarningSigns(webmailTextAround(body), SITE.name),
+                     ...(lastSettings.enableOwnNameCheck !== false && st.base.status !== 'trusted' ? ownNameSigns(st.name, st.address, accountAddress()) : [])];
     const final = applyEmailSignals(st.base, signals);
     st.final = final;
     logEmailVerdict(st.msgId || st.address, st.address, st.base, final);
@@ -3583,7 +3586,7 @@ window.addEventListener('hashchange', () => { scheduleBadgeUpdate(); if (MAIL) s
 window.addEventListener('popstate', scheduleBadgeUpdate);
 // Coming back to the tab: the webmail may have refreshed the list while it was hidden.
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { lastReported = ''; scheduleBadgeUpdate(); if (MAIL) scheduleScan(); if (spamQueue.size) scheduleSpamMoves(); } });
-const SENDER_SETTING_KEYS = ['enableLookalikeCheck', 'enableSpamFolderFlags', 'enableCopyAddress', 'senderPictureSize', 'enableSenderBimi', 'enableRowHighlighter', 'rowHighlightColor', 'rowHighlightStyle', 'rowHighlightSelected', 'rowHighlightSelectedColor', 'enableConflictWarnings',
+const SENDER_SETTING_KEYS = ['enableLookalikeCheck', 'enableOwnNameCheck', 'enableSpamFolderFlags', 'enableCopyAddress', 'senderPictureSize', 'enableSenderBimi', 'enableRowHighlighter', 'rowHighlightColor', 'rowHighlightStyle', 'rowHighlightSelected', 'rowHighlightSelectedColor', 'enableConflictWarnings',
     'enableSenderIdentity', 'enableSenderAvatars', 'enableSenderIconFallback', 'enableSenderCountry', 'enableSenderDomainCheck', 'enableSenderAddressCheck', 'enableAutoSpam', 'customTrustedSenders', 'customAllowlist', 'enableDnsThreatCheck'];
 // Turning protection on or off in Settings or the popup takes effect on the icon immediately.
 chrome.storage.onChanged.addListener((changes, area) => {
