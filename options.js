@@ -319,7 +319,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function buildIntuneScript(settings) {
         const q = (v) => `'${String(v).replace(/'/g, "''")}'`;
         return [
-            '# Gmail Link Unshortener — Firefox policy for Windows (Microsoft Intune, Group Policy or any management tool).',
+            '# S.P.R.U.C.E+ — Firefox policy for Windows (Microsoft Intune, Group Policy or any management tool).',
             `# Generated ${new Date().toISOString().slice(0, 10)} from the Options page (version ${chrome.runtime.getManifest().version}).`,
             '# Intune: Devices → Scripts and remediations → Platform scripts → Add (Windows 10 and later);',
             '# run as system (logged on credentials: No) in 64-bit PowerShell. Check the result at about:policies.',
@@ -1090,7 +1090,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `gmail_unshortener_history_${new Date().toISOString().slice(0,10)}.csv`;
+            a.download = `spruce_history_${new Date().toISOString().slice(0,10)}.csv`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -1107,7 +1107,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `gmail_unshortener_policies_${new Date().toISOString().slice(0,10)}.json`;
+            a.download = `spruce_policies_${new Date().toISOString().slice(0,10)}.json`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -1224,7 +1224,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `gmail_unshortener_diagnostic_logs_${new Date().toISOString().slice(0,10)}.csv`;
+            a.download = `spruce_diagnostic_logs_${new Date().toISOString().slice(0,10)}.csv`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);

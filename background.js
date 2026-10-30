@@ -2212,7 +2212,7 @@ function decodeDrawnQr(grid) {
 // ---------------------------------------------------------------------------
 const ICON_ACTIVE = { 16: 'icons/icon16.png', 32: 'icons/icon32.png', 48: 'icons/icon48.png', 128: 'icons/icon128.png' };
 const ICON_IDLE = { 16: 'icons/icon16-off.png', 32: 'icons/icon32-off.png', 48: 'icons/icon48-off.png', 128: 'icons/icon128-off.png' };
-const IDLE_TITLE = 'Gmail Link Unshortener: not active here. Open an email to have it checked.';
+const IDLE_TITLE = 'S.P.R.U.C.E+: not active here. Open an email to have it checked.';
 
 function setTabState(tabId, active, links, pixels) {
     const total = links + pixels;
@@ -2221,7 +2221,7 @@ function setTabState(tabId, active, links, pixels) {
     chrome.action.setBadgeText({ tabId, text: active && total > 0 ? String(total) : null }, ignore);
     if (active && total > 0) chrome.action.setBadgeBackgroundColor({ tabId, color: '#d93025' }, ignore);
     chrome.action.setTitle({ tabId, title: active
-        ? `Gmail Link Unshortener: checking this email (${links} link${links === 1 ? '' : 's'} fixed or flagged, ${pixels} tracking pixel${pixels === 1 ? '' : 's'} blocked)`
+        ? `S.P.R.U.C.E+: checking this email (${links} link${links === 1 ? '' : 's'} fixed or flagged, ${pixels} tracking pixel${pixels === 1 ? '' : 's'} blocked)`
         : IDLE_TITLE }, ignore);
 }
 

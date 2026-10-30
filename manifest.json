@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "Gmail Link Unshortener & Tracker Blocker",
-  "version": "5.70",
+  "name": "S.P.R.U.C.E+",
+  "version": "5.71",
   "description": "Shows where links in your email really go, flags phishing, look-alike sites, risky QR codes and attachments, and blocks tracking pixels in Gmail and other webmail.",
   "browser_specific_settings": {
     "gecko": {
@@ -60,7 +60,7 @@
       "48": "icons/icon48-off.png",
       "128": "icons/icon128-off.png"
     },
-    "default_title": "Link Unshortener: not active here. Open an email to have it checked."
+    "default_title": "S.P.R.U.C.E+: not active here. Open an email to have it checked."
   },
   "background": {
     "page": "background.html"

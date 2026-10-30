@@ -89,7 +89,7 @@ part('conflicts', async () => {
   await set(base);
   page = await ctx.newPage(); await page.goto('https://mail.google.com/mail/u/0/?ext=1#inbox'); await waitFor(() => page.evaluate(() => !!document.querySelector('.unshortener-conflict-notice')), 10000);
   let n = await notice(page);
-  check('a known extension in the page (Gmail Sender Icons): warned, recommends keeping ours', n && /Gmail Sender Icons also does sender icons in the inbox/.test(n.text) && /recommend keeping Gmail Link Unshortener on/.test(n.text), n);
+  check('a known extension in the page (Gmail Sender Icons): warned, recommends keeping ours', n && /Gmail Sender Icons also does sender icons in the inbox/.test(n.text) && /recommend keeping S\.P\.R\.U\.C\.E\+ on/.test(n.text), n);
   check('…with the three choices', n && n.buttons.some(b => /Turn off Gmail Sender Icons/.test(b)) && n.buttons.some(b => /Turn off ours \(sender icons and labels\)/.test(b)) && n.buttons.includes('Ignore'), n && n.buttons);
   await page.locator('.unshortener-conflict-notice button', { hasText: 'Turn off ours' }).click();
   await sleep(800);

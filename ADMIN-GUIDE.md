@@ -1,4 +1,8 @@
-# Managing Gmail Link Unshortener with Firefox enterprise policy
+# Managing S.P.R.U.C.E+ with Firefox enterprise policy
+
+S.P.R.U.C.E+ (Spam & Phishing Risk URL Checker Extension+) was called Gmail Link Unshortener before
+version 5.71. Only the name changed: the add-on ID (`link-unshortener@gmail-link-scanner`) and every
+policy name stay the same, so existing policies keep working.
 
 Every setting, plus the allowlist, blocklist and custom resolver, can be set and locked by policy.
 Locked settings show 🔒 in the Options page and the toolbar popup and cannot be changed by users.
