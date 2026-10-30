@@ -205,7 +205,7 @@ All of this is on by default and every part has its own key above. In short:
   by domain lists or DNS, only by exact addresses on the community list, so they are **not verified**. Labels
   are colored only when they need attention: ⛔ red (flagged), ⚠ yellow (caution) and ✓ green only for trusted
   senders and allowlisted domains (a person chose them). Checked and not-verified senders get a plain, neutral
-  label: neither a warning (most mail comes from providers like Gmail) nor a promise of safety. Also flagged: a sender domain that doesn't exist;
+  label: neither a warning (most mail comes from providers like Gmail) nor a promise of safety. Also flagged: a sender domain that doesn't exist (a subdomain with no DNS records of its own counts only when its organization's domain doesn't exist either; otherwise that domain is checked);
   a malformed address (encoded part, more than 64 characters before the @, two @, invalid domain); and an email
   that shows enough signs of forgery itself. Signs are weighted (strong ones flag on their own, weaker ones add
   up): a failed DMARC check when the From domain's owner publishes quarantine or reject (Gmail's own result on
