@@ -123,7 +123,7 @@ In Safari the two phishing-simulation rows don't apply: their rules are set by p
 
 Requires **Safari 18.2 or later** (macOS; iOS and iPadOS with a build signed by your organization). In
 Safari an extension comes inside a small app, built from this folder with Apple's converter. See
-[INSTALL-FOR-TESTERS.md](INSTALL-FOR-TESTERS.md) for the full walkthrough:
+[docs/INSTALL-FOR-TESTERS.md](docs/INSTALL-FOR-TESTERS.md) for the full walkthrough:
 
 1. On a Mac with Xcode, run `tools/build-safari.sh` (or download the app from the **Safari build**
    GitHub workflow, `.github/workflows/safari.yml`).
@@ -141,7 +141,7 @@ Safari has no extension policies: settings can't be set or locked by an administ
 management (macOS 15, iOS 18 and iPadOS 18 or later) can install the app, keep the extension always on
 and allow it on your webmail sites; the same settings for everyone come from a backup file each person
 restores. The policy-only options of the Chrome and Firefox builds (a simpler popup, phishing-simulation
-rules) aren't available. See [ADMIN-GUIDE.md](ADMIN-GUIDE.md).
+rules) aren't available. See [docs/ADMIN-GUIDE.md](docs/ADMIN-GUIDE.md).
 
 ## Repository layout
 
@@ -162,13 +162,19 @@ rules) aren't available. See [ADMIN-GUIDE.md](ADMIN-GUIDE.md).
 | `tools/refresh-snapshot.js` | Refreshes the bundled shortener-domain snapshot |
 | `tools/build-safari.sh` | Wraps the extension in a Mac/iPhone/iPad app with Apple's converter and builds it (macOS, Xcode) |
 | `.github/workflows/safari.yml` | Builds the app on a GitHub Mac and offers it for download |
-| `CHANGELOG.md` | Full release history with rationale for every change |
+| `icons/` | Toolbar and store icons |
+| `docs/` | Architecture guide, admin guide, tester instructions |
+| `branding/` | Logos, icons and the donation QR code (PNG and SVG) |
+| `tests/` | Unit and end-to-end tests, with sanitized sample emails |
+| `CHANGELOG.md` · `PRIVACY.md` · `LICENSE` | Release history · privacy policy · Apache 2.0 license |
+
+Everything at the top level besides those three files and the README is part of the extension; `docs/`, `branding/`, `tests/`, `tools/` and `.github/` never go into the app.
 
 ## Documentation
 
 - [CHANGELOG.md](CHANGELOG.md) — every version, what changed and why.
-- [INSTALL-FOR-TESTERS.md](INSTALL-FOR-TESTERS.md) — install and update steps.
-- [ADMIN-GUIDE.md](ADMIN-GUIDE.md) — building, signing and deploying the Safari app.
+- [docs/INSTALL-FOR-TESTERS.md](docs/INSTALL-FOR-TESTERS.md) — install and update steps.
+- [docs/ADMIN-GUIDE.md](docs/ADMIN-GUIDE.md) — building, signing and deploying the Safari app.
 - The extension's own **Help** tab explains how each warning works, the privacy details and
   troubleshooting.
 

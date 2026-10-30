@@ -229,7 +229,7 @@ test('every new setting is on by default and has a policy key in schema.json', (
   const hasSchema = fs.existsSync(path.join(EXT, 'schema.json'));
   const schema = hasSchema ? JSON.parse(fs.readFileSync(path.join(EXT, 'schema.json'), 'utf8')) : null;
   // The Safari build has no policies, so no example file.
-  const examplePath = path.join(EXT, 'policy-example.json');
+  const examplePath = path.join(EXT, 'docs', 'policy-example.json');
   let example = fs.existsSync(examplePath) ? JSON.parse(fs.readFileSync(examplePath, 'utf8')) : null;
   if (example && example.policies) example = example.policies['3rdparty'].Extensions['spruce@spruce-browser-extension'];
   for (const d of S('SETTING_DEFS')) {

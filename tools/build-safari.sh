@@ -35,7 +35,7 @@ rm -rf "$OUT"
 mkdir -p "$OUT/extension"
 rsync -a "$ROOT/" "$OUT/extension/" \
     --exclude '/.git' --exclude '/.github' --exclude '/.gitignore' --exclude '/.gitattributes' \
-    --exclude '/build' --exclude '/tests' --exclude '/tools' --exclude 'node_modules' --exclude '*.md' --exclude '.DS_Store'
+    --exclude '/build' --exclude '/tests' --exclude '/tools' --exclude '/docs' --exclude '/branding' --exclude 'node_modules' --exclude '*.md' --exclude '.DS_Store'
 
 # 2. Apple's converter makes the Xcode project, with a copy of the extension inside it.
 CONVERT=(xcrun safari-web-extension-converter "$OUT/extension"
