@@ -61,6 +61,7 @@ const SETTING_DEFS = [
     { key: 'enableAutoSpam',              managedKey: 'managedEnableAutoSpam',              def: true, type: 'boolean' },
     // A short notice at the top of Gmail when emails were moved, with a link to the Spam folder.
     { key: 'enableSpamNotice',            managedKey: 'managedEnableSpamNotice',            def: true, type: 'boolean' },
+    { key: 'enableSpamFolderFlags',       managedKey: 'managedEnableSpamFolderFlags',       def: true, type: 'boolean' },
     { key: 'enableQrScanning',           managedKey: 'managedEnableQrScanning',            def: true, type: 'boolean' },
     { key: 'enableAttachmentScanning',    managedKey: 'managedEnableAttachmentScanning',    def: true, type: 'boolean' },
     // Other webmail (experimental): the extension also works on these sites.
@@ -1440,6 +1441,7 @@ const FEATURE_SUPPORT = [
     { name: 'Signs of forgery in the headers (DMARC, forged delivery records…)', needs: 'headers' },
     { name: 'Phishing-simulation emails recognized by their headers', needs: 'headers' },
     { name: 'Flagged emails moved to Spam', needs: 'move' },
+    { name: 'Dangerous emails marked red in the Spam folder (moved there by the extension or not)', needs: 'move' },
     { name: 'Links checked before sending', needs: 'compose' },
     { name: 'Row highlighter (the email under the mouse, and selected ones)', needs: 'list' },
     { name: 'Warnings about other extensions that do the same job', needs: null }
@@ -2145,7 +2147,7 @@ const ESP_HEADER_MARKERS = [
 ];
 // Bumped whenever headerAnomalies learns new signs, so results saved by an older version are worked
 // out again (see messageInfo in content.js).
-const HEADER_SIGNS_VERSION = 2;
+const HEADER_SIGNS_VERSION = 3;
 // receiver: the webmail's receiving mail system, whose own records can be trusted:
 // { host: 'mx.google.com', name: 'Gmail' } (see the `mail.headers` entry of WEBMAIL_SITES).
 function headerAnomalies(raw, accountAddress, receiver = {}) {
@@ -2170,7 +2172,18 @@ function headerAnomalies(raw, accountAddress, receiver = {}) {
         if (forged.length) {
             const years = [...new Set(forged.map(v => new Date(receivedTime(v)).getUTCFullYear()))].sort();
             const n = forged.length, gm = forged.every(receiverHop);
-            out.push({ weight: 3, text: `Its headers contain ${n} fake ${gm && receiver.name ? receiver.name + ' ' : ''}delivery record${n === 1 ? '' : 's'} (copied from other, older emails${gm ? '' : `; dated ${years.join(', ')}`}).` });
+            const what = `${n} fake ${gm && receiver.name ? receiver.name + ' ' : ''}delivery record${n === 1 ? '' : 's'}`;
+            // One old record can be genuine (mail imported from an old mailbox), and so can two written
+            // minutes apart (forwarded between two addresses, then imported). Records for two or more
+            // other people (not this account), written more than 12 hours apart, were copied from
+            // different emails: no genuine email has that.
+            const own = new Set([...get('delivered-to'), accountAddress].map(a => String(a || '').trim().toLowerCase()).filter(Boolean));
+            const others = forged.map(v => ({ to: (/\bfor\s+<?([^\s<>;]+@[^\s<>;]+?)>?[\s;]/i.exec(v + ' ') || [])[1], t: receivedTime(v) }))
+                .filter(x => x.to && !own.has(x.to.toLowerCase()));
+            const people = new Set(others.map(x => x.to.toLowerCase())).size;
+            const spread = others.length ? Math.max(...others.map(x => x.t)) - Math.min(...others.map(x => x.t)) : 0;
+            if (people >= 2 && spread > 12 * 36e5) out.push({ weight: 5, text: `Its headers contain ${what} copied from emails to ${people} other people${gm ? '' : ` (dated ${years.join(', ')})`}, which no genuine email has.` });
+            else out.push({ weight: 3, text: `Its headers contain ${what} (copied from other, older emails${gm ? '' : `; dated ${years.join(', ')}`}).` });
         }
     }
     // The sender's own verification (DMARC), as Gmail itself recorded it on arrival. When the domain

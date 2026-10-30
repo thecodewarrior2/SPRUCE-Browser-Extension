@@ -101,6 +101,7 @@ extra sign-in, an app registration or an administrator-approved API.
 | Signs of forgery in the headers (DMARC, forged delivery records…) | ✓ | — | — | — | — | — | — | — | — |
 | Phishing-simulation emails recognized by their headers | ✓ | — | — | — | — | — | — | — | — |
 | Flagged emails moved to Spam | ✓ | — | — | — | — | — | — | — | — |
+| Dangerous emails marked red in the Spam folder (moved there by the extension or not) | ✓ | — | — | — | — | — | — | — | — |
 | Links checked before sending | ✓ | — | — | — | — | — | — | — | — |
 | Row highlighter (the email under the mouse, and selected ones) | ✓ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
 | Warnings about other extensions that do the same job *(every site)* | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
@@ -132,7 +133,7 @@ All of this is on by default and every part has its own switch in Settings → S
   bulk-mail placeholders, repeated From/Subject/Date lines, a "To" line hiding the real recipient, a padded subject
   or sender name, an unnamed ("noname") or dangerous attachment, and links flagged as dangerous (all of them, or
   two or more, flag the email; one among several only makes it Caution). Headers are read for opened emails and
-  read emails in the list, never for unread ones.
+  read emails in the list, and in the Spam folder for unread ones too; never for unread emails in the inbox.
 - **Trusted senders (the allow list):** Settings → Senders → Trusted senders. They are never flagged or moved.
   Use it for your phishing-training provider and for false positives; to give everyone the same list, add it
   before making the backup you share (see below).

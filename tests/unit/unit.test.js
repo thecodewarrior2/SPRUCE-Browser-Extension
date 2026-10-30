@@ -224,13 +224,31 @@ test('header signs: both scam samples flagged, a normal newsletter clean', () =>
   assert.ok(score('scam1.eml') >= 5, 'scam1'); assert.ok(score('scam2.eml') >= 5, 'scam2'); assert.equal(score('legit.eml'), 0);
 });
 
+test('header signs: delivery records copied from emails to other people, on different days, flag on their own (sample 4)', () => {
+  const RX = S('WEBMAIL_SITES').find(w => w.id === 'gmail').mail.headers.receiver;
+  const H = (raw) => S('headerAnomalies')(raw, '', RX);
+  const score = (raw) => H(raw).reduce((a, x) => a + x.weight, 0);
+  const sample = fs.readFileSync(FX + 'scam4.eml', 'utf8');
+  const forged = H(sample).find(x => /fake .*delivery record/.test(x.text));
+  assert.ok(forged && forged.weight === 5 && /2 other people/.test(forged.text), JSON.stringify(H(sample)));
+  assert.ok(score(sample) >= 5, 'flagged');
+  // Genuine shapes stay amber at most: an old record from an imported mailbox (one), or two old records
+  // written minutes apart (mail forwarded between two old addresses, then imported).
+  const top = 'Delivered-To: user@example.org\nReceived: by 2002:a05::1 with SMTP id x; Thu, 7 Nov 2024 11:52:24 -0800 (PST)\nReceived: from a.example by mx.google.com with ESMTPS id q.2024.11.07.11.52.23 for <user@example.org>; Thu, 07 Nov 2024 11:52:24 -0800 (PST)\n';
+  const old = (who, when) => `Received: from b.example by mx.google.com with ESMTPS id r for <${who}>; ${when}\n`;
+  const end = 'From: A <a@example.com>\nMIME-Version: 1.0\n\nx';
+  assert.equal(score(top + old('old-account@example.net', 'Sun, 24 Dec 2023 12:40:28 -0800') + end), 3, 'one old record');
+  assert.equal(score(top + old('alias@example.net', 'Sun, 24 Dec 2023 12:40:28 -0800') + old('old-account@example.net', 'Sun, 24 Dec 2023 12:38:02 -0800') + end), 3, 'two, minutes apart');
+  assert.equal(score(top + old('user@example.org', 'Sun, 24 Dec 2023 12:40:28 -0800') + old('user@example.org', 'Mon, 08 Jan 2024 11:19:58 -0800') + end), 3, 'two old records for this account itself');
+});
+
 test('header signs: DMARC failing a quarantine policy, records forged years earlier, MIME 2.0 (sample 3)', () => {
   const RX = S('WEBMAIL_SITES').find(w => w.id === 'gmail').mail.headers.receiver;
   const H = (raw) => S('headerAnomalies')(raw, '', RX);
   const signs = H(fs.readFileSync(FX + 'scam3.eml', 'utf8'));
   const has = (re, w) => signs.some(x => re.test(x.text) && x.weight === w);
   assert.ok(has(/DMARC.*newsletter-tool\.example.*treated as spam/, 5), 'dmarc quarantine');
-  assert.ok(has(/3 fake delivery records.*2018, 2019/, 3), 'forged records');
+  assert.ok(has(/3 fake delivery records copied from emails to 2 other people.*2018, 2019/, 5), 'forged records, copied from emails to two other people');
   assert.ok(has(/MIME version 2\.0/, 2) && has(/mailing-list ID is malformed/, 1));
   assert.ok(signs.reduce((a, x) => a + x.weight, 0) >= 5);
   // Genuine mail is left alone.
