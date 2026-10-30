@@ -1,5 +1,11 @@
 # Changelog
 
+## 5.60 — Picture sizes that follow Gmail's density, and colored initials (Firefox build, same as Chrome 5.60)
+
+- **Bigger circles, sized by Gmail's display density** (Settings → Density): **Default** gets 36-pixel circles over each email's checkbox, **Comfortable** 32-pixel ones. **Compact** has no circles: the site's icon is back beside the country flag, at the flag's size (15 px). The density is told from Gmail's page (the left menu's item height, attachment chips or a paperclip) and followed when you change it.
+- **Colored initials:** a sender with no photo, logo or site icon gets a circle with the first letter of their name on a color of their own (always the same for the same sender), so every row looks alike. Not in Compact. The colors leave out red, yellow and green, which mean flagged, caution and trusted.
+- New setting **Size of sender pictures**: Automatic (Gmail's density, the default), Large circles (36 px), Medium circles (32 px) or Small, beside the flag. Policy `managedSenderPictureSize`.
+
 ## 5.59 — Pictures for every sender without opening emails, and BIMI logos (Firefox build, same as Chrome 5.59)
 
 - **Every inbox row now shows a circle over its checkbox**, with no email opened first. In order: a colleague's own photo (your organization; learned from emails you've opened, since Gmail offers no other way without signing in to Google's API); the company's **BIMI logo** (published in DNS, looked up when the row appears); a company logo learned from an opened email; otherwise the **site's own icon**, its parent domain's, or DuckDuckGo's stand-in. Your own organization gets the same order after colleagues' photos: its logo, else its icon.

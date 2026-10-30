@@ -2229,29 +2229,86 @@ function serverCountry(info) {
 // site name is sent). A site without an icon, and "Offline only", get a blank space of the same size.
 // The sender's icon: a remembered photo or verified logo for the address first (round, as the webmail
 // shows them), else the site's icon, else a blank space of the same size.
-function senderIconEl(domain, S, address) {
+function senderIconEl(domain, S, address, name) {
     const wrap = document.createElement('span');
     wrap.className = 'unshortener-sender-icon';
     wrap.dataset.site = siteOfSender(domain);
     wrap.dataset.domain = String(domain || '').toLowerCase();
+    wrap.dataset.name = String(name || '').slice(0, 80);
     wrap.dataset.address = String(address || '').toLowerCase();
     fillSenderIcon(wrap, S);
     return wrap;
 }
-// In an inbox row the sender's picture is a circle over the row's checkbox (placeRowAvatar): their
-// photo or company logo, else the site's icon; nothing is drawn beside the sender then (the wrapper
-// keeps only the country flag). In an opened email (no checkbox) the site's icon stays beside the
-// sender, since the webmail shows its own picture there.
+// Size of the sender pictures in the inbox list (setting senderPictureSize; 'auto' follows Gmail's
+// display density): 'large' (36-pixel circles over the checkbox; Default density), 'medium' (32;
+// Comfortable) or 'inline' (Compact: no circles, the site's icon in line with the country flag, at
+// the flag's size). Only where the profile describes its own pictures (Gmail); elsewhere the icon
+// stays beside the sender. The density last seen is kept while the page shows nothing to tell
+// Default and Comfortable apart (no attachments in view).
+let lastDensity = 'default';
+function listDensity() {
+    const D = MAIL && MAIL.list && MAIL.list.density;
+    if (!D) return lastDensity;
+    const nav = D.navItem ? document.querySelector(D.navItem) : null;
+    const navHeight = nav ? nav.getBoundingClientRect().height : 0;
+    const row = listRows().find(isShown);
+    const rowHeight = row ? row.getBoundingClientRect().height : 0;
+    if ((navHeight && navHeight <= D.compactNavMax) || (!navHeight && rowHeight && rowHeight <= D.compactRowMax)) return (lastDensity = 'compact');
+    const rows = listRows().filter(isShown);
+    if (D.chips && rows.some(r => r.querySelector(D.chips))) return (lastDensity = 'default');
+    if (D.paperclip && rows.some(r => r.querySelector(D.paperclip))) return (lastDensity = 'comfortable');
+    return lastDensity === 'compact' ? (lastDensity = 'default') : lastDensity;
+}
+function pictureMode(S) {
+    if (!MAIL_CAN.avatars) return 'none';
+    const set = S.senderPictureSize;
+    if (set === 'large' || set === 'medium' || set === 'inline') return set;
+    return { compact: 'inline', comfortable: 'medium' }[listDensity()] || 'large';
+}
+function applyPictureMode(S) {
+    const mode = pictureMode(S);
+    if (document.documentElement.dataset.unshortenerPictures !== mode) document.documentElement.dataset.unshortenerPictures = mode;
+    return mode;
+}
+
+// The density can change while the inbox is open (Settings → Density) without the list being rebuilt,
+// so it's looked at again every 3 seconds while the tab is shown (one element and two sizes); the
+// rows are redrawn only when the picture size changes. Stopped while the tab is in the background.
+let densityTimer = null;
+function setDensityWatch() {
+    const on = MAIL_CAN.avatars && !document.hidden;
+    if (on && !densityTimer) densityTimer = setInterval(() => guarded('Following Gmail\'s density', () => {
+        if (!lastSettings.enableSenderIdentity) return;
+        const before = document.documentElement.dataset.unshortenerPictures;
+        if (applyPictureMode(lastSettings) !== before) scheduleScan();
+    }), 3000);
+    else if (!on && densityTimer) { clearInterval(densityTimer); densityTimer = null; }
+}
+setDensityWatch();
+document.addEventListener('visibilitychange', setDensityWatch);
+
+// In an inbox row with circles ('large' or 'medium') the sender's picture is a circle over the row's
+// checkbox (placeRowAvatar): their photo or company logo, else the site's icon, else a colored
+// initial, so every row looks the same; nothing is drawn beside the sender then (the wrapper keeps
+// only the country flag). In 'inline' mode the site's icon sits beside the flag, at the flag's size.
+// In an opened email (no checkbox) the site's icon stays beside the sender, since the webmail shows
+// its own picture there.
 function fillSenderIcon(wrap, S) {
     const site = wrap.dataset.site, address = wrap.dataset.address, domain = wrap.dataset.domain || site;
     const blank = () => { const b = document.createElement('span'); b.className = 'unshortener-sender-blank'; b.setAttribute('aria-hidden', 'true'); return b; };
     wrap.querySelectorAll('img, .unshortener-sender-blank').forEach(e => e.remove());
-    // Only where the profile describes its own pictures (Gmail): elsewhere the icon stays beside the sender.
-    const inRow = () => !!(MAIL_CAN.avatars && MAIL.list && MAIL.list.checkbox && wrap.closest(MAIL.list.row) && wrap.closest(MAIL.list.row).querySelector(MAIL.list.checkbox));
+    const row = () => MAIL && MAIL.list ? wrap.closest(MAIL.list.row) : null;
+    const mode = document.documentElement.dataset.unshortenerPictures || 'none';
+    const circles = () => (mode === 'large' || mode === 'medium') && !!(MAIL.list.checkbox && row() && row().querySelector(MAIL.list.checkbox));
+    const initial = () => placeRowAvatar(wrap, '', 'initial');
     const slot = blank();
     wrap.insertBefore(slot, wrap.firstChild);
     const avatars = !!(MAIL_CAN.avatars && S.enableSenderAvatars && address);
-    if (!(SENDER_DOMAIN_RE.test(site) && (S.enableDnsThreatCheck || avatars))) return;
+    if (!(SENDER_DOMAIN_RE.test(site) && (S.enableDnsThreatCheck || avatars))) {
+        // Nothing can be asked for (offline): an initial in the circle, so every row looks the same.
+        Promise.resolve().then(() => { if (slot.isConnected && circles()) { slot.remove(); initial(); } });
+        return;
+    }
     const key = `${site}|${domain}|${avatars ? address : ''}`;
     if (!senderIcons.has(key)) {
         if (senderIcons.size >= SENDER_RESULTS_MAX) senderIcons.delete(senderIcons.keys().next().value);
@@ -2265,16 +2322,18 @@ function fillSenderIcon(wrap, S) {
     }
     senderIcons.get(key).then(r => {
         if (!slot.isConnected) return;
-        if (inRow()) {
+        if (circles()) {
             slot.remove();
             if (r.a) placeRowAvatar(wrap, r.a, r.k || 'logo', r.d);
-            else placeRowAvatar(wrap, r.d, 'icon');
+            else if (r.d) placeRowAvatar(wrap, r.d, 'icon');
+            else initial();
             return;
         }
         if (!r.d) return;
         const img = document.createElement('img');
         img.alt = '';
         img.width = 16; img.height = 16;
+        if (mode === 'inline' && row()) img.className = 'unshortener-flag-size';
         img.addEventListener('error', () => img.replaceWith(blank()), { once: true });
         img.src = r.d;
         slot.replaceWith(img);
@@ -2285,6 +2344,24 @@ function fillSenderIcon(wrap, S) {
 // in the middle of a plain circle. It never takes clicks, and it steps aside while the row is under
 // the mouse, focused or ticked, so the checkbox is there to use.
 function placeRowAvatar(wrap, url, kind = 'logo', fallback = '') {
+    const row0 = MAIL && MAIL.list && MAIL.list.checkbox ? wrap.closest(MAIL.list.row) : null;
+    if (row0 && kind === 'initial') {
+        row0.querySelectorAll('.unshortener-row-avatar').forEach(e => e.remove());
+        const box = row0.querySelector(MAIL.list.checkbox);
+        const letter = senderInitial(wrap.dataset.name, wrap.dataset.address);
+        if (!box || !box.parentElement || !letter) { delete row0.dataset.unshortenerAvatar; return; }
+        box.parentElement.classList.add('unshortener-avatar-cell');
+        row0.classList.add('unshortener-avatar-row');
+        const el = document.createElement('span');
+        el.className = 'unshortener-row-avatar unshortener-row-initial';
+        el.dataset.kind = 'initial';
+        el.setAttribute('aria-hidden', 'true');
+        el.textContent = letter;
+        el.style.backgroundColor = initialColor(wrap.dataset.address);
+        box.parentElement.appendChild(el);
+        row0.dataset.unshortenerAvatar = '1';
+        return;
+    }
     const row = MAIL && MAIL.list && MAIL.list.checkbox ? wrap.closest(MAIL.list.row) : null;
     if (!row) return;
     row.querySelectorAll('.unshortener-row-avatar').forEach(e => e.remove());
@@ -2299,7 +2376,7 @@ function placeRowAvatar(wrap, url, kind = 'logo', fallback = '') {
     img.alt = '';
     img.setAttribute('aria-hidden', 'true');
     // A logo that won't load (its server is down, or the page refuses it): the site's icon instead.
-    img.addEventListener('error', () => { img.remove(); delete row.dataset.unshortenerAvatar; if (fallback) placeRowAvatar(wrap, fallback, 'icon'); }, { once: true });
+    img.addEventListener('error', () => { img.remove(); delete row.dataset.unshortenerAvatar; placeRowAvatar(wrap, fallback, fallback ? 'icon' : 'initial'); }, { once: true });
     if (/^https:/i.test(url)) img.referrerPolicy = 'no-referrer';
     img.src = url;
     cell.appendChild(img);
@@ -2448,13 +2525,14 @@ function scanSenderRows(S) {
     const rows = listRows().filter(isShown);
     if (!rows.length) return;
     const dark = isDarkSurface(rows[0]);
+    const pictures = applyPictureMode(S);          // Gmail's density, read once per scan
     for (const row of rows) {
         const senders = rowSenders(row);
         if (!senders.length) continue;
         const thread = rowThreadKey(row);
         const msgId = rowLastMessageId(row);
         const unread = rowIsUnread(row);
-        const key = [thread, msgId, unread ? 'u' : 'r', ...senders.map(s => s.raw), S.enableSenderIdentity ? 'id' : '', S.enableSenderCountry ? 'cc' : '', S.enableSenderAvatars ? 'av' : ''].join('|');
+        const key = [thread, msgId, unread ? 'u' : 'r', ...senders.map(s => s.raw), S.enableSenderIdentity ? 'id' : '', S.enableSenderCountry ? 'cc' : '', S.enableSenderAvatars ? 'av' : '', pictures].join('|');
         // Unchanged since the last scan (and Gmail hasn't redrawn the row without our label).
         if (row.dataset.unshortenerSender === key && (!S.enableSenderIdentity || (row.querySelector('.unshortener-sender-chip') && !avatarLost(row)))) continue;
         removeSenderDecorations(row);
@@ -2462,7 +2540,7 @@ function scanSenderRows(S) {
         // The sender shown first is the one decorated; a flagged one anywhere in the row wins.
         let icon = null, chip = null;
         if (S.enableSenderIdentity) {
-            icon = senderIconEl(senders[0].domain, S, senders[0].address);
+            icon = senderIconEl(senders[0].domain, S, senders[0].address, senders[0].name);
             chip = senderChipEl(senders[0].domain, dark, senders[0].address);
             const nameCell = firstMatch(row, MAIL.list.nameCell);
             const subject = firstMatch(row, MAIL.list.subjectCell);
@@ -3240,7 +3318,7 @@ window.addEventListener('hashchange', () => { scheduleBadgeUpdate(); if (MAIL) s
 window.addEventListener('popstate', scheduleBadgeUpdate);
 // Coming back to the tab: the webmail may have refreshed the list while it was hidden.
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { lastReported = ''; scheduleBadgeUpdate(); if (MAIL) scheduleScan(); if (spamQueue.size) scheduleSpamMoves(); } });
-const SENDER_SETTING_KEYS = ['enableSenderBimi', 'enableRowHighlighter', 'rowHighlightColor', 'rowHighlightStyle', 'rowHighlightSelected', 'rowHighlightSelectedColor', 'enableConflictWarnings',
+const SENDER_SETTING_KEYS = ['senderPictureSize', 'enableSenderBimi', 'enableRowHighlighter', 'rowHighlightColor', 'rowHighlightStyle', 'rowHighlightSelected', 'rowHighlightSelectedColor', 'enableConflictWarnings',
     'enableSenderIdentity', 'enableSenderAvatars', 'enableSenderIconFallback', 'enableSenderCountry', 'enableSenderDomainCheck', 'enableSenderAddressCheck', 'enableAutoSpam', 'customTrustedSenders', 'customAllowlist', 'enableDnsThreatCheck'];
 // Turning protection on or off in Settings or the popup takes effect on the icon immediately.
 chrome.storage.onChanged.addListener((changes, area) => {
