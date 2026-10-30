@@ -56,7 +56,7 @@ const PROMO = `<!doctype html><html><head><meta charset="utf-8"><style>
 </style></head><body><img src="${ICON}"><div>
   <div class="name">S<span class="dot">.</span>P<span class="dot">.</span>R<span class="dot">.</span>U<span class="dot">.</span>C<span class="dot">.</span>E<span class="plus">+</span></div>
   <div class="tag">Spam &amp; Phishing Risk<br>URL Checker Extension+</div>
-  <div class="tag2">Catches phishing before you click.</div>
+  <div class="tag2">Helps you spot phishing.</div>
 </div></body></html>`;
 
 // The 1400×560 marquee: the name and promise on the left, the inbox capture (red labels) on the right.
@@ -82,8 +82,8 @@ function marquee(png) {
     <div class="brand"><img src="${ICON}"><div>
       <div class="name">S<span class="dot">.</span>P<span class="dot">.</span>R<span class="dot">.</span>U<span class="dot">.</span>C<span class="dot">.</span>E<span class="plus">+</span></div>
       <div class="tag">Spam &amp; Phishing Risk URL Checker Extension+</div></div></div>
-    <h1>Catch phishing<br>before you click</h1>
-    <p>Red flags on dangerous emails in Gmail, hidden link destinations revealed, scams moved to Spam. Private: it all runs on your device.</p>
+    <h1>Spot phishing<br>before you click</h1>
+    <p>Warning signs flagged in Gmail, hidden link destinations revealed, likely scams moved to Spam. A helper on your device, not a guarantee.</p>
   </div>
   <div class="win"><div class="bar"><i></i><i></i><i></i></div><img src="data:image/png;base64,${png.toString('base64')}"></div>
 </body></html>`;
@@ -134,9 +134,9 @@ async function render(ctx, html, size, file) {
   const opts = await page.screenshot();
   await page.close();
 
-  await render(ctx, frame('Phishing flagged in your inbox,<br>before you open it', 'Red labels on fake brand names, look-alike addresses, known scam senders and "call this number" scams.', inbox), { width: 1280, height: 800 }, 'screenshot-1-inbox.png');
+  await render(ctx, frame('Warning signs flagged in your inbox,<br>before you open it', 'Red labels on fake brand names, look-alike addresses, known scam senders and "call this number" scams.', inbox), { width: 1280, height: 800 }, 'screenshot-1-inbox.png');
   await render(ctx, frame('See where links really go', 'An opened email gets a clear warning, and its dangerous links are marked before you click.', email), { width: 1280, height: 800 }, 'screenshot-2-email.png');
-  await render(ctx, frame('Dangerous email moved to Spam for you', 'With your webmail\'s own Report spam. Take one back out and it stays out.', moved), { width: 1280, height: 800 }, 'screenshot-3-moved.png');
+  await render(ctx, frame('Likely scams moved to Spam for you', 'With your webmail\'s own Report spam. Take one back out and it stays out.', moved), { width: 1280, height: 800 }, 'screenshot-3-moved.png');
   await render(ctx, frame('Every check has its own switch', 'Checks run on your device. Schools and businesses can set them for everyone by policy.', opts), { width: 1280, height: 800 }, 'screenshot-4-settings.png');
   await render(ctx, PROMO, { width: 440, height: 280 }, 'promo-440x280.png');
   await render(ctx, marquee(inbox), { width: 1400, height: 560 }, 'marquee-1400x560.png');

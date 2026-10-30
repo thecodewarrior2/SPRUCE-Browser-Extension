@@ -249,7 +249,7 @@
             <div id="statusCard" class="status-card">
                 <div id="statusIcon" class="status-icon">⏳</div>
                 <div>
-                    <div id="statusTitle" class="status-title">Checking protection status…</div>
+                    <div id="statusTitle" class="status-title">Checking status…</div>
                     <div id="statusDetails" class="status-details"></div>
                 </div>
             </div>
@@ -265,7 +265,7 @@
                     <label class="preset" data-preset="standard">
                         <input type="radio" name="privacyPreset" value="standard">
                         <span class="preset-name">Standard <span class="preset-tag">Recommended</span></span>
-                        <span class="preset-desc">Full protection. Short links are looked up online, and site names are checked against security services.</span>
+                        <span class="preset-desc">The most checks. Short links are looked up online, and site names are checked against security services.</span>
                     </label>
                     <label class="preset" data-preset="private">
                         <input type="radio" name="privacyPreset" value="private">
@@ -307,7 +307,7 @@
 
             <div class="card">
                 <h3>✉️ Senders (Gmail)</h3>
-                <p class="card-intro">Who each email is from, at a glance, in your inbox and in opened emails, and automatic protection from known phishing senders. <a href="#" data-help-link="senders">How sender checks work</a></p>
+                <p class="card-intro">Who each email is from, at a glance, in your inbox and in opened emails, and automatic help with known phishing senders. <a href="#" data-help-link="senders">How sender checks work</a></p>
                 <div class="setting-row"><div class="setting-text">Show sender icons and domain labels<div class="setting-desc">Each sender gets its site's icon and a label with its domain, colored only when it matters: ⛔ red when flagged, ⚠ amber for caution, ✓ green for senders you trust. Every other label is plain: no check can prove an email safe, and most mail comes from providers like Gmail that can't be judged by their domain. Point at a label for the details. Icons are fetched once from Google's icon service (only the site name is sent) and remembered for 30 days; a site without an icon gets a blank space, and in <em>Offline only</em> nothing is requested.</div></div>
                     <label class="switch"><input type="checkbox" data-setting="enableSenderIdentity"><span class="slider"></span></label></div>
                 <div class="setting-row"><div class="setting-text">Stand-in icon for sites without their own<div class="setting-desc">When a sender's site has no icon, its parent domain's is used (for <code>alerts.brand.com</code>, <code>brand.com</code>'s), else one from DuckDuckGo's icon service (only the site name is sent, and only for such sites). They're checked again every week and replaced by the site's own icon as soon as it has one. Off: a blank space instead. Logging → Senders shows where each icon came from.</div></div>
@@ -801,12 +801,13 @@
 <section id="help-overview" class="help-section active">
 <h2>How it works</h2>
 <p class="lead">When you open an email in Gmail (or another supported webmail: Outlook, Proton, Yahoo, AOL, Zoho, iCloud, Fastmail or GMX), the extension looks at every link and works out where it really goes, warns you about dangerous or misleading ones, and quietly removes invisible tracking images. It needs no setup.</p>
+<div class="callout-warn"><b>A helper, not a guarantee.</b> S.P.R.U.C.E+ makes a best effort to point out warning signs, but it can miss dangerous emails and links, and it can flag genuine ones. It is one small layer of protection: keep your webmail's own spam filtering, your organization's email security, your browser's protections and your own judgment. When in doubt, don't click: contact the sender another way.</div>
 <div class="flow">
   <div class="flow-step"><b>1. Email opened</b><span>Links and images in the message are read in your browser.</span></div>
   <div class="flow-step"><b>2. Decoded on your device</b><span>Security and tracking wrappers (Proofpoint, Microsoft SafeLinks, Barracuda, Google, Facebook, ad and affiliate trackers and 50+ more) are unpacked locally.</span></div>
   <div class="flow-step"><b>3. Short links looked up</b><span>If the destination is still hidden behind a short link (bit.ly…), it is looked up online. Never for one-time or email-provider links.</span></div>
   <div class="flow-step"><b>4. Checked</b><span>The destination's site name is checked against security services, and the link is checked for tricks such as text that shows a different site.</span></div>
-  <div class="flow-step"><b>5. Shown</b><span>Safe links point straight to their destination. Dangerous ones are marked in red and ask before opening.</span></div>
+  <div class="flow-step"><b>5. Shown</b><span>Links that pass the checks point straight to their destination. Ones flagged as dangerous are marked in red and ask before opening.</span></div>
 </div>
 <p><strong>When you send an email</strong> (Gmail), the links you wrote are checked before it goes: typos such as “.con” or “http//”, whether each website exists and works, and whether it's a look-alike, phishing or malware site. If something's wrong, you see which links and why, and choose <b>Go back and fix</b> or <b>Send anyway</b>.</p>
 <p><strong>In your Gmail inbox</strong>, every sender gets its site's icon, a country flag and a label with its domain, colored by a check of the sender: its address against phishing-sender lists and its domain against the same security services as links. Emails from a <b>flagged</b> sender are moved to Spam for you, once, with a short notice to review them. See <a href="#" data-help-link="senders">Sender icons &amp; Spam</a>.</p>
@@ -928,7 +929,7 @@
 <h3>Choosing a privacy level</h3>
 <table class="help-table">
 <tr><th style="width: 38%;">If you want…</th><th>Do this</th></tr>
-<tr><td>Full protection (most people)</td><td>Keep <b>Standard</b>.</td></tr>
+<tr><td>The most checks (most people)</td><td>Keep <b>Standard</b>.</td></tr>
 <tr><td>No third party to ever see a link</td><td>Choose <b>Private</b>. Short links then show as "destination unknown".</td></tr>
 <tr><td>Nothing to leave the browser at all</td><td>Choose <b>Offline only</b>. Wrapped links are still decoded and tricks still detected, but sites are not checked for threats.</td></tr>
 <tr><td>Short links expanded by a service you trust</td><td>Set <b>Your own services → Custom unshortener</b>, and optionally turn off the unshorten.me fallback.</td></tr>
@@ -1374,6 +1375,7 @@ Flag field:      (leave empty: Google's replies are recognized automatically)</d
                     <strong>Code review, security hardening &amp; redesign (v5.9 onward):</strong> Claude (Anthropic)<br>
                     <strong>Inspiration &amp; pixel heuristics:</strong> <a href="https://github.com/trockerapp/trocker" target="_blank" rel="noopener noreferrer">Trocker</a> and the open-source privacy community.
                 </p>
+<p style="font-size: 14px; color: var(--text-2);">S.P.R.U.C.E+ is provided as is, as a best-effort helper, without any warranty (see the license). It is one small layer of protection, never a replacement for your webmail's and your organization's own email security or for your own care.</p>
 <p id="donateRow" hidden><a class="donate-btn" href="https://www.paypal.com/donate/?hosted_button_id=NA8SK5RBLWGW6" target="_blank" rel="noopener noreferrer">♥ Donate</a> <span style="color: var(--text-muted); font-size: 13px;">S.P.R.U.C.E+ is free, with no ads and no tracking. Donations support its development.</span></p>
 <h3>License</h3>
 <p>Licensed under the Apache License 2.0. Source code: <a href="https://github.com/thecodewarrior2/SPRUCE-Browser-Extension" target="_blank" rel="noopener noreferrer">github.com/thecodewarrior2/SPRUCE-Browser-Extension</a>. Bundled third-party components keep their own licenses (pdf.js: Apache-2.0); the downloaded lists are used under their publishers' terms (see below).</p>

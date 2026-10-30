@@ -6,6 +6,12 @@ file. The extension's own **Help → Architecture** tab has the same material wi
 your installation: the decoder table, the settings in force, and every network request with whether
 it is switched on right now.
 
+> **A helper, not a guarantee.** S.P.R.U.C.E+ makes a best effort to point out warning signs, but it
+> can miss dangerous emails and links, and it can flag genuine ones. It is one small layer of
+> protection: keep your webmail's own spam filtering, your organization's email security, your
+> browser's protections and your own judgment. When in doubt, don't click: contact the sender
+> another way.
+
 ## Contents
 
 1. [The pieces](#1-the-pieces)
@@ -58,7 +64,8 @@ flowchart LR
   are decoded offline before any request is considered.
 - **A link's own server is never contacted.** Short links are expanded by a lookup service; threat
   checks send only a website's name to DNS resolvers.
-- **Unknown is never "safe".** Anything that can't be checked is "not verified". Unreadable replies
+- **Best effort, and unknown is never "safe".** The checks can miss things and can be wrong; the
+  extension says what it found, never that an email is safe. Anything that can't be checked is "not verified". Unreadable replies
   count as no answer.
 - **One-time links are protected.** Password-reset, sign-in, verification and unsubscribe links are
   never sent, cached or logged in full.

@@ -200,14 +200,14 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!S.enableRemoteListSync) details.push('Shortener list updates off');
             else details.push(lastSync ? `Shortener list updated ${relativeTime(lastSync)}` : 'Using the built-in shortener list until the first update');
 
-            let state = 'ok', icon = '✅', title = 'Protection is on';
+            let state = 'ok', icon = '✅', title = 'Checks are on';
             if (!S.enableLinkUnmasking) {
-                state = 'off'; icon = '⏸️'; title = 'Link protection is switched off';
+                state = 'off'; icon = '⏸️'; title = 'Link checks are switched off';
                 details.unshift('Turn on "Reveal where links really go" below to resume');
             } else if (errors.length) {
-                state = 'bad'; icon = '❗'; title = `Protection is on, but ${errors.length === 1 ? '1 error' : errors.length + ' errors'} in the last day ${errors.length === 1 ? 'needs' : 'need'} attention`;
+                state = 'bad'; icon = '❗'; title = `Checks are on, but ${errors.length === 1 ? '1 error' : errors.length + ' errors'} in the last day ${errors.length === 1 ? 'needs' : 'need'} attention`;
             } else if (dnsDown) {
-                state = 'warn'; icon = '⚠️'; title = 'Protection is on, with reduced checking';
+                state = 'warn'; icon = '⚠️'; title = 'Checks are on, with reduced checking';
             }
             card.className = `status-card ${state === 'ok' ? '' : state}`;
             document.getElementById('statusIcon').textContent = icon;

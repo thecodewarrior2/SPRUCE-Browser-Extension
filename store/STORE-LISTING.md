@@ -8,20 +8,20 @@ for Microsoft Edge Add-ons. Upload the zip made by `tools/build-webstore.sh` (fr
 
 **Name** (from the package): `S.P.R.U.C.E+`
 
-**Summary** (from the package, 111 characters):
+**Summary** (from the package, 103 characters):
 
 ```
-Finds phishing and scams in Gmail and other webmail: links, senders, QR codes and attachments. Blocks trackers.
+Helps you spot phishing and scams in Gmail and other webmail: links, senders, QR codes and attachments.
 ```
 
 **Description:**
 
 ```
-S.P.R.U.C.E+ (Spam & Phishing Risk URL Checker Extension+) catches phishing in your email before you click.
+S.P.R.U.C.E+ (Spam & Phishing Risk URL Checker Extension+) helps you spot phishing in your email before you click.
 
 IN YOUR INBOX, BEFORE YOU OPEN ANYTHING
 • Red labels on dangerous senders: fake brand names ("PayPal Service" from an address that isn't PayPal's), look-alike addresses (a letter swapped, or your school's name plus "support"), known scam senders, and senders using your own name.
-• "Call this number" scams are caught even when the email really comes from a company's system.
+• "Call this number" scams are flagged even when the email really comes from a company's system.
 • Flagged emails can be moved to Spam for you, with your webmail's own Report spam. Take one back out and it stays out.
 
 IN AN OPENED EMAIL
@@ -40,6 +40,9 @@ FOR SCHOOLS AND BUSINESSES
 • Phishing-training emails from your provider can be left alone.
 
 Works fully in Gmail. Other popular webmail services are supported in a basic, read-only way.
+
+A HELPER, NOT A GUARANTEE
+S.P.R.U.C.E+ makes a best effort to point out warning signs, but it can miss dangerous emails and can flag genuine ones. It is one small layer of protection: keep your webmail's spam filtering, your organization's email security and your own judgment.
 
 Privacy policy: https://github.com/thecodewarrior2/SPRUCE-Browser-Extension/blob/main/PRIVACY.md
 ```
@@ -76,7 +79,7 @@ fictional). `source/make-images.js` makes them again after a change.
 **Single purpose:**
 
 ```
-Protect webmail users from phishing and scam emails. S.P.R.U.C.E+ checks the emails a user reads in their webmail (the sender, links, QR codes and attachments), warns when an email is dangerous, and can move it to Spam. Every feature serves this one purpose: showing where links really lead, flagging fake or look-alike senders, and blocking the tracking pixels that tell scammers an address is live.
+Help webmail users spot phishing and scam emails. S.P.R.U.C.E+ checks the emails a user reads in their webmail (the sender, links, QR codes and attachments), warns when an email is dangerous, and can move it to Spam. Every feature serves this one purpose: showing where links really lead, flagging fake or look-alike senders, and blocking the tracking pixels that tell scammers an address is live.
 ```
 
 ### Permission justifications
