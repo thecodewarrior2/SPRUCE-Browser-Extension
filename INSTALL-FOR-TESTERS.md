@@ -4,11 +4,11 @@ The extension isn't in a web store yet, so it's installed from this folder. It t
 
 ## Install
 
-1. **Unzip** the download and move the `gmail-link-unshortener` folder somewhere permanent
+1. **Unzip** the download and move the unzipped folder somewhere permanent
    (for example your Documents folder). Chrome loads it from there, so don't delete it later.
 2. Open **chrome://extensions** (Edge: **edge://extensions**).
 3. Turn on **Developer mode** (top-right in Chrome; left side in Edge).
-4. Click **Load unpacked** and choose the `gmail-link-unshortener` folder
+4. Click **Load unpacked** and choose that folder
    (the one that contains `manifest.json`).
 5. Optional: click the puzzle-piece icon in the toolbar and **pin** the extension.
 6. **Reload your webmail tab.** Open any email; the toolbar icon lights up while the email is being checked.

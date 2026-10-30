@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-04/schema#",
-  "title": "Gmail Link Unshortener Policy",
-  "description": "Configuration policy for the Gmail Link Unshortener & Tracker Blocker Chrome extension. Any setting defined here is locked for users.",
+  "title": "S.P.R.U.C.E+ Policy",
+  "description": "Configuration policy for the S.P.R.U.C.E+ (Spam & Phishing Risk URL Checker Extension+) Chrome extension. Any setting defined here is locked for users.",
   "type": "object",
   "properties": {
     "managedEnableLinkUnmasking": {
