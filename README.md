@@ -127,7 +127,16 @@ your webmail. Settings are kept.
 
 The `key` in `manifest.json` is the extension's **public** key: it keeps the extension ID the same
 on every computer, so settings and managed policies apply. It's safe to publish. The matching
-private key (`.pem`) signs releases and must never be committed (see `.gitignore`).
+private key (`.pem`) signs releases and must never be committed (`.gitignore` leaves out `*.pem`).
+
+## Publishing to the Chrome Web Store (or Edge Add-ons)
+
+Run `tools/build-webstore.sh` and upload `build/spruce-<version>-webstore.zip`. It is the last commit
+without the `key` field, which the stores refuse on a new item's first upload. The store gives the
+extension its own ID, so administrators use that ID in policies (the policy names don't change). In
+the developer dashboard, the store also asks for a privacy policy link, a reason for each permission,
+the data the extension handles (website content and email, read on the device), screenshots and a
+promotional image.
 
 ## For administrators
 

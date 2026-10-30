@@ -1,5 +1,11 @@
 # Changelog
 
+## 5.72 — Ready for the Chrome Web Store
+
+- **Shorter description** (111 characters): the Chrome Web Store refuses one over 132, and Safari shows at most 112.
+- **New: `tools/build-webstore.sh`** builds the zip to upload to the Chrome Web Store or Edge Add-ons: the release files without the manifest's `key`, which the stores refuse on a new item's first upload. The key stays in the project, so the test version keeps its ID.
+- The private signing key (`*.pem`) and built packages are now left out of the project by `.gitignore`.
+
 ## 5.71 — New name: S.P.R.U.C.E+
 
 - **Renamed to S.P.R.U.C.E+** (Spam & Phishing Risk URL Checker Extension+), with a new icon: a shield with a magnifying glass. The toolbar icon, the Settings page, the popup and the extension's notices use the new name and icon; while the extension isn't checking an email, the toolbar shows the same icon in gray.
