@@ -55,6 +55,7 @@ Privacy policy: https://github.com/thecodewarrior2/SPRUCE-Browser-Extension/blob
 | Store icon (128×128) | `icons/icon128.png` |
 | Screenshots (1280×800) | `store/screenshot-1-inbox.png`, `store/screenshot-2-email.png`, `store/screenshot-3-moved.png`, `store/screenshot-4-settings.png` |
 | Small promo tile (440×280) | `store/promo-440x280.png` |
+| Marquee promo tile (1400×560) | `store/marquee-1400x560.png` |
 
 The screenshots show the real extension at work on a made-up inbox (every name and address in them is
 fictional). `store/source/make-images.js` makes them again after a change.

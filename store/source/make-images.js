@@ -59,6 +59,36 @@ const PROMO = `<!doctype html><html><head><meta charset="utf-8"><style>
   <div class="tag2">Catches phishing before you click.</div>
 </div></body></html>`;
 
+// The 1400×560 marquee: the name and promise on the left, the inbox capture (red labels) on the right.
+function marquee(png) {
+  return `<!doctype html><html><head><meta charset="utf-8"><style>
+  body { margin: 0; width: 1400px; height: 560px; overflow: hidden; font-family: Inter, Arial, sans-serif; position: relative;
+    background: radial-gradient(900px 560px at 95% 0%, #3b2a5c 0%, ${BRAND.ink} 65%); color: ${BRAND.paper}; }
+  .left { position: absolute; left: 80px; top: 0; bottom: 0; width: 560px; display: flex; flex-direction: column; justify-content: center; }
+  .brand { display: flex; align-items: center; gap: 18px; }
+  .brand img { width: 96px; height: 96px; }
+  .name { font-size: 52px; font-weight: 800; letter-spacing: 2px; white-space: nowrap; }
+  .dot { color: ${BRAND.mint}; } .plus { color: ${BRAND.gold}; }
+  .tag { font-size: 19px; color: #cfc6e6; margin-top: 4px; }
+  h1 { font-size: 46px; line-height: 1.12; font-weight: 800; margin: 38px 0 14px; }
+  p { font-size: 20px; line-height: 1.45; color: #cfc6e6; margin: 0; }
+  .win { position: absolute; left: 700px; top: 70px; width: 820px; height: 520px; border-radius: 14px; overflow: hidden;
+    background: #fff; box-shadow: 0 24px 70px rgba(0,0,0,.5); transform: rotate(-3deg); transform-origin: top left; }
+  .bar { height: 26px; background: #e8e6ee; display: flex; align-items: center; gap: 7px; padding: 0 12px; }
+  .bar i { width: 11px; height: 11px; border-radius: 50%; background: #c9c4d6; display: block; }
+  .win img { display: block; width: 1180px; margin-left: -150px; }
+</style></head><body>
+  <div class="left">
+    <div class="brand"><img src="${ICON}"><div>
+      <div class="name">S<span class="dot">.</span>P<span class="dot">.</span>R<span class="dot">.</span>U<span class="dot">.</span>C<span class="dot">.</span>E<span class="plus">+</span></div>
+      <div class="tag">Spam &amp; Phishing Risk URL Checker Extension+</div></div></div>
+    <h1>Catch phishing<br>before you click</h1>
+    <p>Red flags on dangerous emails in Gmail, hidden link destinations revealed, scams moved to Spam. Private: it all runs on your device.</p>
+  </div>
+  <div class="win"><div class="bar"><i></i><i></i><i></i></div><img src="data:image/png;base64,${png.toString('base64')}"></div>
+</body></html>`;
+}
+
 async function render(ctx, html, size, file) {
   const page = await ctx.newPage();
   await page.setViewportSize(size);
@@ -109,5 +139,6 @@ async function render(ctx, html, size, file) {
   await render(ctx, frame('Dangerous email moved to Spam for you', 'With your webmail\'s own Report spam. Take one back out and it stays out.', moved), { width: 1280, height: 800 }, 'screenshot-3-moved.png');
   await render(ctx, frame('Every check has its own switch', 'Checks run on your device. Schools and businesses can set them for everyone by policy.', opts), { width: 1280, height: 800 }, 'screenshot-4-settings.png');
   await render(ctx, PROMO, { width: 440, height: 280 }, 'promo-440x280.png');
+  await render(ctx, marquee(inbox), { width: 1400, height: 560 }, 'marquee-1400x560.png');
   await ctx.close();
 })().catch(e => { console.error(e); process.exit(1); });
