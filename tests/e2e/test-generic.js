@@ -48,6 +48,17 @@ const chips = (page) => page.evaluate(() => [...document.querySelectorAll('.unsh
   check('still no click with a flagged opened email', clicks.length === 0, clicks);
   await page.close();
 
+  // A genuine Microsoft notification carrying "call this number" scam text, opened in Outlook.
+  await set(base);
+  page = await ctx.newPage();
+  await page.goto('https://outlook.office.com/mail/inbox?callback=1');
+  c = await until(() => chips(page), c => c.some(x => !x.inRow && x.status === 'flagged'), 10000);
+  const cb = c.filter(x => !x.inRow);
+  const cbBanner = await until(() => page.evaluate(() => (document.querySelector('.unshortener-email-banner') || {}).textContent || ''), t => /call this number/.test(t), 5000);
+  check('Outlook: a "call this number" scam in a genuine Microsoft email is flagged when opened', cb.length === 1 && cb[0].status === 'flagged' && /call this number/.test(cb[0].title) && /mathematical/.test(cb[0].title), cb);
+  check('…and the banner says why', /This email is flagged/.test(cbBanner) && /call this number/.test(cbBanner), cbBanner.slice(0, 200));
+  await page.close();
+
   // Yahoo-like page.
   await set(base);
   page = await ctx.newPage();
