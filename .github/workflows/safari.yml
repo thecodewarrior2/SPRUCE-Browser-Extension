@@ -29,6 +29,6 @@ jobs:
         with:
           name: safari-xcode-project
           path: |
-            build/safari/Link Unshortener/
+            build/safari/SPRUCE/
             build/safari/*.log
           if-no-files-found: ignore

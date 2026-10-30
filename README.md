@@ -1,4 +1,9 @@
-# Gmail Link Unshortener & Tracker Blocker
+<p align="center"><img src="branding/logo.png" alt="S.P.R.U.C.E+ — Spam &amp; Phishing Risk URL Checker Extension+" width="640"></p>
+
+# S.P.R.U.C.E+
+
+**Spam & Phishing Risk URL Checker Extension+**, formerly *Gmail Link Unshortener & Tracker Blocker*.
+Logos and icons (PNG and SVG, for light and dark backgrounds) are in [`branding/`](branding).
 
 A Safari (Manifest V3) web extension that shows where the links in your email **really** go before you
 click them, flags phishing and look-alike sites, and blocks email tracking pixels. Everything

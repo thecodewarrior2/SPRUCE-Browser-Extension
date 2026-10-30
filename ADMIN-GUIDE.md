@@ -1,4 +1,8 @@
-# Deploying Gmail Link Unshortener in Safari
+# Deploying S.P.R.U.C.E+ in Safari
+
+S.P.R.U.C.E+ (Spam & Phishing Risk URL Checker Extension+) was called Gmail Link Unshortener before
+version 5.71. Only the name changed: the app's bundle identifier and the extension's settings stay the
+same. The Mac app is now called SPRUCE.app.
 
 Safari has **no extension policies**: unlike Chrome and Firefox, an administrator can't set or lock an
 extension's settings. What device management can do in Safari is install the app that carries the

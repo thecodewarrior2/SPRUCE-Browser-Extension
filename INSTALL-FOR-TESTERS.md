@@ -7,19 +7,19 @@ locally", so Safari has to be told to allow unsigned extensions. It takes a few 
 ## Get the app
 
 - **From GitHub:** open the latest run of the **Safari build** workflow and download
-  `safari-mac-app` under Artifacts; unzip it (twice: GitHub zips the zip) to get **Link Unshortener.app**.
+  `safari-mac-app` under Artifacts; unzip it (twice: GitHub zips the zip) to get **SPRUCE.app**.
 - **Or build it yourself** on a Mac with Xcode: run `tools/build-safari.sh` in this folder; the app is in
-  `build/safari/LinkUnshortener-<version>-macos.zip`.
+  `build/safari/SPRUCE-<version>-macos.zip`.
 
 ## Install
 
-1. Move **Link Unshortener.app** to your Applications folder.
+1. Move **SPRUCE.app** to your Applications folder.
 2. The first time, **right-click the app → Open** and confirm (macOS warns about apps from outside the
-   App Store). If it still refuses, run `xattr -dr com.apple.quarantine "/Applications/Link Unshortener.app"`
+   App Store). If it still refuses, run `xattr -dr com.apple.quarantine "/Applications/SPRUCE.app"`
    in Terminal, then open it again.
 3. In Safari: **Settings → Advanced → Show features for web developers**, then in the menu bar
    **Develop → Allow Unsigned Extensions** (enter your password).
-4. **Safari → Settings → Extensions:** tick **Gmail Link Unshortener & Tracker Blocker**.
+4. **Safari → Settings → Extensions:** tick **S.P.R.U.C.E+**.
 5. Open your webmail, click the extension's toolbar icon (or the **Aa**/puzzle icon) and choose
    **Always Allow on This Website**. Reload the page.
 

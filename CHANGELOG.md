@@ -1,5 +1,11 @@
 # Changelog
 
+## 5.71 — New name: S.P.R.U.C.E+ (Safari build, same as Chrome 5.71)
+
+- **Renamed to S.P.R.U.C.E+** (Spam & Phishing Risk URL Checker Extension+), with a new icon: a shield with a magnifying glass. The toolbar icon, the Settings page, the popup and the extension's notices use the new name and icon; while the extension isn't checking an email, the toolbar shows the same icon in gray.
+- **Nothing else changes:** settings and the app's bundle identifier stay the same, so the app updates in place. The Mac app built by `tools/build-safari.sh` is now called **SPRUCE.app** (letters only, which Xcode needs); Safari shows the extension as S.P.R.U.C.E+.
+- Logos and icons for documents and announcements (PNG and SVG, for light and dark backgrounds) are in the `branding` folder of the project.
+
 ## 5.70 — "Call this number" scams caught; OneDrive no longer flagged (Safari build, same as Chrome 5.70)
 
 - **New: Catch "call this number" scams** (on by default). A fake receipt ("Your order of Windows Defender for (555.68 USD) was successfully purchased. If this purchase was not made by you, please contact Microsoft Customer Support Immediately at…") wasn't flagged in Outlook, because Microsoft's own system really sent it: attackers had typed the text into a name that Microsoft's verification email repeats, so it passed every sender check. Now a subject with a phone number to call about a purchase or charge you didn't make is flagged red from the inbox list (Gmail) and moved to Spam, whoever sent it. A number with only "call" or "support" (a shop's "call to pick it up") is a caution. In an opened email, on Gmail, Outlook and the other webmail sites, "call this number if you didn't make this purchase" is a caution, and so are look-alike "mathematical" letters such as 𝐔𝐒𝐃, used to slip past filters; together they flag it. Phone numbers written "1(555)010-0188", with nothing after the brackets, are now recognized too.

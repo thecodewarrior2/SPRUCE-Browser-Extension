@@ -3,3 +3,5 @@ tests export-ignore
 .gitignore export-ignore
 .gitattributes export-ignore
 .github export-ignore
+# Logos for documents and the project page; the extension uses icons/.
+branding export-ignore

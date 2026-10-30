@@ -1191,7 +1191,7 @@ function flagRiskySchemeLink(link, scheme) {
         : `this link opens embedded "${scheme}:" content instead of a web page`;
     link.setAttribute('data-unshortener-original-href', link.getAttribute('href'));
     link.removeAttribute('href');
-    link.title = `⚠️ Disabled by Link Unshortener: ${reason}.`;
+    link.title = `⚠️ Disabled by S.P.R.U.C.E+: ${reason}.`;
     link.style.backgroundColor = '#d93025'; link.style.color = '#fff'; link.style.padding = '2px 5px'; link.style.borderRadius = '4px';
     reportEvent('info', `Disabled a "${scheme}:" link in an email.`);
 }
@@ -1586,7 +1586,7 @@ function refreshEmailBanner(body) {
         st.el = document.createElement('div');
         st.el.className = 'unshortener-email-banner';
         st.el.setAttribute('role', 'note');
-        st.el.setAttribute('aria-label', 'Link Unshortener notice about this email');
+        st.el.setAttribute('aria-label', 'S.P.R.U.C.E+ notice about this email');
         body.parentElement.insertBefore(st.el, body);
     }
     renderBanner(body, st, lines, entries, kinds);
@@ -3013,7 +3013,7 @@ function showConflictNotice(c) {
     const text = document.createElement('div');
     const lead = document.createElement('b');
     lead.textContent = c.via === 'effect' ? `Another extension also shows ${c.does}.` : `${c.name} also does ${c.does}.`;
-    text.append(lead, ` Two extensions doing the same job in ${SITE.name} can conflict (doubled icons, flicker, a slower page). We recommend keeping Gmail Link Unshortener on, since it also checks these senders for phishing, and turning the other one off.`);
+    text.append(lead, ` Two extensions doing the same job in ${SITE.name} can conflict (doubled icons, flicker, a slower page). We recommend keeping S.P.R.U.C.E+ on, since it also checks these senders for phishing, and turning the other one off.`);
     const buttons = document.createElement('div');
     buttons.className = 'unshortener-conflict-buttons';
     const btn = (label, primary, fn) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = label; if (primary) b.className = 'primary'; b.addEventListener('click', () => guarded('Resolving an extension conflict', fn)); buttons.appendChild(b); return b; };

@@ -3,22 +3,22 @@
 # Apple's converter, then builds the Mac app. Run it on a Mac with Xcode, from anywhere:
 #     tools/build-safari.sh
 # Output in build/safari/:
-#     Link Unshortener/                     the Xcode project (open it to sign, archive, or build for iOS)
-#     LinkUnshortener-<version>-macos.zip   the built Mac app, signed "to run locally" (ad hoc)
+#     SPRUCE/                               the Xcode project (open it to sign, archive, or build for iOS)
+#     SPRUCE-<version>-macos.zip            the built Mac app, signed "to run locally" (ad hoc)
 # To try the app on one Mac: Safari → Settings → Advanced → Show features for web developers, then
 # Develop → Allow Unsigned Extensions; open the app once and turn the extension on in Safari → Settings →
 # Extensions. To give it to others, sign it with your team (see Help → Deploying in organizations).
 #
 # Optional settings (environment variables):
 #     BUNDLE_ID   the app's bundle identifier (default org.example.LinkUnshortener; use your own domain)
-#     APP_NAME    the app's name (default "Link Unshortener")
+#     APP_NAME    the app's name (default "SPRUCE"; Safari shows the extension as S.P.R.U.C.E+)
 #     PLATFORMS   "all" (Mac and iPhone/iPad project, the default) or "macos"
 #     TEAM_ID     your Apple Developer team: the Mac app is then signed with it instead of ad hoc
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="$ROOT/build/safari"
-APP_NAME="${APP_NAME:-Link Unshortener}"
+APP_NAME="${APP_NAME:-SPRUCE}"
 BUNDLE_ID="${BUNDLE_ID:-org.example.LinkUnshortener}"
 PLATFORMS="${PLATFORMS:-all}"
 TEAM_ID="${TEAM_ID:-}"
@@ -62,7 +62,7 @@ grep -E '^\*\*|error:' "$OUT/xcodebuild.log" || true
 
 APP="$(find "$OUT/DerivedData/Build/Products/Release" -maxdepth 1 -name '*.app' -type d | head -n 1)"
 [ -n "$APP" ] || { echo "No app was built (see $OUT/xcodebuild.log)." >&2; exit 1; }
-ZIP="$OUT/LinkUnshortener-$VERSION-macos.zip"
+ZIP="$OUT/SPRUCE-$VERSION-macos.zip"
 ditto -c -k --keepParent "$APP" "$ZIP"
 echo "Done: $ZIP"
 echo "Xcode project: $PROJECT"
