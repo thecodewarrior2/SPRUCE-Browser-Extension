@@ -42,7 +42,7 @@ Firefox passes an add-on's policy from `policies` → `3rdparty` → `Extensions
 
 `<slug>` is the last part of the add-on's addons.mozilla.org address; for a self-hosted signed `.xpi`,
 use its address instead. The examples below show only the add-on's own settings object (the part under
-the add-on ID). `policy-example.json` lists every key with its default value. Users can also generate a
+the add-on ID). `docs/policy-example.json` lists every key with its default value. Users can also generate a
 starting point from **Options → Settings → Backup & enterprise policy → "Copy policies.json"**.
 
 ## Windows: Microsoft Intune and Group Policy

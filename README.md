@@ -120,7 +120,7 @@ sign-in, an app registration or an administrator-approved API.
 ## Install
 
 Requires **Firefox 140 or later** (desktop). Until it's on addons.mozilla.org, it's loaded from this
-folder. See [INSTALL-FOR-TESTERS.md](INSTALL-FOR-TESTERS.md) for the full walkthrough:
+folder. See [docs/INSTALL-FOR-TESTERS.md](docs/INSTALL-FOR-TESTERS.md) for the full walkthrough:
 
 1. Open `about:debugging#/runtime/this-firefox`.
 2. Click **Load Temporary Add-on…** and choose `manifest.json` in this folder.
@@ -135,7 +135,7 @@ attached to the same add-on on every computer.
 
 Settings can be forced with Firefox enterprise policy: `policies.json` on any platform, the Windows
 registry with Microsoft Intune or Group Policy (Settings → **Copy Intune script** generates the
-PowerShell), or a macOS configuration profile. See [ADMIN-GUIDE.md](ADMIN-GUIDE.md); [`policy-example.json`](policy-example.json) is a
+PowerShell), or a macOS configuration profile. See [docs/ADMIN-GUIDE.md](docs/ADMIN-GUIDE.md); [`docs/policy-example.json`](docs/policy-example.json) is a
 complete `policies.json` with every key.
 
 The sender features (Gmail) each have their own key (`managedEnableSenderIdentity`,
@@ -169,14 +169,20 @@ Some policies exist for administrators only, with no setting in the extension:
 | `options.*`, `help.js`, `popup.*` | Settings, logging, Link Inspector and Help; the toolbar popup |
 | `theme.css` / `theme.js` | Design tokens and light/dark appearance (WCAG 2.1 AA) |
 | `lib/` | Bundled pdf.js (Apache-2.0), used only for PDF attachments |
-| `tools/refresh-snapshot.js` | Refreshes the bundled shortener-domain snapshot |
-| `CHANGELOG.md` | Full release history with rationale for every change |
+| `icons/` | Toolbar and store icons |
+| `tools/` | Maintenance scripts: `refresh-snapshot.js` (the bundled shortener list) |
+| `docs/` | Architecture guide, admin guide, tester instructions, policy example |
+| `branding/` | Logos, icons and the donation QR code (PNG and SVG) |
+| `tests/` | Unit and end-to-end tests, with sanitized sample emails |
+| `CHANGELOG.md` · `PRIVACY.md` · `LICENSE` | Release history · privacy policy · Apache 2.0 license |
+
+Everything at the top level besides those three files and the README is part of the extension (the folder a browser loads); `docs/`, `store/`, `branding/`, `tests/` and `tools/` never go into a package.
 
 ## Documentation
 
 - [CHANGELOG.md](CHANGELOG.md) — every version, what changed and why.
-- [INSTALL-FOR-TESTERS.md](INSTALL-FOR-TESTERS.md) — install and update steps.
-- [ADMIN-GUIDE.md](ADMIN-GUIDE.md) — deployment and policy keys.
+- [docs/INSTALL-FOR-TESTERS.md](docs/INSTALL-FOR-TESTERS.md) — install and update steps.
+- [docs/ADMIN-GUIDE.md](docs/ADMIN-GUIDE.md) — deployment and policy keys.
 - The extension's own **Help** tab explains how each warning works, the privacy details and
   troubleshooting.
 
