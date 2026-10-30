@@ -1,0 +1,48 @@
+<!doctype html>
+<!-- A made-up phishing email for the store screenshots (fictional sender; the links lead nowhere real). -->
+<html><head><meta charset="utf-8"><title>Your account has been limited - teacher@lincolnschools.example - Mail</title>
+<style>
+  body { margin: 0; font: 14px/1.5 Inter, Arial, sans-serif; color: #202124; background: #f6f8fc; }
+  .top { display: flex; align-items: center; gap: 16px; height: 64px; padding: 0 20px; }
+  .brand { font-weight: 600; font-size: 20px; color: #444; width: 210px; }
+  .search { flex: 1; max-width: 720px; height: 46px; border-radius: 24px; background: #e9eef6; display: flex; align-items: center; padding: 0 20px; color: #5f6368; }
+  .wrap { display: flex; }
+  [role=navigation] { width: 230px; padding: 8px 0; }
+  .TN { height: 32px; display: flex; align-items: center; padding: 0 26px; border-radius: 0 16px 16px 0; }
+  .TN.on { background: #d3e3fd; font-weight: 600; }
+  [role=main] { flex: 1; background: #fff; border-radius: 16px; margin: 0 16px 16px 0; padding: 8px 28px 28px; min-height: 560px; }
+  [gh=mtb] { height: 44px; display: flex; align-items: center; gap: 12px; color: #5f6368; }
+  h2.hP { font-size: 22px; font-weight: 400; margin: 8px 0 18px 52px; }
+  .adn { display: flex; gap: 12px; }
+  .aCi { width: 40px; height: 40px; border-radius: 50%; background: #e8eaed; }
+  .gs { flex: 1; }
+  h3.iw { margin: 0; font-size: 14px; } .gD { font-weight: 600; } .go { color: #5f6368; font-weight: 400; }
+  .ii.gt { margin-top: 16px; font-size: 15px; max-width: 640px; }
+  .btn { display: inline-block; background: #0070ba; color: #fff; padding: 10px 22px; border-radius: 22px; text-decoration: none; font-weight: 600; }
+</style></head>
+<body>
+<div class="top"><div class="brand">✉️ Mail</div><div class="search">Search mail</div></div>
+<div class="wrap">
+  <div role="navigation"><div class="TN on">Inbox</div><div class="TN">Starred</div><div class="TN">Sent</div><div class="TN">Spam</div></div>
+  <div role="main" id="main">
+    <div gh="mtb"><div role="button" aria-label="Back to Inbox">←</div><div role="button" aria-label="Archive" act="7">Archive</div><div role="button" aria-label="Report spam" act="9">Report spam</div></div>
+  </div>
+</div>
+<script>
+setTimeout(() => {
+  document.getElementById('main').insertAdjacentHTML('beforeend', `<h2 class="hP" data-thread-perm-id="thread-f:7001" data-legacy-thread-id="${(7001).toString(16)}">Your account has been limited</h2>
+  <div class="adn ads" data-message-id="#msg-f:3001" data-legacy-message-id="${(3001).toString(16)}">
+    <div class="aju"><div class="aCi"></div></div>
+    <div class="gs">
+      <h3 class="iw"><span class="qu"><span class="gD" email="billing@account-alert.example" name="PayPal Service">PayPal Service</span> <span class="go">&lt;billing@account-alert.example&gt;</span></span></h3>
+      <div class="a3s aiL"><div class="ii gt"><div>
+        <p>Dear customer,</p>
+        <p>We noticed unusual activity on your account and limited what you can do with it. Confirm your details within 24 hours at <a href="https://storage.googleapis.com/acct-review-7731/verify.html">www.paypal.com/verify</a> to restore access.</p>
+        <p><a class="btn" href="http://198.51.100.23/paypal/login">Restore access</a></p>
+        <p>Thank you,<br>Account Services</p>
+      </div></div></div>
+    </div>
+  </div>`);
+}, 200);
+</script>
+</body></html>

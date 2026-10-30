@@ -1989,12 +1989,9 @@ function scanSenders() {
         const finish = (auth) => guarded('Checking the sender', () => {
             if (!body.isConnected) return;
             const r = evaluateSender({ displayName: sender.name, address: sender.address, auth, bodyText: auth ? body.innerText.slice(0, 20000) : '' });
-            // A colleague's name on an outside address (the brand-name case is in evaluateSender).
-            if (lastSettings.enableLookalikeCheck !== false) {
-                for (const x of nameAddressSigns(sender.name, sender.address, ownOrgDomain(), loadColleagueHashes())) {
-                    if (x.weight < SIGNAL_FLAG_SCORE) r.findings.push({ severity: 'caution', message: x.text });
-                }
-            }
+            // A brand's or a colleague's name on another address counts in the email's verdict (as in
+            // the inbox list; see updateOpenedVerdict), which the banner shows: not repeated here.
+            if (lastSettings.enableLookalikeCheck !== false) r.findings = r.findings.filter(f => !/^The sender's name says/.test(f.message));
             showSenderFindings(body, r.findings);
             for (const line of r.info) reportEvent('info', line);
             for (const f of r.findings) reportEvent(f.severity === 'danger' ? 'warning' : 'info', `Sender check: ${f.message}`);
@@ -2814,6 +2811,7 @@ function updateOpenedVerdict(body) {
     if (!st || !st.base || !st.nameEl.isConnected) return;
     const signals = [...displayNameAnomalies(st.name), ...(st.info && st.info.fh === addressFingerprint(st.address) ? st.info.an : []), ...emailContentSignals(body),
                      ...serviceWarningSigns(webmailTextAround(body), SITE.name),
+                     ...(lastSettings.enableLookalikeCheck !== false && st.base.status !== 'trusted' ? nameAddressSigns(st.name, st.address, ownOrgDomain(), loadColleagueHashes()) : []),
                      ...(lastSettings.enableOwnNameCheck !== false && st.base.status !== 'trusted' ? ownNameSigns(st.name, st.address, accountAddress()) : []),
                      ...(lastSettings.enableCallbackScamCheck !== false && st.base.status !== 'trusted' ? [...subjectScamSigns(openedSubject()), ...bodyScamSigns(body.innerText)] : [])];
     const final = applyEmailSignals(st.base, signals);

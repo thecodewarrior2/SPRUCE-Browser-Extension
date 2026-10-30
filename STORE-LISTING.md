@@ -1,0 +1,169 @@
+# Chrome Web Store listing: S.P.R.U.C.E+
+
+Text for each field of the Chrome Web Store developer dashboard, ready to copy. The same answers work
+for Microsoft Edge Add-ons. Upload the zip made by `tools/build-webstore.sh`
+(`build/spruce-<version>-webstore.zip`).
+
+## Store listing tab
+
+**Name** (from the package): `S.P.R.U.C.E+`
+
+**Summary** (from the package, 111 characters):
+
+```
+Finds phishing and scams in Gmail and other webmail: links, senders, QR codes and attachments. Blocks trackers.
+```
+
+**Description:**
+
+```
+S.P.R.U.C.E+ (Spam & Phishing Risk URL Checker Extension+) catches phishing in your email before you click.
+
+IN YOUR INBOX, BEFORE YOU OPEN ANYTHING
+• Red labels on dangerous senders: fake brand names ("PayPal Service" from an address that isn't PayPal's), look-alike addresses (a letter swapped, or your school's name plus "support"), known scam senders, and senders using your own name.
+• "Call this number" scams are caught even when the email really comes from a company's system.
+• Flagged emails can be moved to Spam for you, with your webmail's own Report spam. Take one back out and it stays out.
+
+IN AN OPENED EMAIL
+• Shows where every link really goes, including short links and tracking redirects.
+• Marks dangerous links in red: phishing sites, pages hosted in public cloud storage, look-alike domains, and links whose text says one site but go to another.
+• Checks QR codes in images and attachments, and attachments for hidden scripts and fake sign-in pages.
+• Blocks tracking pixels that tell senders when you opened an email.
+• Spots forged emails: failed sender verification, fake delivery records, and other signs genuine mail never has.
+
+PRIVATE BY DESIGN
+• No account, no ads, no analytics, no server of its own. Your email never leaves your device.
+• Threat checks send only a website's name (for example example.com) to public security services. Choose Private or Offline only to send less, or nothing.
+
+FOR SCHOOLS AND BUSINESSES
+• Every check has its own switch, and administrators can set or lock any of them by policy (Google Workspace, Microsoft Intune, Group Policy).
+• Phishing-training emails from your provider can be left alone.
+
+Works fully in Gmail; Outlook on the web, Yahoo, AOL, Zoho, iCloud, Fastmail, GMX and Proton Mail are supported in a basic, read-only way.
+
+Privacy policy: https://github.com/thecodewarrior2/SPRUCE-Browser-Extension/blob/main/PRIVACY.md
+```
+
+**Category:** the store's privacy and security category (or Productivity if that isn't offered).
+
+**Language:** English.
+
+**Images** (in the [`store`](store) folder):
+
+| Field | File |
+|---|---|
+| Store icon (128×128) | `icons/icon128.png` |
+| Screenshots (1280×800) | `store/screenshot-1-inbox.png`, `store/screenshot-2-email.png`, `store/screenshot-3-moved.png`, `store/screenshot-4-settings.png` |
+| Small promo tile (440×280) | `store/promo-440x280.png` |
+
+The screenshots show the real extension at work on a made-up inbox (every name and address in them is
+fictional). `store/source/make-images.js` makes them again after a change.
+
+**Official URL / homepage:** `https://github.com/thecodewarrior2/SPRUCE-Browser-Extension`
+
+**Support URL:** `https://github.com/thecodewarrior2/SPRUCE-Browser-Extension/issues`
+
+## Privacy tab
+
+**Single purpose:**
+
+```
+S.P.R.U.C.E+ protects people from phishing and spam in webmail: it checks the links, senders, QR codes and attachments of their emails for danger, warns them, and can move dangerous emails to Spam.
+```
+
+### Permission justifications
+
+**activeTab**
+
+```
+When the user opens the toolbar popup, the extension reads the current tab's address to show whether it is a supported webmail page and how many links and tracking pixels it checked there.
+```
+
+**alarms**
+
+```
+Schedules the daily download of the public phishing and short-link lists and the automatic deletion of old history, so the extension doesn't need to stay running.
+```
+
+**offscreen**
+
+```
+Opens a hidden page, only while an email image or attachment is being checked, to decode QR codes and read PDF attachments on the user's device. It closes itself after a minute without work.
+```
+
+**storage**
+
+```
+Keeps the user's settings, recent check results, the history of checked links (deleted automatically after 30 days by default) and the downloaded phishing lists on the device. Also reads settings an organization sets by policy (managed storage).
+```
+
+**unlimitedStorage**
+
+```
+The public phishing lists, the list of known scam senders and the cache of sender icons are larger than the default storage limit. Everything stays on the device.
+```
+
+**management** (optional, asked only when the user clicks)
+
+```
+Requested only when the user clicks "Turn it off" on a warning that another installed extension does the same job (for example two extensions both drawing sender icons in Gmail). It is used to find that extension and turn it off at the user's request; nothing else.
+```
+
+**Host permissions**
+
+```
+mail.google.com: reads an email's original source (its headers) from Gmail, with the user's own session, to check the sender's verification and find forged headers.
+security.cloudflare-dns.com, family.cloudflare-dns.com, 1.1.1.1, dns.quad9.net, freedns.controld.com, protective.joindns4.eu, dns.adguard-dns.com: DNS-over-HTTPS security services that say whether a website is known to be dangerous. Only the website's name is sent. 1.1.1.1 is also used to read companies' published email-logo (BIMI) and DMARC records.
+unshorten.me: expands public short links (such as bit.ly) so the user sees where they lead. Can be turned off.
+raw.githubusercontent.com, openphish.com, phishing.army, tranco-list.eu: daily or monthly downloads of public lists (short-link services, phishing sites, scam senders, popular sites). Nothing about the user is sent.
+*.googleusercontent.com: fetches email images through Gmail's own image proxy to decode QR codes, and the sender photos Gmail already shows.
+www.google.com/s2, *.gstatic.com, icons.duckduckgo.com: sender website icons shown beside each email (only the website's name is sent).
+api.country.is: the country of the server that delivered an email, shown as a flag.
+storage.googleapis.com, firebasestorage.googleapis.com: only when the user clicks the reveal button on a link to a page in cloud storage, to download that page and show where it really leads.
+```
+
+**Optional host permission (https://\*/\*)**
+
+```
+Requested only when the user or their organization sets up its own threat-check or link-expanding service in Settings, and only for that service's address.
+```
+
+**Content scripts on webmail sites**
+
+```
+The extension runs on Gmail, Outlook on the web, Yahoo Mail, AOL Mail, Zoho Mail, iCloud Mail, Fastmail, GMX and Proton Mail to check the links and senders of the emails the user reads there. It runs on no other sites.
+```
+
+**Are you using remote code?** No.
+
+```
+All code is in the package. The lists it downloads (phishing sites, short-link services, scam senders, popular sites) are plain data and are never run.
+```
+
+### Data usage
+
+Tick these, because website names from emails are sent to the security services and the extension
+reads the user's emails:
+
+- **Website content**
+- **Personal communications**
+
+Leave the others unticked (it collects no personally identifiable information, health, financial,
+authentication or location data, web history or user activity).
+
+Tick all three certifications:
+
+- I do not sell or transfer user data to third parties, outside of the approved use cases.
+- I do not use or transfer user data for purposes that are unrelated to my item's single purpose.
+- I do not use or transfer user data to determine creditworthiness or for lending purposes.
+
+**Privacy policy URL:**
+
+```
+https://github.com/thecodewarrior2/SPRUCE-Browser-Extension/blob/main/PRIVACY.md
+```
+
+## Distribution tab
+
+**Visibility:** Public, or Unlisted to test with a few people first. Schools and businesses can also
+install it for everyone from the Google Admin console once it is published.

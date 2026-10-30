@@ -131,6 +131,10 @@ private key (`.pem`) signs releases and must never be committed (`.gitignore` le
 
 ## Publishing to the Chrome Web Store (or Edge Add-ons)
 
+The listing text, a reason for each permission and the data-usage answers are in
+[STORE-LISTING.md](STORE-LISTING.md); the screenshots and promo image are in [`store`](store); the
+privacy policy is [PRIVACY.md](PRIVACY.md).
+
 Run `tools/build-webstore.sh` and upload `build/spruce-<version>-webstore.zip`. It is the last commit
 without the `key` field, which the stores refuse on a new item's first upload. The store gives the
 extension its own ID, so administrators use that ID in policies (the policy names don't change). In

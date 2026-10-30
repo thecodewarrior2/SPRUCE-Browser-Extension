@@ -1698,7 +1698,8 @@ async function bimiLogo(domain) {
 // How a sender's domain is judged against them:
 //   strong (red, moved to Spam): look-alike characters (pаypal with a Cyrillic а, rn for m), a protected
 //     domain worn as the start of another (paypal.com.verify-acct.net), a protected name plus a scare
-//     word (paypal-billing.com), an imitation of your own organization (example-k12.org);
+//     word (paypal-billing.com), an imitation of your own organization (example-k12.org, or its name
+//     plus such a word: example-support.org);
 //   near (one letter off, two letters swapped, or the same name under another ending): red when the
 //     sender's domain was registered less than 90 days ago (public registry date, RDAP); a built-in
 //     brand also gets amber when older or of unknown age; otherwise nothing, since real companies with
@@ -1955,7 +1956,11 @@ async function lookalikeVerdict(domain, ownDomain, S) {
     if (ownReg) {
         const flat = uLabel.replace(/-/g, '');
         const forms = collapsedForms(ownReg);
+        const ownName = mainLabel(ownReg), scare = tokens.find(t => CREDENTIAL_WORDS.has(t));
         if (forms.includes(flat) || forms.includes(skel)) strong.push({ target: ownReg, why: `runs your organization's address ${ownReg} together` });
+        // Its name plus a word like "support" or "login" (lincolnschools-support.org): the classic
+        // "IT Help Desk: your password expires" phish.
+        else if (scare && tokens.some(t => t.length >= 4 && (t === ownName || forms.includes(t)))) strong.push({ target: ownReg, why: `uses your organization's name with “${scare}” but isn't ${ownReg}` });
         else if (host !== own && host.length >= 6 && editDistanceAtMost1(host, own)) strong.push({ target: ownReg, why: `is one letter away from your organization's ${own}` });
         else if (mainLabel(ownReg) === label) near.push({ target: ownReg, why: `uses your organization's name under another ending` });
         else if (label.length >= 6 && editDistanceAtMost1(label, mainLabel(ownReg))) near.push({ target: ownReg, why: `is one letter away from your organization's ${ownReg}` });

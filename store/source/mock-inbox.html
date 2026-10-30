@@ -1,0 +1,82 @@
+<!doctype html>
+<!-- A made-up webmail inbox for the store screenshots (every name and address is fictional). It has
+     the page structure the extension reads, so the real extension marks it as it would a real inbox. -->
+<html><head><meta charset="utf-8"><title>Inbox - teacher@lincolnschools.example - Mail</title>
+<style>
+  body { margin: 0; font: 14px/1.4 Inter, Arial, sans-serif; color: #202124; background: #f6f8fc; }
+  .top { display: flex; align-items: center; gap: 16px; height: 64px; padding: 0 20px; }
+  .brand { font-weight: 600; font-size: 20px; color: #444; width: 210px; }
+  .search { flex: 1; max-width: 720px; height: 46px; border-radius: 24px; background: #e9eef6; display: flex; align-items: center; padding: 0 20px; color: #5f6368; }
+  .wrap { display: flex; }
+  [role=navigation] { width: 230px; padding: 8px 0; }
+  .TN { height: 32px; display: flex; align-items: center; padding: 0 26px; border-radius: 0 16px 16px 0; color: #202124; }
+  .TN.on { background: #d3e3fd; font-weight: 600; }
+  .TN b { margin-left: auto; font-weight: 600; }
+  [role=main] { flex: 1; background: #fff; border-radius: 16px; margin: 0 16px 16px 0; overflow: hidden; }
+  [gh=mtb] { height: 48px; display: flex; align-items: center; gap: 6px; padding: 0 16px; border-bottom: 1px solid #f1f3f4; color: #5f6368; }
+  [gh=mtb] [role=button] { padding: 4px 10px; border-radius: 4px; cursor: pointer; }
+  .hidden { display: none !important; }
+  table.F { width: 100%; border-collapse: collapse; }
+  tr.zA td { height: 40px; border-bottom: 1px solid #f1f3f4; padding: 0 8px; white-space: nowrap; }
+  tr.zA.zE { background: #fff; font-weight: 600; }
+  tr.zA.yO { background: #f2f6fc; }
+  td.oZ-x3 { width: 52px; text-align: center; }
+  [role=checkbox] { display: inline-block; width: 16px; height: 16px; border: 2px solid #757575; border-radius: 2px; }
+  .yW { display: inline-block; width: 300px; overflow: hidden; vertical-align: middle; }
+  .xT { display: flex; align-items: center; gap: 6px; overflow: hidden; max-width: 640px; }
+  .y2 { color: #5f6368; font-weight: 400; overflow: hidden; text-overflow: ellipsis; }
+  .brd { display: inline-block; margin-left: 6px; border: 1px solid #dadce0; border-radius: 12px; padding: 0 8px; font-weight: 400; font-size: 12px; color: #444; }
+  td.time { width: 70px; text-align: right; color: #5f6368; font-size: 12px; }
+  #toast { position: fixed; left: 24px; bottom: 24px; }
+</style></head>
+<body>
+<div class="top"><div class="brand">✉️ Mail</div><div class="search">Search mail</div></div>
+<div class="wrap">
+  <div role="navigation" id="nav">
+    <div class="TN on">Inbox <b id="unread">5</b></div><div class="TN">Starred</div><div class="TN">Snoozed</div><div class="TN">Sent</div><div class="TN">Drafts</div><div class="TN">Spam</div>
+  </div>
+  <div role="main">
+    <div gh="mtb">
+      <div role="button" aria-label="Archive" act="7" class="sel-only hidden">Archive</div>
+      <div role="button" aria-label="Report spam" data-tooltip="Report spam" act="9" id="spamBtn" class="sel-only hidden">Report spam</div>
+      <div role="button" aria-label="Refresh" id="refresh">⟳</div><div style="margin-left:auto;font-size:12px" id="count">1–8 of 8</div>
+    </div>
+    <table class="F"><tbody id="list"></tbody></table>
+  </div>
+</div>
+<div id="toast"></div>
+<script>
+window.__spammed = [];
+const ROWS = [
+  { t: 7001, email: 'billing@account-alert.example', name: 'PayPal Service', subj: 'Your account has been limited', snip: 'We noticed unusual activity. Confirm your details within 24 hours to restore access…', unread: true, time: '9:41 AM' },
+  { t: 7002, email: 'news@lincolnschools.example', name: 'Lincoln Schools', subj: 'Book fair this Friday', snip: 'Join us in the library from 8 to 3. Volunteers welcome.', time: '9:12 AM', chip: 'flyer.pdf' },
+  { t: 7003, email: 'helpdesk@lincolnschools-support.example', name: 'IT Help Desk', subj: 'Password expires today', snip: 'Keep your current password: sign in here before 5 PM…', unread: true, time: '8:55 AM' },
+  { t: 7004, email: 'msonlineservicesteam@microsoftonline.com', name: 'Microsoft', subj: 'Your order of Windows Defender ($499.99) was purchased. If this purchase was not made by you, call 1(555)010-0188', snip: '', unread: true, time: '8:20 AM' },
+  { t: 7005, email: 'jordan.lee@lincolnschools.example', name: 'Jordan Lee', subj: 'Field trip forms', snip: 'Here are the signed forms for Thursday.', time: '7:58 AM' },
+  { t: 7006, email: 'invoice@quick-payments.example', name: 'Accounts Payable', subj: 'Invoice #44871 overdue', snip: 'Please review the attached invoice and pay today.', unread: true, time: 'Yesterday' },
+  { t: 7007, email: 'orders@books.example', name: 'Books & More', subj: 'Your order has shipped', snip: 'Track your package: arriving Tuesday.', time: 'Yesterday' },
+  { t: 7008, email: 'pta@lincolnschools.example', name: 'PTA', subj: 'Meeting notes', snip: 'Thanks to everyone who came last night!', time: 'Mon' }
+];
+function row(r) {
+  const tr = document.createElement('tr');
+  tr.className = 'zA ' + (r.unread ? 'zE' : 'yO');
+  const hex = (r.t + 0x18000000).toString(16), mhex = (r.t * 7 + 0x10000000).toString(16);
+  tr.innerHTML = `<td class="oZ-x3"><div role="checkbox" aria-checked="false" tabindex="-1"></div></td>
+    <td class="yX xY"><div class="yW"><span class="bA4"><span class="${r.unread ? 'zF' : 'yP'}" email="${r.email}" name="${r.name}">${r.name}</span></span></div></td>
+    <td class="xY a4W"><div class="xS"><div class="xT"><div class="y6"><span class="bog"><span data-thread-id="#thread-f:${r.t}" data-legacy-thread-id="${hex}" data-legacy-last-message-id="${mhex}">${r.subj}</span></span></div><span class="y2">${r.snip ? '– ' + r.snip : ''}</span>${r.chip ? `<div class="brd"><span class="brc">${r.chip}</span></div>` : ''}</div></div></td>
+    <td class="time">${r.time}</td>`;
+  const cb = tr.querySelector('[role=checkbox]');
+  cb.addEventListener('click', () => { const on = cb.getAttribute('aria-checked') !== 'true'; cb.setAttribute('aria-checked', String(on)); tr.classList.toggle('x7', on); document.querySelectorAll('.sel-only').forEach(b => b.classList.toggle('hidden', !document.querySelector('tr.zA.x7'))); });
+  return tr;
+}
+document.getElementById('spamBtn').addEventListener('click', () => {
+  document.querySelectorAll('tr.zA.x7').forEach(tr => { window.__spammed.push(tr.querySelector('[data-thread-id]').getAttribute('data-thread-id')); tr.remove(); });
+  document.getElementById('toast').textContent = 'Conversation marked as spam. Undo';
+  const n = document.querySelectorAll('tr.zA').length;
+  document.getElementById('count').textContent = `1–${n} of ${n}`;
+  document.getElementById('unread').textContent = document.querySelectorAll('tr.zA.zE').length || '';
+  document.querySelectorAll('.sel-only').forEach(b => b.classList.add('hidden'));
+});
+setTimeout(() => { const tb = document.getElementById('list'); ROWS.forEach(r => tb.appendChild(row(r))); }, 200);
+</script>
+</body></html>
