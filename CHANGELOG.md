@@ -3,6 +3,7 @@
 ## 5.75 — First public release (Firefox build, same as Chrome 5.75)
 
 - **First public release** of S.P.R.U.C.E+, and its first publication in the Firefox add-ons store (its add-on ID is `spruce@spruce-browser-extension`).
+- **Desktop Firefox only** for now: Firefox for Android isn't declared, so the store offers it for desktop only.
 - The logo (`branding/logo.png`, `logo.svg`) has a transparent background, with a light-lettered version for dark backgrounds (`logo-dark-background`); the README shows the one that suits the reader's theme.
 
 ## 5.74 — Store listing material; two fixes found while making it (Firefox build, same as Chrome 5.74)
