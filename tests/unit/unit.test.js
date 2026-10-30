@@ -560,16 +560,20 @@ test('BIMI logos: DMARC enforced, organization domain only, downloaded or kept b
   };
   const b = loadBackground({}, { indexedDB: new IDBFactory(), fetch });
   const run = (c) => vm.runInContext(c, b);
-  assert.match(await run('bimiLogo("brand.example")'), /^data:image\/svg\+xml;base64,/, 'downloaded and kept');
+  // Logos are never downloaded here (most logo servers don't allow it, and each refusal is an error in
+  // the browser's extension log): the inbox page shows them by their address, as pictures, which can't
+  // run scripts.
+  assert.equal(await run('bimiLogo("brand.example")'), 'https://logos.brand.example/logo.svg', 'kept by its address for the page');
   assert.equal((await run('iconStore.get("bimi:brand.example")')).source, 'bimi');
   // A subdomain sender: only the organization domain is looked up, never the subdomain.
   asked.length = 0;
-  assert.match(await run('bimiLogo("mail.brand.example")'), /^data:image\/svg\+xml/);
+  assert.equal(await run('bimiLogo("mail.brand.example")'), 'https://logos.brand.example/logo.svg');
   assert.ok(!asked.some(u => /_bimi\.mail\.brand/.test(u)), 'subdomain never looked up');
   assert.equal(asked.length, 0, 'cached: no lookup at all the second time');
-  assert.equal(await run('bimiLogo("nocors.example")'), 'https://vmc.issuer.example/nocors.svg', 'no CORS: kept by its address for the page');
+  assert.equal(await run('bimiLogo("nocors.example")'), 'https://vmc.issuer.example/nocors.svg', 'a server that allows no download: same');
   assert.equal(await run('bimiLogo("lax.example")'), '', 'DMARC p=none: no logo');
-  assert.equal(await run('bimiLogo("evil.example")'), '', 'event handler in the SVG: refused');
+  assert.equal(await run('bimiLogo("evil.example")'), 'https://logos.evil.example/logo.svg', 'shown as a picture, so its scripts never run');
+  assert.ok(!asked.some(u => /\.svg$/.test(u)), 'no logo was ever fetched by the extension');
   assert.equal(await run('bimiLogo("nobimi.example")'), '', 'no record');
   assert.equal(await run('bimiLogo("gmail.com")'), '', 'personal email service: never looked up');
   assert.equal((await run('iconStore.get("bimi:nobimi.example")')).source, 'none', 'remembered as none');

@@ -1561,16 +1561,14 @@ async function avatarFor(address, site) {
 // sender can't make a lookup or a logo address per recipient out of throwaway subdomains (which
 // would work like a read receipt for an email nobody opened).
 // The logo is an SVG (BIMI's "Tiny PS" format), only ever shown as an image, where SVG can't run code.
-// Downloaded once per domain by the background (no cookies or referrer) where the logo's server
-// allows it: kept as it is if at most 32 KB with no scripts or event handlers. Most logo servers
-// don't allow that kind of download (vmc.digicert.com, valimail…): then only the logo's address is
-// kept, and the inbox page loads it as an image (no referrer), the way a web page shows a picture.
-// Either way the company's logo server sees the computer's IP address (Gmail fetches BIMI logos on
-// its own servers instead). Asked about again weekly; a domain without one is remembered ("none").
+// Only its address is kept, and the inbox page loads it as an image (no referrer), the way a web page
+// shows a picture. It isn't downloaded by the background: most logo servers don't allow that
+// (vmc.digicert.com, valimail…: no CORS), and each refusal is an error in the browser's extension
+// log. The company's logo server sees the computer's IP address (Gmail fetches BIMI logos on its own
+// servers instead). Asked about again weekly; a domain without one is remembered ("none").
 // Stored in the icon store under "bimi:<domain>". Off with enableSenderBimi, and only when network
 // checks are allowed (privacy level).
 const BIMI_RECHECK_MS = 7 * 24 * 60 * 60 * 1000;
-const BIMI_MAX_BYTES = 32 * 1024;
 const bimiInFlight = new Map();
 // TXT records from Cloudflare (1.1.1.1; its security resolver when the address 1.1.1.1 itself is blocked,
 // as some school and company networks do).
@@ -1642,13 +1640,6 @@ function bimiResult(rec) {
     if (rec.type === BIMI_LINK_TYPE) { const u = new TextDecoder().decode(rec.bytes); return /^https:\/\/[^\s"'<>]+$/i.test(u) ? u : ''; }
     return iconDataUrl(rec);
 }
-// A safe BIMI SVG, or null.
-function bimiSvg(bytes) {
-    if (!bytes.byteLength || bytes.byteLength > BIMI_MAX_BYTES) return null;
-    const text = new TextDecoder().decode(bytes);
-    if (!/<svg[\s>]/i.test(text) || /<script|\son[a-z]+\s*=|javascript:|<foreignObject/i.test(text)) return null;
-    return { type: 'image/svg+xml', bytes };
-}
 // The company's BIMI logo: a data: URL, an https: address for the page to load, or ''.
 async function bimiLogo(domain) {
     const d = normalizeDomain(domain);
@@ -1668,18 +1659,12 @@ async function bimiLogo(domain) {
                 await iconStore.put(key, '', null, 'none');
                 return '';
             }
-            let found = null, how = 'downloaded';
-            try {
-                const res = await fetchWithTimeout(url, { credentials: 'omit', referrerPolicy: 'no-referrer' }, 6000);
-                if (res.ok) found = bimiSvg(await res.arrayBuffer());
-                if (!found) { await iconStore.put(key, '', null, 'none'); logInfo(`The BIMI logo of ${org} isn't used: ${res.ok ? 'not a plain SVG image of at most 32 KB' : `its address answered HTTP ${res.status}`}.`, 'Sender checks'); return ''; }
-            } catch (e) {
-                // The logo's server doesn't allow a download from here (no CORS): the page loads it.
-                found = { type: BIMI_LINK_TYPE, bytes: new TextEncoder().encode(url).buffer };
-                how = 'shown from its address';
-            }
+            // Kept by its address and shown by the inbox page as a picture (no referrer), which can't run
+            // scripts. It isn't downloaded here: most logo servers don't allow that (no CORS), and each
+            // refusal is an error in the browser's extension log.
+            const found = { type: BIMI_LINK_TYPE, bytes: new TextEncoder().encode(url).buffer };
             await iconStore.put(key, found.type, found.bytes, 'bimi', url);
-            if (!(hit && hit.bytes && hit.from === url)) logInfo(`BIMI logo for ${org}: ${hit && hit.bytes ? 'changed, replaced' : 'remembered'} (${how}).`, 'Sender checks');
+            if (!(hit && hit.bytes && hit.from === url)) logInfo(`BIMI logo for ${org}: ${hit && hit.bytes ? 'changed, replaced' : 'remembered'} (shown from its address).`, 'Sender checks');
             return bimiResult({ type: found.type, bytes: found.bytes });
         } catch (e) {
             // A failed DNS lookup keeps what was known (a logo isn't lost to an outage).

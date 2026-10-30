@@ -1,5 +1,9 @@
 # Changelog
 
+## 5.67 — No more CORS errors from company logos (Safari build, same as Chrome 5.67)
+
+- **Fixed: "blocked by CORS policy" errors in the browser's extension log** (the console of the extension's background page), one for each company logo (BIMI) from a server such as vmc.digicert.com, Valimail or CloudFront. The extension tried to download each logo to check and keep it, but almost no logo server allows that kind of download, and each refusal was an error. Logos were already shown from their address by the inbox page whenever that happened; now that is the only way, and nothing is downloaded. A logo shown as a picture can't run scripts, so the old check of the file isn't needed.
+
 ## 5.66 — No more "domain doesn't exist" for company subdomains (Safari build, same as Chrome 5.66)
 
 - **Fixed: real company mail flagged as forged.** An email from Blink (Amazon), sent from `hello.blink.com`, was flagged red and moved to Spam as "The sender's domain doesn't exist". Blink's DNS answers "no such domain" for `hello.blink.com` itself, because only names below it exist (its bounce address `e.hello.blink.com` and its DKIM key), and the email passed Gmail's sender verification (DMARC) for blink.com. A subdomain with no DNS records of its own now counts as missing only when its organization's own domain is missing too; otherwise the organization's domain is checked for threats instead, and the log says so.
