@@ -105,7 +105,7 @@
         const sites = WEBMAIL_SITES;
         const caps = sites.map(mailCapabilities);
         const short = (n) => n.replace(/ on the web$/, '').replace(/ Mail$/, '');
-        const mark = (v) => v === 'generic' ? el('span', { class: 'basic', 'aria-label': 'Basic', title: 'Basic: found through the page\'s accessibility labels (experimental)' }, '◐')
+        const mark = (v) => v === 'generic' ? el('span', { class: 'basic', title: 'Found through the page\'s accessibility labels; read-only (experimental)' }, 'Basic')
             : v ? el('span', { class: 'yes', 'aria-label': 'Yes', title: 'Works' }, '✓') : el('span', { class: 'no', 'aria-label': 'Not yet', title: 'Not yet' }, '—');
         const head = el('tr', null, el('th', { scope: 'col' }, 'Feature'), sites.map(w => el('th', { scope: 'col' }, short(w.name))));
         const status = el('tr', { class: 'status' }, el('th', { scope: 'row', style: 'font-weight: normal;' }, 'Support'), sites.map(w => el('td', null, w.mail ? 'Full' : 'Experimental')));

@@ -207,7 +207,7 @@
         .compat-table .status td { font-size: 10px; }
         .compat-table .yes { color: var(--success-text); font-weight: 700; }
         .compat-table .no { color: var(--text-muted); }
-        .compat-table .basic { color: var(--warn-text, var(--text-2)); font-weight: 700; }
+        .compat-table .basic { color: var(--warn-text, var(--text-2)); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; }
         .compat-table .status td { color: var(--text-muted); }
         .regex { font-family: monospace; font-size: 11px; background: var(--surface-2); border: 1px solid var(--border-subtle); border-radius: 4px; padding: 8px; word-break: break-all; display: block; }
         @media (max-width: 900px) { .preset-grid, .two-col, .flow { grid-template-columns: 1fr; } .help-layout { grid-template-columns: 1fr; } .help-nav { position: static; } }
@@ -851,8 +851,8 @@
 <p class="lead">The extension has one engine for every webmail. What it can do on each site depends only on what that site's entry in its table of webmail sites describes, and this chart is generated from that table, so it always matches the version you're running.</p>
 <div class="compat-wrap" id="compatTable"></div>
 <ul class="simple-list">
-  <li><b>✓</b> works on that site; <b>◐</b> basic; <b>—</b> not yet. Features marked “every site” need nothing site-specific: they read the opened email itself.</li>
-  <li><b>Basic (◐)</b>: on a site without an entry of its own, the extension finds inbox rows and senders through the page's accessibility labels, the markup screen readers use, which well-built webmail share. It only <b>reads</b> the page: it never clicks anything there, so moving to Spam and the Send check wait for a site's own entry, tested on a real account. A row that doesn't show the sender's address gets no label.</li>
+  <li><b>✓</b> works on that site; <b>Basic</b>: see below; <b>—</b> not yet. Features marked “every site” need nothing site-specific: they read the opened email itself.</li>
+  <li><b>Basic</b>: on a site without an entry of its own, the extension finds inbox rows and senders through the page's accessibility labels, the markup screen readers use, which well-built webmail share. It only <b>reads</b> the page: it never clicks anything there, so moving to Spam and the Send check wait for a site's own entry, tested on a real account. A row that doesn't show the sender's address gets no label.</li>
   <li><b>Gmail</b> is fully supported and tested. The other sites are <b>experimental</b>: their page layouts were mapped from public information, and each gains the remaining features as its entry is filled in (no new code is needed).</li>
   <li>Features that read an email's <b>headers</b> need a page the webmail itself offers with the email's original source (Gmail's “Show original”). Proton Mail encrypts messages, so it can't offer one.</li>
   <li>Nothing here needs an extra sign-in, an app registration or an administrator-approved API: only the webmail page you already have open, and the public services listed in <a href="#" data-help-link="privacy">Your privacy</a>.</li>
