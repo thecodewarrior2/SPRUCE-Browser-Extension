@@ -35,6 +35,9 @@
   "managedEnableLookalikeCheck": {
     "Value": true
   },
+  "managedEnableOwnNameCheck": {
+    "Value": true
+  },
   "managedEnableRowHighlighter": {
     "Value": true
   },

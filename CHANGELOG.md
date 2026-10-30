@@ -1,5 +1,11 @@
 # Changelog
 
+## 5.68 — Senders using your own name are flagged
+
+- **New: Catch senders using your own name** (on by default; policy `managedEnableOwnNameCheck`). A fake cloud-storage email ("We've blocked your account! Your photos and videos will be deleted…") sat in Spam without a red label: its sender's name was the recipient's own mailbox name (the part of their address before the @), sent from a stranger's address, so it looked like a notice about their own account. An email whose sender name is your own email address, or your mailbox name written exactly as in your address, but which comes from someone else's address is now flagged red from the inbox list, without opening it, and moved to Spam (in the Spam folder it is marked red). Left alone: shared mailbox names (info, office, support…), senders from your own organization, an address that contains your mailbox name (likely your other account), a name written with capitals, as people write names ("Patdoe" for patdoe@…), and trusted senders.
+- **Headers:** two different Content-Length sizes in one email (a filter-dodging trick in the same email) now count as a sign of forgery, like repeated From or Subject lines. Emails checked before are checked again.
+- **Clearer Spam folder labels:** an email in Spam without a red label now says it was checked and that no check flags it, which doesn't prove it's safe.
+
 ## 5.67 — No more CORS errors from company logos
 
 - **Fixed: "blocked by CORS policy" errors in the browser's extension log** (chrome://extensions → Errors), one for each company logo (BIMI) from a server such as vmc.digicert.com, Valimail or CloudFront. The extension tried to download each logo to check and keep it, but almost no logo server allows that kind of download, and each refusal was an error. Logos were already shown from their address by the inbox page whenever that happened; now that is the only way, and nothing is downloaded. A logo shown as a picture can't run scripts, so the old check of the file isn't needed.
