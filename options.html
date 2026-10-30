@@ -216,7 +216,9 @@
         .conflict-item .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
         .regex { font-family: monospace; font-size: 11px; background: var(--surface-2); border: 1px solid var(--border-subtle); border-radius: 4px; padding: 8px; word-break: break-all; display: block; }
         @media (max-width: 900px) { .preset-grid, .two-col, .flow { grid-template-columns: 1fr; } .help-layout { grid-template-columns: 1fr; } .help-nav { position: static; } }
-    </style>
+            .donate-btn { display: inline-block; padding: 4px 12px; border-radius: 14px; background: #0070ba; color: #fff !important; font-size: 13px; font-weight: 600; text-decoration: none; }
+        .donate-btn:hover, .donate-btn:focus-visible { background: #005ea6; text-decoration: none; }
+</style>
 </head>
 <body>
     <header>
@@ -1076,6 +1078,7 @@ Flag field:      (leave empty: Google's replies are recognized automatically)</d
 <p>These exist only in the policy; there's no setting for them here, and they aren't in backups or in <b>Copy as policy JSON</b>. Full details and examples are in <code>ADMIN-GUIDE.md</code>.</p>
 <ul class="simple-list">
   <li><code>managedHidePopupSettingsButton</code> and <code>managedHideRecentActivity</code> remove the <b>Open Settings</b> button and the <b>Recent activity</b> list from the toolbar popup. Settings stays reachable by typing <code>chrome-extension://<span class="ext-id">nnbeoijlicodfplamcelmdlkjggddfla</span>/options.html</code> in the address bar.</li>
+  <li><code>managedHideDonateButton</code> removes the <b>Donate</b> button from Help → About.</li>
   <li><code>managedPhishSimulationDomains</code> (every webmail) lists your training vendor's link domains. An email whose links <b>all</b> go to those domains (after unwrapping SafeLinks, Proofpoint and similar) is left completely unchecked; one link anywhere else and it's checked as usual, so real phishing can't hide behind a training link. Shared platforms (such as <code>docs.google.com</code>, <code>sharepoint.com</code>, <code>bit.ly</code> or cloud hosting) are refused, with a warning in the log.</li>
   <li><code>managedPhishSimulationRules</code> (Gmail) lists your phishing-simulation (security training) emails, for example from KnowBe4 or Wizer, by the header the vendor adds, a secret value in it, and/or the vendor's sending addresses. In Gmail, a matching email is left completely unchecked: no link is looked up (which the vendor could record as a click), no tracking pixel is blocked and no warning is shown. Use a secret value or the sending addresses: a public header name alone could be copied by real phishing.</li>
 </ul>
@@ -1371,6 +1374,7 @@ Flag field:      (leave empty: Google's replies are recognized automatically)</d
                     <strong>Code review, security hardening &amp; redesign (v5.9 onward):</strong> Claude (Anthropic)<br>
                     <strong>Inspiration &amp; pixel heuristics:</strong> <a href="https://github.com/trockerapp/trocker" target="_blank" rel="noopener noreferrer">Trocker</a> and the open-source privacy community.
                 </p>
+<p id="donateRow" hidden><a class="donate-btn" href="https://www.paypal.com/donate/?hosted_button_id=NA8SK5RBLWGW6" target="_blank" rel="noopener noreferrer">♥ Donate</a> <span style="color: var(--text-muted); font-size: 13px;">S.P.R.U.C.E+ is free, with no ads and no tracking. Donations support its development.</span></p>
 <h3>License</h3>
 <p>Licensed under the Apache License 2.0. Source code: <a href="https://github.com/thecodewarrior2/SPRUCE-Browser-Extension" target="_blank" rel="noopener noreferrer">github.com/thecodewarrior2/SPRUCE-Browser-Extension</a>. Bundled third-party components keep their own licenses (pdf.js: Apache-2.0); the downloaded lists are used under their publishers' terms (see below).</p>
 <h3>Accessibility</h3>

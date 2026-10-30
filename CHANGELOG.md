@@ -1,5 +1,10 @@
 # Changelog
 
+## 5.76 — Donate button
+
+- **A small Donate button** in Settings → Help → About, opening the project's PayPal donation page. Organizations can hide it with the administrator-only policy `managedHideDonateButton`.
+- The README has a Donate badge and the donation QR code.
+
 ## 5.75 — First public release
 
 - **First public release** of S.P.R.U.C.E+, and its first publication in the Chrome Web Store.

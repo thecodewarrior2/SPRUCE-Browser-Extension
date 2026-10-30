@@ -165,7 +165,7 @@ Some policies exist for administrators only, with no setting in the extension:
   unchecked, so the extension never records a false click or hides an open. They're recognized by their
   link domains in every webmail (`managedPhishSimulationDomains`: all links must go to the vendor's
   domains) or by header in Gmail (`managedPhishSimulationRules`, ideally with a secret value).
-- **A simpler popup** (`managedHidePopupSettingsButton`, `managedHideRecentActivity`): hides the
+- **A simpler popup** (`managedHidePopupSettingsButton`, `managedHideRecentActivity`, `managedHideDonateButton`): hides the
   Settings button and recent activity; Settings stays reachable at
   `chrome-extension://<ID>/options.html`.
 

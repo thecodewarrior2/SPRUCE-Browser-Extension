@@ -255,6 +255,7 @@ async function loadEffectiveSettings() {
         policy: {
             hideSettingsButton: managed.managedHidePopupSettingsButton === true,
             hideRecentActivity: managed.managedHideRecentActivity === true,
+            hideDonateButton: managed.managedHideDonateButton === true,
             phishSimRules: normalizePhishSimRules(managed.managedPhishSimulationRules),
             ...splitSimulationDomains(normalizeDomainList(managed.managedPhishSimulationDomains).slice(0, 500))
         }

@@ -408,6 +408,11 @@
       "description": "true removes the \"Open Settings\" button from the toolbar popup. There is no matching setting in the extension. Settings can still be opened by typing chrome-extension://<extension ID>/options.html in the address bar, for example by IT staff. Default: false.",
       "type": "boolean"
     },
+    "managedHideDonateButton": {
+      "title": "Hide the Donate button (administrator only)",
+      "description": "true removes the Donate button from Settings → Help → About. There is no matching setting in the extension. Default: false.",
+      "type": "boolean"
+    },
     "managedHideRecentActivity": {
       "title": "Hide recent activity in the toolbar popup (administrator only)",
       "description": "true removes the \"Recent activity\" list and its Clear button from the toolbar popup. There is no matching setting in the extension; activity is still recorded in Settings → Logging. Default: false.",

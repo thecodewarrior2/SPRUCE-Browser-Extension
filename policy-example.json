@@ -204,6 +204,9 @@
   "managedHideRecentActivity": {
     "Value": false
   },
+  "managedHideDonateButton": {
+    "Value": false
+  },
   "managedPhishSimulationRules": {
     "Value": []
   },

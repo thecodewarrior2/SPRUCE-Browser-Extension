@@ -44,6 +44,17 @@ part('old-block-list', async () => {
   await r.ctx.close();
 });
 
+part('donate-button', async () => {
+  // The Donate button in About, unless the organization hides it.
+  for (const [policy, want] of [[{}, true], [{ managedHideDonateButton: true }, false]]) {
+    const r = await run(policy, {});
+    const opt = await options(r.ctx, r.sw);
+    const shown = await opt.evaluate(() => { const d = document.getElementById('donateRow'); return !!d && !d.hidden && /paypal\.com\/donate/.test(d.querySelector('a').href); });
+    check(want ? 'About shows the Donate button' : 'managedHideDonateButton hides the Donate button', shown === want, { policy, shown });
+    await r.ctx.close();
+  }
+});
+
 part('auto-spam-locked', async () => {
   const r = await run({ managedEnableAutoSpam: false }, { __testScamSenders: ['phisher@evil-scam.test'], enableAutoSpam: true });
   check('managed auto-spam off wins over the user\'s setting', r.spammed.length === 0 && r.chips.some(c => c.startsWith('flagged')), r.spammed);
