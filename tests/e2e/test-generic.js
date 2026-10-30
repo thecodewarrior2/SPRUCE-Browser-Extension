@@ -25,7 +25,7 @@ const chips = (page) => page.evaluate(() => [...document.querySelectorAll('.unsh
   check('generic list: a gmail.com friend is not flagged', rows.some(x => x.status === 'unverified' && /friend@gmail\.com/.test(x.title)), rows);
   const opened = c.filter(x => !x.inRow);
   check('generic opened email: the sender above the body is found (not the To address)', opened.length === 1 && /service@paypa1-secure\.test/.test(opened[0].title), opened);
-  check('generic opened email without a warning: not flagged', opened.length === 1 && opened[0].status !== 'flagged', opened);
+  check('generic opened email: a brand\'s name on an address that isn\'t the brand\'s is red, as in the inbox list', opened.length === 1 && opened[0].status === 'flagged' && /isn't PayPal's address/.test(opened[0].title), opened);
   const linkChecked = await page.evaluate(() => !!document.querySelector('[aria-label="Message body"] a[data-unshortened]'));
   check('link checks still run on the site', linkChecked, linkChecked);
   await sleep(3000);                                 // long enough for a (wrong) click to have happened

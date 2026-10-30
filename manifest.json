@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "S.P.R.U.C.E+",
-  "version": "5.73",
+  "version": "5.74",
   "description": "Finds phishing and scams in Gmail and other webmail: links, senders, QR codes and attachments. Blocks trackers.",
   "browser_specific_settings": {
     "gecko": {
