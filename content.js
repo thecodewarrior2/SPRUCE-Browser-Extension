@@ -1340,7 +1340,11 @@ function getMessageHeadersById(id) {
                 const pre = firstMatch(doc, H.text || 'pre');
                 raw = pre ? pre.textContent : text;
             }
-            return { raw, auth: parseAuthResults(raw, H.receiver && H.receiver.host) };
+            const auth = parseAuthResults(raw, H.receiver && H.receiver.host);
+            // A domain whose mail passed its sender verification here becomes protected against
+            // look-alikes (the look-alike check; only the domain is kept).
+            if (auth && auth.dmarc === 'pass' && auth.headerFrom && lastSettings.enableLookalikeCheck !== false) safeSend({ action: 'senderVerified', domain: String(auth.headerFrom) });
+            return { raw, auth };
         })
         .catch(e => {
             if (!authFetchFailureLogged) { authFetchFailureLogged = true; reportEvent('warning', `${SITE.name}'s original message could not be read (${e.message}), so senders are treated as not checked.`); }
@@ -1982,6 +1986,12 @@ function scanSenders() {
         const finish = (auth) => guarded('Checking the sender', () => {
             if (!body.isConnected) return;
             const r = evaluateSender({ displayName: sender.name, address: sender.address, auth, bodyText: auth ? body.innerText.slice(0, 20000) : '' });
+            // A colleague's name on an outside address (the brand-name case is in evaluateSender).
+            if (lastSettings.enableLookalikeCheck !== false) {
+                for (const x of nameAddressSigns(sender.name, sender.address, ownOrgDomain(), loadColleagueHashes())) {
+                    if (x.weight < SIGNAL_FLAG_SCORE) r.findings.push({ severity: 'caution', message: x.text });
+                }
+            }
             showSenderFindings(body, r.findings);
             for (const line of r.info) reportEvent('info', line);
             for (const f of r.findings) reportEvent(f.severity === 'danger' ? 'warning' : 'info', `Sender check: ${f.message}`);
@@ -2109,6 +2119,29 @@ function rowSenders(row) {
         out.set(who.raw, who);
     }
     return [...out.values()].slice(-3);
+}
+
+// Colleagues' names (look-alike check), as hashes only: learned from your own organization's senders in
+// the inbox list, so an outside address using one of those names is noticed. Loaded once per page.
+let colleagueHashes = null;
+const colleagueLearnQueue = new Set();
+function loadColleagueHashes() {
+    if (!colleagueHashes) {
+        colleagueHashes = new Set();
+        safeSend({ action: 'getColleagueNames' }, (list) => { if (Array.isArray(list)) list.forEach(h => colleagueHashes.add(h)); });
+    }
+    return colleagueHashes;
+}
+function learnColleagueName(name) {
+    const h = colleagueNameHash(name);
+    if (!h || loadColleagueHashes().has(h)) return;
+    colleagueHashes.add(h);
+    colleagueLearnQueue.add(h);
+    if (colleagueLearnQueue.size === 1) setTimeout(() => {
+        const hashes = [...colleagueLearnQueue];
+        colleagueLearnQueue.clear();
+        safeSend({ action: 'learnColleagueNames', hashes });
+    }, 2000);
 }
 
 // Check results, one request per scan for all senders not yet known on this page (the background
@@ -2599,6 +2632,7 @@ function scanSenderRows(S) {
         const thread = rowThreadKey(row);
         const msgId = rowLastMessageId(row);
         const unread = rowIsUnread(row);
+        if (S.enableLookalikeCheck) for (const s of senders) if (s.name && isOwnDomain(s.domain, ownOrgDomain())) learnColleagueName(s.name);
         const key = [thread, msgId, unread ? 'u' : 'r', ...senders.map(s => s.raw), S.enableSenderIdentity ? 'id' : '', S.enableSenderCountry ? 'cc' : '', S.enableSenderAvatars ? 'av' : '', pictures].join('|');
         // Unchanged since the last scan (and Gmail hasn't redrawn the row without our label).
         if (row.dataset.unshortenerSender === key && (!S.enableSenderIdentity || (row.querySelector('.unshortener-sender-chip') && !avatarLost(row)))) continue;
@@ -2626,8 +2660,11 @@ function scanSenderRows(S) {
         const show = (results, info) => guarded('Showing who sent an email', () => {
             if (!row.isConnected || row.dataset.unshortenerSender !== key) return;
             // Signs in this email: the names shown, and the headers when they belong to the last sender.
+            const org = ownOrgDomain();
             const finals = results.map((r, k) => {
                 const signals = displayNameAnomalies(senders[k].name);
+                // The name doesn't belong with the address (a brand's name, or a colleague's, outside).
+                if (S.enableLookalikeCheck && r && r.status !== 'trusted') signals.push(...nameAddressSigns(senders[k].name, senders[k].address, org, loadColleagueHashes()));
                 if (info && info.fh === addressFingerprint(senders[k].address)) signals.push(...info.an);
                 const f = applyEmailSignals(r, signals);
                 if (r && f) logEmailVerdict(`${thread}|${senders[k].address}`, senders[k].address, r, f);
@@ -3459,7 +3496,7 @@ window.addEventListener('hashchange', () => { scheduleBadgeUpdate(); if (MAIL) s
 window.addEventListener('popstate', scheduleBadgeUpdate);
 // Coming back to the tab: the webmail may have refreshed the list while it was hidden.
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { lastReported = ''; scheduleBadgeUpdate(); if (MAIL) scheduleScan(); if (spamQueue.size) scheduleSpamMoves(); } });
-const SENDER_SETTING_KEYS = ['enableCopyAddress', 'senderPictureSize', 'enableSenderBimi', 'enableRowHighlighter', 'rowHighlightColor', 'rowHighlightStyle', 'rowHighlightSelected', 'rowHighlightSelectedColor', 'enableConflictWarnings',
+const SENDER_SETTING_KEYS = ['enableLookalikeCheck', 'enableCopyAddress', 'senderPictureSize', 'enableSenderBimi', 'enableRowHighlighter', 'rowHighlightColor', 'rowHighlightStyle', 'rowHighlightSelected', 'rowHighlightSelectedColor', 'enableConflictWarnings',
     'enableSenderIdentity', 'enableSenderAvatars', 'enableSenderIconFallback', 'enableSenderCountry', 'enableSenderDomainCheck', 'enableSenderAddressCheck', 'enableAutoSpam', 'customTrustedSenders', 'customAllowlist', 'enableDnsThreatCheck'];
 // Turning protection on or off in Settings or the popup takes effect on the icon immediately.
 chrome.storage.onChanged.addListener((changes, area) => {

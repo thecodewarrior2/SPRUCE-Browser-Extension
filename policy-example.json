@@ -32,6 +32,9 @@
   "managedEnableCopyAddress": {
     "Value": true
   },
+  "managedEnableLookalikeCheck": {
+    "Value": true
+  },
   "managedEnableRowHighlighter": {
     "Value": true
   },

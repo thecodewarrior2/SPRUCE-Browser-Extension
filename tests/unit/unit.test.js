@@ -31,6 +31,7 @@ function loadBackground(local = {}, extra = {}) {
   };
   const fetchLog = [];
   const ctx = { chrome, console, setTimeout, clearTimeout, URL, URLSearchParams, TextDecoder, TextEncoder, AbortController, atob, btoa, Intl, BigInt,
+    Blob, Response, CompressionStream, DecompressionStream, TextDecoderStream,
     fetch: async (u) => { fetchLog.push(String(u)); throw new Error('offline'); }, self: { addEventListener() {} } };
   Object.assign(ctx, extra);
   ctx.importScripts = (...files) => files.forEach(f => vm.runInContext(fs.readFileSync(path.join(EXT, f), 'utf8'), ctx, { filename: f }));
@@ -563,4 +564,125 @@ test('DMARC: failures always get at least amber; pictures only for domains that 
   assert.equal(await run('dmarcEnforced("half.example")'), false, 'pct=50: not enforced');
   assert.equal(await run('dmarcEnforced("watch.example")'), false, 'p=none: not enforced');
   assert.equal(await run('dmarcEnforced("none.example")'), false, 'no DMARC record');
+});
+
+test('registrable domains: US school and locality domains, UK school domains', () => {
+  const r = (h) => S('registrableDomain')(h);
+  assert.equal(r('mail.example.k12.fl.us'), 'example.k12.fl.us', 'a school district is its own domain');
+  assert.equal(r('example.k12.fl.us'), 'example.k12.fl.us');
+  assert.equal(r('ci.example.fl.us'), 'example.fl.us', 'a city under a state');
+  assert.equal(r('school.pvt.k12.ma.us'), 'school.pvt.k12.ma.us');
+  assert.equal(r('library.lib.tx.us'), 'library.lib.tx.us');
+  assert.equal(r('stmarys.sch.uk'), 'stmarys.sch.uk');
+  assert.equal(r('news.example.co.uk'), 'example.co.uk');
+  assert.equal(r('a.b.example.org'), 'example.org');
+});
+
+test('popular sites: Chrome UX Report list read as a stream and stopped at the top N; Tranco parsed', async () => {
+  const zlib = require('zlib');
+  const rows = ['origin,rank'];
+  for (let i = 0; i < 50; i++) rows.push(`https://www.site${i}.example,1000`, `https://m.site${i}.example,1000`);
+  rows.push('https://later.example,5000');
+  const gz = zlib.gzipSync(rows.join('\n') + '\n');
+  const b = loadBackground({}, { DecompressionStream, TextDecoderStream, Blob });
+  vm.runInContext('globalThis.__stream = (buf) => new Blob([buf]).stream()', b);
+  b.__gz = gz;
+  const all = await vm.runInContext('readPopularDomains(__stream(__gz), 1000)', b);
+  assert.equal(all.size, 51, 'www. and m. of the same site count once; registrable domains');
+  const top = await vm.runInContext('readPopularDomains(__stream(__gz), 10)', b);
+  assert.equal(top.size, 5, 'stops after the top rows');
+  const tr = vm.runInContext('parseTrancoList("1,google.com\\n2,mail.example.co.uk\\n3,not a domain\\n")', b);
+  assert.deepEqual([...tr].sort(), ['example.co.uk', 'google.com']);
+});
+
+test('look-alike senders: strong imitations, young near-misses, protected only when DMARC is enforced', async () => {
+  const { IDBFactory } = require('fake-indexeddb');
+  const url = require('url');
+  const day = 86400000, now = Date.now();
+  const dmarc = { '_dmarc.brandsite.example': 'v=DMARC1; p=reject', '_dmarc.mirrorsite.example': 'v=DMARC1; p=none' };
+  const created = { 'brandsitte.example': now - 10 * day, 'brandsitee.example': now - 2000 * day, 'mirrorsitte.example': now - 5 * day, 'amazom.example': now - 3000 * day };
+  const fetch = async (u) => {
+    u = String(u);
+    const q = /dns-query\?name=([^&]+)&type=TXT/.exec(u);
+    if (q) { const t = dmarc[decodeURIComponent(q[1])]; return { ok: true, status: 200, json: async () => ({ Status: t ? 0 : 3, Answer: t ? [{ type: 16, data: `"${t}"` }] : [] }) }; }
+    if (u === 'https://data.iana.org/rdap/dns.json') return { ok: true, status: 200, json: async () => ({ services: [[['example'], ['https://rdap.registry.example/']]] }) };
+    const d = /\/domain\/([^/?]+)$/.exec(u);
+    if (d) { const c = created[decodeURIComponent(d[1])]; return c ? { ok: true, status: 200, json: async () => ({ events: [{ eventAction: 'registration', eventDate: new Date(c).toISOString() }] }) } : { ok: false, status: 404, json: async () => ({}) }; }
+    throw new Error('unexpected ' + u);
+  };
+  const b = loadBackground({ popularDomains: { updated: now, entries: ['brandsite.example', 'mirrorsite.example'].join('\n') }, verifiedDomains: { 'vendorco.example': now } },
+    { indexedDB: new IDBFactory(), fetch });
+  const v = async (d, own = '') => { const r = await vm.runInContext(`lookalikeVerdict(${JSON.stringify(d)}, ${JSON.stringify(own)}, { enableDnsThreatCheck: true })`, b); return r && r.level; };
+  // Strong, whatever the age.
+  assert.equal(await v('paypal-billing.com'), 'strong', 'a built-in brand plus a scare word');
+  assert.equal(await v(url.domainToASCII('pаypal.com')), 'strong', 'a Cyrillic letter (punycode)');
+  assert.equal(await v('paypal.com.verify-acct.net'), 'strong', 'a brand domain worn at the start');
+  assert.equal(await v('example-k12.org', 'example.k12.fl.us'), 'strong', 'your organization run together');
+  assert.equal(await v('example.k12.f1.us', 'example.k12.fl.us'), 'strong', 'your organization one letter off');
+  // Near: by age.
+  assert.equal(await v('brandsitte.example'), 'strong', 'one letter off a popular domain, 10 days old');
+  assert.equal(await v('brandsitee.example'), null, 'one letter off, but years old (real companies with similar names)');
+  assert.equal(await v('mirrorsitte.example'), null, 'a popular domain that doesn\'t enforce DMARC is not protected');
+  assert.equal(await v('amazom.example'), 'caution', 'a built-in brand one letter off, old: amber');
+  assert.equal(await v('vendorc.example'), null, 'learned domain one letter off, unknown age: nothing');
+  // The real ones never match.
+  assert.equal(await v('brandsite.example'), null);
+  assert.equal(await v('paypal.com'), null);
+  assert.equal(await v('vendorco.example'), null, 'a learned domain isn\'t its own look-alike');
+  assert.equal(await v('example.k12.fl.us', 'example.k12.fl.us'), null);
+  assert.equal(await v('gmail.com'), null);
+});
+
+test('name and address: a brand\'s name elsewhere is red; a colleague\'s name outside is amber; hashes only', () => {
+  const b = loadBackground();
+  const run = (c) => vm.runInContext(c, b);
+  assert.equal(run('colleagueNameHash("Smith, John")'), run('colleagueNameHash("John Smith")'), 'word order doesn\'t matter');
+  assert.equal(run('colleagueNameHash("John Smith (Superintendent)")'), run('colleagueNameHash("john  SMITH")'), 'brackets and case ignored');
+  assert.equal(run('colleagueNameHash("Admin")'), '', 'one-word names are not kept');
+  assert.ok(!run('colleagueNameHash("John Smith")').includes('john'), 'a hash, not the name');
+  run('globalThis.__col = new Set([colleagueNameHash("Pat Colleague")])');
+  const signs = (name, addr) => run(`nameAddressSigns(${JSON.stringify(name)}, ${JSON.stringify(addr)}, "school.org", __col)`).map(x => x.weight);
+  assert.deepEqual(signs('PayPal Service', 'help@random-shop.example'), [5], 'brand name on another address: red');
+  assert.deepEqual(signs('PayPal', 'service@paypal.com'), [], 'the brand itself');
+  assert.deepEqual(signs('Pat Colleague', 'pat.personal@gmail.com'), [3], 'a colleague\'s name outside: amber');
+  assert.deepEqual(signs('Pat Colleague', 'pat.colleague@school.org'), [], 'the colleague themself');
+  assert.deepEqual(signs('Someone Else', 'someone@gmail.com'), []);
+});
+
+test('list storage: compressed, each entry once; old plain copies still read; a failed list keeps its domains', async () => {
+  const b = loadBackground();
+  const run = (c) => vm.runInContext(c, b);
+  const text = Array.from({ length: 5000 }, (_, i) => `domain${i}.example`).sort().join('\n');
+  b.__t = text;
+  const packed = await run('packText(__t)');
+  assert.ok(packed.length < text.length / 3, `compressed: ${packed.length} vs ${text.length}`);
+  b.__p = packed;
+  assert.equal(await run('unpackText(__p)'), text, 'round trip');
+  // A phishing list stored compressed is looked up like a plain one.
+  const b2 = loadBackground({ feed_phishingarmy: { updated: Date.now(), count: 3, gz: await run('packText("bad.test\\nmid.test\\nzz-bad.test")') } });
+  assert.ok(await vm.runInContext('feedHit("https://login.bad.test/x")', b2), 'compressed list matched');
+  // Popular sites: each domain once with its sources; a list that fails keeps its previous domains.
+  const now = Date.now();
+  const cruxDomains = Array.from({ length: 3500 }, (_, i) => `c${i}.example`), shared = Array.from({ length: 100 }, (_, i) => `both${i}.example`);
+  const trancoDomains = Array.from({ length: 3500 }, (_, i) => `t${i}.example`);
+  const zlib = require('zlib');
+  const csv = ['origin,rank', ...[...cruxDomains, ...shared].map(d => `https://www.${d},1000`)].join('\n');
+  let trancoUp = true;
+  const fetch = async (u) => {
+    u = String(u);
+    if (u.includes('crux-top-lists')) return { ok: true, status: 200, body: new Blob([zlib.gzipSync(csv)]).stream() };
+    if (u.endsWith('/top-1m-id')) { if (!trancoUp) throw new Error('down'); return { ok: true, status: 200, text: async () => 'ABC12' }; }
+    if (u.includes('tranco-list.eu/download/')) return { ok: true, status: 200, text: async () => [...trancoDomains, ...shared].map((d, i) => `${i + 1},${d}`).join('\n') };
+    throw new Error('unexpected ' + u);
+  };
+  const b3 = loadBackground({}, { fetch, indexedDB: new (require('fake-indexeddb').IDBFactory)() });
+  const r1 = await vm.runInContext('syncPopularDomains(true)', b3);
+  assert.equal(r1.count, 7100, 'the shared domains are stored once');
+  const stored = await vm.runInContext('chrome.storage.local.get("popularDomains")', b3);
+  assert.ok(stored.popularDomains.gz && !stored.popularDomains.entries, 'stored compressed only');
+  const m1 = await vm.runInContext('(async () => readPopularList((await chrome.storage.local.get("popularDomains")).popularDomains))()', b3);
+  assert.equal(m1.get('both0.example'), 3); assert.equal(m1.get('c0.example'), 1); assert.equal(m1.get('t0.example'), 2);
+  trancoUp = false;
+  const r2 = await vm.runInContext('syncPopularDomains(true)', b3);
+  assert.equal(r2.count, 7100, 'Tranco failed: its previous domains are kept');
 });

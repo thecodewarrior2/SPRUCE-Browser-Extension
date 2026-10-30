@@ -19,7 +19,7 @@ function getConfig() {
 
 // Keys that never affect settings; changes to them don't invalidate the cache.
 const NON_CONFIG_KEYS = new Set(['errorLogs', 'recentActivity', 'resolutionHistory', 'lastSyncTime', 'listState', 'cacheSchema', 'welcomeDismissed', 'uiTheme',
-    'detectedConflicts', 'ignoredConflicts', 'keptConflictFeatures',
+    'detectedConflicts', 'ignoredConflicts', 'keptConflictFeatures', 'popularDomains', 'verifiedDomains', 'colleagueNameHashes', 'rdapBootstrap',
     'senderDomainCache', 'geoCache', 'spamMovedThreads', 'spamRescuedThreads', 'senderMessageCache', 'senderResultCache', 'faviconCache', 'spamMoveLog']);
 function invalidateConfig() {
     configPromise = null;
@@ -568,6 +568,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
         const cfg = await getConfig();
         updateRemoteLists();
         syncPhishFeeds().catch(() => {});          // a list added by this version is fetched now, not tomorrow
+        syncPopularDomains().catch(() => {});
         await pruneExpiredData(cfg.values.retentionDays);
         if (details && (details.reason === 'install' || details.reason === 'update')) {
             logInfo(details.reason === 'install' ? `Installed version ${chrome.runtime.getManifest().version}.`
@@ -581,7 +582,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 chrome.alarms.onAlarm.addListener(async (alarm) => {
     try {
         if (alarm.name === 'syncLists') updateRemoteLists();
-        if (alarm.name === 'syncPhishFeeds') await syncPhishFeeds();
+        if (alarm.name === 'syncPhishFeeds') { await syncPhishFeeds(); await syncPopularDomains(); }
         if (alarm.name === 'pruneExpiredEntries') {
             const cfg = await getConfig();
             await pruneExpiredData(cfg.values.retentionDays);
@@ -1114,6 +1115,26 @@ async function lookupShortLink(shortUrl, cfg) {
 }
 
 // ---------------------------------------------------------------------------
+// LIST STORAGE: downloaded lists are kept compressed (gzip, as base64 text in extension storage), each
+// entry once and sorted: Phishing Army's 150,000 domains take about 1.5 MB instead of 3.2 MB, the
+// popular-sites lists about 100 KB instead of 400 KB. Unpacked once when the background starts, into
+// the compact sorted form used for lookups (compactSet) or the look-alike index.
+// ---------------------------------------------------------------------------
+async function packText(text) {
+    const zipped = new Blob([text]).stream().pipeThrough(new CompressionStream('gzip'));
+    const bytes = new Uint8Array(await new Response(zipped).arrayBuffer());
+    let bin = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(bin);
+}
+async function unpackText(b64) {
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
+}
+
+// ---------------------------------------------------------------------------
 // PHISHING LISTS (OpenPhish community feed, Phishing Army)
 // Downloaded on a schedule (a plain download; nothing about the user is sent) and matched in memory.
 // Same safeguards as the shortener lists: size limits, a minimum size, and the previous copy is kept
@@ -1167,7 +1188,7 @@ async function syncPhishFeeds(force = false) {
             const entries = sanitizeFeed(feed, text);
             if (entries.size < PHISH_FEED_MIN_ENTRIES) throw new Error(`only ${entries.size} entries; keeping the previous copy`);
             // Stored sorted, so it loads as a compact list without sorting (see compactSet).
-            await chrome.storage.local.set({ [`feed_${feed.id}`]: { updated: Date.now(), count: entries.size, entries: [...entries].sort().join('\n') } });
+            await chrome.storage.local.set({ [`feed_${feed.id}`]: { updated: Date.now(), count: entries.size, gz: await packText([...entries].sort().join('\n')) } });
             changed = true;
             logInfo(`${feed.name}: updated (${entries.size.toLocaleString()} entries).`, 'Phishing lists');
         } catch (e) {
@@ -1194,7 +1215,9 @@ async function readFeedSets() {
     const parts = { url: [], domain: [], address: [] };
     for (const feed of PHISH_FEEDS) {
         const rec = stored[`feed_${feed.id}`];
-        if (rec && rec.entries) parts[feed.kind].push({ name: feed.name, list: compactSet(rec.entries) });
+        // Compressed (gz); a copy saved before lists were compressed is plain (entries) until its next update.
+        const text = rec && rec.gz ? await unpackText(rec.gz).catch(() => '') : rec && rec.entries;
+        if (text) parts[feed.kind].push({ name: feed.name, list: compactSet(text) });
     }
     return { url: feedLookup(parts.url), domain: feedLookup(parts.domain), address: feedLookup(parts.address) };
 }
@@ -1657,6 +1680,348 @@ async function bimiLogo(domain) {
     return p;
 }
 
+// ---------------------------------------------------------------------------
+// LOOK-ALIKE SENDER DOMAINS, checked for every inbox row (nothing has to be opened).
+// Protected domains:
+//   - popular: two public research lists, downloaded monthly, their top 10,000 each: the sites most
+//     visited in Google Chrome (the Chrome UX Report top list, a copy on GitHub by Zakir Durumeric,
+//     Stanford; data CC BY 4.0; only the start of the file is read), and Tranco (tranco-list.eu, KU
+//     Leuven and others), which also ranks by DNS traffic and so includes the services that send a
+//     lot of email but are rarely visited (sendgrid.net, docusign.net, mailchimp.com). Together about
+//     14,000 domains. A popular domain counts only if it enforces DMARC itself, as email-sending
+//     brands do: that keeps piracy mirrors and the like out;
+//   - built-in: the well-known brands phishing targets most (PROTECTED_BRANDS);
+//   - your own organization;
+//   - learned: domains whose mail passed DMARC in this mailbox (from headers already read). Learned
+//     domains can only be imitated: being learned never makes a sender trusted (a forger's own
+//     look-alike domain passes DMARC too).
+// How a sender's domain is judged against them:
+//   strong (red, moved to Spam): look-alike characters (pаypal with a Cyrillic а, rn for m), a protected
+//     domain worn as the start of another (paypal.com.verify-acct.net), a protected name plus a scare
+//     word (paypal-billing.com), an imitation of your own organization (example-k12.org);
+//   near (one letter off, two letters swapped, or the same name under another ending): red when the
+//     sender's domain was registered less than 90 days ago (public registry date, RDAP); a built-in
+//     brand also gets amber when older or of unknown age; otherwise nothing, since real companies with
+//     similar names exist (channel4/channel5).
+// The real domains (popular, built-in, own) never match; trusted senders are never judged.
+// ---------------------------------------------------------------------------
+const POPULAR_LIST_URL = 'https://raw.githubusercontent.com/zakird/crux-top-lists/main/data/global/current.csv.gz';
+const TRANCO_ID_URL = 'https://tranco-list.eu/top-1m-id';             // the latest list's id
+const TRANCO_LIST_URL = (id) => `https://tranco-list.eu/download/${encodeURIComponent(id)}/${POPULAR_TOP}`;
+const POPULAR_TOP = 10000;
+const POPULAR_MIN = 3000;
+const POPULAR_REFRESH_MS = 30 * 24 * 60 * 60 * 1000;
+const YOUNG_DOMAIN_DAYS = 90;
+const VERIFIED_DOMAINS_MAX = 2000;
+const COLLEAGUE_NAMES_MAX = 5000;
+
+// The registrable domains of the first `top` sites of the (gzip-compressed CSV) list, read as a stream
+// and stopped there: the rest of the file isn't downloaded.
+async function readPopularDomains(stream, top = POPULAR_TOP) {
+    const reader = stream.pipeThrough(new DecompressionStream('gzip')).pipeThrough(new TextDecoderStream()).getReader();
+    const out = new Set();
+    let rest = '', rows = 0;
+    try {
+        for (;;) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            rest += value;
+            const lines = rest.split('\n');
+            rest = lines.pop();
+            for (const line of lines) {
+                const origin = line.split(',')[0].trim();
+                if (!/^https?:\/\//i.test(origin)) continue;                   // the header line
+                if (++rows > top) return out;
+                let host;
+                try { host = new URL(origin).hostname; } catch (e) { continue; }
+                const reg = registrableDomain(host);
+                if (SENDER_DOMAIN_RE.test(reg)) out.add(reg);
+            }
+        }
+    } finally {
+        reader.cancel().catch(() => {});
+    }
+    return out;
+}
+// Tranco's top domains ("rank,domain" lines, already registrable domains).
+function parseTrancoList(text, top = POPULAR_TOP) {
+    const out = new Set();
+    for (const line of String(text).split('\n').slice(0, top)) {
+        const reg = registrableDomain((line.split(',')[1] || '').trim().toLowerCase());
+        if (SENDER_DOMAIN_RE.test(reg)) out.add(reg);
+    }
+    return out;
+}
+// The popular domains as one list, each domain once, with the lists it's on (1: Chrome UX Report,
+// 2: Tranco, 3: both), so a list that fails to update keeps its previous domains. Stored compressed:
+// lines of "<sources digit><domain>", sorted.
+const POPULAR_SOURCE_BIT = { crux: 1, tranco: 2 };
+async function readPopularList(rec) {
+    const out = new Map();                                    // domain → source bits
+    if (!rec) return out;
+    if (rec.gz) {
+        for (const line of (await unpackText(rec.gz).catch(() => '')).split('\n')) if (line.length > 1) out.set(line.slice(1), Number(line[0]) || 3);
+    } else if (rec.entries) {
+        for (const d of String(rec.entries).split('\n')) if (d) out.set(d, 3);   // a plain list (tests, early copies)
+    }
+    return out;
+}
+// One download at a time: a second request (install and the daily timer together) waits for it.
+let popularSyncInFlight = null;
+function syncPopularDomains(force = false) {
+    if (!popularSyncInFlight) popularSyncInFlight = syncPopularDomainsNow(force).finally(() => { popularSyncInFlight = null; });
+    return popularSyncInFlight;
+}
+async function syncPopularDomainsNow(force) {
+    const cfg = await getConfig();
+    if (!cfg.values.enableLookalikeCheck || !cfg.values.enableRemoteListSync) return { skipped: true };
+    const prev = (await storageGet('local', { popularDomains: null })).popularDomains;
+    if (!force && prev && Date.now() - prev.updated < POPULAR_REFRESH_MS) return { skipped: true };
+    const sources = [
+        { name: 'Chrome UX Report top list', id: 'crux', get: async () => {
+            const res = await fetchWithTimeout(POPULAR_LIST_URL, { credentials: 'omit' }, 60000);
+            if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+            return readPopularDomains(res.body);
+        } },
+        { name: 'Tranco', id: 'tranco', get: async () => {
+            const idRes = await fetchWithTimeout(TRANCO_ID_URL, { credentials: 'omit' }, 15000);
+            if (!idRes.ok) throw new Error(`HTTP ${idRes.status}`);
+            const id = (await idRes.text()).trim();
+            if (!/^[A-Za-z0-9]{3,12}$/.test(id)) throw new Error('no list id');
+            const res = await fetchWithTimeout(TRANCO_LIST_URL(id), { credentials: 'omit' }, 30000);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            return parseTrancoList(await res.text());
+        } }
+    ];
+    const list = await readPopularList(prev);
+    const have = Object.assign({}, prev && prev.sources);
+    let updated = 0;
+    // Each list on its own: one failing keeps its previous domains (and the other list).
+    for (const src of sources) {
+        try {
+            const set = await src.get();
+            if (set.size < POPULAR_MIN) throw new Error(`only ${set.size} domains`);
+            const bit = POPULAR_SOURCE_BIT[src.id];
+            for (const [d, bits] of list) { const left = bits & ~bit; if (left) list.set(d, left); else list.delete(d); }
+            for (const d of set) list.set(d, (list.get(d) || 0) | bit);
+            have[src.id] = Date.now();
+            updated++;
+        } catch (e) {
+            logWarning(`${src.name} (popular sites for the look-alike check) could not be updated (${errorText(e)}); ${have[src.id] ? 'its previous copy is kept' : 'the other list and the built-in brands are used meanwhile'}.`, 'Sender checks');
+        }
+    }
+    if (!updated) return { skipped: false, failed: true };
+    const text = [...list.keys()].sort().map(d => list.get(d) + d).join('\n');
+    await chrome.storage.local.set({ popularDomains: { updated: Date.now(), count: list.size, sources: have, gz: await packText(text) } });
+    lookalikeIndex = null;
+    logInfo(`Popular sites for the look-alike check: updated (${list.size.toLocaleString()} domains from ${sources.filter(x => have[x.id]).map(x => x.name).join(' and ')}).`, 'Sender checks');
+    return { skipped: false, count: list.size };
+}
+
+// The protected domains, indexed by their name (the label before the ending) and by every way of
+// taking one letter out of names of 6 letters or more (finds one-letter-off names without comparing
+// each one). Rebuilt when the list or the learned domains change.
+let lookalikeIndex = null;
+function loadLookalikeIndex() {
+    if (!lookalikeIndex) lookalikeIndex = buildLookalikeIndex().catch((e) => { lookalikeIndex = null; throw e; });
+    return lookalikeIndex;
+}
+const mainLabel = (reg) => String(reg || '').split('.')[0];
+async function buildLookalikeIndex() {
+    const st = await storageGet('local', { popularDomains: null, verifiedDomains: {} });
+    const popular = [...(await readPopularList(st.popularDomains)).keys()];
+    const learned = Object.keys(st.verifiedDomains && typeof st.verifiedDomains === 'object' ? st.verifiedDomains : {});
+    const builtIn = PROTECTED_BRANDS.map(d => registrableDomain(d));
+    const kind = new Map();                                   // domain → 'builtin' | 'popular' | 'learned'
+    for (const d of learned) kind.set(d, 'learned');
+    for (const d of popular) kind.set(d, 'popular');
+    for (const d of builtIn) kind.set(d, 'builtin');
+    const real = new Set([...builtIn, ...popular]);
+    // Values are one string, or an array when several share the key (most don't): about 4 MB in
+    // memory for the 90,000 one-letter-out keys of 14,000 domains, built in well under 100 ms.
+    const byLabel = new Map(), dels = new Map();
+    const push = (m, k, v) => {
+        const a = m.get(k);
+        if (a === undefined) m.set(k, v);
+        else if (typeof a === 'string') { if (a !== v) m.set(k, [a, v]); }
+        else if (!a.includes(v)) a.push(v);
+    };
+    for (const d of kind.keys()) {
+        const label = mainLabel(d);
+        if (label.length < 4) continue;
+        push(byLabel, label, d);
+        if (label.length >= 6) for (let i = 0; i < label.length; i++) push(dels, label.slice(0, i) + label.slice(i + 1), label);
+    }
+    const all = (v) => v === undefined ? [] : typeof v === 'string' ? [v] : v;
+    byLabel.all = (k) => all(byLabel.get(k));
+    dels.all = (k) => all(dels.get(k));
+    return { kind, real, byLabel, dels, stamp: `${st.popularDomains ? st.popularDomains.updated : 0}:${learned.length}` };
+}
+// Protected names one letter off (or with two letters swapped) from `label`.
+function nearLabels(label, idx) {
+    const found = new Set();
+    const add = (list) => { for (const t of list) if (t !== label) found.add(t); };
+    add(idx.dels.all(label));                                 // a protected name with one letter more
+    for (let i = 0; i < label.length; i++) {
+        const v = label.slice(0, i) + label.slice(i + 1);
+        add(idx.dels.all(v));                                 // one letter changed (or two swapped)
+        if (v.length >= 6 && idx.byLabel.has(v)) found.add(v); // a protected name with one letter less
+    }
+    return [...found].filter(t => editDistanceAtMost1(label, t));
+}
+// The forms "example.k12.fl.us" takes when run together: examplek12, examplek12fl, examplek12flus.
+function collapsedForms(host) {
+    const labels = String(host || '').split('.');
+    const out = [];
+    for (let i = 2; i <= labels.length; i++) out.push(labels.slice(0, i).join(''));
+    return out;
+}
+
+// How old a domain is, from its registry's public record (RDAP; the registry is found through IANA's
+// directory). Days, or null when the registry publishes no date (some country endings) or can't be
+// reached. Remembered 30 days (icon store "age:<domain>").
+const RDAP_BOOTSTRAP_URL = 'https://data.iana.org/rdap/dns.json';
+const RDAP_CACHE_MS = 30 * 24 * 60 * 60 * 1000;
+let rdapServers = null;
+async function rdapServerFor(tld) {
+    if (!rdapServers) rdapServers = (async () => {
+        const st = await storageGet('local', { rdapBootstrap: null });
+        if (st.rdapBootstrap && Date.now() - st.rdapBootstrap.updated < RDAP_CACHE_MS) return st.rdapBootstrap.map;
+        const res = await fetchWithTimeout(RDAP_BOOTSTRAP_URL, { credentials: 'omit' }, 10000);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const map = {};
+        for (const [tlds, urls] of data.services || []) {
+            const url = (urls || []).find(u => /^https:\/\//i.test(u));
+            if (url) for (const t of tlds) map[String(t).toLowerCase()] = url.endsWith('/') ? url : url + '/';
+        }
+        await chrome.storage.local.set({ rdapBootstrap: { updated: Date.now(), map } });
+        return map;
+    })().catch((e) => { rdapServers = null; throw e; });
+    return (await rdapServers)[tld] || '';
+}
+const ageInFlight = new Map();
+async function domainAgeDays(reg) {
+    const key = 'age:' + reg;
+    const hit = await iconStore.get(key).catch(() => null);
+    const fromRecord = (rec) => { try { const v = JSON.parse(new TextDecoder().decode(rec.bytes)); return v.created ? Math.floor((Date.now() - v.created) / 86400000) : null; } catch (e) { return null; } };
+    if (hit && Date.now() - hit.ts < RDAP_CACHE_MS) return hit.bytes ? fromRecord(hit) : null;
+    if (ageInFlight.has(key)) return ageInFlight.get(key);
+    const p = (async () => {
+        try {
+            const base = await rdapServerFor(reg.split('.').pop());
+            let created = null;
+            if (base) {
+                const res = await fetchWithTimeout(`${base}domain/${encodeURIComponent(reg)}`, { credentials: 'omit', headers: { accept: 'application/rdap+json' } }, 8000);
+                if (res.ok) {
+                    const data = await res.json();
+                    const ev = (data.events || []).find(e => e && e.eventAction === 'registration' && e.eventDate);
+                    const t = ev ? Date.parse(ev.eventDate) : NaN;
+                    if (Number.isFinite(t)) created = t;
+                }
+            }
+            await iconStore.put(key, created ? 'application/json' : '', created ? new TextEncoder().encode(JSON.stringify({ created })).buffer : null, created ? 'rdap' : 'none').catch(() => {});
+            return created ? Math.floor((Date.now() - created) / 86400000) : null;
+        } catch (e) {
+            return null;                                      // unknown: never a reason to flag on its own
+        } finally {
+            ageInFlight.delete(key);
+        }
+    })();
+    ageInFlight.set(key, p);
+    return p;
+}
+
+// Whether a sender's domain imitates a protected one: null, or { level: 'strong' | 'caution', text }.
+async function lookalikeVerdict(domain, ownDomain, S) {
+    const host = normalizeDomain(domain);
+    const reg = registrableDomain(host);
+    if (!SENDER_DOMAIN_RE.test(reg) || isPersonalMailDomain(reg)) return null;
+    const own = ownDomain ? normalizeDomain(ownDomain) : '';
+    const ownReg = own ? registrableDomain(own) : '';
+    if (ownReg && reg === ownReg) return null;
+    const idx = await loadLookalikeIndex();
+    if (idx.real.has(reg)) return null;
+    const online = !!S.enableDnsThreatCheck;
+    // A popular domain is protected only when it enforces DMARC (needs a lookup, so not offline).
+    const protectedTarget = async (t) => {
+        const k = idx.kind.get(t);
+        if (k === 'builtin' || k === 'learned') return true;
+        return k === 'popular' && online ? dmarcEnforced(t).catch(() => false) : false;
+    };
+    const label = mainLabel(reg), uLabel = unicodeLabel(label), skel = confusableSkeleton(uLabel), tokens = uLabel.split('-');
+    const strong = [], near = [];
+    // Your own organization.
+    if (ownReg) {
+        const flat = uLabel.replace(/-/g, '');
+        const forms = collapsedForms(ownReg);
+        if (forms.includes(flat) || forms.includes(skel)) strong.push({ target: ownReg, why: `runs your organization's address ${ownReg} together` });
+        else if (host !== own && host.length >= 6 && editDistanceAtMost1(host, own)) strong.push({ target: ownReg, why: `is one letter away from your organization's ${own}` });
+        else if (mainLabel(ownReg) === label) near.push({ target: ownReg, why: `uses your organization's name under another ending` });
+        else if (label.length >= 6 && editDistanceAtMost1(label, mainLabel(ownReg))) near.push({ target: ownReg, why: `is one letter away from your organization's ${ownReg}` });
+    }
+    // A protected domain worn at the start of another: paypal.com.verify-acct.net.
+    const labels = host.split('.');
+    for (let i = 2; i < labels.length - 1; i++) {
+        const head = labels.slice(0, i).join('.');
+        if (idx.kind.has(head) && registrableDomain(head) === head) { strong.push({ target: head, why: `starts with “${head}” but is really ${reg}` }); break; }
+    }
+    // Look-alike characters.
+    if (skel !== label && skel.length >= 4) for (const t of idx.byLabel.all(skel)) strong.push({ target: t, why: `imitates ${t} with look-alike characters` });
+    // A protected name plus a scare word.
+    if (tokens.length > 1 && tokens.some(t => CREDENTIAL_WORDS.has(t))) {
+        for (const tok of tokens) for (const t of idx.byLabel.all(tok)) {
+            if (tok.length >= (idx.kind.get(t) === 'builtin' ? 4 : 5)) strong.push({ target: t, why: `uses the name “${tok}” but isn't ${t}` });
+        }
+    }
+    // One letter off, or the same name under another ending.
+    if (label.length >= 5) {
+        for (const t of nearLabels(label, idx)) for (const d of idx.byLabel.all(t)) near.push({ target: d, why: `is one letter away from ${d}` });
+        for (const d of idx.byLabel.all(label)) if (d !== reg) near.push({ target: d, why: `uses the name of ${d} under another ending` });
+    }
+    for (const c of strong) {
+        if (c.target === ownReg || await protectedTarget(c.target)) return { level: 'strong', text: `The sender's domain ${reg} ${c.why}: a look-alike address.` };
+    }
+    const nearOk = [];
+    for (const c of near) if (c.target === ownReg || await protectedTarget(c.target)) nearOk.push(c);
+    if (!nearOk.length) return null;
+    const age = online ? await domainAgeDays(reg) : null;
+    const c = nearOk[0];
+    if (age !== null && age < YOUNG_DOMAIN_DAYS) {
+        return { level: 'strong', text: `The sender's domain ${reg} ${c.why}, and was registered only ${age} day${age === 1 ? '' : 's'} ago: a look-alike address.` };
+    }
+    const builtin = nearOk.find(x => idx.kind.get(x.target) === 'builtin');
+    if (builtin) return { level: 'caution', text: `The sender's domain ${reg} ${builtin.why}${age !== null ? ` (registered ${age} days ago)` : ''}. Make sure it's really who you expect.` };
+    return null;
+}
+
+// Domains whose mail passed DMARC here (from headers already read): remembered as protected, newest
+// VERIFIED_DOMAINS_MAX. Colleagues' names: their hashes only (colleagueNameHash), never the names.
+async function rememberVerifiedDomain(domain) {
+    const d = registrableDomain(normalizeDomain(domain));
+    if (!SENDER_DOMAIN_RE.test(d) || isPersonalMailDomain(d)) return false;
+    // Already protected as a popular or built-in domain: not stored a second time.
+    const idx = await loadLookalikeIndex().catch(() => null);
+    if (idx && idx.real.has(d)) return false;
+    const st = await storageGet('local', { verifiedDomains: {} });
+    const map = st.verifiedDomains && typeof st.verifiedDomains === 'object' ? st.verifiedDomains : {};
+    const isNew = !map[d];
+    map[d] = Date.now();
+    const entries = Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, VERIFIED_DOMAINS_MAX);
+    await chrome.storage.local.set({ verifiedDomains: Object.fromEntries(entries) });
+    if (isNew) lookalikeIndex = null;
+    return true;
+}
+async function rememberColleagueNames(hashes) {
+    const st = await storageGet('local', { colleagueNameHashes: [] });
+    const list = Array.isArray(st.colleagueNameHashes) ? st.colleagueNameHashes : [];
+    const set = new Set(list);
+    let added = 0;
+    for (const h of hashes) if (typeof h === 'string' && /^[0-9a-z]{2,16}$/.test(h) && !set.has(h)) { set.add(h); added++; }
+    if (added) await chrome.storage.local.set({ colleagueNameHashes: [...set].slice(-COLLEAGUE_NAMES_MAX) });
+    return added;
+}
+
 // The sender's exact address on the community scam-sender list (downloaded with the phishing lists).
 async function phishingSenderHit(address, cfg) {
     if (!cfg.values.enablePhishingFeeds) return null;
@@ -1694,6 +2059,10 @@ async function checkSender(s, ownDomain, cfg) {
         dnsChecked: domainChecks && online
     });
     verdict = applyEmailSignals(verdict, parsed.malformed);
+    // A look-alike of a protected domain (the trusted lists, big providers and your own domain aside).
+    const lookalike = S.enableLookalikeCheck && validDomain && !trustedHit && !allowlisted && !shared && !listHit
+        ? await lookalikeVerdict(domain, own, S).catch(() => null) : null;
+    if (lookalike) verdict = applyEmailSignals(verdict, [{ weight: lookalike.level === 'strong' ? SIGNAL_FLAG_SCORE : SIGNAL_CAUTION_SCORE, text: lookalike.text }]);
     // Country: the domain's ending when it names one, else where its website is hosted. (The country
     // of the server that sent a particular email is looked up separately: senderCountry.)
     let country = null, countrySource = null;
@@ -1706,7 +2075,8 @@ async function checkSender(s, ownDomain, cfg) {
         S.enableSenderAddressCheck ? `community scam-sender list: ${listHit ? `listed (${listHit.name || 'community list'})` : S.enablePhishingFeeds ? 'not listed' : 'off'}` : 'community scam-sender list: off',
         !domainChecks ? 'domain checks: off' : shared ? 'domain: big provider or your organization, not judged' : !validDomain ? 'domain: invalid'
             : `phishing lists: ${domainFeed ? `listed (${domainFeed})` : S.enablePhishingFeeds ? 'not listed' : 'off'}; threat services: ${dns ? (dns.verdict === 'unsafe' ? `blocked by ${dns.scanner}` : dns.verdict === 'safe' ? 'clean' : (dns.note || 'no answer')) : online ? 'not needed' : 'off (Offline only)'}`,
-        parsed.malformed.length ? `address: malformed (${parsed.malformed.length} sign${parsed.malformed.length === 1 ? '' : 's'})` : null
+        parsed.malformed.length ? `address: malformed (${parsed.malformed.length} sign${parsed.malformed.length === 1 ? '' : 's'})` : null,
+        S.enableLookalikeCheck ? `look-alike: ${lookalike ? (lookalike.level === 'strong' ? 'yes' : 'possible') : 'no'}` : null
     ].filter(Boolean).join('; ');
     return Object.assign({ address, domain, country, countrySource, checks }, verdict);
 }
@@ -1718,12 +2088,14 @@ async function checkSenders(list, ownDomain) {
     if (!S.enableSenderIdentity && !S.enableSenderDomainCheck && !S.enableSenderAddressCheck) return [];
     const items = list.slice(0, 60);
     const results = new Array(items.length);
+    // A new popular-sites list or newly learned domains re-judge senders (look-alike check).
+    const stamp = S.enableLookalikeCheck ? (await loadLookalikeIndex().catch(() => ({ stamp: '' }))).stamp : 'off';
     let next = 0;
     const worker = async () => {
         while (next < items.length) {
             const i = next++;
             const parsed = parseSenderAddress(items[i].address);
-            const key = `${parsed ? parsed.address : String(items[i].address || '').trim()}|${parsed && parsed.malformed.length ? 'malformed' : ''}|${normalizeDomain(ownDomain || '')}`;
+            const key = `${parsed ? parsed.address : String(items[i].address || '').trim()}|${parsed && parsed.malformed.length ? 'malformed' : ''}|${normalizeDomain(ownDomain || '')}|${stamp}`;
             try {
                 const hit = await senderResultCache.get(key);
                 if (hit && !hit.retry) { results[i] = hit.r; continue; }
@@ -2453,6 +2825,23 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         getConfig().then(cfg => cfg.values.enableSenderIdentity && cfg.values.enableSenderAvatars && cfg.values.enableDnsThreatCheck
             ? rememberAvatar(target, request.url.slice(0, 2000)) : 'off')
             .then(r => sendResponse(r), () => sendResponse('failed'));
+        return true;
+    }
+    // Look-alike check: a domain whose mail passed DMARC here (from headers already read); colleagues'
+    // names, as hashes only (colleagueNameHash), learned from your own organization's senders.
+    if (request.action === 'senderVerified') {
+        if (!sender || sender.id !== chrome.runtime.id || typeof request.domain !== 'string') { sendResponse(false); return false; }
+        rememberVerifiedDomain(request.domain.slice(0, 253)).then(sendResponse, () => sendResponse(false));
+        return true;
+    }
+    if (request.action === 'learnColleagueNames') {
+        if (!sender || sender.id !== chrome.runtime.id || !Array.isArray(request.hashes)) { sendResponse(0); return false; }
+        rememberColleagueNames(request.hashes.slice(0, 200)).then(sendResponse, () => sendResponse(0));
+        return true;
+    }
+    if (request.action === 'getColleagueNames') {
+        if (!sender || sender.id !== chrome.runtime.id) { sendResponse([]); return false; }
+        storageGet('local', { colleagueNameHashes: [] }).then(r => sendResponse(Array.isArray(r.colleagueNameHashes) ? r.colleagueNameHashes : []), () => sendResponse([]));
         return true;
     }
     // Other extensions that do the same job (content.js detectConflicts): remembered for Settings →
