@@ -1,5 +1,12 @@
 # Changelog
 
+## 5.56 — Row highlighter, and warnings about extensions that do the same job
+
+- **New: row highlighter.** The inbox row under the mouse gets a soft see-through color and an outline, so it's clear which email a click opens; emails you've ticked keep the highlight. Six colors (yellow, blue, green, pink, purple, gray) and three styles (color and outline, color only, outline only), each with a light- and dark-theme variant so text keeps its contrast. Works on every webmail whose inbox list the extension finds. Inspired by Row Highlighter for Gmail. Settings → Row highlighter; policies `managedEnableRowHighlighter`, `managedRowHighlightColor`, `managedRowHighlightStyle`, `managedRowHighlightSelected`.
+- **New: warnings about other extensions that do the same job.** Two extensions changing the same part of the webmail (both drawing sender icons, both highlighting rows) can conflict. Known ones (Gmail Sender Icons, Simplify Gmail, Contact Avatars for Gmail, Row Highlighter for Gmail) are recognized from what they add to the page, and any extension drawing sender icons or photos is noticed by its effect. A notice recommends keeping this extension on (it also checks senders for phishing) and offers: turn the other one off (opens Settings → Other extensions, where one click does it in Chrome after the browser asks for permission; Firefox gets the steps), turn our matching feature off, or ignore. **Check installed extensions** lists installed ones too. Nothing about other extensions is sent anywhere. Administrators can suppress the warnings completely with `managedEnableConflictWarnings: false`.
+- New optional permission "manage your extensions": never asked at install, only when you press one of those buttons.
+- **Fixed:** choice settings (such as a custom service's GET/POST method) set by policy or the user in different upper/lower case were ignored; any spelling is now accepted.
+
 ## 5.55 — Sender photos and logos as Gmail's real page shows them
 
 - **Verified brand logos now work:** Gmail embeds a verified BIMI logo in the page itself (a `data:` image) rather than loading it from an address. Such a logo is kept as it is, with nothing downloaded, and only when Gmail's own sender verification passed for that email (DMARC). SVG logos are kept as SVG (at most 32 KB) and shown only as an image.

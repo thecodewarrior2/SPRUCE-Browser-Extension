@@ -19,6 +19,7 @@ function getConfig() {
 
 // Keys that never affect settings; changes to them don't invalidate the cache.
 const NON_CONFIG_KEYS = new Set(['errorLogs', 'recentActivity', 'resolutionHistory', 'lastSyncTime', 'listState', 'cacheSchema', 'welcomeDismissed', 'uiTheme',
+    'detectedConflicts', 'ignoredConflicts',
     'senderDomainCache', 'geoCache', 'spamMovedThreads', 'spamRescuedThreads', 'senderMessageCache', 'senderResultCache', 'faviconCache', 'spamMoveLog']);
 function invalidateConfig() {
     configPromise = null;
@@ -2281,6 +2282,41 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         getConfig().then(cfg => cfg.values.enableSenderIdentity && cfg.values.enableSenderAvatars && cfg.values.enableDnsThreatCheck
             ? rememberAvatar(address, request.url.slice(0, 2000), 'personal') : 'off')
             .then(r => sendResponse(r), () => sendResponse('failed'));
+        return true;
+    }
+    // Other extensions that do the same job (content.js detectConflicts): remembered for Settings →
+    // Other extensions (newest 50, with where and when they were seen); answers the ones the user
+    // chose to ignore.
+    if (request.action === 'reportConflicts') {
+        if (!sender || sender.id !== chrome.runtime.id || !Array.isArray(request.conflicts)) { sendResponse([]); return false; }
+        storageGet('local', { detectedConflicts: {}, ignoredConflicts: [] }).then(async (r) => {
+            const map = r.detectedConflicts && typeof r.detectedConflicts === 'object' ? r.detectedConflicts : {};
+            for (const c of request.conflicts.slice(0, 10)) {
+                if (!c || typeof c.key !== 'string' || c.key.length > 80) continue;
+                const known = OVERLAPPING_EXTENSIONS.find(x => x.ids.includes(c.key));
+                const isNew = !map[c.key];
+                map[c.key] = { key: c.key, name: known ? known.name : 'Another extension', does: known ? known.does : String(c.does || '').slice(0, 80),
+                               features: (known ? known.features : (Array.isArray(c.features) ? c.features : [])).filter(k => SETTING_BY_KEY[k]),
+                               via: c.via === 'effect' ? 'effect' : 'page', site: String(request.site || '').slice(0, 40), ts: Date.now() };
+                if (isNew) logWarning(`${map[c.key].name} also does ${map[c.key].does} in ${map[c.key].site}; the two can conflict. Settings → Other extensions offers to turn one off.`, 'Other extensions');
+            }
+            const kept = Object.fromEntries(Object.entries(map).sort((a, b) => b[1].ts - a[1].ts).slice(0, 50));
+            await chrome.storage.local.set({ detectedConflicts: kept });
+            sendResponse(Array.isArray(r.ignoredConflicts) ? r.ignoredConflicts : []);
+        }).catch(() => sendResponse([]));
+        return true;
+    }
+    if (request.action === 'ignoreConflict') {
+        if (!sender || sender.id !== chrome.runtime.id || typeof request.key !== 'string') { sendResponse(false); return false; }
+        storageGet('local', { ignoredConflicts: [] }).then(r => {
+            const list = (Array.isArray(r.ignoredConflicts) ? r.ignoredConflicts : []).filter(k => k !== request.key).concat(request.key).slice(-100);
+            return chrome.storage.local.set({ ignoredConflicts: list });
+        }).then(() => sendResponse(true), () => sendResponse(false));
+        return true;
+    }
+    if (request.action === 'openConflicts') {
+        if (!sender || sender.id !== chrome.runtime.id) { sendResponse(false); return false; }
+        chrome.tabs.create({ url: chrome.runtime.getURL('options.html#conflicts') }, () => sendResponse(!chrome.runtime.lastError));
         return true;
     }
     if (request.action === 'forgetSpamMoves') {

@@ -209,6 +209,9 @@
         .compat-table .no { color: var(--text-muted); }
         .compat-table .basic { color: var(--warn-text, var(--text-2)); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; }
         .compat-table .status td { color: var(--text-muted); }
+        .row-hl-preview { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 3px; color: var(--text); }
+        .conflict-item { border: 1px solid var(--border-subtle); border-left: 4px solid var(--warn-solid, #f9ab00); border-radius: 6px; padding: 10px 12px; margin: 10px 0; }
+        .conflict-item .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
         .regex { font-family: monospace; font-size: 11px; background: var(--surface-2); border: 1px solid var(--border-subtle); border-radius: 4px; padding: 8px; word-break: break-all; display: block; }
         @media (max-width: 900px) { .preset-grid, .two-col, .flow { grid-template-columns: 1fr; } .help-layout { grid-template-columns: 1fr; } .help-nav { position: static; } }
     </style>
@@ -335,6 +338,29 @@
                     <div class="setting-row"><div class="setting-text">Remove pixels completely<div class="setting-desc">On: the pixel is deleted from the email. Off: it is replaced with a blank, invisible image.</div></div>
                         <label class="switch"><input type="checkbox" data-setting="removeTrackingPixels"><span class="slider"></span></label></div>
                 </details>
+            </div>
+
+            <div class="card">
+                <h3>🖍️ Row highlighter</h3>
+                <p class="card-intro">Makes it clear which email you're about to open: the row under your mouse gets a soft color and an outline. Works in light and dark themes.</p>
+                <div class="setting-row"><div class="setting-text">Highlight the email under the mouse<div class="setting-desc">The inbox row your mouse is over is highlighted, so a click opens the email you meant. <span class="row-hl-preview" id="rowHlPreview" aria-hidden="true">Example row</span></div></div>
+                    <label class="switch"><input type="checkbox" data-setting="enableRowHighlighter"><span class="slider"></span></label></div>
+                <div class="setting-row"><div class="setting-text">Color</div>
+                    <select data-setting="rowHighlightColor" aria-label="Row highlight color"><option value="yellow">Yellow</option><option value="blue">Blue</option><option value="green">Green</option><option value="pink">Pink</option><option value="purple">Purple</option><option value="gray">Gray</option></select></div>
+                <div class="setting-row"><div class="setting-text">Style</div>
+                    <select data-setting="rowHighlightStyle" aria-label="Row highlight style"><option value="both">Color and outline</option><option value="fill">Color only</option><option value="outline">Outline only</option></select></div>
+                <div class="setting-row"><div class="setting-text">Also highlight selected emails<div class="setting-desc">Emails you've ticked keep the highlight, so you can see what an action will apply to.</div></div>
+                    <label class="switch"><input type="checkbox" data-setting="rowHighlightSelected"><span class="slider"></span></label></div>
+            </div>
+
+            <div class="card" id="conflicts">
+                <h3>🧩 Other extensions</h3>
+                <p class="card-intro">Two extensions doing the same job in your webmail (both drawing sender icons, both highlighting rows) can conflict: doubled icons, flicker, a slower page. When one is found, you're warned and can turn one of them off. We recommend keeping this extension on: it also checks senders and links for phishing.</p>
+                <div class="setting-row"><div class="setting-text">Warn me about extensions that do the same job<div class="setting-desc">Checked from what other extensions add to the webmail page. Nothing about them is sent anywhere.</div></div>
+                    <label class="switch"><input type="checkbox" data-setting="enableConflictWarnings"><span class="slider"></span></label></div>
+                <div id="conflictList" aria-live="polite"></div>
+                <div style="margin-top: 10px;"><button type="button" class="btn-primary" id="checkExtensionsBtn">Check installed extensions</button>
+                    <span class="setting-desc" id="checkExtensionsNote" style="margin-left: 8px;">Lists installed extensions that do the same job, so you can turn them off with one click. Your browser asks you first to let this extension see and manage your extensions; nothing is sent anywhere.</span></div>
             </div>
 
             <div class="card">
@@ -762,6 +788,7 @@
 </div>
 <p><strong>When you send an email</strong> (Gmail), the links you wrote are checked before it goes: typos such as “.con” or “http//”, whether each website exists and works, and whether it's a look-alike, phishing or malware site. If something's wrong, you see which links and why, and choose <b>Go back and fix</b> or <b>Send anyway</b>.</p>
 <p><strong>In your Gmail inbox</strong>, every sender gets its site's icon, a country flag and a label with its domain, colored by a check of the sender: its address against phishing-sender lists and its domain against the same security services as links. Emails from a <b>flagged</b> sender are moved to Spam for you, once, with a short notice to review them. See <a href="#" data-help-link="senders">Sender icons &amp; Spam</a>.</p>
+<p><strong>The row highlighter</strong> marks the email under your mouse (and the ones you've ticked) with a soft color and an outline, so a click opens the email you meant. If another extension does the same job (for example another sender-icon or row-highlighter extension), you're warned and can turn one of them off with one click: see Settings → Other extensions.</p>
 <p><strong>Which of these work on which webmail</strong> is shown in <a href="#" data-help-link="compat">Which features work where</a>. Link, QR-code and tracking-pixel checks work on every supported webmail, and so do sender labels and checks (basic on sites without an entry of their own). Moving to Spam and the Send check run on Gmail today and reach other sites as their entries are filled in and tested.</p>
 <p>Everything you see is also available in this window: the <strong>Link Inspector</strong> shows each step for any link you paste, and <strong>Logging</strong> holds the application log (every problem and event), the history of checked links and the URL cache. Technical readers will find every detail in the <a href="#" data-help-link="architecture">architecture deep dive</a>.</p>
 </section>
@@ -1300,6 +1327,7 @@ Flag field:      (leave empty: Google's replies are recognized automatically)</d
 <tr><td><code>*.googleusercontent.com</code></td><td>Sender photos: a colleague's profile photo Gmail shows beside them in an opened email, fetched once from Google's image host (the same address Gmail loads it from) and checked again weekly. Verified brand logos are embedded in Gmail's page and are kept as they are, with no request at all. Off with <b>Sender photos and verified logos</b>.</td></tr>
 <tr><td><code>icons.duckduckgo.com</code></td><td>Stand-in sender icons: asked only for a site that has no icon of its own (and whose parent domain has none either), at most once a week per site; only the site name is sent. Off with <b>Stand-in icon for sites without their own</b>.</td></tr>
 <tr><td><code>api.country.is</code></td><td>The country of a sending server for the sender flag (only its IP address is sent; at most once a month per address).</td></tr>
+<tr><td>Manage your extensions <span style="font-size: 11px;">(optional, <code>management</code>)</span></td><td>Not asked at install. Only when you press <b>Check installed extensions</b> or <b>Turn off …</b> in Settings → Other extensions does your browser ask you to allow it. It's used only to list installed extensions that do the same job as this one and to turn off the one you choose. Nothing about your extensions is sent anywhere. Firefox doesn't let extensions turn others off, so there you get the steps instead.</td></tr>
 <tr><td><code>storage.googleapis.com</code>, <code>firebasestorage.googleapis.com</code></td><td>Only when you click 🔍 on a cloud-storage link: reads that page's code to see where it redirects.</td></tr>
 <tr><td><code>storage</code> and <code>unlimitedStorage</code></td><td>Settings, cache, history, logs and the phishing lists (several MB), kept in this browser.</td></tr>
 <tr><td><code>alarms</code></td><td>The daily list updates and data cleanup.</td></tr>

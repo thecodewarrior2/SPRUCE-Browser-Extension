@@ -44,6 +44,44 @@
       "description": "Show, in place of the site icon, the photo or logo Gmail itself shows beside a sender in an opened email, remembered per address so the inbox list shows it too: profile photos of people in the user's own organization (its domain; fetched from Gmail's image host googleusercontent.com, checked again weekly), and brand logos Gmail embeds in the page for an email that passed its sender verification (BIMI, DMARC pass; kept as they are, nothing downloaded). Personal photos of outside senders are never used. A changed photo or logo replaces the old one. Requires managedEnableSenderIdentity.",
       "type": "boolean"
     },
+    "managedEnableRowHighlighter": {
+      "title": "Row Highlighter",
+      "description": "Highlight the inbox row under the mouse (and selected rows) in Gmail and the other supported webmail, so users can see exactly which email a click opens. A see-through color and/or an outline, readable in light and dark themes. Inspired by Row Highlighter for Gmail.",
+      "type": "boolean"
+    },
+    "managedRowHighlightColor": {
+      "title": "Row Highlighter Color",
+      "description": "Highlight color: yellow (default), blue, green, pink, purple or gray.",
+      "type": "string",
+      "enum": [
+        "yellow",
+        "blue",
+        "green",
+        "pink",
+        "purple",
+        "gray"
+      ]
+    },
+    "managedRowHighlightStyle": {
+      "title": "Row Highlighter Style",
+      "description": "both (color and outline, default), fill (color only) or outline (outline only).",
+      "type": "string",
+      "enum": [
+        "both",
+        "fill",
+        "outline"
+      ]
+    },
+    "managedRowHighlightSelected": {
+      "title": "Row Highlighter: Selected Emails",
+      "description": "Also highlight emails the user has selected (ticked), so they can see what an action will apply to.",
+      "type": "boolean"
+    },
+    "managedEnableConflictWarnings": {
+      "title": "Warnings About Overlapping Extensions",
+      "description": "Warn users when another extension does the same job in their webmail (for example Gmail Sender Icons, Simplify Gmail, Contact Avatars for Gmail or Row Highlighter for Gmail), with one-click fixes: turn the other extension off (Chrome; asks the user for permission first) or turn this extension's matching feature off. Set to false to suppress these warnings completely: nothing is shown, logged or listed in Settings.",
+      "type": "boolean"
+    },
     "managedEnableSenderCountry": {
       "title": "Sender Country Flags (Gmail)",
       "description": "Show a country flag for each sender: the country of the server that delivered the email (from Gmail's own Received header, read emails only; the server's IP address is looked up at api.country.is, at most once a month per address), else the country named by the domain ending, else where the sender's website is hosted. With managedEnableDnsThreatCheck false only the domain ending is used.",

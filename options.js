@@ -1443,3 +1443,115 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 })();
 
+
+// ---------------------------------------------------------------------------
+// OTHER EXTENSIONS THAT DO THE SAME JOB (Settings → Other extensions). Lists the ones found in the
+// webmail page (content.js) and, once the user allows it (the browser asks: optional "management"
+// permission), the installed ones from OVERLAPPING_EXTENSIONS. Each can be turned off with one click
+// (Chrome; Firefox lets only the user turn other add-ons off, so it gets the steps), or our own
+// matching feature can be turned off instead, or the warning ignored.
+// ---------------------------------------------------------------------------
+(() => {
+    const listEl = document.getElementById('conflictList');
+    if (!listEl) return;
+    const isFirefox = typeof browser !== 'undefined' && /firefox/i.test(navigator.userAgent);
+    const hasManagement = () => new Promise(r => { try { chrome.permissions.contains({ permissions: ['management'] }, r); } catch (e) { r(false); } });
+
+    async function installedConflicts() {
+        if (!(await hasManagement()) || !chrome.management) return [];
+        const all = await new Promise(r => chrome.management.getAll(r));
+        return all.filter(x => x.enabled && x.id !== chrome.runtime.id).map(x => {
+            const known = OVERLAPPING_EXTENSIONS.find(k => k.ids.includes(x.id));
+            return known ? { key: x.id, name: x.name || known.name, does: known.does, features: known.features, via: 'installed', ts: Date.now() } : null;
+        }).filter(Boolean);
+    }
+
+    async function render() {
+        const cfg = await loadEffectiveSettings();
+        const st = await new Promise(r => chrome.storage.local.get({ detectedConflicts: {}, ignoredConflicts: [] }, r));
+        const map = Object.assign({}, st.detectedConflicts || {});
+        for (const c of await installedConflicts()) map[c.key] = Object.assign({}, map[c.key] || {}, c);
+        const ignored = new Set(st.ignoredConflicts || []);
+        listEl.replaceChildren();
+        const items = Object.values(map).sort((a, b) => (b.ts || 0) - (a.ts || 0));
+        if (!items.length) {
+            const p = document.createElement('p'); p.className = 'setting-desc'; p.textContent = 'No other extension doing the same job has been found.'; listEl.appendChild(p); return;
+        }
+        const management = await hasManagement();
+        for (const c of items) {
+            const box = document.createElement('div'); box.className = 'conflict-item';
+            const title = document.createElement('div');
+            const b = document.createElement('b'); b.textContent = c.name;
+            title.append(b, ` also does ${c.does}`, c.site ? ` (seen in ${c.site})` : '', c.via === 'installed' ? ' (installed)' : '', ignored.has(c.key) ? ' · ignored' : '');
+            const ours = (c.features || []).filter(k => SETTING_BY_KEY[k]);
+            const oursOn = ours.filter(k => cfg.values[k]);
+            const note = document.createElement('div'); note.className = 'setting-desc';
+            note.textContent = oursOn.length ? `Ours does the same with: ${oursOn.map(k => FEATURE_NAMES[k] || k).join(', ')}. We recommend keeping ours on and turning ${c.name === 'Another extension' ? 'the other one' : c.name} off.`
+                : 'Our matching feature is already off, so there is no conflict.';
+            const actions = document.createElement('div'); actions.className = 'actions';
+            const btn = (label, cls, fn) => { const x = document.createElement('button'); x.type = 'button'; x.className = cls; x.textContent = label; x.addEventListener('click', fn); actions.appendChild(x); return x; };
+            const isExtId = /^[a-p]{32}$/.test(c.key);
+            if (isExtId && !isFirefox) {
+                btn(`Turn off ${c.name}`, 'btn-primary', async () => {
+                    const granted = management || await new Promise(r => chrome.permissions.request({ permissions: ['management'] }, r));
+                    if (!granted) { note.textContent = 'Not allowed: your browser didn\'t give permission. You can turn it off yourself in chrome://extensions.'; return; }
+                    chrome.management.setEnabled(c.key, false, () => {
+                        if (chrome.runtime.lastError) { note.textContent = `${c.name} couldn't be turned off (${chrome.runtime.lastError.message}). Turn it off in chrome://extensions.`; return; }
+                        reportToLog('info', 'Options page', `${c.name} turned off by the user (it did the same job as this extension).`);
+                        chrome.storage.local.get({ detectedConflicts: {} }, r => { const m = r.detectedConflicts || {}; delete m[c.key]; chrome.storage.local.set({ detectedConflicts: m }, render); });
+                    });
+                });
+            } else {
+                const how = document.createElement('div'); how.className = 'setting-desc';
+                how.textContent = isFirefox ? `Firefox lets only you turn other add-ons off: open the menu ☰ → Add-ons and themes → Extensions, and turn ${c.name === 'Another extension' ? 'the other one' : c.name} off.`
+                    : `To turn ${c.name === 'Another extension' ? 'it' : c.name} off: open chrome://extensions and switch it off there.`;
+                box.appendChild(how);
+            }
+            const offOurs = btn(`Turn off ours (${oursOn.map(k => FEATURE_NAMES[k] || k).join(', ') || 'already off'})`, 'btn-action', () => {
+                const changes = {};
+                oursOn.filter(k => !cfg.locked[k]).forEach(k => { changes[k] = false; });
+                chrome.storage.local.set(changes, () => { reportToLog('info', 'Options page', `Turned off our ${oursOn.map(k => FEATURE_NAMES[k] || k).join(' and ')} because ${c.name} does the same job.`); render(); });
+            });
+            if (!oursOn.length || oursOn.every(k => cfg.locked[k])) { offOurs.disabled = true; if (oursOn.length) offOurs.title = 'Set by your organization'; }
+            btn(ignored.has(c.key) ? 'Warn me again' : 'Ignore', 'btn-action', () => {
+                chrome.storage.local.get({ ignoredConflicts: [] }, r => {
+                    const set = new Set(r.ignoredConflicts || []);
+                    if (set.has(c.key)) set.delete(c.key); else set.add(c.key);
+                    chrome.storage.local.set({ ignoredConflicts: [...set] }, render);
+                });
+            });
+            box.prepend(title, note);
+            box.appendChild(actions);
+            listEl.appendChild(box);
+        }
+    }
+
+    document.getElementById('checkExtensionsBtn').addEventListener('click', async () => {
+        const granted = (await hasManagement()) || await new Promise(r => { try { chrome.permissions.request({ permissions: ['management'] }, r); } catch (e) { r(false); } });
+        document.getElementById('checkExtensionsNote').textContent = granted ? 'Checked just now.' : 'Not checked: your browser didn\'t give permission. Extensions found in the webmail page are still listed.';
+        render();
+    });
+    chrome.storage.onChanged.addListener((ch, area) => { if (area === 'local' && (ch.detectedConflicts || ch.ignoredConflicts || ch.enableSenderIdentity || ch.enableSenderAvatars || ch.enableRowHighlighter || ch.enableTrackingPixelBlocking)) render(); });
+    render();
+
+    // Row highlighter preview: the chosen color as a sample row.
+    async function preview() {
+        const cfg = await loadEffectiveSettings();
+        const el = document.getElementById('rowHlPreview');
+        if (!el) return;
+        const c = ROW_HIGHLIGHT_COLORS[cfg.values.rowHighlightColor] || ROW_HIGHLIGHT_COLORS.yellow;
+        const dark = document.documentElement.dataset.theme === 'dark' || (!document.documentElement.dataset.theme && matchMedia('(prefers-color-scheme: dark)').matches);
+        const style = cfg.values.rowHighlightStyle;
+        el.style.background = style === 'outline' ? 'transparent' : (dark ? c.dark : c.light);
+        el.style.outline = style === 'fill' ? 'none' : `2px solid ${dark ? c.accentDark : c.accent}`;
+        el.style.opacity = cfg.values.enableRowHighlighter ? '1' : '0.4';
+    }
+    chrome.storage.onChanged.addListener((ch, area) => { if (area === 'local' && (ch.rowHighlightColor || ch.rowHighlightStyle || ch.enableRowHighlighter)) preview(); });
+    preview();
+
+    // Opened from the webmail's notice (options.html#conflicts): this card.
+    if (location.hash === '#conflicts') {
+        const t = document.querySelector('.tab-btn[data-tab="settings"]'); if (t) t.click();
+        setTimeout(() => document.getElementById('conflicts').scrollIntoView({ behavior: 'smooth', block: 'start' }), 300);
+    }
+})();

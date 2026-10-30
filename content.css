@@ -109,3 +109,36 @@ a:focus + .unshortener-icon.unshortener-hover-reveal,
 }
 .unshortener-spam-notice a:focus-visible,
 .unshortener-spam-notice button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+
+/* Notice when another extension does the same job: bottom left, out of the way of Gmail's own toasts. */
+.unshortener-conflict-notice {
+    position: fixed;
+    left: 16px;
+    bottom: 16px;
+    z-index: 2147483000;
+    max-width: min(520px, calc(100vw - 32px));
+    box-sizing: border-box;
+    padding: 12px 14px;
+    border-radius: 8px;
+    border-left: 4px solid #f9ab00;
+    background: #fef7e0;
+    color: #3c2a00;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+    font: 13.5px/1.45 Arial, sans-serif;
+}
+.unshortener-conflict-notice.unshortener-dark { background: #3a3220; color: #fde293; }
+.unshortener-conflict-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.unshortener-conflict-buttons button {
+    font: inherit;
+    font-weight: bold;
+    padding: 5px 10px;
+    border-radius: 6px;
+    border: 1px solid currentColor;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+}
+.unshortener-conflict-buttons button.primary { background: #8a4b00; border-color: #8a4b00; color: #fff; }
+.unshortener-conflict-notice.unshortener-dark .unshortener-conflict-buttons button.primary { background: #fdd663; border-color: #fdd663; color: #202124; }
+.unshortener-conflict-buttons button:disabled { opacity: 0.5; cursor: not-allowed; }
+.unshortener-conflict-buttons button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }

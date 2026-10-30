@@ -23,6 +23,21 @@
   "managedEnableSenderAvatars": {
     "Value": true
   },
+  "managedEnableRowHighlighter": {
+    "Value": true
+  },
+  "managedRowHighlightColor": {
+    "Value": "yellow"
+  },
+  "managedRowHighlightStyle": {
+    "Value": "both"
+  },
+  "managedRowHighlightSelected": {
+    "Value": true
+  },
+  "managedEnableConflictWarnings": {
+    "Value": true
+  },
   "managedEnableSenderCountry": {
     "Value": true
   },
