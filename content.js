@@ -2249,6 +2249,15 @@ function fillSenderIcon(wrap, S) {
 // then). Personal photos of outside senders are never used: anyone can make their profile photo look
 // like a bank's logo. The webmail loads the image late, so it's looked for again after 0.5, 1.5 and 3 s.
 // A changed photo replaces the old one, and every icon of that sender on the page is redrawn.
+// Why a photo or logo wasn't used is logged once per sender on the page (Logging → application log),
+// with the image's host and kind but never its full address.
+const avatarSkipLogged = new Set();
+function logAvatarSkip(address, why) {
+    if (avatarSkipLogged.has(address)) return;
+    avatarSkipLogged.add(address);
+    if (avatarSkipLogged.size > 500) avatarSkipLogged.delete(avatarSkipLogged.values().next().value);
+    reportEvent('info', `Sender photo or logo for ${address} not used: ${why}`);
+}
 function harvestAvatar(body, who, auth) {
     const A = MAIL_CAN.avatars ? MAIL.message.avatar : null;
     if (!A || !lastSettings.enableSenderAvatars || !who || !who.address) return;
@@ -2256,14 +2265,22 @@ function harvestAvatar(body, who, auth) {
     const own = !!org && (who.domain === org || who.domain.endsWith('.' + org));
     const attempt = (n) => {
         const container = messageContainerOf(body);
-        const img = container && [...container.querySelectorAll(A.img)].find(i => (i.getAttribute(A.addressAttr) || '').trim().toLowerCase() === who.address);
+        const imgs = container ? [...container.querySelectorAll(A.img)] : [];
+        const img = imgs.find(i => (i.getAttribute(A.addressAttr) || '').trim().toLowerCase() === who.address);
         const url = img ? (img.currentSrc || img.getAttribute('src') || '') : '';
         if (!url || !A.host.test(url) || A.placeholder.test(url)) {
-            if (n < 3) setTimeout(() => guarded('Reading a sender photo', () => attempt(n + 1)), [500, 1500, 3000][n]);
+            if (n < 3) { setTimeout(() => guarded('Reading a sender photo', () => attempt(n + 1)), [500, 1500, 3000][n]); return; }
+            let host = '';
+            try { host = url ? new URL(url, location.href).hostname : ''; } catch (e) { /* ignore */ }
+            logAvatarSkip(who.address, !img ? (imgs.length ? `${SITE.name} showed ${imgs.length} photo${imgs.length === 1 ? '' : 's'} in the email, none marked as this sender's.` : `${SITE.name} showed no photo or logo beside the sender.`)
+                : !url ? 'the image had no address yet.'
+                : A.placeholder.test(url) ? `${SITE.name} showed its generic placeholder (no photo).`
+                : `the image comes from ${host || 'an unknown host'}, not ${SITE.name}'s own image host.`);
             return;
         }
         const kind = A.personal.test(url) ? 'personal' : 'logo';
-        if (kind === 'personal' ? !own : !(auth && auth.dmarc === 'pass')) return;
+        if (kind === 'personal' && !own) { logAvatarSkip(who.address, `it's a personal profile photo of someone outside ${org || 'your organization'} (never used: anyone can make their photo look like a company's logo).`); return; }
+        if (kind === 'logo' && !(auth && auth.dmarc === 'pass')) { logAvatarSkip(who.address, `it's a logo, and ${SITE.name}'s sender verification for this email was ${auth ? `DMARC ${auth.dmarc}` : 'not available'} (a logo is used only after DMARC pass).`); return; }
         safeSend({ action: 'senderAvatar', address: who.address, url, kind }, (r) => guarded('Showing a sender photo', () => {
             if (r !== 'saved' && r !== 'updated') return;
             for (const k of [...senderIcons.keys()]) if (k.endsWith('|' + who.address)) senderIcons.delete(k);
