@@ -1,5 +1,9 @@
 # Changelog
 
+## 5.54 — Fix: sender icons and labels disappearing from some inbox rows (Firefox build, same as Chrome 5.54)
+
+- **Fixed:** when Gmail refreshed the inbox list in place (for example on coming back to the tab), it rewrote the top rows' contents and their sender icons, flags and labels disappeared until the page was reloaded. The extension only noticed new rows, not rows whose contents were replaced. Now a row that lost them gets them back right away, and the list is checked again whenever the tab is shown.
+
 ## 5.53 — Why a sender photo or logo wasn't used (Firefox build, same as Chrome 5.53)
 
 - The application log (Settings → Logging) now says, once per sender, why a photo or logo wasn't used: none shown beside the sender, only the generic placeholder, an image from an unexpected host (named, never the full address), an outside sender's personal photo, or a logo for an email that didn't pass DMARC (with the result). Photos and logos are learned when an email is opened; the inbox list shows them from then on.
