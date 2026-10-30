@@ -23,6 +23,9 @@
   "managedEnableSenderAvatars": {
     "Value": true
   },
+  "managedEnableSenderBimi": {
+    "Value": true
+  },
   "managedEnableRowHighlighter": {
     "Value": true
   },

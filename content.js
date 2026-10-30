@@ -2212,30 +2212,44 @@ function senderIconEl(domain, S, address) {
     const wrap = document.createElement('span');
     wrap.className = 'unshortener-sender-icon';
     wrap.dataset.site = siteOfSender(domain);
+    wrap.dataset.domain = String(domain || '').toLowerCase();
     wrap.dataset.address = String(address || '').toLowerCase();
     fillSenderIcon(wrap, S);
     return wrap;
 }
+// In an inbox row the sender's picture is a circle over the row's checkbox (placeRowAvatar): their
+// photo or company logo, else the site's icon; nothing is drawn beside the sender then (the wrapper
+// keeps only the country flag). In an opened email (no checkbox) the site's icon stays beside the
+// sender, since the webmail shows its own picture there.
 function fillSenderIcon(wrap, S) {
-    const site = wrap.dataset.site, address = wrap.dataset.address;
+    const site = wrap.dataset.site, address = wrap.dataset.address, domain = wrap.dataset.domain || site;
     const blank = () => { const b = document.createElement('span'); b.className = 'unshortener-sender-blank'; b.setAttribute('aria-hidden', 'true'); return b; };
     wrap.querySelectorAll('img, .unshortener-sender-blank').forEach(e => e.remove());
+    // Only where the profile describes its own pictures (Gmail): elsewhere the icon stays beside the sender.
+    const inRow = () => !!(MAIL_CAN.avatars && MAIL.list && MAIL.list.checkbox && wrap.closest(MAIL.list.row) && wrap.closest(MAIL.list.row).querySelector(MAIL.list.checkbox));
     const slot = blank();
     wrap.insertBefore(slot, wrap.firstChild);
     const avatars = !!(MAIL_CAN.avatars && S.enableSenderAvatars && address);
     if (!(SENDER_DOMAIN_RE.test(site) && (S.enableDnsThreatCheck || avatars))) return;
-    const key = `${site}|${avatars ? address : ''}`;
+    const key = `${site}|${domain}|${avatars ? address : ''}`;
     if (!senderIcons.has(key)) {
         if (senderIcons.size >= SENDER_RESULTS_MAX) senderIcons.delete(senderIcons.keys().next().value);
-        senderIcons.set(key, new Promise(resolve => safeSend({ action: 'senderIcon', site, address: avatars ? address : '' },
+        senderIcons.set(key, new Promise(resolve => safeSend({ action: 'senderIcon', site, domain, address: avatars ? address : '' },
             (r) => {
                 const img = (v) => typeof v === 'string' && v.startsWith('data:image/') ? v : '';
-                resolve({ d: img(r && r.d), a: img(r && r.a) });
+                // A BIMI logo whose server allows no download comes as its https: address.
+                const pic = (v) => img(v) || (typeof v === 'string' && /^https:\/\/[^\s"'<>]+$/i.test(v) ? v : '');
+                resolve({ d: img(r && r.d), a: pic(r && r.a), k: r && typeof r.k === 'string' ? r.k : '' });
             })));
     }
     senderIcons.get(key).then(r => {
         if (!slot.isConnected) return;
-        placeRowAvatar(wrap, r.a || '');
+        if (inRow()) {
+            slot.remove();
+            if (r.a) placeRowAvatar(wrap, r.a, r.k || 'logo', r.d);
+            else placeRowAvatar(wrap, r.d, 'icon');
+            return;
+        }
         if (!r.d) return;
         const img = document.createElement('img');
         img.alt = '';
@@ -2245,10 +2259,11 @@ function fillSenderIcon(wrap, S) {
         slot.replaceWith(img);
     });
 }
-// The sender's photo or company logo in an inbox row: a circle over the row's checkbox (as Gmail's
-// own avatars and Simplify Gmail draw it), not next to the site icon. It never takes clicks, and it
-// steps aside while the row is under the mouse, focused or ticked, so the checkbox is there to use.
-function placeRowAvatar(wrap, url) {
+// The sender's picture in an inbox row: a circle over the row's checkbox (as Gmail's own avatars and
+// Simplify Gmail draw it). kind 'photo' or 'logo' fills the circle; 'icon' (a site's small icon) sits
+// in the middle of a plain circle. It never takes clicks, and it steps aside while the row is under
+// the mouse, focused or ticked, so the checkbox is there to use.
+function placeRowAvatar(wrap, url, kind = 'logo', fallback = '') {
     const row = MAIL && MAIL.list && MAIL.list.checkbox ? wrap.closest(MAIL.list.row) : null;
     if (!row) return;
     row.querySelectorAll('.unshortener-row-avatar').forEach(e => e.remove());
@@ -2258,10 +2273,13 @@ function placeRowAvatar(wrap, url) {
     cell.classList.add('unshortener-avatar-cell');
     row.classList.add('unshortener-avatar-row');
     const img = document.createElement('img');
-    img.className = 'unshortener-row-avatar';
+    img.className = 'unshortener-row-avatar' + (kind === 'icon' ? ' unshortener-row-icon' : '');
+    img.dataset.kind = kind;
     img.alt = '';
     img.setAttribute('aria-hidden', 'true');
-    img.addEventListener('error', () => { img.remove(); delete row.dataset.unshortenerAvatar; }, { once: true });
+    // A logo that won't load (its server is down, or the page refuses it): the site's icon instead.
+    img.addEventListener('error', () => { img.remove(); delete row.dataset.unshortenerAvatar; if (fallback) placeRowAvatar(wrap, fallback, 'icon'); }, { once: true });
+    if (/^https:/i.test(url)) img.referrerPolicy = 'no-referrer';
     img.src = url;
     cell.appendChild(img);
     row.dataset.unshortenerAvatar = '1';
@@ -3201,7 +3219,7 @@ window.addEventListener('hashchange', () => { scheduleBadgeUpdate(); if (MAIL) s
 window.addEventListener('popstate', scheduleBadgeUpdate);
 // Coming back to the tab: the webmail may have refreshed the list while it was hidden.
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { lastReported = ''; scheduleBadgeUpdate(); if (MAIL) scheduleScan(); if (spamQueue.size) scheduleSpamMoves(); } });
-const SENDER_SETTING_KEYS = ['enableRowHighlighter', 'rowHighlightColor', 'rowHighlightStyle', 'rowHighlightSelected', 'rowHighlightSelectedColor', 'enableConflictWarnings',
+const SENDER_SETTING_KEYS = ['enableSenderBimi', 'enableRowHighlighter', 'rowHighlightColor', 'rowHighlightStyle', 'rowHighlightSelected', 'rowHighlightSelectedColor', 'enableConflictWarnings',
     'enableSenderIdentity', 'enableSenderAvatars', 'enableSenderIconFallback', 'enableSenderCountry', 'enableSenderDomainCheck', 'enableSenderAddressCheck', 'enableAutoSpam', 'customTrustedSenders', 'customAllowlist', 'enableDnsThreatCheck'];
 // Turning protection on or off in Settings or the popup takes effect on the icon immediately.
 chrome.storage.onChanged.addListener((changes, area) => {

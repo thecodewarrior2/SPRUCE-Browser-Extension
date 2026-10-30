@@ -30,6 +30,8 @@ const SETTING_DEFS = [
     // the site icon: colleagues' own photos (the user's own organization), and one logo per other
     // company, learned from a verified email from its shared mailbox or with a BIMI logo.
     { key: 'enableSenderAvatars',         managedKey: 'managedEnableSenderAvatars',         def: true, type: 'boolean' },
+    // BIMI logos: the company logo a domain publishes in DNS, shown without opening any email.
+    { key: 'enableSenderBimi',            managedKey: 'managedEnableSenderBimi',            def: true, type: 'boolean' },
     // Row highlighter: the inbox row under the mouse (and selected rows) is highlighted, so it's clear
     // which email a click opens. A see-through color, so text stays readable in light and dark themes.
     { key: 'enableRowHighlighter',        managedKey: 'managedEnableRowHighlighter',        def: true, type: 'boolean' },
@@ -1318,7 +1320,7 @@ const FEATURE_SUPPORT = [
     { name: 'Sender checks in opened emails (brand names, look-alike domains, company links)', needs: 'opened' },
     { name: 'Sender icon, country flag and label in opened emails', needs: 'opened' },
     { name: 'Sender icon, country flag and label in the inbox list', needs: 'list' },
-    { name: 'Colleagues\' photos and company logos as sender icons', needs: 'avatars' },
+    { name: 'Sender pictures over the checkbox: colleagues\' photos, BIMI and company logos, site icons', needs: 'avatars' },
     { name: 'The webmail\'s own warnings about a sender counted in the email\'s verdict', needs: 'opened' },
     { name: 'Signs of forgery in the headers (DMARC, forged delivery records…)', needs: 'headers' },
     { name: 'Phishing-simulation emails recognized by their headers', needs: 'headers' },

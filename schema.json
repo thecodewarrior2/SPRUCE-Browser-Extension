@@ -44,6 +44,11 @@
       "description": "Show, as a circle over each inbox row's checkbox (the checkbox comes back on hover), the picture Gmail itself shows beside a sender in an opened email, remembered so the inbox list shows it too: colleagues' own photos for the user's own organization (never its logo), and for another company one logo for all its addresses, learned only from an email that passed sender verification (DMARC pass) sent from a shared mailbox (contact@, info@, support@…) or carrying a verified BIMI logo. A person's own photo at another company is never used (the company logo is shown); personal email services keep the site icon. Pictures are fetched from Gmail's image host googleusercontent.com and checked again weekly. A changed photo or logo replaces the old one. Requires managedEnableSenderIdentity.",
       "type": "boolean"
     },
+    "managedEnableSenderBimi": {
+      "title": "Company Logos from BIMI (Gmail)",
+      "description": "Show the logo a company publishes in DNS for its email (BIMI, default._bimi.<domain>) over the checkbox of each inbox row from that company, with no email opened. Only for organization domains (never subdomains) that enforce DMARC (p=quarantine or p=reject). DNS lookups go to Cloudflare (1.1.1.1, or its security resolver when 1.1.1.1 is blocked); the logo is downloaded by the extension where the logo's server allows it, otherwise loaded by the inbox page from its address with no referrer, so the company's logo server sees the user's IP address. Checked again weekly. Requires managedEnableSenderIdentity and network checks.",
+      "type": "boolean"
+    },
     "managedEnableRowHighlighter": {
       "title": "Row Highlighter",
       "description": "Highlight the inbox row under the mouse (and selected rows) in Gmail and the other supported webmail, so users can see exactly which email a click opens. A see-through color and/or an outline, readable in light and dark themes. Inspired by Row Highlighter for Gmail.",

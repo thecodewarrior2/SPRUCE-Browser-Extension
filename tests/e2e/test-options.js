@@ -10,9 +10,9 @@ const { launch, servePage, sleep, until, check, done } = require('./harness');
   page.on('dialog', d => { errors.push('dialog: ' + d.message()); d.dismiss(); });
   await page.goto(`chrome-extension://${ID}/options.html`);
   const toggles = await until(() => page.$$eval('[data-setting^="enableSender"], [data-setting="enableAutoSpam"], [data-setting="enableSpamNotice"]', els => els.map(e => [e.dataset.setting, e.checked, e.disabled])),
-    t => t.length === 9 && t.every(x => x[1]), 10000);
+    t => t.length === 10 && t.every(x => x[1]), 10000);
   await sleep(1000);                                 // late page errors, if any, are caught too
-  check('nine sender switches (incl. stand-in icons and photos), all on, unlocked', toggles.length === 9 && toggles.some(t => t[0] === 'enableSenderIconFallback') && toggles.some(t => t[0] === 'enableSenderAvatars') && toggles.every(t => t[1] && !t[2]), toggles);
+  check('ten sender switches (incl. stand-in icons, photos and BIMI logos), all on, unlocked', toggles.length === 10 && toggles.some(t => t[0] === 'enableSenderBimi') && toggles.some(t => t[0] === 'enableSenderIconFallback') && toggles.some(t => t[0] === 'enableSenderAvatars') && toggles.every(t => t[1] && !t[2]), toggles);
   await page.evaluate(() => { document.getElementById('trustedSenderInput').closest('details').open = true; });
   await page.fill('#trustedSenderInput', '@Evil-Scam.test');
   await page.click('#addTrustedSenderBtn');

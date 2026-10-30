@@ -48,6 +48,23 @@ a:focus + .unshortener-icon.unshortener-hover-reveal,
     pointer-events: none;
     z-index: 1;
 }
+/* Beside the sender only the country flag remains in inbox rows; nothing at all leaves no gap. */
+.unshortener-sender-icon:empty {
+    display: none;
+}
+/* A flagged or caution email never shows a company logo or photo: before an email is opened its
+   sender isn't verified, so a forged "paypal.com" must not get PayPal's logo. Its checkbox shows. */
+.unshortener-avatar-row:has(.unshortener-sender-chip[data-status="flagged"]) .unshortener-row-avatar:not(.unshortener-row-icon),
+.unshortener-avatar-row:has(.unshortener-sender-chip[data-status="caution"]) .unshortener-row-avatar:not(.unshortener-row-icon) {
+    display: none;
+}
+/* A site's small icon (no photo or logo): in the middle of a plain circle. */
+.unshortener-row-avatar.unshortener-row-icon {
+    box-sizing: border-box;
+    padding: 5px;
+    object-fit: contain;
+    border: 1px solid rgba(60, 64, 67, 0.2);
+}
 .unshortener-avatar-row:hover .unshortener-row-avatar,
 .unshortener-avatar-row:focus-within .unshortener-row-avatar,
 .unshortener-avatar-cell:has([aria-checked="true"]) .unshortener-row-avatar {
