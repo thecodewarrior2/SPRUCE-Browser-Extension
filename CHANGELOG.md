@@ -1,5 +1,12 @@
 # Changelog
 
+## 5.63 — Sender icons readable in the dark and light themes (Safari build, same as Chrome 5.63)
+
+- **Fixed: dark icons vanished in Gmail's dark theme.** A site icon drawn in black with a see-through background (a logo with nothing behind it) was put on a dark tint of its own color, so it nearly disappeared (1.2:1). Each icon is now measured before its circle is chosen: its outline (what touches the circle) and its inside. If neither stands out from the theme's tint, the circle takes the other one (light in the dark theme, dark in the light theme) or a mid grey, whichever gives the icon's outline the most 3:1 contrast (WCAG 2.1 non-text contrast). White and pale-yellow icons in the light theme get a dark circle the same way.
+- Icons that already show keep their look: a colored logo, or one on its own white or black backdrop (Google's G, Apple, Threads), keeps the theme's tint. Of 35 real site icons with see-through parts that were checked, only the four that were hard to see change (two black logos in the dark theme; Spotify's green and Walmart's yellow in the light theme). Icons with a solid square background are never changed.
+- **Compact density and opened emails:** an icon beside the flag that wouldn't show on the row gets a small plate of a contrasting color.
+- Company logos with see-through parts that are white themselves get a dark circle instead of the white one.
+- Only pictures the extension already holds are measured, in the page; nothing is downloaded again for this.
 ## 5.62 — First Safari build (same features as Chrome 5.62)
 
 - **Safari 18.2 or later** on macOS (and iOS/iPadOS with a build signed by your organization). The extension is the Firefox build's code with a non-persistent background page, wrapped in a small app by Apple's converter: `tools/build-safari.sh` builds it on a Mac with Xcode, and the **Safari build** GitHub workflow builds it on a GitHub Mac and offers it for download.

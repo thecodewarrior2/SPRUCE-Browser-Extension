@@ -548,6 +548,45 @@ test('initials: letter from the name (else the address), steady color per sender
   assert.equal(used.size, colors.length, 'senders spread over all colors');
 });
 
+test('icon contrast: a dark icon gets a light circle on the dark theme and the reverse; others keep their tint', () => {
+  const size = 32;
+  // An icon: `paint(x, y)` gives a pixel's [r, g, b, a] (or null for see-through).
+  const icon = (paint) => { const d = new Uint8ClampedArray(size * size * 4);
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) { const c = paint(x, y); if (c) d.set(c.length === 4 ? c : [...c, 255], (y * size + x) * 4); }
+    return S('iconPixelLook')(d, size); };
+  const ring = (inside, edge) => (x, y) => { const r = Math.hypot(x - 15.5, y - 15.5); return r < 9 ? inside : r < 14 ? edge : null; };
+  const lum = (c) => S('relativeLuminance')(c), cr = (a, b) => S('contrastRatio')(lum(a), lum(b));
+  const circle = (look, dark) => S('iconCircleColor')(look, dark);
+  const DARK = [32, 33, 36], WHITE = [255, 255, 255];
+  // A black glyph with nothing behind it (as in the reported inbox): unreadable on the dark tint.
+  const black = icon(ring(null, [0, 0, 0]));
+  assert.ok(black.seeThrough && black.edge.length > 0);
+  assert.ok(cr(circle(black, true), [0, 0, 0]) >= 3, 'dark theme: black icon on a light circle');
+  assert.ok(lum(circle(black, false)) > 0.5, 'light theme: it keeps its light circle');
+  // A white glyph: the mirror case.
+  const white = icon(ring(null, [255, 255, 255]));
+  assert.equal(white.tint, null, 'a white icon has no tint of its own');
+  assert.ok(cr(circle(white, false), WHITE) >= 3, 'light theme: white icon on a dark circle');
+  assert.ok(lum(circle(white, true)) < 0.1, 'dark theme: it keeps its dark circle');
+  // A colored logo on its own white disc (like Google's G): fine on a light circle although the disc blends in.
+  const onDisc = icon((x, y) => { const r = Math.hypot(x - 15.5, y - 15.5); return r >= 15 ? null : (r > 5 && r < 9 ? [66, 133, 244] : [255, 255, 255]); });
+  assert.ok(lum(circle(onDisc, false)) > 0.5, 'light theme: a logo on its own white disc keeps the light circle');
+  // A mid-blue icon shows on both: the theme's own tint either way.
+  const blue = icon(ring([25, 103, 210], [25, 103, 210]));
+  assert.deepEqual(circle(blue, true), S('iconTintOver')(blue.tint, true));
+  assert.deepEqual(circle(blue, false), S('iconTintOver')(blue.tint, false));
+  // A solid icon (its own square background) always keeps the theme's tint.
+  const solidBlack = icon(() => [0, 0, 0]);
+  assert.ok(!solidBlack.seeThrough);
+  assert.deepEqual(circle(solidBlack, true), S('iconTintOver')(solidBlack.tint, true));
+  // Inline beside the flag: a plate only when needed.
+  const plate = (look, surface) => S('contrastingBackground')(look, surface, [S('iconTintOver')(look.tint, !(surface === DARK)), S('ICON_MID_GREY')]);
+  assert.notEqual(plate(black, DARK), DARK, 'black icon on a dark row: a plate');
+  assert.equal(plate(black, WHITE), WHITE, 'black icon on a light row: none');
+  assert.equal(plate(blue, DARK), DARK, 'blue icon on a dark row: none');
+  assert.equal(S('contrastingBackground')(null, DARK, [WHITE]), DARK, 'an icon that couldn\'t be read: unchanged');
+});
+
 test('DMARC: failures always get at least amber; pictures only for domains that enforce DMARC', async () => {
   const RX = S('WEBMAIL_SITES').find(w => w.id === 'gmail').mail.headers.receiver;
   const raw = (policy, extra = '') => `Received: from mail.sender.example by mx.google.com; Mon, 13 Feb 2023 12:46:46 -0800\nAuthentication-Results: mx.google.com; dkim=none; spf=fail; dmarc=fail (p=${policy} sp=${policy} dis=NONE) header.from=sender.example\n${extra}From: A <a@sender.example>\nMIME-Version: 1.0\n\nx`;

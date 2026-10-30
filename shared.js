@@ -1332,6 +1332,70 @@ function senderInitial(name, address) {
     return '';
 }
 
+// --- Icon contrast ------------------------------------------------------------------------------------
+// A site's icon has to stand out from what it's drawn on: a black logo with a see-through background
+// vanishes on Gmail's dark theme, a white or yellow one on the light theme. Two things are measured: the
+// icon's outline (its solid pixels next to see-through ones, or on its edge), which shows its shape, and
+// its inner pixels, which are what's left to see when the outline is the icon's own backdrop (Google's G
+// on a white disc reads fine on a light circle even though the disc blends in).
+function relativeLuminance(rgb) {
+    const lin = (v) => { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+    return 0.2126 * lin(rgb[0]) + 0.7152 * lin(rgb[1]) + 0.0722 * lin(rgb[2]);
+}
+function contrastRatio(a, b) { return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05); }
+// From an icon's pixels (RGBA, size × size): its main color (the average of its solid, not-white pixels;
+// null for a white or empty icon), whether it has see-through parts, and the luminance of each pixel of
+// its outline and of its inside.
+function iconPixelLook(d, size) {
+    const solid = (i) => d[i * 4 + 3] >= 128;
+    let r = 0, g = 0, b = 0, n = 0, clear = 0;
+    const edge = [], inner = [];
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+        const i = y * size + x, p = i * 4;
+        if (!solid(i)) { clear++; continue; }
+        if (!(d[p] > 230 && d[p + 1] > 230 && d[p + 2] > 230)) { r += d[p]; g += d[p + 1]; b += d[p + 2]; n++; }
+        const outline = x === 0 || y === 0 || x === size - 1 || y === size - 1 || !solid(i - 1) || !solid(i + 1) || !solid(i - size) || !solid(i + size);
+        (outline ? edge : inner).push(relativeLuminance([d[p], d[p + 1], d[p + 2]]));
+    }
+    return { tint: n >= Math.max(8, size * size / 32) ? [r / n, g / n, b / n] : null, seeThrough: clear >= size * size * 0.05, edge, inner };
+}
+// The share of some of an icon's pixels (luminances) with at least `min`:1 contrast against a color.
+function iconVisibleShare(pixels, bg, min) {
+    if (!pixels.length) return 0;
+    const lb = relativeLuminance(bg);
+    return pixels.filter(l => contrastRatio(l, lb) >= min).length / pixels.length;
+}
+// An icon shows on a background when most of its outline (half, at 2:1) or enough of its inside (a
+// fifth, at 2:1) stands out from it. 2:1 rather than 3:1 here, so a colorful logo keeps its usual look.
+function iconStandsOut(look, bg) {
+    return !look.edge.length || iconVisibleShare(look.edge, bg, 2) >= 0.5 || iconVisibleShare(look.inner, bg, 2) >= 0.2;
+}
+const ICON_SURFACE = { light: [255, 255, 255], dark: [32, 33, 36] };   // Gmail's light and dark rows
+const ICON_MID_GREY = [128, 134, 139];                                  // 3.7:1 with white, 5.7:1 with black
+// A soft tint of an icon's color: 16% of it over white (light theme), 30% over Gmail's dark surface;
+// a plain grey when the icon has no color of its own.
+function iconTintOver(rgb, dark) {
+    if (!rgb) return dark ? [60, 64, 67] : [241, 243, 244];
+    const base = dark ? ICON_SURFACE.dark : ICON_SURFACE.light, k = dark ? 0.3 : 0.16;
+    return base.map((v, i) => Math.round(v + (rgb[i] - v) * k));
+}
+// The background for an icon: the preferred one while the icon shows on it, otherwise whichever of the
+// others gives the most of its outline 3:1 contrast (WCAG 2.1 non-text contrast). A solid icon (no
+// see-through parts) carries its own background and keeps the preferred one.
+function contrastingBackground(look, preferred, others) {
+    if (!look || !look.seeThrough || iconStandsOut(look, preferred)) return preferred;
+    let best = preferred, bestShare = iconVisibleShare(look.edge, preferred, 3);
+    for (const c of others) { const s = iconVisibleShare(look.edge, c, 3); if (s > bestShare) { best = c; bestShare = s; } }
+    return best;
+}
+// The circle behind a site's icon in an inbox row: its own tint, light or dark to suit the theme, or
+// the other one (or a mid grey) when the icon wouldn't show on it.
+function iconCircleColor(look, dark) {
+    const tint = look && look.tint;
+    return contrastingBackground(look, iconTintOver(tint, dark), [iconTintOver(tint, !dark), ICON_MID_GREY]);
+}
+const cssRgb = (c) => `rgb(${c.map(v => Math.round(v)).join(', ')})`;
+
 // The names of our features, as the conflict warnings say them.
 const FEATURE_NAMES = {
     enableSenderIdentity: 'sender icons and labels', enableSenderAvatars: 'sender photos and company logos',
