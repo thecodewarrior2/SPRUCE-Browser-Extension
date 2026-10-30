@@ -1,0 +1,65 @@
+Delivered-To: sample_user@gmail.com
+Received: by 2002:a05:6500:800c:b0:345:212:701e with SMTP id 12csp50528lqb; Wed, 21 Oct 2026 09:08:48 -0700 (PDT)
+X-Received: by 2002:a05:6808:c3d7:b0:4f3:f7da:3e55 with SMTP id 5614622812f47-553616cfccfmr1807305b6e.62.1792598928637; Wed, 21 Oct 2026 09:08:48 -0700 (PDT)
+ARC-Authentication-Results: i=1; mx.google.com; dkim=pass header.i=@roasters-sample.example header.s=selector1 header.b=O+vKrZqg; dkim=permerror (no key for signature) header.i=@env.mailer-sample.example header.s=selector1 header.b=Or3gOoOX; spf=pass (google.com: domain of return@delivery.roasters-sample.example designates 203.0.113.149 as permitted sender) smtp.mailfrom=return@delivery.roasters-sample.example; dmarc=pass (p=REJECT sp=REJECT dis=NONE) header.from=roasters-sample.example
+Return-Path: <return@delivery.roasters-sample.example>
+Received: from roasters-sample.example (roasters-sample.example. [203.0.113.149]) by mx.google.com with ESMTPS id 5614622812f47-552bcbb9489si3735823b6e.80.2026.10.21.09.08.47 for <sample_user@gmail.com> (version=TLS1 cipher=ECDHE-ECDSA-AES128-SHA bits=128/128); Wed, 21 Oct 2026 09:08:48 -0700 (PDT)
+Received-SPF: pass (google.com: domain of return@delivery.roasters-sample.example designates 203.0.113.149 as permitted sender) client-ip=203.0.113.149;
+Authentication-Results: mx.google.com; dkim=pass header.i=@roasters-sample.example header.s=selector1 header.b=O+vKrZqg; dkim=permerror (no key for signature) header.i=@env.mailer-sample.example header.s=selector1 header.b=Or3gOoOX; spf=pass (google.com: domain of return@delivery.roasters-sample.example designates 203.0.113.149 as permitted sender) smtp.mailfrom=return@delivery.roasters-sample.example; dmarc=pass (p=REJECT sp=REJECT dis=NONE) header.from=roasters-sample.example
+Date: Wed, 21 Oct 2026 09:08:48 -0700 (PDT)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=roasters-sample.example; s=selector1; h=Message-ID:From:To:Cc:Subject:MIME-Version; bh=ILlaPLvYJQ9NI0dBaO3r7Bm9IVwN9qc8MhGVbWtpklY=; b=O+vKrZqg
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=env.mailer-sample.example; s=selector1; h=Message-ID:From:To:Cc:Subject:MIME-Version; bh=ILlaPLvYJQ9NI0dBaO3r7Bm9IVwN9qc8MhGVbWtpklY=; b=Or3gOoOX
+Message-ID: <83907251643117667.tormoap4l.54969@batch-5743-a-335.prod.news-sample.example>
+From: FidelityLifeㅤㅤㅤㅤㅤㅤㅤㅤ 谷峡湾峰<info@roasters-sample.example>
+To: "[sample_user@gmail.com]" <sample_user@gmail.com@gmabjuqbcd8tep5l4.__Random_anm[,s].se>
+CC: "[sample_user@gmail.com]@Wl9qwhua0U.email.RLz8QcpuкогWq7v.example [pyrqobqlvlha55gpqbnfg5aqdod3o1nage06m2e8dt5nid] gmabjuqbcd8tep5l4" <sample_user@gmail.com@8DqN1mRHxeкогV0Y.email.mail-sample.example>
+Bcc: "[sample_user@gmail.com]@gmail.com [VSFDABGDRITITJBYVVVGQDYSKPLNXWODFENVIOQIPPMQSSGZRUSSKGQLWORRQNNUTOBVEHCBUAIJQSRZKZIPSOMGJBKYTEQIVHZNWETOGXISRRTSABSUIXRVONNSNALPKNZHXRMLFNTDLKZFGQJZFNZZDSOKOIKPGDHJXIQEKJHQBD] <strong>Lo público y lo privado</strong><br/><em>Homenaje [SYQYOYZABCMHKDZAHQVHWOYMFMWLROJNOCRZKDVEFTOBLUTUBZMYESOFYXEBXEMIWVBEGRRLLUSGJETOLERINKDTEJWTQITJDFYTFZUZUZXWRSQECKLBAYCUZRMGZKJFUUFAWANVUMYYRXGNSCEVXFMDPWLCJWQAQVPHIFSWUYFSZYLSNOBGOMUVYUNAFOJPWSYWQAXWCERYUCKKOWVOBFZYURYZVJFELQARMGSNJFPMKDIJNXTHNRFIWI]</em><br/><br/><strong>Resumen:</strong> [_PTOMGQFLCXQHBTQYPNRTYQYZGSTHLBRYDIZKNQXLHSQCFHCARZTCGJYOQLPRZVQZETWETCRBEVIQADLFVMLAPAIYXRQXVJOJW] <em>Filosofía liberal</em>" <sample_user@gmail.com@2mfcкогhpct.email.mail-sample.example>
+Subject: sample_use Welcome to your fidelity life quote plans
+   #3PB
+                                                                                                                                                                                                                                                                                                                                                                                                                bkqr kcUrqe04zh6dhmwOY04h3d6tO8WU2c8CzrEdX6v988uWMWM4XWWUM6AFjmPYJrHfj8LUE7BF8n9hnJ5yytX9VIfe3dim29VcXg5KUtXOqLDavBEdJ8S2iYnABd6xbD74jZVM1RA32lpRSizJYH7pCgrg2rI5ZGyzTo7EBJ96M73NcbVwH1XXuD3Q3jUWsYqvOo8Hr678rnGOdY499We6OG8o9TqT278T87QNaINi2la2FTwsCRkSRX6HT8F3870D48DoaDPcYYJ4NTurf2Qc3PqhD9g7eaNDpN6O93 []
+MIME-Version: 1.0
+X-mid: UCO8MPHjMcw736MALD3x4rLlO5mCn3NplcGY14INZ3Tq4y65vWUyitzwtk66RR==
+References: <m80gw79fz5scqadofupri-lvzt397vta@roasters-sample.example>
+X-ListMember: sample_user@gmail.com
+In-Reply-To: sample_user@gmail.com
+X-AntiAbuse: Original Domain - gmail.com
+X-SG-EID: u001.34d00dea0d2b4f76e163df08d891d67e34d00dea0d2b4f76e163df08d891d67e
+X-Envelope-From: O7HL-3KVOKA5TS4SC@roasters-sample.example
+Importance: High
+Content-Class: urn:content-classes:message
+X-SG-ID: 34d00dea0d2b4f76e163df08d891d67e34d00dea0d2b4f76e163df08d891d67e=
+X-Batch-Id: 34d00dea0d2b4f76e163df08d891d67e34d00dea0d2b4f76e163df08d891d67e
+List-Unsubscribe: <mailto:listunsub@roasters-sample.example>
+List-Unsubscribe-Post: List-Unsubscribe=One-Click
+x-campaignid: 34d00dea0d2b4f76e163df08d891d67e
+X-REFERENCE: 34d00dea0d2b4f76e163df08d891d67e34d00dea0d2b4f76e163df08d891d67e
+X-MDArrival-Date: Wed, 21 Oct 2026 11:46:08 -0400 (EDT)
+Content-Type: multipart/mixed; boundary="----=_Part_21481_34d00dea0d2b4f76e163df08d891d67e.__34d00dea0d2b4f76e163df08d891d67e"
+X-MDaemon-Deliver-To: sample_user@gmail.com
+
+------=_Part_21481_34d00dea0d2b4f76e163df08d891d67e.__34d00dea0d2b4f76e163df08d891d67e
+Content-Type: image/png
+Content-Transfer-Encoding: base64
+Content-ID: < @cars.example>
+Content-Type: application/pdf
+Content-Disposition: inline
+
+
+------=_Part_21481_34d00dea0d2b4f76e163df08d891d67e.__34d00dea0d2b4f76e163df08d891d67e
+Content-Type: text/html; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+<div style="display:none;font-size:0;line-height:0;max-height:0;max-width:0;opacity:0;overflow:hidden;">
+</div>
+<center>
+    <a href="http://swfgsdx.roasters-sample.example/re2c8.php?32=1o556ac26842c4777_2pe4.9161knxj.A00vyrfvcxr2n6g7rb_cl3506.07tclNjBxOHUxOTFxZGNs0o4tXc">
+    <inPUt id="image" type="image" Src="http://swfgsdx.roasters-sample.example/21f6cqd6t3ox/KAKBV5K7ywb224R.jpg">
+</a>
+    <center><a href="http://swfgsdx.roasters-sample.example/re2c8.php?32=1o556a47ee0e69c8b.9161knxj.A00vyrfvcxr2n6g7rb_cl3506.07tclNjBxOHUxOTFxZGNs0m4NPa"><img src="http://swfgsdx.roasters-sample.example/re2c8.php?32=851eh__o556ac26842c4777_2pe4" ></a></center>
+</center>
+</html>
+<div style="font-size: 6px; max-width: 1000px; opacity: 0.1;"><head>
+Hello Traders! What are your thoughts on US Oil? Crude Oil is currently testing a critical horizontal demand area.
+</div>
+
+------=_Part_21481_34d00dea0d2b4f76e163df08d891d67e.__34d00dea0d2b4f76e163df08d891d67e--

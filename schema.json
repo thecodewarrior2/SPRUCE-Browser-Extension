@@ -72,7 +72,7 @@
     },
     "managedEnableOwnNameCheck": {
       "title": "Catch Senders Using the User's Own Name",
-      "description": "In the inbox list, without opening anything: flag (red, moved to Spam) an email whose sender name is the user's own email address or mailbox name (the part before the @, written as in the address) but which comes from someone else's address. Shared mailbox names (info, office, support...), the user's own organization's senders and addresses containing the user's mailbox name are left alone.",
+      "description": "In the inbox list, without opening anything: flag (red, moved to Spam) an email whose sender name is the user's own email address or mailbox name (the part before the @, written as in the address; in any case for addresses at Gmail, Outlook.com and other big providers) but which comes from someone else's address. Shared mailbox names (info, office, support...), the user's own organization's senders and addresses containing the user's mailbox name are left alone.",
       "type": "boolean"
     },
     "managedEnableRowHighlighter": {
@@ -143,7 +143,12 @@
     },
     "managedEnableAutoSpam": {
       "title": "Move Emails From Flagged Senders to Spam (Gmail)",
-      "description": "Move flagged emails to Spam using Gmail's own Report spam. An email is flagged when its sender's exact address is on the community scam-sender list, its domain is on a phishing list, blocked by a security service or doesn't exist, its address is malformed, or the email itself shows enough signs of forgery (forged delivery headers, links or attachments flagged as dangerous…). Never unverified, caution or clean ones; only from the inbox; never while the user is typing or has emails selected; never phishing-simulation emails (managedPhishSimulationDomains / managedPhishSimulationRules), trusted senders, or mail from the user's own organization domain. A conversation is moved at most once: one the user takes back out of Spam stays in the inbox.",
+      "description": "Move flagged emails to Spam using Gmail's own Report spam. An email is flagged when its sender's exact address is on the community scam-sender list, its domain is on a phishing list, blocked by a security service or doesn't exist, its address is malformed, or the email itself shows enough signs of forgery (forged delivery headers, links or attachments flagged as dangerous…). Never unverified, caution or clean ones; only from the inbox and from search results (see managedEnableAutoSpamInSearch); never while the user is typing or has emails selected; never phishing-simulation emails (managedPhishSimulationDomains / managedPhishSimulationRules), trusted senders, or mail from the user's own organization domain. A conversation is moved at most once: one the user takes back out of Spam stays in the inbox.",
+      "type": "boolean"
+    },
+    "managedEnableAutoSpamInSearch": {
+      "title": "Also Move Flagged Emails Found by a Search (Gmail)",
+      "description": "With managedEnableAutoSpam, also move flagged emails shown in search results (mail archived or under a label, not only the inbox). Never from a search in Spam, Trash, Sent, Drafts, chats or everywhere (in:spam, in:trash, in:sent, in:anywhere...), and never conversations the user wrote in. False: only from the inbox.",
       "type": "boolean"
     },
     "managedEnableSpamNotice": {

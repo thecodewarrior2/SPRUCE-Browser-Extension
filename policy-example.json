@@ -68,6 +68,9 @@
   "managedEnableAutoSpam": {
     "Value": true
   },
+  "managedEnableAutoSpamInSearch": {
+    "Value": true
+  },
   "managedEnableSpamNotice": {
     "Value": true
   },
