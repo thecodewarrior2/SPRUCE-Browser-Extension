@@ -1160,18 +1160,72 @@ const WEBMAIL_SITES = [
       readFrames: true, frameBody: true, imageParams: ['url', 'u'] }
 ];
 
+// Elements that hold a sender's address in a webmail page, as most webmail write it: an attribute with
+// the address, a title such as "Jane Doe <jane@example.com>", a mailto: link or a screen-reader label.
+const SENDER_HOLDERS = '[email], [data-email], [data-address], [title*="@"], a[href^="mailto:"], [aria-label*="@"]';
+// "Unread" as webmail say it to screen readers, in the languages the extension's other labels cover.
+const UNREAD_WORDS = /\b(unread|ungelesen|non lu|no leído|non letto|niet gelezen|nieprzeczytan\w*|não lida|oläst|ulæst|ulest)\b/i;
+
+// The generic profile, used on a supported site whose entry has no `mail` profile of its own. It finds
+// what well-built webmail exposes to screen readers and in plain attributes: inbox rows (by their
+// accessibility roles, and only rows that show a sender's address), the sender of an opened email
+// (the address shown just before its body), and unread state (the row's accessibility label). It is
+// read-only: it never clicks, so moving to Spam and the Send check wait for a site's own, verified
+// entry. Header checks need a site's original-source page, which only a site's own entry can describe.
+const GENERIC_MAIL = {
+    generic: true,
+    list: { row: '[role="listbox"] [role="option"], [role="grid"] [role="row"], [role="table"] [role="row"], [role="list"] [role="listitem"]',
+            unreadLabel: UNREAD_WORDS, checkbox: '[role="checkbox"]', sender: SENDER_HOLDERS },
+    senderAttrs: { address: ['email', 'data-email', 'data-address', 'title', 'href', 'aria-label'], name: ['name', 'data-name'], extract: true },
+    message: { near: SENDER_HOLDERS }
+};
+
 // What the shared engine can do on a site, from what its entry describes (used by the content script
-// and by the compatibility chart in Help, so the two always agree).
+// and by the compatibility chart in Help, so the two always agree). Each is true (the site's own
+// entry describes it), 'generic' (found through the generic profile) or false. A site entry without a
+// `mail` profile gets the generic one; `mail: null` means none at all.
 function mailCapabilities(site) {
-    const M = (site && site.mail) || null;
+    const M = site && site.mail !== undefined ? site.mail : GENERIC_MAIL;
+    const how = (has) => has ? (M.generic ? 'generic' : true) : false;
     return {
-        list: !!(M && M.list),                                // sender icons, labels and checks in the inbox list
-        opened: !!(M && M.message),                           // sender checks, icons and labels in opened emails
-        headers: !!(M && M.headers),                          // signs in the original source; server country
-        move: !!(M && M.list && M.toolbar && M.views),        // moving flagged emails to Spam
-        compose: !!(M && M.compose),                          // checking links before sending
+        list: how(!!(M && M.list)),                           // sender icons, labels and checks in the inbox list
+        opened: how(!!(M && M.message)),                      // sender checks, icons and labels in opened emails
+        headers: !!(M && !M.generic && M.headers),            // signs in the original source; server country
+        move: !!(M && !M.generic && M.list && M.toolbar && M.views),   // moving flagged emails to Spam
+        compose: !!(M && !M.generic && M.compose),            // checking links before sending
         attachments: !!(site && site.attachments)             // attachment checks
     };
+}
+
+// The webmail's own warnings about a sender, shown around an opened email (never inside its body,
+// which the sender wrote). The webmail checked the sender's verification (DMARC, SPF) and reports, so
+// they count as signs in the email's verdict. Wording from the webmail's own help and public reports;
+// a site that words it differently simply adds nothing.
+//   Outlook: "This sender failed our fraud detection checks…", "… may not have been sent by …",
+//            "unverified sender"
+//   Gmail:   "This message might be dangerous" / "seems dangerous", "Be careful with this message"
+const SERVICE_WARNINGS = [
+    { re: /\bfailed our fraud detection checks\b/i, weight: 5 },
+    { re: /\bthis message (might be|seems|may be) dangerous\b/i, weight: 5 },
+    { re: /\bbe careful with this message\b/i, weight: 3 },
+    { re: /\bmay not have been sent by\b/i, weight: 3 },
+    { re: /\bunverified sender\b|\bcouldn't verify (that )?this (email|message|sender)\b/i, weight: 3 }
+];
+// Signs from a webmail's own warnings in some text: [{ weight, text }], each phrase once.
+function serviceWarningSigns(text, siteName) {
+    const out = [];
+    const t = String(text || '');
+    for (const w of SERVICE_WARNINGS) {
+        const m = w.re.exec(t);
+        if (!m) continue;
+        // The whole sentence the phrase is in, as the webmail wrote it (at most 160 characters).
+        const start = Math.max(t.lastIndexOf('.', m.index) + 1, t.lastIndexOf('\n', m.index) + 1, m.index - 120);
+        let end = t.slice(m.index).search(/[.!\n]/);
+        end = end < 0 ? Math.min(t.length, m.index + 160) : m.index + end + 1;
+        const sentence = t.slice(start, end).replace(/\s+/g, ' ').trim().slice(0, 160);
+        out.push({ weight: w.weight, text: `${siteName || 'The webmail'} itself warns about this sender: “${sentence}”` });
+    }
+    return out;
 }
 
 // Every feature, and what a site needs for it (null: works on every supported site). Shown as the
@@ -1186,6 +1240,7 @@ const FEATURE_SUPPORT = [
     { name: 'Sender checks in opened emails (brand names, look-alike domains, company links)', needs: 'opened' },
     { name: 'Sender icon, country flag and label in opened emails', needs: 'opened' },
     { name: 'Sender icon, country flag and label in the inbox list', needs: 'list' },
+    { name: 'The webmail\'s own warnings about a sender counted in the email\'s verdict', needs: 'opened' },
     { name: 'Signs of forgery in the headers (DMARC, forged delivery records…)', needs: 'headers' },
     { name: 'Phishing-simulation emails recognized by their headers', needs: 'headers' },
     { name: 'Flagged emails moved to Spam', needs: 'move' },

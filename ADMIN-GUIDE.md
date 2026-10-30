@@ -163,13 +163,16 @@ extra sign-in, an app registration or an administrator-approved API.
 | QR codes drawn without an image *(every site)* | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Phishing-simulation emails recognized by their link domains *(every site)* | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Attachment checks (QR codes, scripts, fake logins, encrypted archives) | ✓ | — | — | — | — | — | — | — | — |
-| Sender checks in opened emails (brand names, look-alike domains, company links) | ✓ | — | — | — | — | — | — | — | — |
-| Sender icon, country flag and label in opened emails | ✓ | — | — | — | — | — | — | — | — |
-| Sender icon, country flag and label in the inbox list | ✓ | — | — | — | — | — | — | — | — |
+| Sender checks in opened emails (brand names, look-alike domains, company links) | ✓ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
+| Sender icon, country flag and label in opened emails | ✓ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
+| Sender icon, country flag and label in the inbox list | ✓ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
+| The webmail's own warnings about a sender counted in the email's verdict | ✓ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
 | Signs of forgery in the headers (DMARC, forged delivery records…) | ✓ | — | — | — | — | — | — | — | — |
 | Phishing-simulation emails recognized by their headers | ✓ | — | — | — | — | — | — | — | — |
 | Flagged emails moved to Spam | ✓ | — | — | — | — | — | — | — | — |
 | Links checked before sending | ✓ | — | — | — | — | — | — | — | — |
+
+✓ works · ◐ basic (found through the page's accessibility labels; read-only, never clicks) · — not yet
 
 ## Sender icons and moving phishing to Spam (Gmail)
 
