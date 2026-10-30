@@ -5,6 +5,7 @@
 - **Every administrator-only policy has its own clear entry** in the README and Help: hiding the popup's Settings button (`managedHidePopupSettingsButton`, a convenience, not a lock: Settings stay reachable by address, and locked settings can't be changed there), hiding recent activity (`managedHideRecentActivity`), hiding the Donate button in Help → About (`managedHideDonateButton`), and the phishing-simulation rules. The organization lists (`managedTrustedSenders`, `managedAllowlist`, `managedBlocklist`) are described too, and the README now points to the admin guide for the full list of keys instead of listing some of them.
 - **Fixed: Help showed the test version's extension ID** in the Settings address; it now shows this installation's own ID (a store install has a different one). The admin guide explains where to find it.
 - The policy example now lists every key, including the request body, headers and reply field of your own threat-check and short-link services.
+- **A short README; the full documentation is in `docs/`.** The README now says what the extension is, in a few lines, and links the documents: `docs/FEATURES.md` (every feature, the toolbar button, Settings, Link Inspector, Logging, Help, and which webmail supports what), the admin guide (now with a contents list and its own section for the organization lists), the privacy policy, the architecture and development guides, and `docs/README.md`, an index of the folder.
 
 ## 5.77 — A helper, not a guarantee
 
