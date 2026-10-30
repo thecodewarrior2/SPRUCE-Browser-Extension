@@ -201,6 +201,13 @@
         .arch-table td, .arch-table th { font-size: 12px; padding: 7px 10px; }
         .arch-table code { font-size: 11px; padding: 1px 4px; word-break: normal; overflow-wrap: break-word; }
         .arch-table td:last-child { white-space: nowrap; }
+        .compat-wrap { overflow-x: auto; margin: 12px 0; }
+        .compat-table th, .compat-table td { font-size: 12px; padding: 7px 5px; text-align: center; }
+        .compat-table th:first-child, .compat-table td:first-child { text-align: left; min-width: 200px; }
+        .compat-table .status td { font-size: 10px; }
+        .compat-table .yes { color: var(--success-text); font-weight: 700; }
+        .compat-table .no { color: var(--text-muted); }
+        .compat-table .status td { color: var(--text-muted); }
         .regex { font-family: monospace; font-size: 11px; background: var(--surface-2); border: 1px solid var(--border-subtle); border-radius: 4px; padding: 8px; word-break: break-all; display: block; }
         @media (max-width: 900px) { .preset-grid, .two-col, .flow { grid-template-columns: 1fr; } .help-layout { grid-template-columns: 1fr; } .help-nav { position: static; } }
     </style>
@@ -728,6 +735,7 @@
                     <div class="help-subnav" role="group" aria-label="How it works topics">
                         <button data-help="warnings" class="sub">What the warnings mean</button>
                         <button data-help="senders" class="sub">Sender icons &amp; Spam</button>
+                        <button data-help="compat" class="sub">Which features work where</button>
                         <button data-help="privacy" class="sub">Your privacy</button>
                         <button data-help="limitations" class="sub">Limitations</button>
                         <button data-help="permissions" class="sub">Permissions</button>
@@ -751,6 +759,7 @@
 </div>
 <p><strong>When you send an email</strong> (Gmail), the links you wrote are checked before it goes: typos such as “.con” or “http//”, whether each website exists and works, and whether it's a look-alike, phishing or malware site. If something's wrong, you see which links and why, and choose <b>Go back and fix</b> or <b>Send anyway</b>.</p>
 <p><strong>In your Gmail inbox</strong>, every sender gets its site's icon, a country flag and a label with its domain, colored by a check of the sender: its address against phishing-sender lists and its domain against the same security services as links. Emails from a <b>flagged</b> sender are moved to Spam for you, once, with a short notice to review them. See <a href="#" data-help-link="senders">Sender icons &amp; Spam</a>.</p>
+<p><strong>Which of these work on which webmail</strong> is shown in <a href="#" data-help-link="compat">Which features work where</a>. Link, QR-code and tracking-pixel checks work on every supported webmail; the sender, Spam and Send features run on Gmail today and reach other sites as their entries are filled in.</p>
 <p>Everything you see is also available in this window: the <strong>Link Inspector</strong> shows each step for any link you paste, and <strong>Logging</strong> holds the application log (every problem and event), the history of checked links and the URL cache. Technical readers will find every detail in the <a href="#" data-help-link="architecture">architecture deep dive</a>.</p>
 </section>
 
@@ -836,6 +845,18 @@
 <p>Nothing about your emails is sent anywhere. The checks send only: each sender's <b>domain</b> to the threat-check services (as for links), its <b>site name</b> to Google's icon service (and, for a site without an icon of its own, to DuckDuckGo's), and a sending server's <b>IP address</b> to country.is. Results are remembered (verdicts 6 hours, icons and countries 30 days), so the inbox shows them at once without new requests. Emails' headers are read from Gmail itself (your own session), and unread emails are never opened to read them, so nothing can change what Gmail shows as unread. At <b>Offline only</b> none of these requests are made. Details: <a href="#" data-help-link="privacy">Your privacy</a>.</p>
 </section>
 
+<section id="help-compat" class="help-section">
+<h2>Which features work where <span class="live-tag">LIVE</span></h2>
+<p class="lead">The extension has one engine for every webmail. What it can do on each site depends only on what that site's entry in its table of webmail sites describes, and this chart is generated from that table, so it always matches the version you're running.</p>
+<div class="compat-wrap" id="compatTable"></div>
+<ul class="simple-list">
+  <li><b>✓</b> works on that site; <b>—</b> not yet. Features marked “every site” need nothing site-specific: they read the opened email itself.</li>
+  <li><b>Gmail</b> is fully supported and tested. The other sites are <b>experimental</b>: their page layouts were mapped from public information, and each gains the remaining features as its entry is filled in (no new code is needed).</li>
+  <li>Features that read an email's <b>headers</b> need a page the webmail itself offers with the email's original source (Gmail's “Show original”). Proton Mail encrypts messages, so it can't offer one.</li>
+  <li>Nothing here needs an extra sign-in, an app registration or an administrator-approved API: only the webmail page you already have open, and the public services listed in <a href="#" data-help-link="privacy">Your privacy</a>.</li>
+</ul>
+</section>
+
 <section id="help-privacy" class="help-section">
 <h2>Your privacy</h2>
 <p class="lead">The extension has no account, no analytics and no server of its own. Your email's text, subject, sender's address, recipients and attachments are never sent anywhere. (In Gmail, the sender's <i>domain</i> can be checked like a link's site name; see below.)</p>
@@ -890,7 +911,7 @@
 
 <section id="help-limitations" class="help-section">
 <h2>Limitations and recommendations</h2>
-<p class="lead">What the extension can't do on its own, and how your own services fill the gaps.</p>
+<p class="lead">What the extension can't do on its own, and how your own services fill the gaps. Which features run on which webmail is in <a href="#" data-help-link="compat">Which features work where</a>.</p>
 <table class="help-table">
 <tr><th style="width: 22%;">Area</th><th>Limitation</th><th style="width: 30%;">What helps</th></tr>
 <tr><td>Short-link lookups</td><td>The free public service (unshorten.me) rejects links longer than 100 characters (for example Google's c.gle links and many marketing links), limits how many new links it looks up per hour, may be blocked by company firewalls, can't expand links that need a sign-in, and sees each link it looks up. Google offers no API to expand short links.</td><td><b>Your own lookup service</b> (Settings → Your own services → Custom unshortener). It has no length limit and keeps links inside your organization.</td></tr>
@@ -904,7 +925,7 @@
 <tr><td>Sender icons and moving to Spam</td><td>Gmail only, in the web version. Moving uses Gmail's own Report spam button, recognized by its label in English and several other languages or by Gmail's internal action number; if Gmail changes its page so the button can't be found, moving keeps pausing and retrying (and says so in the log) while the icons and warnings keep working. A phishing sender that is on no list and whose domain no security service blocks yet isn't flagged. Report spam also tells Google about the sender and teaches Gmail to send that sender's mail to Spam, as it does when you click it; <b>Not spam</b> undoes that. Moves wait until you've been idle in Gmail for 10 seconds.</td><td>Trusted senders (<code>managedTrustedSenders</code>) for false positives; Gmail's own Report spam for anything missed.</td></tr>
 <tr><td>Look-alike domains</td><td>Compared with about 65 commonly impersonated brands.</td><td>Your own blocklist for local brands.</td></tr>
 <tr><td>QR codes and attachments</td><td>Attachments are checked in Gmail only (up to 10 MB; PDFs up to 10 pages). In other webmail, only images the webmail hosts are read. Badly damaged QR codes may not decode.</td><td>—</td></tr>
-<tr><td>Other webmail</td><td>Outlook, Proton, Yahoo, AOL, Zoho, iCloud, Fastmail and GMX support is experimental: their layouts were mapped from public information.</td><td>Report problems with the application log.</td></tr>
+<tr><td>Other webmail</td><td>Outlook, Proton, Yahoo, AOL, Zoho, iCloud, Fastmail and GMX support is experimental: their layouts were mapped from public information. All sites share one engine; each gets the sender, Spam and Send features once its entry describes its inbox list, toolbar and compose window (see <a href="#" data-help-link="compat">Which features work where</a>). Proton Mail encrypts messages, so header checks can't run there.</td><td>Report problems with the application log.</td></tr>
 <tr><td>Tracking pixels</td><td>Clicking a tracked link still tells the sender you clicked; images inside attachments aren't checked.</td><td>—</td></tr>
 <tr><td>Private and Offline levels</td><td>Short links aren't looked up at all, not even by your own lookup service, so their destination stays unknown; at Offline the threat checks are off too.</td><td>To keep lookups inside your organization, use the Standard level with your own lookup service and turn off the unshorten.me fallback (Settings → Your own services).</td></tr>
 </table>
@@ -1171,10 +1192,14 @@ Flag field:      (leave empty: Google's replies are recognized automatically)</d
 </div>
 <div id="archFiles"></div>
 
+<h3 id="arch-engine">The mail engine and webmail entries <span class="live-tag">LIVE</span></h3>
+<p>One engine in <code>content.js</code> handles every webmail. Everything that differs between sites is data in that site's entry of <code>WEBMAIL_SITES</code> (<code>shared.js</code>): where message bodies are; how the image proxy keeps original addresses; and, in the entry's <code>mail</code> profile, how the inbox list, conversation and message ids, the opened email's sender, the toolbar and Report spam, the inbox and Spam views, the signed-in account, the original source and the compose window are found. <span class="fn">mailCapabilities</span> turns an entry into what the engine may do there; the same function draws the <a href="#" data-help-link="compat">compatibility chart</a>. Header lines are trusted only from the receiving mail system the entry names; with none, no header line is trusted. A site without a profile still gets every check inside opened emails.</p>
+<div id="archEngine"></div>
+
 <h3 id="arch-pipeline">The link pipeline, step by step</h3>
 <p>From the moment a message opens to the moment a link is marked. Function names refer to the source files.</p>
 <ol class="pipeline">
-  <li><b>Detect</b> <span class="fn">content.js · MutationObserver</span> A single observer on <code>document.body</code> watches for Gmail inserting a message body (<code>.ii.gt</code>). Bursts of changes are debounced (350 ms), then the scan runs once.</li>
+  <li><b>Detect</b> <span class="fn">content.js · MutationObserver</span> A single observer on <code>document.body</code> watches for the webmail inserting a message body (its entry's <code>body</code> selector; Gmail's is <code>.ii.gt</code>) and, where the entry describes one, inbox rows. Bursts of changes are debounced (350 ms), then the scan runs once.</li>
   <li><b>Prepare</b> <span class="fn">unshortenLinks</span> Settings are fetched from the service worker (<code>getSettings</code>). Hidden links are disabled, tracking pixels handled, then every <code>&lt;a&gt;</code> with an http(s) host other than mail.google.com is sent once per unique address (<code>resolveUrl</code>), together with its visible text, image alt text and aria-label (used for one-time detection).</li>
   <li><b>Blocklist</b> <span class="fn">resolveLink · blocklistHit</span> If the link's own host is blocklisted, the answer is immediate: flagged, destination hidden, nothing decoded, checked or sent. A later reveal re-enters the pipeline with <code>reveal: true</code> (as does revealing an email tracking link).</li>
   <li><b>Allowlist</b> The link is decoded offline; if both it and its destination are allowlisted, it is left untouched.</li>

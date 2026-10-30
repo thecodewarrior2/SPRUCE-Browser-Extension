@@ -58,13 +58,7 @@ const SITE = (() => {
 //   MAIL_CAN.compose  checking links before sending
 // ---------------------------------------------------------------------------
 const MAIL = SITE.mail;
-const MAIL_CAN = {
-    list: !!(MAIL && MAIL.list),
-    opened: !!(MAIL && MAIL.message),
-    headers: !!(MAIL && MAIL.headers),
-    move: !!(MAIL && MAIL.list && MAIL.toolbar && MAIL.views),
-    compose: !!(MAIL && MAIL.compose)
-};
+const MAIL_CAN = mailCapabilities(SITE);
 // The first element matching the comma-separated selectors, trying them in the order listed.
 function firstMatch(root, selectors) {
     if (!root || !selectors) return null;

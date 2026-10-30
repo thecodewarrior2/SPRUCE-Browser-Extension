@@ -84,6 +84,31 @@ Anything you do **not** set stays under the user's control (all features are on 
 - **Troubleshooting:** every failure is recorded in **Options → Logging → Application log** with a level (Error, Warning, Info) and its source: DNS checks, list sync, custom resolvers, Gmail, restore and so on. Error messages contain only a link's site, never its full address. Errors also appear in the toolbar popup.
 - Policy changes apply without reinstalling; open Gmail tabs pick them up on the next message opened.
 
+## Feature compatibility by webmail
+
+Every feature, and the webmail sites it runs on in this version. One engine handles all of them; a
+site gains features as its entry in `WEBMAIL_SITES` (`shared.js`) describes more of its page, with no
+new code. The same chart, generated from the running code, is in Settings → Help → Which features
+work where. Gmail is fully supported and tested; the others are experimental. Nothing here needs an
+extra sign-in, an app registration or an administrator-approved API.
+
+| Feature | Gmail | Outlook | Proton | Yahoo | AOL | Zoho | iCloud | Fastmail | GMX |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| *Support* | Full | Experimental | Experimental | Experimental | Experimental | Experimental | Experimental | Experimental | Experimental |
+| Links: hidden destinations revealed, dangerous and look-alike links marked *(every site)* | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Tracking pixels blocked *(every site)* | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| QR codes in email images *(every site)* | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| QR codes drawn without an image *(every site)* | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Phishing-simulation emails recognized by their link domains *(every site)* | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Attachment checks (QR codes, scripts, fake logins, encrypted archives) | ✓ | — | — | — | — | — | — | — | — |
+| Sender checks in opened emails (brand names, look-alike domains, company links) | ✓ | — | — | — | — | — | — | — | — |
+| Sender icon, country flag and label in opened emails | ✓ | — | — | — | — | — | — | — | — |
+| Sender icon, country flag and label in the inbox list | ✓ | — | — | — | — | — | — | — | — |
+| Signs of forgery in the headers (DMARC, forged delivery records…) | ✓ | — | — | — | — | — | — | — | — |
+| Phishing-simulation emails recognized by their headers | ✓ | — | — | — | — | — | — | — | — |
+| Flagged emails moved to Spam | ✓ | — | — | — | — | — | — | — | — |
+| Links checked before sending | ✓ | — | — | — | — | — | — | — | — |
+
 ## Sender icons and moving phishing to Spam (Gmail)
 
 All of this is on by default and every part has its own key above. In short:

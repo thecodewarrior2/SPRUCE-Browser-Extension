@@ -1161,6 +1161,38 @@ const WEBMAIL_SITES = [
       readFrames: true, frameBody: true, imageParams: ['url', 'u'] }
 ];
 
+// What the shared engine can do on a site, from what its entry describes (used by the content script
+// and by the compatibility chart in Help, so the two always agree).
+function mailCapabilities(site) {
+    const M = (site && site.mail) || null;
+    return {
+        list: !!(M && M.list),                                // sender icons, labels and checks in the inbox list
+        opened: !!(M && M.message),                           // sender checks, icons and labels in opened emails
+        headers: !!(M && M.headers),                          // signs in the original source; server country
+        move: !!(M && M.list && M.toolbar && M.views),        // moving flagged emails to Spam
+        compose: !!(M && M.compose),                          // checking links before sending
+        attachments: !!(site && site.attachments)             // attachment checks
+    };
+}
+
+// Every feature, and what a site needs for it (null: works on every supported site). Shown as the
+// compatibility chart in Help → Which features work where.
+const FEATURE_SUPPORT = [
+    { name: 'Links: hidden destinations revealed, dangerous and look-alike links marked', needs: null },
+    { name: 'Tracking pixels blocked', needs: null },
+    { name: 'QR codes in email images', needs: null },
+    { name: 'QR codes drawn without an image', needs: null },
+    { name: 'Phishing-simulation emails recognized by their link domains', needs: null },
+    { name: 'Attachment checks (QR codes, scripts, fake logins, encrypted archives)', needs: 'attachments' },
+    { name: 'Sender checks in opened emails (brand names, look-alike domains, company links)', needs: 'opened' },
+    { name: 'Sender icon, country flag and label in opened emails', needs: 'opened' },
+    { name: 'Sender icon, country flag and label in the inbox list', needs: 'list' },
+    { name: 'Signs of forgery in the headers (DMARC, forged delivery records…)', needs: 'headers' },
+    { name: 'Phishing-simulation emails recognized by their headers', needs: 'headers' },
+    { name: 'Flagged emails moved to Spam', needs: 'move' },
+    { name: 'Links checked before sending', needs: 'compose' }
+];
+
 // The supported webmail entry for a page address, or null.
 function webmailSiteFor(urlString) {
     let u;
