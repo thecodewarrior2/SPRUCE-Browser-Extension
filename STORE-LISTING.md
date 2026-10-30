@@ -69,7 +69,7 @@ fictional). `store/source/make-images.js` makes them again after a change.
 **Single purpose:**
 
 ```
-S.P.R.U.C.E+ protects people from phishing and spam in webmail: it checks the links, senders, QR codes and attachments of their emails for danger, warns them, and can move dangerous emails to Spam.
+Protect webmail users from phishing and scam emails. S.P.R.U.C.E+ checks the emails a user reads in their webmail (the sender, links, QR codes and attachments), warns when an email is dangerous, and can move it to Spam. Every feature serves this one purpose: showing where links really lead, flagging fake or look-alike senders, and blocking the tracking pixels that tell scammers an address is live.
 ```
 
 ### Permission justifications
