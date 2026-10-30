@@ -9,7 +9,8 @@ const EXT = process.env.EXT || path.resolve(__dirname, '..', '..');
 // Background context with a minimal chrome stub (storage in memory).
 function loadBackground(local = {}, extra = {}) {
   const store = { ...local };
-  const listeners = () => ({ addListener() {} });
+  // Event stubs keep their listeners, so a test can fire one (chrome.runtime.onInstalled.fire(...)).
+  const listeners = () => { const fns = []; return { addListener(f) { fns.push(f); }, fire: (...a) => Promise.all(fns.map(f => f(...a))) }; };
   const area = {
     get(keys, cb) {
       let r = {};
@@ -639,7 +640,8 @@ test('look-alike senders: strong imitations, young near-misses, protected only w
   const url = require('url');
   const day = 86400000, now = Date.now();
   const dmarc = { '_dmarc.brandsite.example': 'v=DMARC1; p=reject', '_dmarc.mirrorsite.example': 'v=DMARC1; p=none' };
-  const created = { 'brandsitte.example': now - 10 * day, 'brandsitee.example': now - 2000 * day, 'mirrorsitte.example': now - 5 * day, 'amazom.example': now - 3000 * day };
+  const created = { 'brandsitte.example': now - 10 * day, 'brandsitee.example': now - 2000 * day, 'mirrorsitte.example': now - 5 * day, 'amazom.example': now - 3000 * day,
+    'brandsite-help.example': now - 4000 * day, 'brandsite-billing.example': now - 10 * day, 'vendorco-payment.example': now - 3 * day };
   const fetch = async (u) => {
     u = String(u);
     const q = /dns-query\?name=([^&]+)&type=TXT/.exec(u);
@@ -664,12 +666,29 @@ test('look-alike senders: strong imitations, young near-misses, protected only w
   assert.equal(await v('mirrorsitte.example'), null, 'a popular domain that doesn\'t enforce DMARC is not protected');
   assert.equal(await v('amazom.example'), 'caution', 'a built-in brand one letter off, old: amber');
   assert.equal(await v('vendorc.example'), null, 'learned domain one letter off, unknown age: nothing');
+  // A popular or learned name plus a scare word: by age too (their names are often ordinary words, like
+  // "simple" in simple-help.com); a built-in brand plus a scare word stays strong at any age.
+  assert.equal(await v('brandsite-help.example'), null, 'popular name plus "help", registered years ago: a real company');
+  assert.equal(await v('brandsite-support.example'), null, 'popular name plus a scare word, unknown age: nothing');
+  assert.equal(await v('brandsite-billing.example'), 'strong', 'popular name plus a scare word, 10 days old');
+  assert.equal(await v('vendorco-payment.example'), 'strong', 'a learned name plus a scare word, 3 days old');
   // The real ones never match.
   assert.equal(await v('brandsite.example'), null);
   assert.equal(await v('paypal.com'), null);
   assert.equal(await v('vendorco.example'), null, 'a learned domain isn\'t its own look-alike');
   assert.equal(await v('example.k12.fl.us', 'example.k12.fl.us'), null);
   assert.equal(await v('gmail.com'), null);
+});
+
+test('an update re-judges senders: verdicts cached by the previous version are dropped', async () => {
+  const b = loadBackground();
+  const run = (c) => vm.runInContext(c, b);
+  await run('senderResultCache.set("someone@example.org|||", { r: { status: "flagged" } })');
+  assert.ok(await run('senderResultCache.get("someone@example.org|||")'), 'cached');
+  await run('chrome.runtime.onInstalled.fire({ reason: "chrome_update" })');
+  assert.ok(await run('senderResultCache.get("someone@example.org|||")'), 'a browser update keeps it');
+  await run('chrome.runtime.onInstalled.fire({ reason: "update", previousVersion: "5.63" })');
+  assert.equal(await run('senderResultCache.get("someone@example.org|||")'), null, 'an extension update drops it');
 });
 
 test('name and address: a brand\'s name elsewhere is red; a colleague\'s name outside is amber; hashes only', () => {

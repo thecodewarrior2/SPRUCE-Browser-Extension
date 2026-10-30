@@ -559,7 +559,8 @@ ensureAlarms();
 
 chrome.runtime.onInstalled.addListener(async (details) => {
     try {
-        if (details && details.reason === 'update') purgeOneTimeEntries();
+        // A new version may judge senders differently (a rule fixed), so their cached verdicts go.
+        if (details && details.reason === 'update') { purgeOneTimeEntries(); clearSenderDomainCache(); }
         await migrateStoredData();
         await ensureListState();      // bundled snapshot on a fresh install: coverage before any download
         ensureAlarms();
@@ -1966,10 +1967,13 @@ async function lookalikeVerdict(domain, ownDomain, S) {
     }
     // Look-alike characters.
     if (skel !== label && skel.length >= 4) for (const t of idx.byLabel.all(skel)) strong.push({ target: t, why: `imitates ${t} with look-alike characters` });
-    // A protected name plus a scare word.
+    // A protected name plus a scare word: always for a built-in brand (paypal-billing); for a popular or
+    // learned name only when the domain is young (below), as their names are often ordinary words
+    // (simple.life: simple-help.com is a real company).
     if (tokens.length > 1 && tokens.some(t => CREDENTIAL_WORDS.has(t))) {
         for (const tok of tokens) for (const t of idx.byLabel.all(tok)) {
-            if (tok.length >= (idx.kind.get(t) === 'builtin' ? 4 : 5)) strong.push({ target: t, why: `uses the name “${tok}” but isn't ${t}` });
+            const builtin = idx.kind.get(t) === 'builtin';
+            if (tok.length >= (builtin ? 4 : 5)) (builtin ? strong : near).push({ target: t, why: `uses the name “${tok}” but isn't ${t}` });
         }
     }
     // One letter off, or the same name under another ending.
