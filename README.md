@@ -32,8 +32,8 @@ Every feature in detail, and which webmail supports what: [docs/FEATURES.md](doc
 
 ## Install
 
-The Safari version comes inside a small Mac app. To try a test version from this repository, follow
-[docs/INSTALL-FOR-TESTERS.md](docs/INSTALL-FOR-TESTERS.md).
+The Safari version comes inside a small Mac app. It isn't available as a download yet; to build and try
+a test version from this repository, follow [docs/INSTALL-FOR-TESTERS.md](docs/INSTALL-FOR-TESTERS.md).
 
 ## Documentation
 

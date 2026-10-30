@@ -3,6 +3,19 @@
 For people working on the extension itself: the Safari build (branch `safari`). Everyone else needs only the
 [README](../README.md); administrators, the [admin guide](ADMIN-GUIDE.md).
 
+## Branches and workflow
+
+| Branch | What it holds |
+|---|---|
+| `testing` | **Where all work happens first.** Every change is made, tested and committed there. |
+| `main` | The Chrome and Edge build. |
+| `firefox` | The Firefox (desktop) build. |
+| `safari` | The Safari build. |
+
+A change is made and tested on `testing`, brought into `main`, and then ported to this branch (its
+files differ in places: the background page, policies, browser APIs) and tested here before it is
+pushed. Nothing goes to `main`, `firefox` or `safari` that hasn't been on `testing` first.
+
 ## Run it from source
 
 Requires **Safari 18.2 or later** (macOS; iOS and iPadOS with a build signed by your organization). In
@@ -18,6 +31,12 @@ Safari an extension comes inside a small app, built from this folder with Apple'
 
 The script leaves an Xcode project in `build/safari/` to sign with your team and archive for the App
 Store, TestFlight or Developer ID distribution.
+
+## Publishing a release
+
+Nothing is attached to the [releases page](https://github.com/thecodewarrior2/SPRUCE-Browser-Extension/releases) for Safari until there is a signed and notarized app
+(it needs an Apple Developer account). An unsigned build only runs with Safari's "Allow unsigned
+extensions", which resets every time Safari restarts, so it is for testing only.
 
 ## Repository layout
 
