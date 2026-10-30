@@ -1,5 +1,10 @@
 # Changelog
 
+## 5.72 — Store-ready description (Firefox build, same as Chrome 5.72)
+
+- **Shorter description** (111 characters), the same in every build: the Chrome Web Store refuses one over 132, and Safari shows at most 112.
+- The private signing key (`*.pem`) and built packages are now left out of the project by `.gitignore`.
+
 ## 5.71 — New name: S.P.R.U.C.E+ (Firefox build, same as Chrome 5.71)
 
 - **Renamed to S.P.R.U.C.E+** (Spam & Phishing Risk URL Checker Extension+), with a new icon: a shield with a magnifying glass. The toolbar icon, the Settings page, the popup and the extension's notices use the new name and icon; while the extension isn't checking an email, the toolbar shows the same icon in gray.
