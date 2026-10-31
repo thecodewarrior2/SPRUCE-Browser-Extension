@@ -577,6 +577,28 @@ test('BIMI logos: DMARC enforced, organization domain only, downloaded or kept b
   assert.equal((await run('iconStore.get("bimi:nobimi.example")')).source, 'none', 'remembered as none');
 });
 
+test('BIMI logos: a DNS answer that failed (SERVFAIL) is never remembered as "no logo"', async () => {
+  const { IDBFactory } = require('fake-indexeddb');
+  const dns = { 'default._bimi.slow.example': 'v=BIMI1; l=https://logos.slow.example/logo.svg', '_dmarc.slow.example': 'v=DMARC1; p=reject' };
+  let failing = true;
+  const fetch = async (u) => {
+    const name = decodeURIComponent(/dns-query\?name=([^&]+)&type=TXT/.exec(String(u))[1]);
+    // While failing, both resolvers answer as one does when it couldn't reach the domain's DNS in time.
+    const json = failing ? { Status: 2, Answer: [] } : { Status: 0, Answer: [{ type: 16, data: `"${dns[name]}"` }] };
+    return { ok: true, status: 200, json: async () => json };
+  };
+  const b = loadBackground({}, { indexedDB: new IDBFactory(), fetch });
+  const run = (c) => vm.runInContext(c, b);
+  assert.equal(await run('bimiLogo("slow.example")'), '', 'no answer: no logo this time');
+  assert.equal(await run('iconStore.get("bimi:slow.example")'), null, 'nothing remembered about the logo');
+  assert.equal(await run('iconStore.get("dmarc:slow.example")'), null, 'nor about the DMARC policy');
+  failing = false;
+  assert.equal(await run('bimiLogo("slow.example")'), 'https://logos.slow.example/logo.svg', 'found as soon as DNS answers');
+  // A definite "no logo" is asked again after a day, a logo after a week.
+  assert.equal(run('bimiFresh({ ts: Date.now() - 2 * 864e5, bytes: null })'), false);
+  assert.equal(run('bimiFresh({ ts: Date.now() - 2 * 864e5, bytes: new ArrayBuffer(1) })'), true);
+});
+
 test('initials: letter from the name (else the address), steady color per sender, readable white text', () => {
   const b = loadBackground();
   const run = (c) => vm.runInContext(c, b);
@@ -630,6 +652,31 @@ test('icon contrast: a dark icon gets a light circle on the dark theme and the r
   assert.equal(plate(black, WHITE), WHITE, 'black icon on a light row: none');
   assert.equal(plate(blue, DARK), DARK, 'blue icon on a dark row: none');
   assert.equal(S('contrastingBackground')(null, DARK, [WHITE]), DARK, 'an icon that couldn\'t be read: unchanged');
+});
+
+test('icon size: site icons are drawn to fill their circle, margins and all', () => {
+  const size = 32;
+  const icon = (paint) => { const d = new Uint8ClampedArray(size * size * 4);
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) if (paint(x, y)) d.set([200, 60, 20, 255], (y * size + x) * 4);
+    return S('iconPixelLook')(d, size); };
+  const fill = (look) => S('iconFillScale')(look);
+  // Where the farthest visible pixel ends up, as a share of the circle's radius.
+  const edge = (look) => look.reach * fill(look);
+  // A round logo with a wide empty margin (like Firefox's or Google's site icons): blown up to fill the circle.
+  const round = icon((x, y) => Math.hypot(x - 15.5, y - 15.5) < 9);
+  assert.ok(fill(round) > 1.4, `round logo with margins drawn larger than the circle box (${fill(round)})`);
+  assert.ok(edge(round) > 0.8 && edge(round) <= 0.87, 'its edge lands just inside the circle');
+  // A round logo already touching the edges: about the circle's own size.
+  const full = icon((x, y) => Math.hypot(x - 15.5, y - 15.5) < 16);
+  assert.ok(fill(full) > 0.8 && fill(full) < 0.9);
+  // A square glyph touching the edges (see-through around it): its corners stay inside the circle.
+  const square = icon((x, y) => (x < 3 || x > 28 || y < 3 || y > 28) && x > 0 && y > 0 && x < 31 && y < 31);
+  assert.ok(square.seeThrough && edge(square) <= 0.87, 'square glyph: corners inside the circle');
+  // A solid tile (its own square background): edge to edge, like a company logo.
+  assert.equal(fill(icon(() => true)), 1);
+  // A tiny dot isn't blown up without limit; an icon that couldn't be read keeps the old fixed size.
+  assert.equal(fill(icon((x, y) => x === 15 && y === 15)), 2.5);
+  assert.equal(fill(null), null);
 });
 
 test('DMARC: failures always get at least amber; pictures only for domains that enforce DMARC', async () => {
