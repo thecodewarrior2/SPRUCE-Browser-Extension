@@ -3,7 +3,7 @@
 // red and says Gmail or the user put it there. Reading an unread email's headers must never mark it
 // read: if it ever does, the extension stops reading them.
 const fs = require('fs'), path = require('path');
-const { launch, servePage, until, sleep, check, part, runParts, waitForLog } = require('./harness');
+const { launch, servePage, until, settled: settledPage, ready, check, part, runParts, waitForLog } = require('./harness');
 const sample = fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'scam4.eml'), 'utf8');   // forged records copied from 2 other people's emails
 const FORGED = 'contact_support.pum@chariots.example';
 const STRANGER = 'teomnrd@cloud-alerts.example';   // signs as "teacher", the mailbox of teacher@school.org (the page's account)
@@ -26,7 +26,7 @@ async function start(hash, settings = {}, rows) {
   }, settings);
   const page = await ctx.newPage();
   await page.goto(`https://mail.google.com/mail/u/0/#${hash}`);
-  await sleep(500);
+  await ready(page);
   await page.evaluate((rows) => window.__arrive(rows), rows || [
     { t: 9101, email: FORGED, name: 'Benefits Card', subj: 'Login Verification', unread: true },
     { t: 9102, email: 'friend@example.com', name: 'Friend', subj: 'Lunch', unread: false },
@@ -55,7 +55,7 @@ part('inbox-unchanged', async () => {
   // In the inbox an unread email's headers are still never read.
   const { ctx, page } = await start('inbox');
   const a = await until(() => label(page, 9101), settled, 8000);
-  await sleep(1500);
+  await settledPage(page);
   const again = await label(page, 9101);
   check('inbox, unread: headers not read (not red), as before', again && again.status !== 'flagged' && !/copied from emails/.test(again.title), again);
   await ctx.close();
@@ -64,7 +64,7 @@ part('inbox-unchanged', async () => {
 part('off', async () => {
   const { ctx, page } = await start('spam', { enableSpamFolderFlags: false });
   const a = await until(() => label(page, 9101), settled, 8000);
-  await sleep(1500);
+  await settledPage(page);
   const [again, moved] = [await label(page, 9101), await label(page, 9103)];
   check('switched off: unread emails in Spam aren\'t read, moved ones aren\'t marked', again && again.status !== 'flagged' && moved && !/moved it to Spam/.test(moved.title), { again, moved });
   await ctx.close();
@@ -81,7 +81,7 @@ part('mark-read-guard', async () => {
   check('an email turned read after its headers were read: the extension stops reading unread ones, and says so', !!off && logged, { off, logged });
   await page.evaluate(() => window.__arrive([{ t: 9104, email: 'contact_support.pum@chariots.example', name: 'Benefits Card', subj: 'Login Verification 2', unread: true }]));
   const d = await until(() => label(page, 9104), settled, 8000);
-  await sleep(1500);
+  await settledPage(page);
   const again = await label(page, 9104);
   check('…the next unread email in Spam is checked without reading its headers', again && !/copied from emails/.test(again.title), again);
   await ctx.close();
@@ -102,7 +102,7 @@ part('own-name', async () => {
   }
   const { ctx, page } = await start('inbox', { enableOwnNameCheck: false }, OWN_NAME_ROWS);
   await until(() => label(page, 9105), settled, 8000);
-  await sleep(1000);
+  await settledPage(page);
   const off = await label(page, 9105);
   check('switched off: not flagged for it', off && !/your own mailbox name/.test(off.title), off);
   await ctx.close();

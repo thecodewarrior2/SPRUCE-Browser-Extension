@@ -1,7 +1,7 @@
 // Sender picture sizes follow Gmail's display density: Default 36 px circles, Comfortable 32 px,
 // Compact no circles (the site's icon beside the country flag at the flag's size); colored initials
 // for senders with no picture (not in Compact); the size setting overrides the density.
-const { launch, servePage, until, sleep, check, part, runParts } = require('./harness');
+const { launch, servePage, until, settled, ready, check, part, runParts } = require('./harness');
 const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 
 // A fresh browser with known site icons (iconsite.example has one, noicon.example has none).
@@ -19,7 +19,7 @@ async function start(density, settings = {}) {
   }, [PNG, settings]);
   const page = await ctx.newPage();
   await page.goto(`https://mail.google.com/mail/u/0/?density=${density}#inbox`);
-  await sleep(500);
+  await ready(page);
   await page.evaluate(() => window.__arrive([
     { t: 8201, email: 'news@iconsite.example', name: 'Iconsite News', subj: 'Has a site icon', unread: true },
     { t: 8202, email: 'olivia@noicon.example', name: 'Olivia Example', subj: 'No picture at all', unread: true },
@@ -62,7 +62,7 @@ part('compact', async () => {
   const { ctx, page } = await start('compact');
   const a = await until(() => rowLook(page, 8201), l => l.mode === 'inline' && l.inline);
   check('Compact density: no circles; the site icon beside the flag at the flag\'s size (15 px)', a.mode === 'inline' && !a.circle && a.inline && a.inline.w === 15 && a.inline.h === 15, a);
-  await sleep(1500);
+  await settled(page);
   const b = await rowLook(page, 8202);
   check('Compact: no initials (and no circle) for a sender with no picture', !b.circle, b);
   await ctx.close();

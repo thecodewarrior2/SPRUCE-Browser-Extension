@@ -1,6 +1,6 @@
 // Row highlighter and warnings about overlapping extensions (simulated Gmail and Outlook pages).
 const fs = require('fs');
-const { launch, servePage, sleep, waitFor, until, check, part, runParts } = require('./harness');
+const { launch, servePage, waitFor, until, settled, check, part, runParts } = require('./harness');
 // A fresh browser per part (the parts run in parallel). The extension's id comes from the browser.
 async function setup() {
   const { ctx, sw } = await launch();
@@ -11,7 +11,8 @@ async function setup() {
   const hovered = async (page, rowSel) => {
     const box = await page.locator(rowSel).first().boundingBox();
     await page.mouse.move(box.x + 30, box.y + box.height / 2);
-    await sleep(300);
+    // Two frames: the browser has applied the hover styles (no guess at a duration).
+    await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
     return page.evaluate((sel) => { const r = document.querySelector(sel); const cell = r.querySelector('td') || r; const cs = getComputedStyle(cell), rs = getComputedStyle(r);
       return { image: cs.backgroundImage, outline: rs.outlineStyle + ' ' + rs.outlineColor, style: !!document.getElementById('unshortener-row-highlight') }; }, rowSel);
   };
@@ -29,8 +30,8 @@ part('highlighter', async () => {
   await waitFor(() => page.evaluate(() => !!document.getElementById('unshortener-row-highlight')), 8000);
   let h = await hovered(page, 'tr.zA');
   check('row under the mouse: see-through color and outline (default)', /linear-gradient/.test(h.image) && /rgba\(255, 213, 0, 0\.3/.test(h.image) && /^solid/.test(h.outline), h);
-  await page.mouse.move(5, 5); await sleep(300);
-  const away = await page.evaluate(() => getComputedStyle(document.querySelector('tr.zA td')).backgroundImage);
+  await page.mouse.move(5, 5);
+  const away = await until(() => page.evaluate(() => getComputedStyle(document.querySelector('tr.zA td')).backgroundImage), v => v === 'none', 5000);
   check('the highlight goes away when the mouse leaves', away === 'none', away);
   await page.close();
   // Blue, color only.
@@ -43,8 +44,8 @@ part('highlighter', async () => {
   await set(base);
   page = await ctx.newPage(); await page.goto('https://mail.google.com/mail/u/0/#inbox'); await waitFor(() => page.evaluate(() => !!document.getElementById('unshortener-row-highlight')), 8000);
   await page.evaluate(() => document.querySelectorAll('tr.zA')[1].querySelector('[role=checkbox]').click());
-  await page.mouse.move(5, 5); await sleep(400);
-  const sel = await page.evaluate(() => getComputedStyle(document.querySelectorAll('tr.zA')[1].querySelector('td')).backgroundImage);
+  await page.mouse.move(5, 5);
+  const sel = await until(() => page.evaluate(() => getComputedStyle(document.querySelectorAll('tr.zA')[1].querySelector('td')).backgroundImage), v => /rgba\(26, 115, 232/.test(v), 5000);
   check('a ticked email keeps a highlight, in its own color (blue by default, not the mouse\'s yellow)', /linear-gradient/.test(sel) && /rgba\(26, 115, 232/.test(sel), sel);
   await page.evaluate(() => { document.querySelectorAll('tr.zA')[1].id = 'tickrow'; }); h = await hovered(page, '#tickrow');
   check('a ticked email under the mouse shows the mouse color', /rgba\(255, 213, 0, 0\.3/.test(h.image), h);
@@ -65,13 +66,13 @@ part('highlighter', async () => {
   await optHl.close();
   // Off, and locked off by policy.
   await set(Object.assign({}, base, { enableRowHighlighter: false }));
-  page = await ctx.newPage(); await page.goto('https://mail.google.com/mail/u/0/#inbox'); await sleep(4000);
+  page = await ctx.newPage(); await page.goto('https://mail.google.com/mail/u/0/#inbox'); await settled(page);
   h = await hovered(page, 'tr.zA');
   check('switched off: no highlight', !h.style && h.image === 'none', h);
   await page.close();
   await set(Object.assign({}, base, { __testManaged: { managedEnableRowHighlighter: false }, enableRowHighlighter: true }));
   await sw.evaluate(() => invalidateConfig());
-  page = await ctx.newPage(); await page.goto('https://mail.google.com/mail/u/0/#inbox'); await sleep(4000);
+  page = await ctx.newPage(); await page.goto('https://mail.google.com/mail/u/0/#inbox'); await settled(page);
   h = await hovered(page, 'tr.zA');
   check('locked off by policy: no highlight even with the user\'s setting on', !h.style, h);
   await page.close();
@@ -109,8 +110,9 @@ part('conflicts', async () => {
   await set(base);
   page = await ctx.newPage(); await page.goto('https://mail.google.com/mail/u/0/?ext=1#inbox'); await waitFor(() => page.evaluate(() => !!document.querySelector('.unshortener-conflict-notice')), 10000);
   await page.locator('.unshortener-conflict-notice button', { hasText: 'Ignore' }).click();
-  await sleep(500); await page.close();
-  page = await ctx.newPage(); await page.goto('https://mail.google.com/mail/u/0/?ext=1#inbox'); await sleep(4000);
+  await until(() => sw.evaluate(async () => (await chrome.storage.local.get('ignoredConflicts')).ignoredConflicts), v => v && Object.keys(v).length > 0, 8000);
+  await page.close();
+  page = await ctx.newPage(); await page.goto('https://mail.google.com/mail/u/0/?ext=1#inbox'); await settled(page);
   check('ignored: not warned again', !(await notice(page)));
   await page.close();
   // An extension overlapping with two of ours (Simplify Gmail): turn off only one of ours.
@@ -122,7 +124,7 @@ part('conflicts', async () => {
   const st = await until(() => sw.evaluate(async () => chrome.storage.local.get(['enableSenderAvatars', 'enableTrackingPixelBlocking', 'keptConflictFeatures'])), v => v.enableSenderAvatars === false, 8000);
   await page.close();
   check('only that setting is turned off; the other stays on', st.enableSenderAvatars === false && st.enableTrackingPixelBlocking !== false, st);
-  page = await ctx.newPage(); await page.goto('https://mail.google.com/mail/u/0/?ext=simplify#inbox'); await sleep(4000);
+  page = await ctx.newPage(); await page.goto('https://mail.google.com/mail/u/0/?ext=simplify#inbox'); await settled(page);
   check('settled: not warned again while it stays off', !(await notice(page)));
   await page.close();
   await sw.evaluate(async () => chrome.storage.local.set({ enableSenderAvatars: true }));
@@ -131,12 +133,15 @@ part('conflicts', async () => {
   check('turned back on: warned again', n && /Simplify Gmail/.test(n.text), n);
   await page.close();
   // Settings: pressing Ignore and Warn me again never lists an extension twice.
-  const opt2 = await ctx.newPage(); await opt2.goto(`chrome-extension://${ID}/options.html#conflicts`); await sleep(1500);
+  const opt2 = await ctx.newPage(); await opt2.goto(`chrome-extension://${ID}/options.html#conflicts`);
+  await opt2.waitForSelector('#conflictList .conflict-item', { state: 'attached' });
   const count = () => opt2.evaluate(() => [...document.querySelectorAll('#conflictList .conflict-item')].filter(i => /Simplify Gmail/.test(i.textContent)).length);
   const simplifyItem = opt2.locator('#conflictList .conflict-item', { hasText: 'Simplify Gmail' });
-  await simplifyItem.locator('button', { hasText: 'Ignore' }).click(); await sleep(1200);
+  await simplifyItem.locator('button', { hasText: 'Ignore' }).click();
+  await simplifyItem.locator('button', { hasText: 'Warn me again' }).waitFor();
   const c1 = await count();
-  await simplifyItem.locator('button', { hasText: 'Warn me again' }).click(); await sleep(1200);
+  await simplifyItem.locator('button', { hasText: 'Warn me again' }).click();
+  await simplifyItem.locator('button', { hasText: 'Ignore' }).waitFor();
   const c2 = await count();
   check('Settings: Ignore / Warn me again never duplicates an entry', c1 === 1 && c2 === 1, { c1, c2 });
   const btns = await simplifyItem.evaluate(i => [...i.querySelectorAll('button')].map(b => b.textContent));
@@ -151,7 +156,7 @@ part('conflicts', async () => {
   // Suppressed by the administrator: nothing shown.
   await set(Object.assign({}, base, { __testManaged: { managedEnableConflictWarnings: false } }));
   await sw.evaluate(() => invalidateConfig());
-  page = await ctx.newPage(); await page.goto('https://mail.google.com/mail/u/0/?ext=1&fakeicons=1#inbox'); await sleep(4000);
+  page = await ctx.newPage(); await page.goto('https://mail.google.com/mail/u/0/?ext=1&fakeicons=1#inbox'); await settled(page);
   check('administrator suppressed the warnings: nothing shown', !(await notice(page)));
   await page.close();
   await ctx.close();

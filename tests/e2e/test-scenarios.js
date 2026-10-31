@@ -1,4 +1,4 @@
-const { launch, servePage, sleep, waitFor, listSettled, check, part, runParts } = require('./harness');
+const { launch, servePage, waitFor, until, settled, listSettled, check, part, runParts } = require('./harness');
 const BASE = { __testScamSenders: ['phisher@evil-scam.test', 'billing@evil-scam.test', 'rescued@evil-scam.test'], spamMovedThreads: { 'thread-f:1005': 1 }, enableDnsThreatCheck: false };
 // moves: how many emails should be moved (waits until they are); 0 or none: waits until the badges are
 // drawn, then long enough for a move to have happened (they take about 2 s after the page loads).
@@ -125,14 +125,13 @@ part('memory', async () => {
   await r.page.mouse.move(0, 0);
   const nb = await r.page.$('#notSpamBtn');
   await nb.click();
-  await sleep(800);
-  const mem2 = await sw.evaluate(() => new Promise(res => chrome.storage.local.get(['spamMovedThreads', 'spamRescuedThreads'], res)));
+  const mem2 = await until(() => sw.evaluate(() => new Promise(res => chrome.storage.local.get(['spamMovedThreads', 'spamRescuedThreads'], res))), m => !!(m.spamRescuedThreads || {})['thread-f:1001'], 10000);
   check('Not spam in the Spam folder: remembered in its own list', !!(mem2.spamRescuedThreads || {})['thread-f:1001'] && !(mem2.spamMovedThreads || {})['thread-f:1001'], mem2);
   await r.page.close();
   const page2 = await ctx.newPage();
   await page2.goto('https://mail.google.com/mail/u/0/#inbox');
   await waitFor(() => page2.evaluate(() => window.__spammed.includes('#thread-f:1007')), 10000);
-  await sleep(1500);                                   // and long enough for 1001 to have been moved too, if it were
+  await settled(page2);                                // everything checked and decided: 1001 would have been moved by now
   const sp2 = await page2.evaluate(() => window.__spammed);
   check('rescued conversation not moved from the inbox; others are', !sp2.includes('#thread-f:1001') && sp2.includes('#thread-f:1007'), sp2);
   await page2.close();

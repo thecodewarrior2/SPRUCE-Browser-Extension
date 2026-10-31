@@ -1,7 +1,7 @@
 // Look-alike senders in the inbox list, with nothing opened: imitations are flagged and moved to Spam,
 // weaker cases get amber, real companies with similar old names and trusted senders are left alone.
 // (The lists, DMARC policies and registration dates are given here as if already looked up.)
-const { launch, servePage, until, sleep, check, done } = require('./harness');
+const { launch, servePage, until, settled, ready, check, done } = require('./harness');
 (async () => {
   const { ctx, sw } = await launch();
   await servePage(ctx, 'fake-gmail-list.html');
@@ -22,10 +22,10 @@ const { launch, servePage, until, sleep, check, done } = require('./harness');
   });
   const page = await ctx.newPage();
   await page.goto('https://mail.google.com/mail/u/0/#inbox');
-  await sleep(800);
+  await ready(page);
   // A colleague first (their name is learned, as a hash), then the rest.
   await page.evaluate(() => window.__arrive([{ t: 8301, email: 'pat.colleague@school.org', name: 'Pat Colleague', subj: 'Staff meeting', unread: false }]));
-  await sleep(3500);
+  await settled(page);                               // the colleague's row checked: their name is learned
   await page.evaluate(() => window.__arrive([
     { t: 8302, email: 'alerts@paypal-billing.example', name: 'Account alerts', subj: 'Your account is limited', unread: true },
     { t: 8303, email: 'news@brandsitte.example', name: 'Brandsite', subj: 'Confirm your details', unread: true },
@@ -39,7 +39,7 @@ const { launch, servePage, until, sleep, check, done } = require('./harness');
   check('a brand name plus a scare word (paypal-billing…): moved to Spam without being opened', m.includes('#thread-f:8302'), m);
   check('one letter off a popular domain, registered 12 days ago: moved to Spam', m.includes('#thread-f:8303'), m);
   check('a brand\'s name on an address that isn\'t the brand\'s: moved to Spam', m.includes('#thread-f:8305'), m);
-  await sleep(1500);
+  await settled(page);                               // everything checked and decided
   const after = await moved();
   check('nothing else moved (old similar name, colleague\'s name outside, trusted sender)', after.length === 3, after);
   const old = await status(8304);

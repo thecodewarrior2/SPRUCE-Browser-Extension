@@ -1,5 +1,10 @@
 # Changelog
 
+## 5.80 — Tests that wait for "done" instead of guessing (Safari build, same as Chrome 5.80)
+
+- **The page now says when the extension is done.** The inbox page carries `data-unshortener-busy` (how many checks are still running: answers awaited from the background, emails' source or attachments being read, a scan waiting, moves queued or running; 0 when everything on screen is checked and decided) and `data-unshortener-spam-wait` (why queued moves to Spam are waiting: a selection, recent activity, the view…). The toolbar popup marks `data-loaded` once its settings are applied. Nothing changes in what the extension does; they're there for the tests and for troubleshooting a move that seems stuck.
+- **The browser tests no longer guess how long anything takes.** Every fixed pause is gone: a test waits for what it checks, or, to check that something did *not* happen (nothing moved, no warning), for the page to report it's done. A page that never finishes fails the test with what was still pending, and the test runner refuses a new fixed pause. The tests pass the same on a slow computer as on a fast one (three full runs on an overloaded computer, all passing), which is what made GitHub's checks fail now and then.
+
 ## 5.79 — Icons that fill their circles; company logos not lost to a slow DNS answer (Safari build, same as Chrome 5.79)
 
 - **Site icons fill their circles.** Many sites' icons carry their own empty margins (Google's "G", Firefox's logo), so they looked small next to company logos. Each icon is now measured and drawn as large as fits: a round logo fills the circle, a square one the largest square that fits, and a solid square icon fills it edge to edge, like a logo.

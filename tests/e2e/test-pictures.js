@@ -1,7 +1,7 @@
 // Sender pictures in the inbox list with no email opened: a circle over each row's checkbox with the
 // company's BIMI logo, else the site's icon; nothing beside the sender. (BIMI lookups themselves are
 // unit-tested; here the logos are already known, as after a lookup.)
-const { launch, servePage, waitFor, until, check, done } = require('./harness');
+const { launch, servePage, until, check, done } = require('./harness');
 const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 const SOLID = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGOQKn7xHwAElQJ1OydWnwAAAABJRU5ErkJggg==';   // a visible (opaque blue) icon
 const SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10" fill="#c00"/></svg>';
