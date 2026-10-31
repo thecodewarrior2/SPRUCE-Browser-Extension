@@ -16,6 +16,12 @@ A change is made and tested on `testing`, brought into `main`, and then ported t
 files differ in places: the background page, policies, browser APIs) and tested here before it is
 pushed. Nothing goes to `main`, `firefox` or `safari` that hasn't been on `testing` first.
 
+The branch rules on GitHub (no deleting, no force pushes, linear history on `main`, `firefox` and
+`safari`; a passing test run before a commit reaches `main`) are kept in `.github/rulesets/` on
+`main`; its
+[development guide](https://github.com/thecodewarrior2/SPRUCE-Browser-Extension/blob/main/docs/DEVELOPMENT.md#checks-and-branch-rules-on-github)
+explains how to import them.
+
 ## Run it from source
 
 Requires **Firefox 140 or later** (desktop). Until it's on addons.mozilla.org, it's loaded from this
