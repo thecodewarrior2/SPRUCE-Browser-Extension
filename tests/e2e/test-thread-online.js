@@ -1,4 +1,4 @@
-const { launch, servePage, sleep, until, check, done } = require('./harness');
+const { launch, servePage, until, settled, check, done } = require('./harness');
 global.RAW_MESSAGES = {
   'msg-f:3001': [
     'Delivered-To: teacher@school.org',
@@ -23,7 +23,7 @@ global.RAW_MESSAGES = {
   const read1 = () => page.evaluate(() => ({ spammed: window.__spammed, status: (document.querySelector('.unshortener-sender-address') || { dataset: {} }).dataset.status, chip: (document.querySelector('.unshortener-sender-address') || {}).textContent, title: (document.querySelector('.unshortener-sender-address') || {}).title, pills: document.querySelectorAll('.unshortener-sender-chip').length,
     flag: document.querySelector('.unshortener-sender-flag') && document.querySelector('.unshortener-sender-flag').title, link: (document.querySelector('.ii.gt a') || {dataset:{}}).dataset.unshortened, banner: (document.querySelector('.unshortener-email-banner') || {}).textContent, img: !!document.querySelector('.unshortener-sender-icon img'), blank: !!document.querySelector('.unshortener-sender-blank') }));
   let r = await until(read1, r => r.link === 'true' && r.status === 'flagged' && /This email is flagged/.test(r.banner || '') && /Sent from a server in/.test(r.flag || '') && r.blank, 15000);
-  await sleep(2000);                                 // long enough for a (wrong) move to have happened
+  await settled(page);                               // everything checked and decided: no (wrong) move
   r = Object.assign(await read1(), { });
   console.log(r);
   check('regression: links in the opened email are still checked', r.link === 'true', r.link);
@@ -39,7 +39,7 @@ global.RAW_MESSAGES = {
   page = await ctx.newPage();
   await page.goto('https://mail.google.com/mail/u/0/?with=colleague@example.com&t=2009#inbox/mixed');
   await until(() => page.evaluate(() => (document.querySelector('.unshortener-sender-address') || { dataset: {} }).dataset.status), st => st && st !== 'pending', 10000);
-  await sleep(3000);                                 // long enough for a (wrong) move to have happened
+  await settled(page);                               // everything checked and decided: no (wrong) move
   r = await page.evaluate(() => window.__spammed);
   check('open conversation with a non-flagged sender too: not moved', r.length === 0, r);
   await page.close();
@@ -57,7 +57,7 @@ global.RAW_MESSAGES = {
   page = await ctx.newPage();
   await page.goto('https://mail.google.com/mail/u/0/#inbox/FMfcgz');
   await until(() => page.evaluate(() => (document.querySelector('.unshortener-sender-address') || { dataset: {} }).dataset.status), st => st === 'flagged', 10000);
-  await sleep(3000);                                 // long enough for a (wrong) move to have happened
+  await settled(page);                               // everything checked and decided: no (wrong) move
   r = await page.evaluate(() => ({ spammed: window.__spammed, status: (document.querySelector('.unshortener-sender-address') || { dataset: {} }).dataset.status }));
   check('rescued conversation not moved again (still marked flagged)', r.spammed.length === 0 && r.status === 'flagged', r);
   await page.close();

@@ -1,7 +1,7 @@
 // Search results: flagged emails found by a search are moved to Spam as in the inbox (also when Gmail
 // splits the results into sections), but never from a search in Spam, Trash or Sent, and not when
 // the setting is off. A sender named as the user's own mailbox name in any case is red at Gmail.
-const { launch, servePage, until, sleep, check, part, runParts } = require('./harness');
+const { launch, servePage, until, settled, ready, check, part, runParts } = require('./harness');
 
 // The default fake list: 1001 and 1007 are flagged senders, 1005 was taken back out of Spam before.
 async function start(hash, settings = {}, query = '') {
@@ -22,7 +22,7 @@ const flaggedShown = (page) => page.evaluate(() => document.querySelectorAll('.u
 part('moves', async () => {
   const { ctx, page } = await start('search/invoice');
   const moved = await until(() => spammed(page), s => s.length >= 2, 15000);
-  await sleep(1500);                                  // long enough for a (wrong) third move
+  await settled(page);                                // everything checked and decided: no (wrong) third move
   const all = await spammed(page);
   check('search results: flagged emails are moved (1001, 1007)', moved.includes('#thread-f:1001') && moved.includes('#thread-f:1007'), all);
   check('search results: the one taken back out of Spam, and clean ones, are not', all.length === 2 && !all.includes('#thread-f:1005'), all);
@@ -41,7 +41,7 @@ part('excluded', async () => {
   for (const hash of ['search/in%3Atrash+invoice', 'search/in%3Asent+invoice', 'search/in%3Aanywhere+invoice']) {
     const { ctx, page } = await start(hash);
     await until(() => flaggedShown(page), n => n >= 2, 10000);
-    await sleep(3000);
+    await settled(page);
     const all = await spammed(page);
     check(`#${hash}: marked red, but nothing is moved`, all.length === 0 && (await flaggedShown(page)) >= 2, all);
     await ctx.close();
@@ -51,7 +51,7 @@ part('excluded', async () => {
 part('off', async () => {
   const { ctx, page } = await start('search/invoice', { enableAutoSpamInSearch: false });
   await until(() => flaggedShown(page), n => n >= 2, 10000);
-  await sleep(3000);
+  await settled(page);
   const all = await spammed(page);
   check('setting off: nothing moved from search results (still marked red)', all.length === 0, all);
   await ctx.close();
@@ -60,7 +60,7 @@ part('off', async () => {
 part('own-name-any-case', async () => {
   // Signed in at Gmail as sample_user@gmail.com: "Sample_user" from a stranger's address is red.
   const { ctx, page } = await start('inbox', { enableAutoSpam: false }, '?title=' + encodeURIComponent('Inbox - sample_user@gmail.com - Gmail'));
-  await sleep(500);
+  await ready(page);
   await page.evaluate(() => window.__arrive([{ t: 9201, email: 'order_sender@gmail.com', name: 'Sample_user', subj: 'Your Order Acknowledgement', unread: true }]));
   const l = await until(() => page.evaluate(() => {
     const chip = document.querySelector('[data-thread-id="#thread-f:9201"]').closest('tr').querySelector('.unshortener-sender-chip');

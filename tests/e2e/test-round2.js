@@ -1,5 +1,5 @@
 const fs = require('fs');
-const { launch, servePage, sleep, until, waitFor, check, done } = require('./harness');
+const { launch, servePage, waitFor, until, settled, check, done } = require('./harness');
 const FX = __dirname + '/../fixtures/';
 const scam1 = fs.readFileSync(FX + 'scam1.eml', 'utf8');
 const legit = fs.readFileSync(FX + 'legit.eml', 'utf8');
@@ -49,7 +49,7 @@ global.RAW_MESSAGES = {
   await page.goto('https://mail.google.com/mail/u/0/?set=r2#label/x');
   r = await until(() => page.evaluate(() => [...document.querySelectorAll('tr.zA')].map(tr => { const c = tr.querySelector('.unshortener-sender-chip'); return [tr.querySelector('[data-thread-id]').getAttribute('data-thread-id'), c && c.dataset.status, c && c.textContent, c && c.title]; })),
     rows => rows.length >= 5 && rows.every(x => x[1] && x[1] !== 'pending') && ['#thread-f:5002', '#thread-f:5005'].every(t => rows.some(x => x[0] === t && x[1] === 'flagged')));
-  await sleep(1000);                                 // a later signal must not change them
+  await settled(page);                               // everything checked: a later signal must not change them
   console.log(r.map(x => x.slice(0, 3)));
   const st = Object.fromEntries(r.map(x => [x[0], x]));
   check('sample 2 (unread): badge shown and flagged from its malformed address', st['#thread-f:5001'] && st['#thread-f:5001'][1] === 'flagged' && /characters before the "@"/.test(st['#thread-f:5001'][3]), st['#thread-f:5001']);
@@ -63,7 +63,7 @@ global.RAW_MESSAGES = {
   page = await ctx.newPage();
   await page.goto('https://mail.google.com/mail/u/0/?set=r2#inbox');
   r = await until(() => page.evaluate(() => window.__spammed), r => r.length >= 3);
-  await sleep(1500);                                 // and no fourth one
+  await settled(page);                               // everything checked and decided: no fourth one
   r = await page.evaluate(() => window.__spammed);
   check('inbox: the three scams moved, trusted and clean ones not', r.length === 3 && r.includes('#thread-f:5001') && r.includes('#thread-f:5002') && r.includes('#thread-f:5005'), r);
   await page.close();
@@ -76,13 +76,11 @@ global.RAW_MESSAGES = {
   await opt.waitForSelector('#logNav [data-log="spam"]', { state: 'attached' });
   await opt.evaluate(() => document.querySelector('.tab-btn[data-tab="logging"], [data-tab="logging"]') && document.querySelector('[data-tab="logging"]').click());
   await opt.evaluate(() => document.querySelector('#logNav [data-log="spam"]').click());
-  await sleep(800);
-  const spamRows = await opt.$$eval('#spamLogTable tbody tr', t => t.map(r => r.textContent));
+  const spamRows = await until(() => opt.$$eval('#spamLogTable tbody tr', t => t.map(r => r.textContent)), rows => rows.length >= 2 && rows.some(x => /Moved to Spam/.test(x)), 10000);
   console.log(spamRows.map(x => x.slice(0, 160)));
   check('Moved to Spam log lists the moves with sender and why', spamRows.length >= 2 && spamRows.some(x => /Moved to Spam/.test(x) && /characters before/.test(x)), spamRows.length);
   await opt.evaluate(() => document.querySelector('#logNav [data-log="senders"]').click());
-  await sleep(800);
-  const senderRows = await opt.$$eval('#senderTable tbody tr', t => t.map(r => r.textContent));
+  const senderRows = await until(() => opt.$$eval('#senderTable tbody tr', t => t.map(r => r.textContent)), rows => rows.length >= 4 && rows.some(x => /Checked:/.test(x)), 10000);
   console.log(senderRows.map(x => x.slice(0, 160)));
   check('Senders log lists checked senders with status and what was checked', senderRows.length >= 4 && senderRows.some(x => /Trusted/.test(x)) && senderRows.some(x => /Checked:/.test(x)), senderRows.length);
   const applog = await sw.evaluate(() => new Promise(res => chrome.storage.local.get('errorLogs', res)));
@@ -106,8 +104,7 @@ global.RAW_MESSAGES = {
   check('no icon anywhere (Google, parent, DuckDuckGo): recorded as none, never a globe', none === 'none', none);
   const optPage = await ctx.newPage();
   await optPage.goto(`chrome-extension://${ID}/options.html`);
-  await sleep(1000);
-  const fromOptions = await optPage.evaluate(async () => (await iconStore.all()).map(r => r.site));
+  const fromOptions = await until(() => optPage.evaluate(async () => (await iconStore.all()).map(r => r.site)), sites => sites.includes('paypal.com'), 10000);
   check('Settings page reads the same icon store', fromOptions.includes('paypal.com'), fromOptions);
   await optPage.close();
   await ctx.close();

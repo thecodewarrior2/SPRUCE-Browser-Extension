@@ -23,6 +23,21 @@ fs.mkdirSync(LOGS, { recursive: true });
 let timings = {};
 try { timings = JSON.parse(fs.readFileSync(TIMINGS, 'utf8')); } catch (e) { /* first run */ }
 
+// No fixed pauses in the tests: a test waits for what it checks (until/waitFor), or for the extension to
+// report it has finished (harness settled/ready), never for a guessed number of milliseconds, which
+// passes on a fast computer and fails on a slow one. A pause that is part of the scenario itself (the
+// user clicking every 2 seconds) is marked "allow-sleep" with the reason on the same line.
+const pauses = [];
+for (const f of fs.readdirSync(DIR).filter(f => /^test-.*\.js$/.test(f))) {
+    fs.readFileSync(path.join(DIR, f), 'utf8').split('\n').forEach((line, i) => {
+        if (/\b(sleep|waitForTimeout)\(/.test(line) && !/allow-sleep/.test(line)) pauses.push(`  ${f}:${i + 1}: ${line.trim().slice(0, 120)}`);
+    });
+}
+if (pauses.length) {
+    console.error(`Fixed pauses found; wait for the outcome instead (until, waitFor, settled, ready):\n${pauses.join('\n')}`);
+    process.exit(2);
+}
+
 // A suite split into parts (harness part()) runs as one job per part: "stuck:flaky" and so on.
 const { execFileSync } = require('child_process');
 const suites = [];

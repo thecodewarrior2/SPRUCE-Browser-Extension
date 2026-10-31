@@ -36,6 +36,10 @@ jobs:
       - name: Unit tests
         run: node --test unit/unit.test.js
       - name: Browser tests
+        # GitHub's runners are slower than a desktop: every wait gets 3 times its deadline (a test that
+        # passes still finishes as soon as it can).
+        env:
+          WAIT_SCALE: 3
         run: node run-all.js
       - name: Upload the test logs
         if: failure()

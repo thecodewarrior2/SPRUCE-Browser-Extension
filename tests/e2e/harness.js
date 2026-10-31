@@ -68,8 +68,11 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 // Polls fn (sync or async) until it returns something truthy, and returns that; after timeout ms it
 // returns the last value (falsy), so the check that follows fails with what was seen instead of
 // the suite hanging. Use in place of a fixed sleep wherever there is something to wait for.
+// WAIT_SCALE (default 1) lengthens every deadline on a slow computer (GitHub's runners use 3); a wait
+// that succeeds still returns as soon as it can, so passing tests aren't slowed.
+const WAIT_SCALE = Number(process.env.WAIT_SCALE) || 1;
 async function waitFor(fn, timeout = 8000, interval = 150) {
-  const end = Date.now() + timeout;
+  const end = Date.now() + timeout * WAIT_SCALE;
   let v;
   for (;;) {
     try { v = await fn(); } catch (e) { v = undefined; }
@@ -77,17 +80,40 @@ async function waitFor(fn, timeout = 8000, interval = 150) {
     await sleep(interval);
   }
 }
+// Waits until the extension has finished everything on the page: no check running, no scan waiting,
+// nothing queued or being moved to Spam (content.js publishBusy writes <html data-unshortener-busy>; 0
+// means done), seen on two reads in a row. Returns true, or false at the deadline, so the check that
+// follows fails with what it sees. This is what to wait for before checking that something did NOT
+// happen (nothing moved, no warning): "done" instead of a guess at how long it takes.
+// A page that never settles is a failure (with what was still pending), never a silent wait.
+async function settled(page, timeout = 20000) {
+  let zeros = 0, last = null;
+  const ok = !!await waitFor(async () => {
+    last = await page.evaluate(() => ({ busy: document.documentElement.dataset.unshortenerBusy, spamWait: document.documentElement.dataset.unshortenerSpamWait }));
+    zeros = last.busy === '0' ? zeros + 1 : 0;
+    return zeros >= 2;
+  }, timeout, 100);
+  if (!ok) check('the extension finished its work on the page', false, last);
+  return ok;
+}
+// The extension is running on the page (its work counter is there): the place to start adding emails.
+async function ready(page, timeout = 20000) {
+  return !!await waitFor(() => page.evaluate(() => document.documentElement.dataset.unshortenerBusy !== undefined), timeout, 100);
+}
+// The Settings page has loaded its settings and is listening for changes (every control is bound).
+async function optionsReady(opt, timeout = 20000) {
+  await opt.waitForSelector('[data-setting][data-bound]', { state: 'attached', timeout });
+}
 // After loading a simulated inbox: moves > 0 waits until that many emails were moved and the moves
-// recorded (so a later storage reset can't catch the write); none expected waits until the sender
-// badges are drawn, then long enough for a move to have happened (they come about 2 s after loading).
+// recorded (so a later storage reset can't catch the write); then, as when none are expected, until
+// every row's sender is labelled and the extension has finished (nothing left to check or move).
 async function listSettled(page, sw, moves) {
   if (moves) {
-    await waitFor(() => page.evaluate((n) => window.__spammed.length >= n, moves), 10000);
-    await waitFor(() => sw.evaluate(async (n) => ((await chrome.storage.local.get('recentActivity')).recentActivity || []).filter(a => a.type === 'Moved to Spam').length >= n, moves), 5000);
-  } else {
-    await waitFor(() => page.evaluate(() => document.querySelectorAll('.unshortener-sender-chip, .unshortener-sender-icon').length > 0), 2000);
-    await sleep(2800);
+    await waitFor(() => page.evaluate((n) => window.__spammed.length >= n, moves), 20000);
+    await waitFor(() => sw.evaluate(async (n) => ((await chrome.storage.local.get('recentActivity')).recentActivity || []).filter(a => a.type === 'Moved to Spam').length >= n, moves), 10000);
   }
+  await waitFor(() => page.evaluate(() => document.querySelectorAll('.unshortener-sender-chip, .unshortener-sender-icon').length > 0), 10000);
+  await settled(page);
 }
 // Reads (read()) until cond(value) holds, and returns the last value read: the check that follows
 // passes as soon as the page gets there, and fails with what was last seen after timeout ms.
@@ -122,4 +148,4 @@ async function runParts() {
   done();
 }
 function done() { console.log(failures ? `\n${failures} FAILED` : '\nALL PASSED'); process.exitCode = failures ? 1 : 0; }
-module.exports = { until, listSettled, launch, servePage, sleep, waitFor, waitForLog, logMessages, check, done, part, runParts };
+module.exports = { until, settled, ready, optionsReady, listSettled, launch, servePage, sleep, waitFor, waitForLog, logMessages, check, done, part, runParts };

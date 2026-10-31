@@ -1,6 +1,6 @@
 // Administrator policy: chrome.storage.managed is stubbed (Linux Chromium doesn't load extension
 // policies from files), in the background and on the options page, exactly as Chrome would supply it.
-const { launch, servePage, sleep, listSettled, check, part, runParts } = require('./harness');
+const { launch, servePage, optionsReady, listSettled, check, part, runParts } = require('./harness');
 const stub = (policy) => {
   const get = (keys, cb) => {
     let r = {};
@@ -16,7 +16,7 @@ async function run(policy, local, moves = 0, url = 'https://mail.google.com/mail
   await ctx.addInitScript(`(${stub.toString()})(${JSON.stringify(policy)})`);
   await sw.evaluate(`(${stub.toString()})(${JSON.stringify(policy)}); invalidateConfig();`);
   await sw.evaluate((s) => chrome.storage.local.set(s), Object.assign({ enableDnsThreatCheck: false, spamMovedThreads: { 'thread-f:1005': 1 } }, local));
-  await sleep(300);
+  await sw.evaluate(() => invalidateConfig());          // the new settings are read from now on (no waiting for the change event)
   await servePage(ctx, 'fake-gmail-list.html');
   const page = await ctx.newPage();
   await page.goto(url);
@@ -28,7 +28,7 @@ async function run(policy, local, moves = 0, url = 'https://mail.google.com/mail
 async function options(ctx, sw) {
   const opt = await ctx.newPage();
   await opt.goto(`chrome-extension://${new URL(sw.url()).host}/options.html`);
-  await sleep(1500);
+  await optionsReady(opt);
   return opt;
 }
 // One part per policy case (each its own browser), run in parallel.
