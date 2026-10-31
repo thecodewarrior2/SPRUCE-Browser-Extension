@@ -66,6 +66,9 @@ Kept in your browser's storage for this extension, never uploaded:
   you can shorten that or turn them off). One-time links are never kept in full;
 - sender icons, colleagues' photos and company logos already shown by your webmail;
 - the list of emails moved to Spam, with why, so an email you take back out isn't moved again;
+- the address of your own webmail account (as the page title shows it) next to log entries, so that
+  with several accounts signed in you can tell which account each entry belongs to; it is deleted
+  with the logs;
 - names of people in your organization, only as one-way codes (hashes) that can't be read back, to
   spot outsiders using a colleague's name.
 

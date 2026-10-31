@@ -108,6 +108,53 @@ part('settings', async () => {
   await ctx.close();
 });
 
+part('accounts', async () => {
+  // Two signed-in accounts: every log entry says which mailbox it happened in, and taking a moved email
+  // out of Spam marks its own line in Logging → Moved to Spam (with when) instead of adding one.
+  const { ctx, sw } = await browser();
+  const log = () => sw.evaluate(async () => (await chrome.storage.local.get('spamMoveLog')).spamMoveLog || []);
+  let r = await scenario(ctx, sw, 'first account', BASE, 'https://mail.google.com/mail/u/0/#inbox', null, 2);
+  let lines = await until(log, l => l.length >= 2, 10000);
+  check('moves are logged with the account they happened in', lines.length === 2 && lines.every(e => e.action === 'moved' && e.account === 'teacher@school.org'), lines);
+  const st = await sw.evaluate(async () => chrome.storage.local.get(['errorLogs', 'recentActivity']));
+  check('application log: the move\'s line names the account', (st.errorLogs || []).some(e => /^Moved to Spam:/.test(e.message) && e.account === 'teacher@school.org'), (st.errorLogs || []).slice(0, 4));
+  check('popup activity: the move names the account', (st.recentActivity || []).some(a => a.type === 'Moved to Spam' && a.account === 'teacher@school.org'), (st.recentActivity || []).slice(0, 4));
+  await r.page.close();
+  // A second account, in its own tab: its own move is recorded with its own address.
+  const second = 'https://mail.google.com/mail/u/1/?title=' + encodeURIComponent('Inbox - second@example.org - Gmail') + '#inbox';
+  const p2 = await ctx.newPage();
+  await p2.goto(second);
+  await listSettled(p2, sw, 0);
+  await p2.evaluate(() => window.__arrive([{ t: 2001, email: 'phisher@evil-scam.test', name: 'IT Support', subj: 'Again', unread: true }]));
+  lines = await until(log, l => l.some(e => e.thread === 'thread-f:2001'), 20000);
+  const l2 = lines.find(e => e.thread === 'thread-f:2001');
+  check('a move in the second account is logged with that account', l2 && l2.account === 'second@example.org', l2);
+  await p2.close();
+  // The first account takes 1001 back out of Spam: its line is marked, no line is added.
+  const p3 = await ctx.newPage();
+  await p3.goto('https://mail.google.com/mail/u/0/#spam');
+  await listSettled(p3, sw, 0);
+  await p3.evaluate(() => document.querySelector('[data-thread-id="#thread-f:1001"]').closest('tr').querySelector('[role=checkbox]').click());
+  await p3.click('#notSpamBtn');
+  lines = await until(log, l => l.some(e => e.thread === 'thread-f:1001' && e.rescuedTs), 10000);
+  const moved1001 = lines.filter(e => e.thread === 'thread-f:1001');
+  check('taken out of Spam: the move\'s own line is marked, with when; no new line', lines.length === 3 && moved1001.length === 1 && moved1001[0].action === 'moved' && moved1001[0].rescuedTs > moved1001[0].ts - 1, lines);
+  // Logging → Moved to Spam shows the account column and both labels on the one line.
+  const ID = new URL(sw.url()).host;
+  const opt = await ctx.newPage();
+  await opt.goto(`chrome-extension://${ID}/options.html`);
+  await opt.waitForSelector('#logNav [data-log="spam"]', { state: 'attached' });
+  await opt.evaluate(() => document.querySelector('#logNav [data-log="spam"]').click());
+  const rows = await until(() => opt.$$eval('#spamLogTable tbody tr', t => t.map(r => [...r.children].map(c => c.textContent))), rs => rs.length === 3, 10000);
+  const row1001 = (rows || []).find(c => /Taken out of Spam by you/.test(c[2] || ''));
+  check('Logging shows the account, and "Moved to Spam" + "Taken out of Spam by you" with its date on one line',
+    rows && rows.some(c => c[1] === 'second@example.org') && row1001 && row1001[1] === 'teacher@school.org' && /Moved to Spam/.test(row1001[2]) && /\d/.test(row1001[2].replace(/^.*Taken out of Spam by you/, '')), rows);
+  await opt.evaluate(() => { const i = document.getElementById('spamLogSearch'); i.value = 'second@example.org'; i.dispatchEvent(new Event('input')); });
+  const filtered = await until(() => opt.$$eval('#spamLogTable tbody tr', t => t.length), n => n === 1, 5000);
+  check('searching for an account shows only its lines', filtered === 1, filtered);
+  await ctx.close();
+});
+
 part('memory', async () => {
   const { ctx, sw } = await browser();
   let r;

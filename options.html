@@ -114,6 +114,7 @@
         .badge-warning { background: var(--warn-bg); color: var(--warn-text); }
         .badge-info { background: var(--info-bg); color: var(--info-text); }
         .log-count { font-size: 11px; color: var(--text-muted); margin-left: 6px; white-space: nowrap; }
+        .log-account { font-size: 11px; color: var(--text-muted); margin-top: 3px; word-break: break-all; }
         .number-input { width: 80px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; font-size: 13px; }
     
         /* ---- 5.15 redesign ---- */
@@ -761,11 +762,11 @@
                     <h3>Moved to Spam</h3>
                     <div><button id="clearSpamLogBtn" class="btn-action">Clear this list</button></div>
                 </div>
-                <p class="card-intro">Emails the extension moved to Spam, moves that didn't work, and conversations you took out of Spam (never moved again). Clearing this list doesn't forget which conversations were moved.</p>
+                <p class="card-intro">Emails the extension moved to Spam, moves that didn't work, and conversations you took out of Spam or kept in the inbox (never moved again), each with the account it happened in. When you take a moved email back out of Spam, its own line says so, with the date and time, instead of a new line. Clearing this list doesn't forget which conversations were moved.</p>
                 <div class="stat-row" id="spamLogStats"></div>
-                <input type="text" id="spamLogSearch" aria-label="Search the moved emails" class="search-bar" placeholder="Search senders and reasons...">
+                <input type="text" id="spamLogSearch" aria-label="Search the moved emails" class="search-bar" placeholder="Search senders, reasons and accounts...">
                 <table id="spamLogTable">
-                    <thead><tr><th style="width: 14%; white-space: nowrap;">Time</th><th style="width: 13%;">What happened</th><th style="width: 24%;">Sender</th><th>Why</th></tr></thead>
+                    <thead><tr><th style="width: 13%; white-space: nowrap;">Time</th><th style="width: 15%;">Account</th><th style="width: 13%;">What happened</th><th style="width: 20%;">Sender</th><th>Why</th></tr></thead>
                     <tbody></tbody>
                 </table>
             </div>
@@ -886,7 +887,7 @@
   <li>Gmail's own <b>Report spam</b> is used, exactly as if you clicked it; if Gmail asks “Report spam and unsubscribe?”, only plain <b>Report spam</b> is chosen (unsubscribing would confirm your address to a phisher). Anything unexpected is cancelled.</li>
   <li><b>Never while you're busy:</b> not while you're typing, have a menu or dialog open, or have selected emails yourself (they would be reported too). After your last click or key it waits 10 seconds, so a move never replaces the <b>Undo</b> of something you just did; after the mouse last moved over the list, 2 seconds, so rows never shift under a pointer in motion. It waits and tries again the moment you pause.</li>
   <li><b>While it waits, the row says so and is held still:</b> its subject is struck through and a small banner shows <i>Moving to Spam…</i> and why it's waiting, when it is. Clicks on the row are ignored (the banner flashes instead), so the email can't be opened, and a row about to disappear can't be clicked by accident. The banner's <b>Move now</b> moves it immediately — that click is your own request, so nothing waits; <b>Keep it</b> leaves it in the inbox for good, remembered like an email you took out of Spam. Only clicks are guarded: Gmail's own keyboard shortcuts (<code>j</code>/<code>k</code>, then <code>Enter</code> or <code>o</code>) can still open the email — opened, it keeps its red warning banner, and it is still moved, from the opened conversation or once you're back in the list.</li>
-  <li><b>Once per conversation.</b> A conversation is remembered just before it's moved. If you take an email out of Spam (<b>Not spam</b> or <b>Move to Inbox</b>, or <b>Undo</b> right away), whether the extension or Gmail put it there, it's never moved again (those you take out are kept in their own list, so later moves never push them out). To stop a sender being flagged, add it to <b>Settings → Senders → Trusted senders</b>. There is no list of senders to block: report anything missed with Gmail's own <b>Report spam</b>. Every move, failed move and rescue is listed in <b>Logging → Moved to Spam</b>.</li>
+  <li><b>Once per conversation.</b> A conversation is remembered just before it's moved. If you take an email out of Spam (<b>Not spam</b> or <b>Move to Inbox</b>, or <b>Undo</b> right away), whether the extension or Gmail put it there, it's never moved again (those you take out are kept in their own list, so later moves never push them out). To stop a sender being flagged, add it to <b>Settings → Senders → Trusted senders</b>. There is no list of senders to block: report anything missed with Gmail's own <b>Report spam</b>. Every move, failed move and rescue is listed in <b>Logging → Moved to Spam</b>, with the account it happened in; when you take a moved email back out of Spam, its own line is marked <i>Taken out of Spam by you</i> with the date and time, so each email keeps one line with its whole story.</li>
   <li><b>Never</b> your organization's phishing-training emails. With simulation link domains set, emails are moved only once opened (their links show whether they're training); with header rules, an unread email, whose headers aren't read, is left alone, and never emails from your own organization's domain, unless you or your organization listed that exact address (for example a hacked account).</li>
   <li>Gmail, Outlook.com, Yahoo and other big providers' domains, and big companies' own domains, are never judged as a whole: there, only exact addresses on a list count.</li>
 </ul>
@@ -894,7 +895,8 @@
 <p>Sender addresses are compared on this device with the community scam-sender list <a href="https://github.com/sefinek/Blacklisted-Emails" target="_blank" rel="noopener noreferrer">sefinek/Blacklisted-Emails</a> (MIT license), downloaded with the phishing lists at most once a day. From the community list only exact addresses count, never whole domains, and never addresses at big companies' own domains.</p>
 <p><b>Trusted senders</b> (Settings → Senders → Trusted senders) are the opposite: addresses or whole domains that are never flagged or moved to Spam. Their links are still checked, and your organization's phishing-sender list still wins.</p>
 <h3>Logging</h3>
-<p><b>Logging → Senders: icons &amp; flags</b> lists every sender checked recently with its icon, country, verdict, every reason and what was checked. <b>Logging → Moved to Spam</b> lists each email moved, each move that didn't work and why, and each conversation you took out of Spam. The application log has a readable line for each sender check, country and icon lookup, and move.</p>
+<p><b>Logging → Senders: icons &amp; flags</b> lists every sender checked recently with its icon, country, verdict, every reason and what was checked. <b>Logging → Moved to Spam</b> lists each email moved, each move that didn't work and why, and each conversation you took out of Spam or kept in the inbox. The application log has a readable line for each sender check, country and icon lookup, and move.</p>
+<p><b>Several accounts</b> (signed in to more than one Gmail account, in separate tabs): every log says which account each thing happened in — a column in <b>Moved to Spam</b>, a line under the time in <b>History</b> and under the source in the <b>application log</b>, <b>Seen in</b> in <b>Senders</b>, and after the time in the toolbar popup's recent activity. Search any log for an address to see only that account's entries. The account is the address Gmail shows in its page title; other webmail is named by the site. Entries from before version 5.85 have no account. Sender verdicts are about the sender, so one check serves every account.</p>
 <h3>Privacy</h3>
 <p>Nothing about your emails is sent anywhere. The checks send only: each sender's <b>domain</b> to the threat-check services (as for links), its <b>site name</b> to Google's icon service (and, for a site without an icon of its own, to DuckDuckGo's), and a sending server's <b>IP address</b> to country.is. Results are remembered (verdicts 6 hours, icons and countries 30 days), so the inbox shows them at once without new requests. Emails' headers are read from Gmail itself (your own session). Unread emails' headers are read only in the Spam folder; if that ever marks one read, the extension stops doing it, so nothing changes what Gmail shows as unread in your inbox. At <b>Offline only</b> none of these requests are made. Details: <a href="#" data-help-link="privacy">Your privacy</a>.</p>
 </section>
@@ -922,6 +924,7 @@
   <li><b>One-time links</b> (password reset, sign-in, verification, unsubscribe): never sent, cached or logged in full.</li>
   <li><b>Email-provider tracking links</b> (Mailchimp, SendGrid, Klaviyo…): they identify you personally, so they are never sent to anyone.</li>
   <li><b>Full links to threat-check services:</b> they receive only the site name.</li>
+  <li><b>Your own account address</b> (from the webmail's page title) is written next to log entries so you can tell your accounts apart. It stays in this browser's storage with the logs, is deleted with them, and is never sent anywhere.</li>
 </ul>
 <h3>What can be sent, and to whom</h3>
 <div id="privacySendsTable"></div>
