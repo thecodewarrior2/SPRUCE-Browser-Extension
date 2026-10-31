@@ -2246,9 +2246,11 @@ const EMPTY_STATS = () => ({ total: 0, scanned: 0, safe: 0, caution: 0, unsafe: 
 
 function combinedState(tabId) {
     const frames = tabFrames.get(tabId);
-    const out = { active: false, linkCount: 0, pixelCount: 0, links: EMPTY_STATS() };
+    const out = { active: false, linkCount: 0, pixelCount: 0, links: EMPTY_STATS(), moveWait: null };
     if (!frames) return null;
     for (const f of frames.values()) {
+        // Queued moves to Spam live in the top frame, which reports them even when no email is open.
+        if (f.moveWait) out.moveWait = f.moveWait;
         if (!f.active) continue;
         out.active = true;
         out.linkCount += f.linkCount || 0;
@@ -2261,7 +2263,8 @@ function combinedState(tabId) {
 function setFrameState(tabId, frameId, report) {
     if (!tabFrames.has(tabId)) tabFrames.set(tabId, new Map());
     tabFrames.get(tabId).set(frameId, {
-        active: report.active !== false, linkCount: report.linkCount || 0, pixelCount: report.pixelCount || 0, links: report.links || null
+        active: report.active !== false, linkCount: report.linkCount || 0, pixelCount: report.pixelCount || 0, links: report.links || null,
+        moveWait: report.moveWait || null
     });
     const s = combinedState(tabId);
     setTabState(tabId, s.active, s.linkCount, s.pixelCount);

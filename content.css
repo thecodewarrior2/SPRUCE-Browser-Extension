@@ -242,6 +242,41 @@ html[data-unshortener-pictures="medium"] .unshortener-row-avatar {
 .unshortener-spam-notice a:focus-visible,
 .unshortener-spam-notice button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 
+/* The row guard: a flagged row queued to move to Spam is visibly on its way out and inert. The subject
+   is struck through (Gmail's own subject element; the guard runs only where moving does), the row is
+   tinted, and a banner in the subject cell says what happens next, with Move now and Keep it. Real
+   clicks on the row are swallowed by content.js, so the email can't be opened or selected by accident
+   while it waits; the banner flashes instead, to show where the answer is. */
+tr.unshortener-moving { background: rgba(234, 67, 53, 0.07); }
+.unshortener-moving .bog { opacity: 0.55; text-decoration: line-through; }
+.unshortener-move-banner {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: 8px;
+    padding: 1px 8px;
+    border-radius: 10px;
+    border: 1px solid #ee675c;
+    background: #fce8e6;
+    color: #5c0b07;
+    font: 12px/1.6 Arial, sans-serif;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+.unshortener-move-banner.unshortener-dark { background: #3c1f1f; color: #f6aea9; }
+.unshortener-move-banner button {
+    all: unset;
+    cursor: pointer;
+    font-weight: bold;
+    text-decoration: underline;
+    padding: 0 2px;
+}
+.unshortener-move-banner button:hover { text-decoration: none; }
+.unshortener-move-banner button:focus-visible { outline: 2px solid currentColor; outline-offset: 1px; }
+.unshortener-move-banner.unshortener-flash { animation: unshortener-guard-flash 0.35s ease 2; }
+@keyframes unshortener-guard-flash { 50% { box-shadow: 0 0 0 3px rgba(238, 103, 92, 0.8); } }
+@media (prefers-reduced-motion: reduce) { .unshortener-move-banner.unshortener-flash { animation: none; } }
+
 /* Notice when another extension does the same job: bottom left, out of the way of Gmail's own toasts. */
 .unshortener-conflict-notice {
     position: fixed;

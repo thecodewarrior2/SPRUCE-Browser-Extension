@@ -203,6 +203,17 @@ while you type or have emails ticked; never a conversation you wrote in; never p
 your organization marked. In the Spam folder, emails the same checks would move are marked red, so you
 can tell those from what Gmail or you put there.
 
+Timing: moving waits 10 seconds after the user's last click or key (so it never replaces the Undo of
+something they just did) and 2 seconds after the mouse last moved over the list (so rows never shift
+under a pointer in motion). While an email waits, its row is struck through and carries a banner —
+"Moving to Spam…", with why it's waiting, **Move now** (the user's own request, so nothing waits) and
+**Keep it** (remembered like an email taken out of Spam, never moved) — and real clicks on the row are
+swallowed, so it can't be opened or selected by accident; the extension's own synthetic clicks aren't
+trusted events and pass. A move parked by the page (another view, an open conversation, a selection, a
+hidden tab) is re-checked every 3 seconds, and the moment the view or tab changes back; only a pass
+whose Report spam click Gmail ignored backs off, and repeated failures pause it (15 s doubling to
+10 min). The toolbar popup counts the emails waiting and why.
+
 ## 8. QR codes and attachments
 
 Images in an email and attachments up to 10 MB are read **on the device**. The hidden scanner page

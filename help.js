@@ -155,7 +155,7 @@
             [code('qr-decoder.js'), 'scanner', 'Self-contained QR Code reader (ISO/IEC 18004): finder patterns, perspective correction, Reed-Solomon. Used where Chrome has no built-in BarcodeDetector.'],
             [code('scanner.html / scanner.js'), 'hidden offscreen document', 'Decodes QR codes in images and PDF pages and lists PDF links; created on demand, closed after a minute idle.'],
             [code('lib/pdf.min.mjs, lib/pdf.worker.min.mjs'), 'scanner', 'pdf.js (Mozilla, Apache-2.0) for rendering PDF attachments.'],
-            [code('content.css'), 'Gmail tab', 'Shows the 🔍 on email tracking links only while the link is hovered or focused; styles the sender icons, domain labels and the moved-to-Spam notice.'],
+            [code('content.css'), 'Gmail tab', 'Shows the 🔍 on email tracking links only while the link is hovered or focused; styles the sender icons, domain labels, the moved-to-Spam notice and the "Moving to Spam…" row guard.'],
             [code('background.js'), 'service worker', 'Link pipeline, threat checks, lookups, list sync and safeguards, logging, cleanup, message API, badge.'],
             [code('decoders.js'), 'service worker, Options', 'All offline decoders and the unwrapping loop.'],
             [code('custom-endpoints.js'), 'service worker', 'Request building and reply parsing for your own threat resolver and unshortener.'],

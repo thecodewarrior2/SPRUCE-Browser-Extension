@@ -245,12 +245,18 @@ function protectionOn() {
     if (SITE.settingKey && lastSettings[SITE.settingKey] === false) return false;
     return lastSettings.enableLinkUnmasking !== false || lastSettings.enableTrackingPixelBlocking !== false;
 }
+// Queued moves to Spam, for the toolbar popup: how many, and why they're waiting when they are. In a
+// try: this can run on the background's first message, before the mover's state further down exists.
+function moveWaitState() {
+    try { return spamQueue.size ? { n: spamQueue.size, why: document.documentElement.dataset.unshortenerSpamWait || '' } : null; }
+    catch (e) { return null; }
+}
 let lastReported = '';
 function reportState() {
     refreshCounts();
     const active = protectionOn() && inBodies('').some(isShown);
     const links = active ? linkStats() : null;
-    const state = { action: 'updateBadge', active, linkCount: active ? linkCount : 0, pixelCount: active ? pixelCount : 0, links };
+    const state = { action: 'updateBadge', active, linkCount: active ? linkCount : 0, pixelCount: active ? pixelCount : 0, links, moveWait: moveWaitState() };
     const key = JSON.stringify(state);
     if (key !== lastReported) {                                // only tell the background about changes
         lastReported = key;
@@ -2063,7 +2069,8 @@ let spamMoveFailures = 0;                  // passes in a row in which Gmail mov
 let spamPausedUntil = 0;
 let splitViewLogged = false;
 let multiListLogged = false;
-let spamRetryDelay = 3000;
+let spamRetryDelay = 3000;                 // after a pass whose clicks Gmail ignored (reset when one moves)
+const SPAM_PARKED_POLL_MS = 3000;          // while parked (the view, an open email, a selection…): a cheap look this often
 const SPAM_MAX_TRIES = 3;                  // a conversation Gmail skipped while moving others is tried again, at most this often
 const SPAM_PAUSE_AFTER = 3;                // passes in a row that moved nothing before pausing (never stopping)
 const SPAM_WAIT_MAX_MS = 10 * 60 * 1000;   // a queued conversation that isn't shown for this long leaves the queue
@@ -2789,6 +2796,7 @@ function scanSenderRows(S) {
             infoP.then(info => { if (info) show(results, info, ours); });
         });
     }
+    scheduleGuardSync();        // rows the webmail redrew for another conversation lose a stale guard
 }
 
 // --- Spam folder -----------------------------------------------------------------------------------
@@ -3091,6 +3099,7 @@ function queueSpamMove(thread, item) {
     if (!MAIL_CAN.move || !thread || spamAttempted.has(thread) || spamQueue.has(thread)) return;
     spamQueue.set(thread, Object.assign({}, item, { since: Date.now() }));
     publishBusy();
+    scheduleGuardSync();
     scheduleSpamMoves();
 }
 function scheduleSpamMoves(delay = 800) {
@@ -3133,6 +3142,7 @@ function spamMonitor() {
         if (thread) queueSpamMove(thread, row.unshortenerSpam);
     }
     if (unchecked) scheduleScan();
+    syncMoveGuards();
     if (spamQueue.size && !spamMoveRunning && !spamMoveTimer) scheduleSpamMoves();
 }
 // Runs only while the webmail's tab is shown: stopped while it's in the background, so it never wakes the
@@ -3145,19 +3155,143 @@ function setSpamMonitor() {
 }
 setSpamMonitor();
 document.addEventListener('visibilitychange', setSpamMonitor);
+// What parks a move can end without the page mutating under the observer: the view changes back, the
+// tab is shown again. Look right away then (the pass itself re-checks everything before acting);
+// a pause after failures still holds, because the scheduler never fires inside it.
+if (MAIL_CAN.move) {
+    window.addEventListener('hashchange', () => { if (spamQueue.size) scheduleSpamMoves(); scheduleGuardSync(); });
+    document.addEventListener('visibilitychange', () => { if (!document.hidden && spamQueue.size) scheduleSpamMoves(); });
+}
 
-// The user's own activity in the webmail (a click, a key, the wheel, the mouse moving over the list).
-// Moving waits until there has been none for SPAM_QUIET_MS: rows never disappear under the pointer,
-// and the webmail's Undo for the user's own action isn't replaced by one for ours.
-const SPAM_QUIET_MS = 10000;
-let lastUserActivity = 0;
+// The user's own activity in the webmail, in two tiers. A click or a key is an action: it can have an
+// Undo of its own (which a move of ours must not replace) and shows intent, so moving waits
+// SPAM_ACTION_QUIET_MS after the last one. The mouse merely moving over the list, or scrolling, is a
+// gesture: the one hazard is rows shifting under a pointer in motion, so moving waits only until the
+// pointer has been still for SPAM_GESTURE_QUIET_MS. Clicks on the row guard's own buttons don't count
+// (pressing "Move now" must not start a quiet period that delays the move it asks for).
+const SPAM_ACTION_QUIET_MS = 10000;
+const SPAM_GESTURE_QUIET_MS = 2000;
+let lastUserAction = 0, lastUserGesture = 0;
 function noteUserActivity(e) {
     if (!e.isTrusted) return;                       // our own clicks on the webmail's buttons don't count
-    if (e.type === 'pointermove' && !(e.target && e.target.closest && e.target.closest(`[role="main"], ${MAIL.list.row}`))) return;
-    lastUserActivity = Date.now();
+    if (e.target && e.target.closest && e.target.closest('.unshortener-move-banner')) return;
+    if (e.type === 'pointermove' || e.type === 'wheel') {
+        if (e.type === 'pointermove' && !(e.target && e.target.closest && e.target.closest(`[role="main"], ${MAIL.list.row}`))) return;
+        lastUserGesture = Date.now();
+    } else lastUserAction = Date.now();
 }
 if (MAIL_CAN.move) for (const t of ['pointerdown', 'keydown', 'wheel', 'pointermove']) document.addEventListener(t, noteUserActivity, { capture: true, passive: true });
-function quietRemaining() { return Math.max(0, lastUserActivity + SPAM_QUIET_MS - Date.now()); }
+function quietRemaining() {
+    return Math.max(0, lastUserAction + SPAM_ACTION_QUIET_MS - Date.now(), lastUserGesture + SPAM_GESTURE_QUIET_MS - Date.now());
+}
+
+// --- The row guard ---------------------------------------------------------------------------------
+// A flagged row waiting to move to Spam says so and can't be clicked by accident: the sender and
+// subject are struck through, a small banner explains what will happen (and why it's waiting, when it
+// is), and a real click anywhere on the row is swallowed before the webmail sees it (our own synthetic
+// clicks aren't trusted events and pass through). The banner's "Move now" moves it without waiting for
+// the quiet period — that move is the user's own request; "Keep it" leaves it in the inbox for good
+// (the same memory as taking an email back out of Spam). The guard is keyed to the conversation and
+// checked against the row on every sync and on every swallowed event, so a row the webmail redraws for
+// another conversation is freed at once, never blocked by a stale guard.
+let guardSyncTimer = null;
+function scheduleGuardSync() {
+    if (guardSyncTimer) return;
+    guardSyncTimer = setTimeout(() => { guardSyncTimer = null; guarded('Marking rows about to move', syncMoveGuards); }, 50);
+}
+// Guards only where the mover could act on the list: never with a conversation open beside it (split
+// view) or several list sections shown (the mover refuses both, so the guard must not promise a move),
+// and never in a view moves aren't made from.
+function guardAllowedNow() {
+    return !!lastSettings.enableAutoSpam && MAIL_CAN.list && senderFeaturesOn(lastSettings)
+        && viewAllowsAutoSpam(location.hash, MAIL.views, lastSettings.enableAutoSpamInSearch !== false)
+        && !currentThreadKey()
+        && new Set(shownAll(MAIL.list.row).map(r => r.closest(MAIL.list.container || 'table'))).size <= 1;
+}
+function syncMoveGuards() {
+    if (!MAIL_CAN.move || !MAIL_CAN.list) return;
+    const allowed = guardAllowedNow();
+    for (const row of listRows()) {
+        const thread = rowThreadKey(row);
+        setRowGuard(row, allowed && thread && spamQueue.has(thread) && row.unshortenerSpam && isShown(row) ? thread : null);
+    }
+}
+function guardWaitText() {
+    const wait = document.documentElement.dataset.unshortenerSpamWait || '';
+    if (wait === 'recent activity' || wait === 'user busy') return 'Moving to Spam when you pause…';
+    if (wait === 'selection') return 'Moving to Spam once nothing is selected…';
+    if (wait === 'paused' || wait === 'retrying') return `Moving to Spam (waiting for ${SITE.name})…`;
+    return 'Moving to Spam…';
+}
+function setRowGuard(row, thread) {
+    let banner = row.querySelector('.unshortener-move-banner');
+    if (!thread) {
+        if (banner) banner.remove();
+        row.classList.remove('unshortener-moving');
+        return;
+    }
+    row.classList.add('unshortener-moving');
+    if (banner && banner.dataset.unshortenerThread !== thread) { banner.remove(); banner = null; }
+    if (!banner) {
+        banner = document.createElement('span');
+        banner.className = 'unshortener-move-banner' + (isDarkSurface(row) ? ' unshortener-dark' : '');
+        banner.dataset.unshortenerThread = thread;
+        const text = document.createElement('span');
+        text.className = 'unshortener-move-text';
+        text.setAttribute('role', 'status');
+        const btn = (label, aria, fn) => {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.textContent = label;
+            b.setAttribute('aria-label', aria);
+            b.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); guarded(aria, fn); });
+            return b;
+        };
+        banner.append(text,
+            btn('Move now', 'Move this email to Spam now', () => moveThreadNow(thread)),
+            btn('Keep it', 'Keep this email in the inbox', () => keepThreadInInbox(thread)));
+        // Nothing on the banner may reach the webmail's own row handlers (a click would open the email).
+        for (const t of ['pointerdown', 'mousedown', 'mouseup', 'click', 'dblclick']) banner.addEventListener(t, (e) => e.stopPropagation());
+        const cell = firstMatch(row, MAIL.list.subjectCell);
+        (cell || row.lastElementChild || row).appendChild(banner);
+    }
+    const t = banner.querySelector('.unshortener-move-text');
+    const want = guardWaitText();
+    if (t && t.textContent !== want) t.textContent = want;
+}
+function moveThreadNow(thread) {
+    const it = spamQueue.get(thread);
+    if (!it) return;
+    it.now = Date.now();
+    scheduleSpamMoves(0);
+}
+function keepThreadInInbox(thread) {
+    const it = spamQueue.get(thread) || {};
+    spamQueue.delete(thread);
+    spamAttempted.add(thread);
+    rememberSpamThreads([{ thread, address: it.address || '', reason: 'kept in the inbox by you' }], 'rescued');
+    syncMoveGuards();
+    publishBusy();
+    scheduleBadgeUpdate();
+    reportEvent('info', `An email from ${it.address || 'a flagged sender'} stays in the inbox: you chose Keep it. It will not be moved to Spam.`);
+}
+// The swallowing itself. Re-checked against the queue first: a row redrawn for another conversation
+// frees itself on the very click instead of blocking it.
+function onGuardPointer(e) {
+    if (!e.isTrusted) return;
+    const row = e.target && e.target.closest ? e.target.closest('.unshortener-moving') : null;
+    if (!row) return;
+    if (e.target.closest('.unshortener-move-banner')) return;         // the banner's own buttons work
+    const thread = rowThreadKey(row);
+    if (!thread || !spamQueue.has(thread) || !guardAllowedNow()) { setRowGuard(row, null); return; }
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === 'pointerdown') {                                   // show where the answer is
+        const banner = row.querySelector('.unshortener-move-banner');
+        if (banner) { banner.classList.remove('unshortener-flash'); void banner.offsetWidth; banner.classList.add('unshortener-flash'); }
+    }
+}
+if (MAIL_CAN.move) for (const t of ['pointerdown', 'mousedown', 'mouseup', 'click', 'dblclick', 'auxclick']) document.addEventListener(t, onGuardPointer, true);
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 async function waitFor(test, ms) {
@@ -3229,8 +3363,15 @@ async function confirmSpamDialog(before) {
 }
 
 // Still allowed to act, right now: the setting, the view and the user (checked before every click).
-function mayActNow() {
-    return !!lastSettings.enableAutoSpam && !document.hidden && viewAllowsAutoSpam(location.hash, MAIL.views, lastSettings.enableAutoSpamInSearch !== false) && !userBusy() && !quietRemaining();
+// urgent: the user pressed "Move now" on everything about to be moved, so the quiet period doesn't
+// apply (it protects them from surprise; this move is their own request). Everything else still does.
+function mayActNow(urgent) {
+    return !!lastSettings.enableAutoSpam && !document.hidden && viewAllowsAutoSpam(location.hash, MAIL.views, lastSettings.enableAutoSpamInSearch !== false) && !userBusy() && (urgent || !quietRemaining());
+}
+// Something queued was asked to move now (the row guard's "Move now").
+function queuedNow() {
+    for (const it of spamQueue.values()) if (it.now) return true;
+    return false;
 }
 // Each row still shows the conversation it was checked for (Gmail can redraw a row for another one).
 function rowsStillMatch(items) {
@@ -3242,8 +3383,8 @@ function rowsStillMatch(items) {
 // and the conversations are still in the inbox, so they may be tried again. failed: Gmail asked
 // something unclear, which was cancelled; not tried again.
 const SPAM_CONFIRM_MS = 8000;
-async function reportSpamRows(items) {
-    if (anySelection() || !mayActNow() || !rowsStillMatch(items)) return null;
+async function reportSpamRows(items, urgent) {
+    if (anySelection() || !mayActNow(urgent) || !rowsStillMatch(items)) return null;
     const none = { moved: [], ignored: items, failed: [] };
     const boxes = items.map(it => rowCheckbox(it.row));
     if (boxes.some(b => !b)) return none;
@@ -3253,7 +3394,7 @@ async function reportSpamRows(items) {
     const sel = selectedRows();
     if (sel.length !== items.length || items.some(it => !sel.includes(it.row)) || !rowsStillMatch(items)) { unselect(); return none; }
     const btn = reportSpamButton();
-    if (!btn || !mayActNow()) { unselect(); return btn ? null : none; }
+    if (!btn || !mayActNow(urgent)) { unselect(); return btn ? null : none; }
     const before = new Set(shownAll('[role="alertdialog"], [role="dialog"]'));
     press(btn);
     if (!await confirmSpamDialog(before)) { await sleep(200); cancelNewDialogs(before); unselect(); return { moved: [], ignored: [], failed: items }; }
@@ -3360,7 +3501,7 @@ function rowForThread(thread) {
 
 async function runSpamMoves() {
     if (spamMoveRunning || !spamQueue.size) return;
-    if (!lastSettings.enableAutoSpam) { spamQueue.clear(); publishBusy(); return; }
+    if (!lastSettings.enableAutoSpam) { spamQueue.clear(); scheduleGuardSync(); publishBusy(); return; }
     spamMoveRunning = Date.now();
     publishBusy();
     // Why the queued moves are waiting, when they are (shown as <html data-unshortener-spam-wait>).
@@ -3369,7 +3510,7 @@ async function runSpamMoves() {
         // Paused after repeated failures, hidden tab, not the inbox or the user is busy: wait (every
         // exit below looks again later while anything is queued).
         wait = Date.now() < spamPausedUntil ? 'paused' : document.hidden ? 'tab hidden' : !viewAllowsAutoSpam(location.hash, MAIL.views, lastSettings.enableAutoSpamInSearch !== false) ? 'view'
-            : userBusy() ? 'user busy' : quietRemaining() ? 'recent activity' : '';
+            : userBusy() ? 'user busy' : quietRemaining() && !queuedNow() ? 'recent activity' : '';
         if (wait) return;
         wait = 'not shown';
         const current = currentThreadKey();
@@ -3424,15 +3565,20 @@ async function runSpamMoves() {
         if (!cfg || !cfg.values) { wait = 'settings'; return; }
         lastSettings = cfg.values;
         lastPolicy = cfg.policy || {};
-        if (!mayActNow() || currentThreadKey() !== current) { wait = 'user busy'; return; }
-        const batch = open ? [open] : rows.filter(it => rowsStillMatch([it])).slice(0, 20);
+        // Rows the user asked to move now (the row guard's "Move now") go first, on their own: their
+        // move is the user's own request, so the quiet period doesn't apply to them — but it still
+        // protects every other row, which waits for the next pass.
+        const urgentRows = rows.filter(it => it.now);
+        const urgent = !open && urgentRows.length > 0;
+        if (!mayActNow(urgent) || currentThreadKey() !== current) { wait = 'user busy'; return; }
+        const batch = open ? [open] : (urgent ? urgentRows : rows).filter(it => rowsStillMatch([it])).slice(0, 20);
         if (!batch.length) return;                            // what's queued isn't on screen: 'not shown'
         // Everything that would make Gmail act on something else is checked before remembering, so a
         // move put off for the user isn't recorded as done.
         if (anySelection()) { wait = 'selection'; return; }
         if (open ? currentThreadKey() !== open.thread : !rowsStillMatch(batch)) return;
         if (!await rememberSpamThreads(batch, false)) return;  // not remembered: don't move
-        const result = open ? await reportSpamOpenThread(open) : await reportSpamRows(batch);
+        const result = open ? await reportSpamOpenThread(open) : await reportSpamRows(batch, urgent);
         if (!result) { await forgetSpamThreads(batch); wait = 'user busy'; return; }   // the user got busy first: nothing clicked
         const { moved, ignored, failed } = result;
         for (const it of [...moved, ...failed]) { spamQueue.delete(it.thread); spamAttempted.add(it.thread); }
@@ -3467,10 +3613,17 @@ async function runSpamMoves() {
     } finally {
         spamMoveRunning = 0;
         document.documentElement.dataset.unshortenerSpamWait = spamQueue.size ? wait || 'retrying' : '';
+        scheduleGuardSync();
+        scheduleBadgeUpdate();
         publishBusy();
         if (spamQueue.size) {                                 // waiting (user busy, list hidden, paused): look again
             const quiet = quietRemaining();
-            if (quiet) scheduleSpamMoves(quiet + 300);        // right when the user's quiet period ends
+            // Waiting out the user's quiet period: look right when it ends. Parked, or a one-off wait
+            // (the view, an open email, a selection, the memory): a steady, cheap look — and the change
+            // that unparks it (the view or tab changing, "Move now") brings a look at once. Only a pass
+            // that clicked and was ignored backs off; repeated such passes pause (above).
+            if (quiet && !queuedNow()) scheduleSpamMoves(quiet + 300);
+            else if (wait) scheduleSpamMoves(SPAM_PARKED_POLL_MS);
             else {
                 scheduleSpamMoves(spamRetryDelay);
                 spamRetryDelay = Math.min(spamRetryDelay * 2, 30000);
