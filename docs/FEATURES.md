@@ -50,7 +50,8 @@ lock settings; see the [deployment guide](ADMIN-GUIDE.md) for rolling it out. Wh
   your last click or key (so it never replaces the Undo of something you just did) and 2 seconds
   after the mouse last moved over the list; while an email waits, its row says **Moving to Spam…**,
   is struck through and can't be clicked by accident, with **Move now** (moves it immediately) and
-  **Keep it** (leaves it in the inbox for good). One you take back out of Spam
+  **Keep it** (leaves it in the inbox for good). Only clicks are guarded: Gmail's keyboard shortcuts
+  can still open the email, which then keeps its red warning and is still moved. One you take back out of Spam
   stays out. A short notice says how many were moved, with a **Review** link to Spam.
 - **Red flags in the Spam folder (Gmail).** In Spam, emails the same checks would move there are red,
   whether the extension moved them (the label says when and why) or Gmail did; unread ones are checked
