@@ -12,6 +12,10 @@ const SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect w
   await sw.evaluate(async ([png]) => {
     await chrome.storage.local.clear();
     await chrome.storage.local.set({ enableDnsThreatCheck: true, enableAutoSpam: false, __testScamSenders: ['billing@forgedbrand.example'] });
+    // The made-up domains answer as checked and clean, so no live lookup decides: on a computer with
+    // direct internet it would find that .example names don't exist and flag the senders.
+    const realDns = senderDomainDns, clean = new Set(['brandlogo.example', 'broken.example', 'plainsite.example']);
+    senderDomainDns = async (domain, S) => clean.has(domain) ? { verdict: 'safe', reason: null, scanner: 'Multi-DoH', note: null, ip: '192.0.2.1' } : realDns(domain, S);
     const bytes = Uint8Array.from(atob(png), c => c.charCodeAt(0)).buffer;
     const link = (u) => new TextEncoder().encode(u).buffer;
     await iconStore.put('bimi:brandlogo.example', 'text/uri-list', link('https://logos.brandlogo.example/logo.svg'), 'bimi', 'https://logos.brandlogo.example/logo.svg');
@@ -46,8 +50,8 @@ const SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect w
     return { status: chip && chip.dataset.status, placed: !!c, shown: !!c && getComputedStyle(c).display !== 'none' }; }), f => f.status === 'flagged' && f.placed, 10000);
   check('a flagged sender gets no circle at all (no logo, icon or initial): its checkbox and red label show', forged.status === 'flagged' && !forged.shown, forged);
   // Coming back from an email (Back), Gmail focuses that email's row: its picture stays.
-  const focused = await page.evaluate(() => { const row = document.querySelector('[data-thread-id="#thread-f:8101"]').closest('tr'); row.tabIndex = -1; row.focus(); return getComputedStyle(row.querySelector('.unshortener-row-avatar')).display; });
-  check('the row of the email you came back from keeps its picture (focus doesn\'t hide it)', focused !== 'none', focused);
+  const focused = await page.evaluate(() => { const row = document.querySelector('[data-thread-id="#thread-f:8101"]').closest('tr'); row.tabIndex = -1; row.focus(); const chip = row.querySelector('.unshortener-sender-chip'); return { display: getComputedStyle(row.querySelector('.unshortener-row-avatar')).display, status: chip && chip.dataset.status }; });
+  check('the row of the email you came back from keeps its picture (focus doesn\'t hide it)', focused.display !== 'none', focused);
   // A site icon sits on a soft tint of its own color, with no border.
   const tint = await page.evaluate(() => { const c = document.querySelector('[data-thread-id="#thread-f:8103"]').closest('tr').querySelector('.unshortener-row-avatar'); const cs = getComputedStyle(c); return { bg: cs.backgroundColor, border: cs.borderTopWidth }; });
   check('a site icon\'s circle: tinted from the icon, not white, no border', tint.bg !== 'rgb(255, 255, 255)' && tint.border === '0px', tint);
