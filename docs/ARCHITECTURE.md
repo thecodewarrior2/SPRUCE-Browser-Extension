@@ -243,8 +243,18 @@ your computer is in Settings → Help → Architecture deep dive → Downloaded 
 | [Chrome UX Report top list](https://github.com/zakird/crux-top-lists) (copy by Zakir Durumeric) | popular sites protected from look-alike senders (top 10,000) | monthly | data by Google, CC BY 4.0 |
 | [Tranco](https://tranco-list.eu) | popular sites protected from look-alike senders (top 10,000) | monthly | free research list (KU Leuven and others) |
 
-Short-link lists are treated as untrusted: a new domain counts only once it has been seen on several
-days, and major sites are never accepted from them.
+Every list is treated as untrusted, and how strictly depends on what a wrong entry could do:
+
+| Safeguard | Short-link lists | Phishing and scam lists | Popular-site lists |
+|---|---|---|---|
+| What a wrong entry could do | links on that site sent to unshorten.me (a privacy risk): the strictest | a false warning (never on a major site); for scam senders, that one address's email moved to Spam | that site not flagged as a look-alike (never makes a sender trusted) |
+| Size limits, entry format | 2 MB, 50,000 domains; plain domains only | 40 MB, 1,500,000 entries; links, domains or full addresses | top 10,000 of each; domain names |
+| Never accepted | 42 major sites and their subdomains | the same; shared cloud-storage hosting; addresses on major brands' own domains | sites that don't enforce DMARC |
+| A broken download | previous copy kept | previous copy kept (also under 20 entries) | previous copy kept (also under 3,000 sites) |
+| New entries held back | until seen on 3 separate days | no: phishing sites are often gone within hours | no: downloaded monthly, rankings change slowly |
+| Mass-change guard | over 25% changed (minimum 250): held back | no: these lists change almost completely every day | no: each list kept on its own |
+
+The live version, with the current numbers, is in Settings → Help → Architecture deep dive.
 
 ## 10. Storage
 
