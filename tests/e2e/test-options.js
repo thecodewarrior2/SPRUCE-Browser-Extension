@@ -53,6 +53,20 @@ const { launch, until, optionsReady, check, done } = require('./harness');
   await pop.goto(`chrome-extension://${ID}/popup.html`);
   await pop.waitForSelector('html[data-loaded]', { state: 'attached' });   // settings applied: loading is over
   check('popup has no errors', perr.length === 0, perr);
+  // Drop-down menus in the dark appearance: the open list uses the menu's own colors (Firefox), so the
+  // menu and its options must have an opaque dark background and readable text.
+  await sw.evaluate(() => chrome.storage.local.set({ uiTheme: 'dark' }));
+  for (const pg of [pop, page]) {
+    await pg.reload(); await pg.waitForFunction(() => document.documentElement.dataset.resolved === 'dark');
+    const menus = await pg.evaluate(() => {
+      const lum = (c) => { const m = c.match(/[\d.]+/g).slice(0, 3).map(Number).map(v => v / 255).map(x => x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4); return 0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]; };
+      const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+      return [...document.querySelectorAll('select')].map(sel => { const o = getComputedStyle(sel.options[0] || sel), m = getComputedStyle(sel);
+        return { id: sel.id || sel.dataset.setting, opaque: !/rgba\(.*, 0\)$/.test(m.backgroundColor) && !/rgba\(.*, 0\)$/.test(o.backgroundColor), dark: lum(o.backgroundColor) < 0.1, contrast: Math.round(ratio(o.color, o.backgroundColor) * 10) / 10 }; });
+    });
+    check(`dark appearance: every drop-down menu (${pg === pop ? 'popup' : 'Settings'}) is dark with readable options`, menus.length > 0 && menus.every(x => x.opaque && x.dark && x.contrast >= 4.5), menus.filter(x => !(x.opaque && x.dark && x.contrast >= 4.5)));
+  }
+  await sw.evaluate(() => chrome.storage.local.remove('uiTheme'));
   // Help → Which features work where: generated from the sites table.
   const hp = await ctx.newPage();
   await hp.setViewportSize({ width: 1280, height: 1000 });
