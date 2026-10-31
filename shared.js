@@ -929,6 +929,9 @@ const THIRD_PARTY_LIST_MIN_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const PHISH_FEED_MAX_BYTES = 40 * 1024 * 1024;
 const PHISH_FEED_MAX_ENTRIES = 1500000;
 const PHISH_FEED_MIN_ENTRIES = 20;          // a download smaller than this is treated as broken and ignored
+// Popular-site lists (look-alike check): the top POPULAR_TOP of each; fewer than POPULAR_MIN means a broken download.
+const POPULAR_TOP = 10000;
+const POPULAR_MIN = 3000;
 
 // Normalized form used for exact URL matching: lowercase host, no default port, no fragment.
 function normalizeFeedUrl(urlString) {

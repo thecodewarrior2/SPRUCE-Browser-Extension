@@ -1,5 +1,10 @@
 # Changelog
 
+## 5.83 — One place for the downloaded lists, and their safeguards side by side (Firefox build, same as Chrome 5.83)
+
+- **No more repeated list information in the Architecture deep dive.** "Downloaded lists" is now the one table of lists: for each, what it's used for, how often it's downloaded, its license or terms, the entries in use, the new entries on hold and the last update. "This installation right now" no longer repeats some of the lists in a second table.
+- **Safeguards for every list, side by side**, instead of the short-link lists' rules alone: what a wrong entry could do, size limits, entry format, what's never accepted, what happens to a broken download, holding new entries back, the mass-change guard, removals. Only the short-link lists hold new entries back and guard against mass changes, since a wrong entry there would send links to a lookup service; the table says why the phishing lists (they change almost completely every day, and phishing sites are often gone within hours) and the popular-site lists (downloaded monthly) don't.
+
 ## 5.82 — Every downloaded list shown and credited (Firefox build, same as Chrome 5.82)
 
 - **The Architecture deep dive lists all seven downloaded lists**, not only the two short-link lists: the two short-link lists, the OpenPhish and Phishing Army phishing lists, the Sefinek scam-sender list, and the Chrome UX Report and Tranco popular-site lists used by the look-alike check. For each: what it's used for, how often it's downloaded, its license or terms, and its state on this computer. The section is now called "Downloaded lists"; the short-link update rules follow it. The architecture guide (`docs/ARCHITECTURE.md`) has the same table.
