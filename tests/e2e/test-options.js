@@ -45,6 +45,12 @@ const { launch, until, optionsReady, check, done } = require('./harness');
   const arch = await until(() => page.$eval('#help-architecture', e => e.textContent), t => /managedEnableAutoSpam/.test(t) && /Sefinek scam-sender list/.test(t), 10000);
   check('architecture: settings reference has the new keys', /managedEnableAutoSpam/.test(arch) && /managedTrustedSenders/.test(arch) && !/managedPhishingSenders/.test(arch) && /api\.country\.is/.test(arch) && /checkSenders/.test(arch), '');
   check('architecture lists the scam-sender list state', /Sefinek scam-sender list/.test(arch));
+  // Every downloaded list is in the deep dive, and every list and online service is credited.
+  const lists = await until(() => page.evaluate(() => [...document.querySelectorAll('#archAllLists tbody tr')].map(r => r.cells[0].textContent)), l => l.length >= 7, 8000);
+  check('architecture: all seven downloaded lists, with their state', lists.length === 7 && ['url-shorteners', 'OpenPhish', 'Phishing Army', 'Sefinek', 'Chrome UX Report', 'Tranco'].every(n => lists.some(l => l.includes(n))), lists);
+  const credits = await page.$eval('#help-about', e => e.textContent);
+  const missing = ['PeterDaveHello', 'boutetnico', 'OpenPhish', 'Phishing Army', 'Sefinek', 'Chrome UX Report', 'Tranco', 'unshorten.me', 'DuckDuckGo', 'country.is', 'IANA'].filter(n => !credits.includes(n));
+  check('About & credits names every list and online service', missing.length === 0, missing);
   check('no page errors', errors.filter(e => !/^dialog/.test(e)).length === 0, errors);
   // Popup renders.
   const pop = await ctx.newPage();

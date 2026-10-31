@@ -1316,8 +1316,11 @@ Flag field:      (leave empty: Google's replies are recognized automatically)</d
   <li><b>Tracking pixels</b>: the original image URL is recovered from Gmail's proxy (after <code>#</code>). An image is a pixel if its host is a built-in tracker or blocklisted, its host or path follows tracker conventions, or its size marks it as a beacon: any dimension over 20 px is never a pixel; ≤ 3×8, area ≤ 24 px², a single dimension ≤ 3 px, inline-hidden or inside a collapsed zero-height box is. Images whose size is unknown are re-checked when they finish loading. Allowlisted hosts are skipped.</li>
 </ul>
 
-<h3 id="arch-lists">Community shortener lists <span class="live-tag">LIVE</span></h3>
-<p>Synced daily and treated as untrusted. Each list is tracked separately so one failing never removes the other's domains.</p>
+<h3 id="arch-lists">Downloaded lists <span class="live-tag">LIVE</span></h3>
+<p>Seven public lists, downloaded as plain files (nothing about you is sent) and matched on your device. Each is tracked separately, so one failing to update never removes another's entries. Their makers are credited in About &amp; credits.</p>
+<div id="archAllLists"></div>
+<h4>Short-link lists: how updates are accepted</h4>
+<p>Treated as untrusted: a new domain counts only once it has been seen on several days.</p>
 <div id="archLists"></div>
 
 <h3 id="arch-network">Every network request <span class="live-tag">LIVE</span></h3>
@@ -1386,12 +1389,15 @@ Flag field:      (leave empty: Google's replies are recognized automatically)</d
 <h3>Accessibility</h3>
 <p>The extension aims to meet WCAG 2.1 level AA in both light and dark appearance: sufficient color contrast, full keyboard use with a visible focus outline, labels for screen readers, and reduced motion when your system asks for it. If something is hard to read or use, please report it.</p>
 <h3>Built on</h3>
-<p>Third-party lists are downloaded at most once a day and used as published. Thank you to everyone who maintains them.</p>
+<p>Third-party lists are downloaded at most once a day (the popular-site lists once a month) and used as published. Thank you to everyone who maintains them.</p>
 <ul class="simple-list">
   <li><a href="https://github.com/PeterDaveHello/url-shorteners" target="_blank" rel="noopener noreferrer">PeterDaveHello/url-shorteners</a> and <a href="https://github.com/boutetnico/url-shorteners" target="_blank" rel="noopener noreferrer">boutetnico/url-shorteners</a>: community-maintained lists of URL shorteners (see each project for its license). The bundled starter list (<code>shortener-snapshot.txt</code>) is a copy of them.</li>
   <li><a href="https://openphish.com" target="_blank" rel="noopener noreferrer">OpenPhish</a> community phishing feed, used under the OpenPhish Terms of Use.</li>
   <li><a href="https://phishing.army" target="_blank" rel="noopener noreferrer">Phishing Army</a> blocklist (phishing.army project), licensed <a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noopener noreferrer">CC BY-NC 4.0</a>; used unmodified apart from leaving out major sites.</li>
+  <li><a href="https://github.com/sefinek/Blacklisted-Emails" target="_blank" rel="noopener noreferrer">Sefinek Blacklisted-Emails</a>: community list of scam and phishing sender addresses (MIT), for the sender checks.</li>
+  <li>The <a href="https://developer.chrome.com/docs/crux" target="_blank" rel="noopener noreferrer">Chrome UX Report</a> top sites (data by Google, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>), from the <a href="https://github.com/zakird/crux-top-lists" target="_blank" rel="noopener noreferrer">zakird/crux-top-lists</a> copy by Zakir Durumeric, and the <a href="https://tranco-list.eu" target="_blank" rel="noopener noreferrer">Tranco</a> research ranking (KU Leuven and others; Le Pochat et al., NDSS 2019): popular sites protected from look-alike senders.</li>
   <li><a href="https://unshorten.me" target="_blank" rel="noopener noreferrer">unshorten.me</a>: short-link expansion.</li>
+  <li>Sender details: site icons from <a href="https://www.google.com/s2/favicons" target="_blank" rel="noopener noreferrer">Google's</a> and <a href="https://duckduckgo.com" target="_blank" rel="noopener noreferrer">DuckDuckGo's</a> icon services, server countries from <a href="https://country.is" target="_blank" rel="noopener noreferrer">country.is</a>, and domain registration dates through <a href="https://www.iana.org/domains/root/db" target="_blank" rel="noopener noreferrer">IANA</a>'s registry directory (RDAP).</li>
   <li><a href="https://quad9.net" target="_blank" rel="noopener noreferrer">Quad9</a>, <a href="https://developers.cloudflare.com/1.1.1.1/" target="_blank" rel="noopener noreferrer">Cloudflare 1.1.1.1 for Families</a>, <a href="https://controld.com/free-dns" target="_blank" rel="noopener noreferrer">Control D free DNS</a>, <a href="https://joindns4.eu" target="_blank" rel="noopener noreferrer">DNS4EU</a> and <a href="https://adguard-dns.io" target="_blank" rel="noopener noreferrer">AdGuard DNS</a>: free public threat-filtering resolvers.</li>
   <li><a href="https://mozilla.github.io/pdf.js/" target="_blank" rel="noopener noreferrer">pdf.js</a> by Mozilla (Apache-2.0), bundled for reading PDF attachments (license in <code>lib/PDFJS-LICENSE</code>).</li>
   <li><a href="https://github.com/trockerapp/trocker" target="_blank" rel="noopener noreferrer">Trocker</a> (Apache-2.0): inspiration for tracking-pixel detection.</li>
