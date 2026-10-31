@@ -46,7 +46,11 @@ lock settings; see the [deployment guide](ADMIN-GUIDE.md) for rolling it out. Wh
   links flagged as dangerous, so an email full of red links never shows a green sender. Trusted senders
   (yours and your organization's) are never flagged. Emails from a **flagged** sender (never unverified, unknown or clean ones) are moved
   to Spam with Gmail's own Report spam, from the inbox and from search results (never a search in Spam, Trash or Sent), never while you're typing or have emails
-  selected, and never your organization's phishing-training emails. One you take back out of Spam
+  selected, and never your organization's phishing-training emails. Moving waits 10 seconds after
+  your last click or key (so it never replaces the Undo of something you just did) and 2 seconds
+  after the mouse last moved over the list; while an email waits, its row says **Moving to Spam…**,
+  is struck through and can't be clicked by accident, with **Move now** (moves it immediately) and
+  **Keep it** (leaves it in the inbox for good). One you take back out of Spam
   stays out. A short notice says how many were moved, with a **Review** link to Spam.
 - **Red flags in the Spam folder (Gmail).** In Spam, emails the same checks would move there are red,
   whether the extension moved them (the label says when and why) or Gmail did; unread ones are checked
