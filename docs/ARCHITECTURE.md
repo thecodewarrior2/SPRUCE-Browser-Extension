@@ -209,7 +209,9 @@ under a pointer in motion). While an email waits, its row is struck through and 
 "Moving to Spam…", with why it's waiting, **Move now** (the user's own request, so nothing waits) and
 **Keep it** (remembered like an email taken out of Spam, never moved) — and real clicks on the row are
 swallowed, so it can't be opened or selected by accident; the extension's own synthetic clicks aren't
-trusted events and pass. A move parked by the page (another view, an open conversation, a selection, a
+trusted events and pass. Only pointer events are guarded: Gmail's keyboard shortcuts (j/k, Enter) can
+still open the row — the opened email keeps its warnings, and the move still happens, from the opened
+conversation or once the list is shown again. A move parked by the page (another view, an open conversation, a selection, a
 hidden tab) is re-checked every 3 seconds, and the moment the view or tab changes back; only a pass
 whose Report spam click Gmail ignored backs off, and repeated failures pause it (15 s doubling to
 10 min). The toolbar popup counts the emails waiting and why.
