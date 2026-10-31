@@ -1,5 +1,9 @@
 # Changelog
 
+## 5.81 — Readable drop-down menus in the dark appearance
+
+- **Fixed: the appearance menu (System / Light / Dark) in the toolbar popup was unreadable in the dark appearance**, as were the other drop-down menus in Settings: the menus were see-through, and Firefox draws the open list from the menu's own colors, so the options showed light grey on white. Every drop-down menu now uses the appearance's own background and text (light text on the dark surface, 11.9:1 contrast), and a test checks it.
+
 ## 5.80 — Tests that wait for "done" instead of guessing
 
 - **The page now says when the extension is done.** The inbox page carries `data-unshortener-busy` (how many checks are still running: answers awaited from the background, emails' source or attachments being read, a scan waiting, moves queued or running; 0 when everything on screen is checked and decided) and `data-unshortener-spam-wait` (why queued moves to Spam are waiting: a selection, recent activity, the view…). The toolbar popup marks `data-loaded` once its settings are applied. Nothing changes in what the extension does; they're there for the tests and for troubleshooting a move that seems stuck.
