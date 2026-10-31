@@ -100,6 +100,7 @@ function loadCounts() {
         chrome.runtime.sendMessage({ action: 'getTabState', tabId: tab.id }, (state) => {
             void chrome.runtime.lastError;
             const site = tab.url ? webmailSiteFor(tab.url) : null;
+            setMoveWait(state);
             if (state) {
                 document.getElementById('linkCount').textContent = state.linkCount;
                 document.getElementById('pixelCount').textContent = state.pixelCount;
@@ -161,6 +162,23 @@ function renderLinkStats(s) {
 function setStatsNote(text) {
     const el = document.getElementById('statsNote');
     if (el) el.textContent = text;
+}
+
+// Flagged emails queued to move to Spam in the open tab, and why they're waiting (each row also says
+// so in the inbox itself). Shown only while something is queued.
+const MOVE_WHY = {
+    'recent activity': 'they move when you pause', 'user busy': 'they move when you pause',
+    'selection': 'they move once nothing is selected', 'view': 'they move back in the inbox',
+    'not shown': 'they move when the list is shown again', 'tab hidden': 'they move when the tab is shown',
+    'split view': 'each is moved when opened (split view)', 'several lists': 'each is moved when opened (several inbox sections)',
+    'paused': 'retrying', 'retrying': 'retrying', 'memory': 'retrying', 'settings': 'retrying'
+};
+function setMoveWait(state) {
+    const el = document.getElementById('moveWait');
+    if (!el) return;
+    const mw = state && state.moveWait;
+    el.style.display = mw ? '' : 'none';
+    if (mw) el.textContent = `${mw.n} flagged email${mw.n === 1 ? '' : 's'} waiting to move to Spam${MOVE_WHY[mw.why] ? ` (${MOVE_WHY[mw.why]})` : ''}.`;
 }
 
 // Appearance (System / Light / Dark), shared with the Options page via theme.js.

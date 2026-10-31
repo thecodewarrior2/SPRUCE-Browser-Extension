@@ -157,7 +157,7 @@
             [code('scanner.js'), 'background page', 'Decodes QR codes in images and PDF pages and lists PDF links.'],
             [code('compat.js'), 'background page', 'Small shims for JavaScript features pdf.js uses that older Firefox versions lack.'],
             [code('lib/pdf.min.mjs, lib/pdf.worker.min.mjs'), 'scanner', 'pdf.js (Mozilla, Apache-2.0) for rendering PDF attachments.'],
-            [code('content.css'), 'Gmail tab', 'Shows the 🔍 on email tracking links only while the link is hovered or focused; styles the sender icons, domain labels and the moved-to-Spam notice.'],
+            [code('content.css'), 'Gmail tab', 'Shows the 🔍 on email tracking links only while the link is hovered or focused; styles the sender icons, domain labels, the moved-to-Spam notice and the "Moving to Spam…" row guard.'],
             [code('background.js'), 'background page', 'Link pipeline, threat checks, lookups, list sync and safeguards, logging, cleanup, message API, badge.'],
             [code('decoders.js'), 'background page, Options', 'All offline decoders and the unwrapping loop.'],
             [code('custom-endpoints.js'), 'background page', 'Request building and reply parsing for your own threat resolver and unshortener.'],
