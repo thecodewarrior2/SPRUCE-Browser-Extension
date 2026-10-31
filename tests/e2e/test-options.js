@@ -48,6 +48,13 @@ const { launch, until, optionsReady, check, done } = require('./harness');
   // Every downloaded list is in the deep dive, and every list and online service is credited.
   const lists = await until(() => page.evaluate(() => [...document.querySelectorAll('#archAllLists tbody tr')].map(r => r.cells[0].textContent)), l => l.length >= 7, 8000);
   check('architecture: all seven downloaded lists, with their state', lists.length === 7 && ['url-shorteners', 'OpenPhish', 'Phishing Army', 'Sefinek', 'Chrome UX Report', 'Tranco'].every(n => lists.some(l => l.includes(n))), lists);
+  const layout = await page.evaluate(() => ({
+    columns: [...document.querySelectorAll('#archAllLists thead th')].map(th => th.textContent),
+    safeguards: [...document.querySelectorAll('#archLists thead th')].map(th => th.textContent),
+    state: document.getElementById('archState').textContent }));
+  check('architecture: lists show entries in use, entries on hold and last update; one safeguards table for all three kinds of list',
+    ['In use', 'New entries on hold', 'Last update'].every(c => layout.columns.includes(c)) && ['Short-link lists', 'Phishing and scam lists', 'Popular-site lists'].every(c => layout.safeguards.includes(c)), layout);
+  check('architecture: "This installation right now" doesn\'t repeat the lists', !/OpenPhish|url-shorteners|Synced shortener/.test(layout.state) && /see Downloaded lists above/.test(layout.state), layout.state.slice(0, 300));
   const credits = await page.$eval('#help-about', e => e.textContent);
   const missing = ['PeterDaveHello', 'boutetnico', 'OpenPhish', 'Phishing Army', 'Sefinek', 'Chrome UX Report', 'Tranco', 'unshorten.me', 'DuckDuckGo', 'country.is', 'IANA'].filter(n => !credits.includes(n));
   check('About & credits names every list and online service', missing.length === 0, missing);

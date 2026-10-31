@@ -1716,8 +1716,6 @@ async function bimiLogo(domain) {
 const POPULAR_LIST_URL = 'https://raw.githubusercontent.com/zakird/crux-top-lists/main/data/global/current.csv.gz';
 const TRANCO_ID_URL = 'https://tranco-list.eu/top-1m-id';             // the latest list's id
 const TRANCO_LIST_URL = (id) => `https://tranco-list.eu/download/${encodeURIComponent(id)}/${POPULAR_TOP}`;
-const POPULAR_TOP = 10000;
-const POPULAR_MIN = 3000;
 const POPULAR_REFRESH_MS = 30 * 24 * 60 * 60 * 1000;
 const YOUNG_DOMAIN_DAYS = 90;
 const VERIFIED_DOMAINS_MAX = 2000;

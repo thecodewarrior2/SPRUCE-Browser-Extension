@@ -259,21 +259,26 @@
                 snapshotCount = txt.split('\n').filter(l => l.trim() && !l.trim().startsWith('#')).length;
             } catch (e) { snapshotCount = '?'; }
         }
+        // Safeguards: what each kind of list is checked for, side by side, and why some checks don't apply.
+        const mb = (n) => `${Math.round(n / 1048576)} MB`;
+        // Equal columns for the three kinds of list, so each reads as easily as the others.
+        const evenColumns = (t) => { t.style.tableLayout = 'fixed'; t.querySelectorAll('thead th').forEach((th, i) => { th.style.width = i ? '29%' : '13%'; }); return t; };
         fill('archLists',
-            table(['Rule', 'Value'], [
-                ['Sources', el('div', null, REMOTE_LIST_URLS.map(u => el('div', null, code(u))))],
-                ['Update interval', 'daily (alarm), plus at install and when sync is switched back on'],
-                ['New domains held until seen on', `${REMOTE_LIST_HOLD_SIGHTINGS} separate days (sightings at least ${fmtMs(REMOTE_LIST_SIGHTING_GAP_MS)} apart)`],
-                ['Removals', 'take effect immediately'],
-                ['Mass-change guard', `a download changing more than ${Math.round(REMOTE_LIST_MAX_CHANGE_RATIO * 100)}% of a list (minimum allowance ${REMOTE_LIST_MIN_CHANGE_LIMIT} entries) is held back`],
-                ['Fresh start', `first download, or after ${fmtMs(REMOTE_LIST_FRESH_START_MS)} without a successful update or after sync was off: accepted as the new starting point`],
-                ['Size limits', `${Math.round(REMOTE_LIST_MAX_BYTES / 1048576)} MB per download, ${REMOTE_LIST_MAX_DOMAINS.toLocaleString()} domains`],
-                ['Entry format', 'plain domain names only; anything else is ignored'],
-                ['Never accepted', `${PROTECTED_DOMAINS.size} major sites (and their subdomains), e.g. ${[...PROTECTED_DOMAINS].slice(0, 6).join(', ')}…`],
-                ['Effect of a listed domain', 'only that short-link-shaped URLs on it may be looked up; it never silences warnings or removes images'],
-                ['Bundled snapshot', `${snapshotCount} domains (used until each list has been downloaded once)`],
-                ['Built-in lists', `${publicShorteners.length} public shorteners and ${espTrackers.length} email-provider trackers`]
-            ]),
+            evenColumns(table(['Safeguard', 'Short-link lists', 'Phishing and scam lists', 'Popular-site lists'], [
+                ['What a wrong entry could do', 'make links on that site be sent to unshorten.me to be looked up (a privacy risk), so these lists are checked most strictly',
+                    'show a false warning (never on a major site); for the scam-sender list, move that one address\'s email to Spam', 'keep that site from being flagged as a look-alike (being on the list never makes a sender trusted)'],
+                ['Size limits', `${mb(REMOTE_LIST_MAX_BYTES)} per download, ${REMOTE_LIST_MAX_DOMAINS.toLocaleString()} domains`, `${mb(PHISH_FEED_MAX_BYTES)} per download, ${PHISH_FEED_MAX_ENTRIES.toLocaleString()} entries`, `the top ${POPULAR_TOP.toLocaleString()} of each list`],
+                ['Entry format', 'plain domain names only; anything else is ignored', 'each list its own kind (links, domains or full addresses); anything else is ignored', 'domain names'],
+                ['Never accepted', `${PROTECTED_DOMAINS.size} major sites and their subdomains`, 'the same major sites; shared cloud-storage hosting; addresses on major brands\' own domains', 'only sites that enforce DMARC (as email-sending brands do) count'],
+                ['A broken download', 'failed or too large: the previous copy is kept', `failed, too large or fewer than ${PHISH_FEED_MIN_ENTRIES} entries: the previous copy is kept`, `failed or fewer than ${POPULAR_MIN.toLocaleString()} sites: the previous copy is kept`],
+                ['New entries held back', `until seen on ${REMOTE_LIST_HOLD_SIGHTINGS} separate days (at least ${fmtMs(REMOTE_LIST_SIGHTING_GAP_MS)} apart)`,
+                    'no: phishing sites are often gone within hours, so holding entries for days would keep the list out of date, and a wrong entry can only add a warning', 'no: downloaded once a month, and the rankings change slowly'],
+                ['Mass-change guard', `a download changing more than ${Math.round(REMOTE_LIST_MAX_CHANGE_RATIO * 100)}% of a list (minimum allowance ${REMOTE_LIST_MIN_CHANGE_LIMIT} entries) is held back`,
+                    'no: these lists change almost completely from one day to the next', 'no: each list is kept on its own, so one bad download can\'t replace the other'],
+                ['Removals', 'take effect immediately', 'take effect immediately (each download replaces the list)', 'with the next monthly download'],
+                ['Fresh start', `the first download, or one after ${fmtMs(REMOTE_LIST_FRESH_START_MS)} without an update (or after sync was off), is accepted as the new starting point`, '—', '—']
+            ])),
+            el('p', null, `Before the short-link lists are first downloaded, the bundled snapshot (${snapshotCount} domains) is used. Built in, and never downloaded: ${publicShorteners.length} public shorteners and ${espTrackers.length} email-provider trackers.`),
             el('details', { class: 'more' }, el('summary', null, 'Show the protected sites and built-in lists'),
                 el('p', null, el('b', null, 'Protected sites: '), [...PROTECTED_DOMAINS].join(', ')),
                 el('p', null, el('b', null, 'Built-in public shorteners: '), publicShorteners.join(', ')),
@@ -340,39 +345,33 @@
             const pop = items.popularDomains || {};
             const popSources = pop.sources || {};
             const shortenerRow = (name, home, u) => { const src = (ls.sources || {})[u];
-                return [link(name, home), 'which sites are link shorteners (only those links are looked up)', 'once a day', 'see the project', S.enableRemoteListSync
-                    ? (src && src.lastSuccess ? `${(src.active || []).length.toLocaleString()} domains, ${when(src.lastSuccess)}` : when(0)) : 'off (Keep the shortener list up to date)']; };
+                const row = [link(name, home), 'which sites are link shorteners (only links on them are looked up)', 'once a day', 'see the project'];
+                if (!S.enableRemoteListSync) return [...row, 'off (Keep the shortener list up to date)', '—', '—'];
+                return [...row, src && src.lastSuccess ? `${(src.active || []).length.toLocaleString()} domains` : 'the bundled snapshot meanwhile',
+                    src ? Object.keys(src.pending || {}).length.toLocaleString() : '0', when(src && src.lastSuccess)]; };
             const feedUse = { openphish: 'known phishing links', phishingarmy: 'known phishing sites', sefinekemails: 'known scam and phishing sender addresses (Gmail)' };
-            fill('archAllLists', table(['List', 'Used for', 'Downloaded', 'License or terms', 'On this computer'], [
+            fill('archAllLists', table(['List', 'Used for', 'Downloaded', 'License or terms', 'In use', 'New entries on hold', 'Last update'], [
                 shortenerRow('PeterDaveHello/url-shorteners', 'https://github.com/PeterDaveHello/url-shorteners', REMOTE_LIST_URLS[0]),
                 shortenerRow('boutetnico/url-shorteners', 'https://github.com/boutetnico/url-shorteners', REMOTE_LIST_URLS[1]),
                 ...PHISH_FEEDS.map(f => { const r = items[`feed_${f.id}`]; const on = S.enablePhishingFeeds && (!f.requires || S[f.requires]);
-                    return [link(f.name, f.home), feedUse[f.id] || '', 'once a day', f.license, on ? (r ? `${r.count.toLocaleString()} entries, ${when(r.updated)}` : when(0)) : 'off']; }),
-                ...[['Chrome UX Report top list', 'https://github.com/zakird/crux-top-lists', 'crux', 'data by Google, CC BY 4.0'], ['Tranco', 'https://tranco-list.eu', 'tranco', 'free research list (KU Leuven and others)']].map(([name, home, id, terms]) =>
-                    [link(name, home), 'popular sites (top 10,000) protected from look-alike senders', 'once a month', terms, S.enableLookalikeCheck && S.enableRemoteListSync
-                        ? (popSources[id] ? `${when(popSources[id])} (${(pop.count || 0).toLocaleString()} sites from both lists)` : when(0)) : 'off (Catch look-alike senders)'])
-            ]));
-            const srcRows = REMOTE_LIST_URLS.map(u => {
-                const src = (ls.sources || {})[u];
-                return [code(u.split('/').slice(3, 5).join('/')),
-                        src && src.lastSuccess ? new Date(src.lastSuccess).toLocaleString() : 'never',
-                        src ? (src.active || []).length.toLocaleString() : '0',
-                        src ? Object.keys(src.pending || {}).length.toLocaleString() : '0'];
-            });
+                    const row = [link(f.name, f.home), feedUse[f.id] || '', 'once a day', f.license];
+                    return on ? [...row, r ? `${r.count.toLocaleString()} entries` : '—', 'not held', when(r && r.updated)] : [...row, 'off', '—', '—']; }),
+                ...[['Chrome UX Report top list', 'https://github.com/zakird/crux-top-lists', 'crux', 'data by Google, CC BY 4.0'], ['Tranco', 'https://tranco-list.eu', 'tranco', 'free research list (KU Leuven and others)']].map(([name, home, id, terms]) => {
+                    const row = [link(name, home), `popular sites (top ${POPULAR_TOP.toLocaleString()}) protected from look-alike senders`, 'once a month', terms];
+                    if (!(S.enableLookalikeCheck && S.enableRemoteListSync)) return [...row, 'off (Catch look-alike senders)', '—', '—'];
+                    return [...row, popSources[id] ? `${(pop.count || 0).toLocaleString()} sites, both lists together` : '—', 'not held', when(popSources[id])]; })
+            ]), el('p', null, 'Only the short-link lists hold new entries back; why the others don\'t is under Safeguards below.'));
             const cacheCount = Object.keys(items).filter(k => k.startsWith('http://') || k.startsWith('https://')).length;
             const locked = Object.keys(cfg.locked).length;
             fill('archState',
                 table(['Item', 'Value'], [
                     ['Version', chrome.runtime.getManifest().version],
                     ['Settings set by your organization', locked ? `${locked}` : 'none'],
-                    ['Synced shortener domains in use', (items.remoteShorteners || []).length.toLocaleString() +
-                        (ls.fallback && ls.fallback.length && srcRows.some(r => r[1] === 'never') ? ` (includes the ${ls.fallbackKind === 'snapshot' ? 'bundled snapshot' : 'previous list'} as a fallback)` : '')],
+                    ['Downloaded lists', 'see Downloaded lists above'],
                     ['Cached link results', cacheCount.toLocaleString()],
-                    ...PHISH_FEEDS.map(f => { const r = items[`feed_${f.id}`]; return [`${f.name} (${f.license})`, r ? `${r.count.toLocaleString()} entries, updated ${new Date(r.updated).toLocaleString()}` : 'not downloaded yet']; }),
                     ['History entries', (items.resolutionHistory || []).length.toLocaleString()],
                     ['Application log entries', (items.errorLogs || []).length.toLocaleString()]
-                ]),
-                table(['List source', 'Last successful update', 'Domains in use', 'New domains on hold'], srcRows));
+                ]));
         });
     }
 
