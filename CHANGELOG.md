@@ -1,5 +1,11 @@
 # Changelog
 
+## 5.79 — Icons that fill their circles; company logos not lost to a slow DNS answer (Safari build, same as Chrome 5.79)
+
+- **Site icons fill their circles.** Many sites' icons carry their own empty margins (Google's "G", Firefox's logo), so they looked small next to company logos. Each icon is now measured and drawn as large as fits: a round logo fills the circle, a square one the largest square that fits, and a solid square icon fills it edge to edge, like a logo.
+- **Fixed: a company logo could go missing for a week.** When a DNS service couldn't get an answer in time it still replies, with an error status and no records; the extension read that as "this company has no logo" (or "no DMARC policy", which hides logos too) and remembered it for a week. Only a definite answer counts now; a failed one is tried with the second DNS service, then asked again next time. A definite "no logo" is now remembered for a day instead of a week.
+- Settings → Logging → Senders shows each sender's company logo (BIMI) when there is one, and when it was last found to have none.
+
 ## 5.78 — Documentation (Safari build, same as Chrome 5.78)
 
 - **A short README; the full documentation is in `docs/`.** The README now says what the extension is, in a few lines, and links the documents: `docs/FEATURES.md` (every feature, the toolbar button, Settings, Link Inspector, Logging, Help, and which webmail supports what), the admin guide (now with a contents list and its own section for the organization lists), the privacy policy, the architecture and development guides, and `docs/README.md`, an index of the folder.

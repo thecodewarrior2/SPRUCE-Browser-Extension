@@ -825,6 +825,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     img.title = iconRec.source === 'parent' ? `Stand-in: the parent domain's icon (${iconRec.from}); checked again weekly for the site's own`
                         : iconRec.source === 'duckduckgo' ? 'Stand-in: from DuckDuckGo\'s icon service; checked again weekly for the site\'s own' : 'The site\'s own icon'; img.width = 16; img.height = 16; img.alt = ''; img.style.marginRight = '6px'; look.appendChild(img); }
                 else { const blank = document.createElement('span'); blank.style.cssText = 'display:inline-block;width:16px;margin-right:6px;'; blank.title = 'No icon'; look.appendChild(blank); }
+                // The company's BIMI logo, or when it was last found to have none (asked again after a day).
+                const org = registrableDomain(r.domain) || r.domain;
+                const bimi = iconBySite.get('bimi:' + org);
+                if (bimi && bimi.bytes) {
+                    const url = bimi.type === 'text/uri-list' ? new TextDecoder().decode(bimi.bytes) : iconDataUrl(bimi);
+                    if (/^(https:|data:image\/)/i.test(url)) { const logo = document.createElement('img'); logo.src = url; logo.referrerPolicy = 'no-referrer'; logo.width = 16; logo.height = 16; logo.alt = '';
+                        logo.title = `Company logo (BIMI) for ${org}, shown in the inbox; checked again weekly`; logo.style.cssText = 'margin-right:6px;border-radius:50%;'; look.appendChild(logo); }
+                } else if (bimi) look.title = `No company logo (BIMI) for ${org} when checked on ${new Date(bimi.ts).toLocaleString()}; asked again after a day`;
                 if (r.country) {
                     const f = document.createElement('span');
                     f.textContent = `${countryFlag(r.country)} ${countryName(r.country)}`;

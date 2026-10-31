@@ -1565,10 +1565,14 @@ async function avatarFor(address, site) {
 // shows a picture. It isn't downloaded by the background: most logo servers don't allow that
 // (vmc.digicert.com, valimail…: no CORS), and each refusal is an error in the browser's extension
 // log. The company's logo server sees the computer's IP address (Gmail fetches BIMI logos on its own
-// servers instead). Asked about again weekly; a domain without one is remembered ("none").
+// servers instead). Asked about again weekly; a domain without one is remembered ("none") for a day.
 // Stored in the icon store under "bimi:<domain>". Off with enableSenderBimi, and only when network
 // checks are allowed (privacy level).
 const BIMI_RECHECK_MS = 7 * 24 * 60 * 60 * 1000;
+// A domain without a logo or DMARC policy is asked again sooner (one day), so a logo the company adds,
+// or an answer missed, shows up soon.
+const BIMI_NONE_RECHECK_MS = 24 * 60 * 60 * 1000;
+const bimiFresh = (hit) => !!hit && Date.now() - hit.ts < (hit.bytes ? BIMI_RECHECK_MS : BIMI_NONE_RECHECK_MS);
 const bimiInFlight = new Map();
 // TXT records from Cloudflare (1.1.1.1; its security resolver when the address 1.1.1.1 itself is blocked,
 // as some school and company networks do).
@@ -1580,7 +1584,12 @@ async function dnsTxt(name) {
         try {
             const res = await fetchWithTimeout(`https://${host}/dns-query?name=${encodeURIComponent(name)}&type=TXT`, { headers: { accept: 'application/dns-json' } }, 5000);
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            data = await res.json();
+            const json = await res.json();
+            // Only a definite answer counts: records (NOERROR, 0) or no such name (NXDOMAIN, 3). A resolver
+            // that couldn't get one in time (SERVFAIL, 2) or refused (5) still answers, with no records, and
+            // reading that as "no record" would remember a missing logo or DMARC policy for days.
+            if (!json || (json.Status !== 0 && json.Status !== 3)) throw new Error(`DNS status ${json && json.Status}`);
+            data = json;
             if (TXT_HOSTS[0] !== host) TXT_HOSTS.sort((a, b) => (b === host) - (a === host));
             break;
         } catch (e) { lastError = e; }
@@ -1603,12 +1612,12 @@ async function bimiRecordFor(org) {
     return rec ? { domain: org, logo: rec.l || '' } : null;
 }
 // A domain's DMARC policy ({ p, sp, pct } of its organization domain, or null for none), remembered
-// for a week in the icon store under "dmarc:<org>".
+// in the icon store under "dmarc:<org>" (a week; none, a day).
 const dmarcInFlight = new Map();
 async function dmarcPolicy(org) {
     const key = 'dmarc:' + org;
     const hit = await iconStore.get(key).catch(() => null);
-    if (hit && Date.now() - hit.ts < BIMI_RECHECK_MS) {
+    if (bimiFresh(hit)) {
         try { return hit.bytes ? JSON.parse(new TextDecoder().decode(hit.bytes)) : null; } catch (e) { /* asked again */ }
     }
     if (dmarcInFlight.has(key)) return dmarcInFlight.get(key);
@@ -1649,7 +1658,7 @@ async function bimiLogo(domain) {
     if (d !== org && !await dmarcEnforced(d).catch(() => false)) return '';
     const key = 'bimi:' + org;
     const hit = await iconStore.get(key).catch(() => null);
-    if (hit && Date.now() - hit.ts < BIMI_RECHECK_MS) return bimiResult(hit);
+    if (bimiFresh(hit)) return bimiResult(hit);
     if (bimiInFlight.has(key)) return bimiInFlight.get(key);
     const p = (async () => {
         try {
