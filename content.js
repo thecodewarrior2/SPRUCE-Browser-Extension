@@ -2409,7 +2409,14 @@ function placeRowAvatar(wrap, url, kind = 'logo', fallback = '') {
     // instead of a white disc, so the circles look alike and the icon doesn't get lost; on the other
     // one when the icon wouldn't show on it (a black logo on the dark theme). A logo with see-through
     // parts gets a dark circle instead of white when it's white itself.
-    if (kind === 'icon') iconLook(url).then(look => { if (img.isConnected) img.style.backgroundColor = cssRgb(iconCircleColor(look, isDarkSurface(row))); });
+    // It's drawn as large as fits (shared.js iconFillScale), since site icons often carry their own
+    // empty margins: a round logo fills the circle, a solid square one fills it edge to edge.
+    if (kind === 'icon') iconLook(url).then(async look => {
+        if (!img.isConnected) return;
+        img.style.backgroundColor = cssRgb(iconCircleColor(look, isDarkSurface(row)));
+        const fitted = await fittedIcon(url, iconFillScale(look));
+        if (fitted && img.isConnected && img.src === url) { img.src = fitted; img.classList.add('unshortener-row-icon-fitted'); }
+    });
     else if (kind === 'logo') iconLook(url).then(look => {
         const bg = contrastingBackground(look, ICON_SURFACE.light, [[60, 64, 67], ICON_MID_GREY]);
         if (img.isConnected && bg !== ICON_SURFACE.light) img.style.backgroundColor = cssRgb(bg);
@@ -2439,6 +2446,34 @@ function iconLook(url) {
     });
     if (iconLooks.size > 500) iconLooks.delete(iconLooks.keys().next().value);
     iconLooks.set(url, p);
+    return p;
+}
+
+// A site's icon redrawn at `scale` times the circle's width, centred on a square twice the largest
+// circle's size (sharp on high-density screens); the circle crops what reaches past it. null when the
+// icon can't be drawn. Remembered per icon and size for the page.
+const fittedIcons = new Map();
+function fittedIcon(url, scale) {
+    if (!scale || !/^data:image\//i.test(url || '')) return Promise.resolve(null);
+    const key = scale.toFixed(3) + '|' + url;
+    if (fittedIcons.has(key)) return fittedIcons.get(key);
+    const p = new Promise(resolve => {
+        const im = new Image();
+        im.onload = () => {
+            try {
+                const box = 72, side = box * scale, c = document.createElement('canvas');
+                c.width = c.height = box;
+                const g = c.getContext('2d');
+                g.imageSmoothingQuality = 'high';
+                g.drawImage(im, (box - side) / 2, (box - side) / 2, side, side);
+                resolve(c.toDataURL('image/png'));
+            } catch (e) { resolve(null); }
+        };
+        im.onerror = () => resolve(null);
+        im.src = url;
+    });
+    if (fittedIcons.size > 300) fittedIcons.delete(fittedIcons.keys().next().value);
+    fittedIcons.set(key, p);
     return p;
 }
 

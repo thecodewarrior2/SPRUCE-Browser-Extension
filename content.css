@@ -69,14 +69,19 @@ html[data-unshortener-pictures="medium"] .unshortener-row-avatar {
     --unshortener-circle: 32px;
     --unshortener-icon-pad: 5px;
 }
-/* A site's icon (no photo or logo): 24 px in a 36 px circle (22 px in 32), on a soft tint of the
-   icon's own color (set by content.js; light grey until it's known), with no border, so the circles
-   look alike and the icon fills them. */
+/* A site's icon (no photo or logo): 24 px in a 36 px circle (22 px in 32) until content.js has measured
+   it and redrawn it to fill the circle; on a soft tint of the icon's own color (light grey until it's
+   known), with no border, so the circles look alike. */
 .unshortener-row-avatar.unshortener-row-icon {
     box-sizing: border-box;
     padding: var(--unshortener-icon-pad);
     object-fit: contain;
     background-color: #f1f3f4;
+}
+/* The icon redrawn to fill the circle (content.js fittedIcon): it carries its own margin. */
+.unshortener-row-avatar.unshortener-row-icon.unshortener-row-icon-fitted {
+    padding: 0;
+    object-fit: cover;
 }
 /* No picture and no icon: the sender's initial on a color of their own, so every row looks alike. */
 .unshortener-row-avatar.unshortener-row-initial {

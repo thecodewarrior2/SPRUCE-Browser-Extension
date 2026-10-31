@@ -1365,16 +1365,30 @@ function contrastRatio(a, b) { return (Math.max(a, b) + 0.05) / (Math.min(a, b) 
 // its outline and of its inside.
 function iconPixelLook(d, size) {
     const solid = (i) => d[i * 4 + 3] >= 128;
-    let r = 0, g = 0, b = 0, n = 0, clear = 0;
-    const edge = [], inner = [];
+    let r = 0, g = 0, b = 0, n = 0, clear = 0, far = 0;
+    const edge = [], inner = [], mid = (size - 1) / 2;
     for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
         const i = y * size + x, p = i * 4;
         if (!solid(i)) { clear++; continue; }
+        far = Math.max(far, Math.hypot(x - mid, y - mid) + Math.SQRT1_2);
         if (!(d[p] > 230 && d[p + 1] > 230 && d[p + 2] > 230)) { r += d[p]; g += d[p + 1]; b += d[p + 2]; n++; }
         const outline = x === 0 || y === 0 || x === size - 1 || y === size - 1 || !solid(i - 1) || !solid(i + 1) || !solid(i - size) || !solid(i + size);
         (outline ? edge : inner).push(relativeLuminance([d[p], d[p + 1], d[p + 2]]));
     }
-    return { tint: n >= Math.max(8, size * size / 32) ? [r / n, g / n, b / n] : null, seeThrough: clear >= size * size * 0.05, edge, inner };
+    // reach: how far the icon's visible pixels go from its middle, as a share of half its width (1 = the
+    // middle of an edge, about 1.41 = a corner).
+    return { tint: n >= Math.max(8, size * size / 32) ? [r / n, g / n, b / n] : null, seeThrough: clear >= size * size * 0.05, edge, inner, reach: far / (size / 2) };
+}
+// How wide to draw a site's icon in its circle, as a share of the circle's width, so the icon fills it:
+// the farthest visible pixel lands just inside the edge (a round logo fills the whole circle, a square
+// one the largest square that fits). A solid icon (its own square background) fills the circle edge to
+// edge, like a logo. Never smaller than the fixed size used before (2/3) shrunk a little, never more than
+// 2.5 times the circle (a dot of an icon isn't blown up). null when the icon couldn't be read.
+const ICON_FILL_EDGE = 0.86;   // the farthest pixel at 86% of the circle's radius: about 2.5 px of margin in 36 px
+function iconFillScale(look) {
+    if (!look || !(look.reach > 0)) return null;
+    if (!look.seeThrough) return 1;
+    return Math.min(2.5, Math.max(0.6, ICON_FILL_EDGE / look.reach));
 }
 // The share of some of an icon's pixels (luminances) with at least `min`:1 contrast against a color.
 function iconVisibleShare(pixels, bg, min) {
