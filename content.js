@@ -295,15 +295,53 @@ let badgeTimer = null;
 
 
 function safeSend(message, callback) {
+    // A message that expects an answer is work in progress until the answer has been handled.
+    const done = callback ? workStarted() : null;
+    const answer = (response) => { try { callback(response); } finally { done(); } };
     try {
         chrome.runtime.sendMessage(message, (response) => {
-            if (chrome.runtime.lastError) { if (callback) callback(null); return; }
-            if (callback) callback(response);
+            if (chrome.runtime.lastError) { if (callback) answer(null); return; }
+            if (callback) answer(response);
         });
     } catch (e) {
         // Extension was reloaded/updated while this tab stayed open.
-        if (callback) callback(null);
+        if (callback) answer(null);
     }
+}
+
+// --- Work in progress ------------------------------------------------------------------------------
+// How many checks are still running on the page: messages to the background waiting for an answer,
+// emails' original source or attachments being read, a scan waiting to run (or the first one, right
+// after the page loads), and emails queued or being moved to Spam. Shown as
+// <html data-unshortener-busy="N">: 0 means everything on screen has been checked and decided, so the
+// browser tests (and anyone troubleshooting) can wait for "done" instead of guessing how long it takes.
+let workInFlight = 0, firstScanPending = true;
+const SPAM_PARKED = new Set(['view', 'several lists', 'split view', 'selection', 'user busy', 'tab hidden', 'not shown']);
+function publishBusy() {
+    let n;
+    // Called as early as the first message, before the scan and Spam state below are set up.
+    try {
+        if (!spamQueue.size && document.documentElement.dataset.unshortenerSpamWait) document.documentElement.dataset.unshortenerSpamWait = '';
+        // Moves parked until the user changes something (the view, a selection…) aren't work in progress;
+        // waits that end by themselves (the quiet period, a pause after failures) are.
+        const parked = SPAM_PARKED.has(document.documentElement.dataset.unshortenerSpamWait || '');
+        n = workInFlight + (firstScanPending || mutationDebounceTimer ? 1 : 0) + (parked ? 0 : spamQueue.size) + (spamMoveRunning ? 1 : 0);
+    } catch (e) { n = workInFlight + 1; }
+    const v = String(n);
+    if (document.documentElement.dataset.unshortenerBusy !== v) document.documentElement.dataset.unshortenerBusy = v;
+}
+// Starts a unit of work; the function it returns ends it (once). The end is counted a moment later, so
+// a step that starts the next one right away never shows 0 in between.
+function workStarted() {
+    workInFlight++;
+    publishBusy();
+    let ended = false;
+    return () => { if (ended) return; ended = true; setTimeout(() => { workInFlight--; publishBusy(); }, 0); };
+}
+function trackWork(promise) {
+    const done = workStarted();
+    promise.then(done, done);
+    return promise;
 }
 
 // Link marker icons as [size, extra <svg> attributes, [tag, attributes]…]; built with DOM calls, never
@@ -957,7 +995,7 @@ function maybeScanQr(img) {
     let sameOrigin = false;
     try { sameOrigin = new URL(img.src).origin === location.origin || img.src.startsWith('blob:'); } catch (e) { /* ignore */ }
     if (!sameOrigin) { img.dataset.qr = 'skipped'; return; }   // never fetch from the sender's own server
-    fetch(img.src, { credentials: 'include' })
+    trackWork(fetch(img.src, { credentials: 'include' }))
         .then(r => r.blob()).then(async (blob) => { if (blob.size <= ATTACHMENT_MAX_BYTES) send({ b64: await blobToBase64(blob), mime: blob.type }); })
         .catch(() => { img.dataset.qr = 'failed'; });
 }
@@ -1043,9 +1081,9 @@ function scanAttachments() {
 }
 
 async function readAttachment(url, limit) {
-    const res = await fetch(url, { credentials: 'include' });
+    const res = await trackWork(fetch(url, { credentials: 'include' }));
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    if (!limit) return res.blob();
+    if (!limit) return trackWork(res.blob());
     // only the first `limit` bytes (archive headers)
     const reader = res.body.getReader();
     const chunks = []; let total = 0;
@@ -1352,7 +1390,7 @@ function getMessageHeadersById(id) {
     if (messageAuth.has(id)) return messageAuth.get(id);
     if (messageAuth.size >= MESSAGE_AUTH_MAX) messageAuth.delete(messageAuth.keys().next().value);
     const H = MAIL.headers;
-    const p = fetch(headersUrl(id), { credentials: 'include' })
+    const p = trackWork(fetch(headersUrl(id), { credentials: 'include' })
         .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return readUntilHeadersEnd(r); })
         .then(text => {
             let raw = text;
@@ -1370,7 +1408,7 @@ function getMessageHeadersById(id) {
         .catch(e => {
             if (!authFetchFailureLogged) { authFetchFailureLogged = true; reportEvent('warning', `${SITE.name}'s original message could not be read (${e.message}), so senders are treated as not checked.`); }
             return null;
-        });
+        }));
     messageAuth.set(id, p);
     return p;
 }
@@ -3073,6 +3111,7 @@ function showConflictNotice(c) {
 function queueSpamMove(thread, item) {
     if (!MAIL_CAN.move || !thread || spamAttempted.has(thread) || spamQueue.has(thread)) return;
     spamQueue.set(thread, Object.assign({}, item, { since: Date.now() }));
+    publishBusy();
     scheduleSpamMoves();
 }
 function scheduleSpamMoves(delay = 800) {
@@ -3342,29 +3381,37 @@ function rowForThread(thread) {
 
 async function runSpamMoves() {
     if (spamMoveRunning || !spamQueue.size) return;
-    if (!lastSettings.enableAutoSpam) { spamQueue.clear(); return; }
+    if (!lastSettings.enableAutoSpam) { spamQueue.clear(); publishBusy(); return; }
     spamMoveRunning = Date.now();
+    publishBusy();
+    // Why the queued moves are waiting, when they are (shown as <html data-unshortener-spam-wait>).
+    let wait = 'not shown';
     try {
         // Paused after repeated failures, hidden tab, not the inbox or the user is busy: wait (every
         // exit below looks again later while anything is queued).
-        if (Date.now() < spamPausedUntil || document.hidden || !viewAllowsAutoSpam(location.hash, MAIL.views, lastSettings.enableAutoSpamInSearch !== false) || userBusy() || quietRemaining()) return;
+        wait = Date.now() < spamPausedUntil ? 'paused' : document.hidden ? 'tab hidden' : !viewAllowsAutoSpam(location.hash, MAIL.views, lastSettings.enableAutoSpamInSearch !== false) ? 'view'
+            : userBusy() ? 'user busy' : quietRemaining() ? 'recent activity' : '';
+        if (wait) return;
+        wait = 'not shown';
         const current = currentThreadKey();
         // Several lists on the inbox page (Multiple Inboxes, Priority Inbox sections): some can show
         // conversations that aren't in the inbox, so nothing is moved from the list there. (Search
         // results may be split into sections too; any of them may be moved.)
         if (!current && !isSearchView(location.hash, MAIL.views) && new Set(shownAll(MAIL.list.row).map(r => r.closest(MAIL.list.container || 'table'))).size > 1) {
             if (!multiListLogged) { multiListLogged = true; reportEvent('info', 'Emails from flagged senders are not moved to Spam from an inbox with several sections (Multiple Inboxes or Priority Inbox); they are still marked, and are moved when opened.'); }
+            wait = 'several lists';
             return;
         }
         // Split view (a conversation open beside the list): which one the toolbar acts on isn't certain,
         // so nothing is moved there.
         if (current && shownAll(MAIL.list.row).length) {
             if (!splitViewLogged) { splitViewLogged = true; reportEvent('info', `Emails from flagged senders are not moved to Spam while ${SITE.name} shows a conversation beside the list (split view); they are still marked.`); }
+            wait = 'split view';
             return;
         }
         // Only now the memory (after the cheap checks above, so a wait never reads it).
         const memory = await movedThreads();
-        if (!memory) return;                                  // can't tell what was moved before: wait
+        if (!memory) { wait = 'memory'; return; }             // can't tell what was moved before: wait
         const rows = [];
         let open = null;
         for (const [thread, it] of [...spamQueue]) {
@@ -3395,18 +3442,19 @@ async function runSpamMoves() {
         // The settings (a policy may have changed) and the page are looked at again right before
         // acting: the checks above can take a moment (headers).
         const cfg = await sendWithTimeout({ action: 'getSettings' });
-        if (!cfg || !cfg.values) return;
+        if (!cfg || !cfg.values) { wait = 'settings'; return; }
         lastSettings = cfg.values;
         lastPolicy = cfg.policy || {};
-        if (!mayActNow() || currentThreadKey() !== current) return;
+        if (!mayActNow() || currentThreadKey() !== current) { wait = 'user busy'; return; }
         const batch = open ? [open] : rows.filter(it => rowsStillMatch([it])).slice(0, 20);
-        if (!batch.length) return;
+        if (!batch.length) return;                            // what's queued isn't on screen: 'not shown'
         // Everything that would make Gmail act on something else is checked before remembering, so a
         // move put off for the user isn't recorded as done.
-        if (anySelection() || (open ? currentThreadKey() !== open.thread : !rowsStillMatch(batch))) return;
+        if (anySelection()) { wait = 'selection'; return; }
+        if (open ? currentThreadKey() !== open.thread : !rowsStillMatch(batch)) return;
         if (!await rememberSpamThreads(batch, false)) return;  // not remembered: don't move
         const result = open ? await reportSpamOpenThread(open) : await reportSpamRows(batch);
-        if (!result) { await forgetSpamThreads(batch); return; }   // the user got busy first: nothing clicked
+        if (!result) { await forgetSpamThreads(batch); wait = 'user busy'; return; }   // the user got busy first: nothing clicked
         const { moved, ignored, failed } = result;
         for (const it of [...moved, ...failed]) { spamQueue.delete(it.thread); spamAttempted.add(it.thread); }
         if (moved.length) {
@@ -3436,8 +3484,11 @@ async function runSpamMoves() {
                 reportEvent('warning', `${SITE.name} didn't move flagged emails to Spam ${spamMoveFailures} times in a row (its Report spam button didn't respond as expected). Trying again in ${Math.round(pause / 1000)} seconds; they stay marked meanwhile.`);
             }
         } else spamPausedUntil = 0;
+        wait = '';
     } finally {
         spamMoveRunning = 0;
+        document.documentElement.dataset.unshortenerSpamWait = spamQueue.size ? wait || 'retrying' : '';
+        publishBusy();
         if (spamQueue.size) {                                 // waiting (user busy, list hidden, paused): look again
             const quiet = quietRemaining();
             if (quiet) scheduleSpamMoves(quiet + 300);        // right when the user's quiet period ends
@@ -3567,6 +3618,7 @@ function scanSenderIdentity() {
         if (!senderFeaturesOn(S)) {
             if (document.querySelector('[data-unshortener-sender]')) removeSenderDecorations();
             spamQueue.clear();
+            publishBusy();
             return;
         }
         if (!S.enableSenderIdentity && document.querySelector('.unshortener-sender-icon, .unshortener-sender-chip, .unshortener-sender-address')) removeSenderDecorations();
@@ -3617,12 +3669,18 @@ function scheduleScan() {
         guarded('Scanning an email', unshortenLinks);
         guarded('Checking senders', scanSenderIdentity);
         scheduleBadgeUpdate();
+        mutationDebounceTimer = null;
+        firstScanPending = false;
+        publishBusy();
     }, 350);
+    publishBusy();
 }
 
 observer.observe(document.body, { childList: true, subtree: true });
 if (document.querySelector(SITE.body) || (SITE.readFrames && document.querySelector('iframe'))) setTimeout(() => guarded('Scanning an email', unshortenLinks), 500);
 if (MAIL) setTimeout(scheduleScan, 500);
+else setTimeout(() => { firstScanPending = false; publishBusy(); }, 600);   // after the first scan above
+publishBusy();
 
 // Gmail switches views without reloading; report the state right away on navigation and tab switches.
 // Going back to the inbox shows the list Gmail kept, without inserting anything: scan it again.
@@ -3635,7 +3693,7 @@ const SENDER_SETTING_KEYS = ['enableLookalikeCheck', 'enableOwnNameCheck', 'enab
 // Turning protection on or off in Settings or the popup takes effect on the icon immediately.
 chrome.storage.onChanged.addListener((changes, area) => {
     // A policy change (for example sender features locked off) applies at once.
-    if (area === 'managed' && MAIL) { spamQueue.clear(); senderResults.clear(); removeSenderDecorations(); scheduleScan(); return; }
+    if (area === 'managed' && MAIL) { spamQueue.clear(); publishBusy(); senderResults.clear(); removeSenderDecorations(); scheduleScan(); return; }
     if (area !== 'local') return;
     if (changes.senderMessageCache && changes.senderMessageCache.newValue === undefined) senderMessageCache = null;   // cleared in Settings
     if (changes.spamMovedThreads || changes.spamRescuedThreads) spamMemory = null;   // read again when next needed

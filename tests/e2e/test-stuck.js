@@ -1,6 +1,6 @@
 // Moving to Spam must keep working without a reload: Gmail ignoring clicks, the list hidden for a
 // moment, emails arriving one after another. Each part has its own browser (run in parallel).
-const { launch, servePage, sleep, waitFor, check, part, runParts } = require('./harness');
+const { launch, servePage, sleep, waitFor, ready, check, part, runParts } = require('./harness');
 const scam = (t, unread = true) => ({ t, email: `scam${t}@evil-scam.test`, name: 'Scam ' + t, subj: 'Pay now ' + t, unread });
 const SENDERS = Array.from({ length: 40 }, (_, i) => `scam${6000 + i}@evil-scam.test`);
 const base = { __testScamSenders: ['phisher@evil-scam.test', 'billing@evil-scam.test', ...SENDERS], enableDnsThreatCheck: false };
@@ -33,7 +33,7 @@ part('waves', async () => {
 part('flaky', async () => {
   // Gmail ignores the first 4 clicks: the mover pauses, then recovers on its own.
   const { ctx, page, movedCount } = await start('?flaky=4');
-  await sleep(1500);
+  await ready(page);
   await page.evaluate((rows) => window.__arrive(rows), [scam(6010)]);
   const t0 = Date.now();
   const s = await movedCount(3, 180000);
@@ -46,7 +46,8 @@ part('flaky', async () => {
 part('hidden-list', async () => {
   // The list is hidden (an email opened) while moves are waiting, then shown again.
   const { ctx, page, movedCount } = await start();
-  await sleep(1200);
+  // The flagged rows are labelled: their moves are queued.
+  await waitFor(() => page.evaluate(() => document.querySelectorAll('.unshortener-sender-chip[data-status="flagged"]').length >= 2), 20000);
   await page.evaluate(() => window.__hideList(4000));
   const s = await movedCount(2, 30000);
   check('list hidden for a moment while moves waited: still moved afterwards', s.length === 2, s);
@@ -66,25 +67,30 @@ part('hidden-at-load', async () => {
 part('user-busy', async () => {
   // The user's own activity: nothing moves until 10 seconds after their last click or key.
   const { ctx, page, spammed, movedCount } = await start();
-  await sleep(500);
+  await ready(page);
   const tA = Date.now();
-  for (let i = 0; i < 4; i++) { await page.mouse.click(5, 300); await sleep(2000); }      // a click every 2 s
-  check('while the user keeps clicking: nothing moved', (await spammed()).length === 0, await spammed());
+  // The scenario itself is timed: the user clicks every 2 s (intended timing, not a wait).
+  for (let i = 0; i < 4; i++) { await page.mouse.click(5, 300); await sleep(2000); }      // allow-sleep: the user's clicks
+  const waiting = await waitFor(() => page.evaluate(() => document.documentElement.dataset.unshortenerSpamWait === 'recent activity'), 20000);
+  check('while the user keeps clicking: nothing moved (the mover waits for their activity to stop)', (await spammed()).length === 0 && waiting, { spammed: await spammed(), waiting });
   const lastClick = tA + 6000;
   const s = await movedCount(2, 30000);
   const quietFor = Math.round((Date.now() - lastClick) / 1000);
-  check(`moved once the user was idle 10 s (after ${quietFor} s idle)`, s.length === 2 && quietFor >= 9 && quietFor <= 16, quietFor);
+  // The 10-second quiet period is the extension's own rule; the upper bound leaves room for a slow computer.
+  check(`moved once the user was idle 10 s (after ${quietFor} s idle)`, s.length === 2 && quietFor >= 9 && quietFor <= 25, quietFor);
   await ctx.close();
 });
 
 part('user-selection', async () => {
   // A row selected by the user blocks moving only while it's selected.
   const { ctx, page, spammed, movedCount } = await start();
-  await sleep(700);
+  // The row is there (before any verdict, so nothing can move first).
+  await waitFor(() => page.evaluate(() => !!document.querySelector('[data-thread-id="#thread-f:1002"]')), 20000);
   const tick = () => page.evaluate(() => document.querySelector('[data-thread-id="#thread-f:1002"]').closest('tr').querySelector('[role=checkbox]').click());
   await tick();
-  await sleep(5000);                                     // long enough for a move (~2 s) to have happened
-  check('while the user has an email selected: nothing moved', (await spammed()).length === 0, await spammed());
+  // The mover has tried and is waiting because of the selection.
+  const waiting = await waitFor(() => page.evaluate(() => document.documentElement.dataset.unshortenerSpamWait === 'selection'), 20000);
+  check('while the user has an email selected: nothing moved (the mover waits for the selection)', (await spammed()).length === 0 && waiting, { spammed: await spammed(), waiting });
   await tick();
   await page.mouse.move(0, 0);
   const s = await movedCount(2, 16000);

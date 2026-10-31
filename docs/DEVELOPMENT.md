@@ -92,3 +92,7 @@ pages, so changes to a webmail's layout need checking on the live site. The test
 ```bash
 cd tests && npm install && node run-all.js
 ```
+
+The tests never pause for a fixed time: they wait for what they check, or for the page to report that
+the extension is done (`<html data-unshortener-busy="0">`). How to write them is in
+[`tests/README.md`](../tests/README.md).

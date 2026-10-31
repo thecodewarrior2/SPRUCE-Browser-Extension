@@ -1,4 +1,4 @@
-const { launch, servePage, sleep, until, check, done } = require('./harness');
+const { launch, servePage, until, settled, check, done } = require('./harness');
 (async () => {
   const { ctx, sw } = await launch();
   await sw.evaluate(() => chrome.storage.local.set({
@@ -13,7 +13,7 @@ const { launch, servePage, sleep, until, check, done } = require('./harness');
   await page.goto('https://mail.google.com/mail/u/0/#inbox');
   await until(() => page.evaluate(() => window.__spammed.length), n => n >= 2, 15000);
   await until(() => page.locator('.unshortener-spam-notice').textContent().catch(() => ''), t => /2 emails/.test(t || ''), 8000);
-  await sleep(1500);                                 // and long enough for a (wrong) third move
+  await settled(page);                               // everything checked and decided: no (wrong) third move
   const spammed = await page.evaluate(() => window.__spammed);
   check('flagged unread rows moved (1001, 1007)', spammed.includes('#thread-f:1001') && spammed.includes('#thread-f:1007'), spammed);
   check('rescued thread 1005 not moved again', !spammed.includes('#thread-f:1005'), spammed);
@@ -44,13 +44,11 @@ const { launch, servePage, sleep, until, check, done } = require('./harness');
   const before = await page.evaluate(() => document.querySelectorAll('tr.zA .unshortener-sender-chip').length);
   await page.evaluate(() => window.__rewriteRows());
   const wiped = await page.evaluate(() => document.querySelectorAll('tr.zA .unshortener-sender-chip').length);
-  await sleep(2500);
-  const after = await page.evaluate(() => document.querySelectorAll('tr.zA .unshortener-sender-chip').length);
+  const after = await until(() => page.evaluate(() => document.querySelectorAll('tr.zA .unshortener-sender-chip').length), n => n === before, 15000);
   check(`rows rewritten in place get their labels back (${before} → ${wiped} → ${after})`, before > 0 && wiped === 0 && after === before, { before, wiped, after });
   const mem = await sw.evaluate(() => new Promise(r => chrome.storage.local.get(['spamMovedThreads', 'recentActivity', 'errorLogs'], r)));
   check('memory records moved threads', mem.spamMovedThreads['thread-f:1001'] && mem.spamMovedThreads['thread-f:1007'] && mem.spamMovedThreads['thread-f:1005'], mem.spamMovedThreads);
-  await sleep(800);
-  const mem2 = await sw.evaluate(() => new Promise(r => chrome.storage.local.get(['recentActivity', 'errorLogs', 'spamMovedThreads'], r)));
+  const mem2 = await until(() => sw.evaluate(() => new Promise(r => chrome.storage.local.get(['recentActivity', 'errorLogs', 'spamMovedThreads'], r))), m => (m.recentActivity || []).some(a => a.type === 'Moved to Spam'), 10000);
   console.log('memory later:', mem2.spamMovedThreads);
   check('recent activity shows the move', (mem2.recentActivity || []).some(a => a.type === 'Moved to Spam'), mem2.recentActivity);
   const errs = (mem2.errorLogs || []).filter(e => e.level === 'error');

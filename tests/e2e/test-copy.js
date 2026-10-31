@@ -1,6 +1,6 @@
 // The copy button after the sender's address in an opened email: copies the address, confirms it,
 // works from the keyboard, is independent of the sender checks, and has its own switch.
-const { launch, servePage, until, sleep, check, done } = require('./harness');
+const { launch, servePage, until, settled, check, done } = require('./harness');
 (async () => {
   const { ctx, sw } = await launch();
   await ctx.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: 'https://mail.google.com' });
@@ -35,7 +35,7 @@ const { launch, servePage, until, sleep, check, done } = require('./harness');
   // Its own switch.
   await set({ enableDnsThreatCheck: false, enableCopyAddress: false });
   p = await open();
-  await sleep(2500);
+  await settled(p);
   check('switched off: no copy button', !(await button(p)));
   await p.close();
   await ctx.close();

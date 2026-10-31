@@ -1,6 +1,6 @@
 // Sender photos and logos harvested from opened emails (simulated Gmail, in the formats the real page
 // uses): which ones are used, and how a change is picked up.
-const { launch, servePage, sleep, waitFor, check, done } = require('./harness');
+const { launch, servePage, waitFor, until, settled, check, done } = require('./harness');
 (async () => {
   const { ctx, sw } = await launch();
   await servePage(ctx, 'fake-gmail-thread.html');
@@ -13,7 +13,7 @@ const { launch, servePage, sleep, waitFor, check, done } = require('./harness');
     const who = decodeURIComponent(/from=([^&]+)/.exec(q)[1]);
     const before = await mentions(who);
     const p = await ctx.newPage(); await p.goto('https://mail.google.com/mail/u/0/?' + q + '#inbox/abc');
-    if (quiet) await sleep(4000); else await waitFor(async () => (await mentions(who)) > before, 12000);
+    if (quiet) await settled(p); else await waitFor(async () => (await mentions(who)) > before, 12000);
     await p.close();
   };
   const about = (l, who) => l.filter(m => m.includes(who) && /photo|logo/.test(m));
@@ -75,12 +75,11 @@ const { launch, servePage, sleep, waitFor, check, done } = require('./harness');
   check('inbox list: the picture never takes clicks, and is not drawn next to the sender', over && over.clickThrough && !over.inline, over);
   const box = await p.locator(rowSel).boundingBox();
   await p.mouse.move(box.x + 20, box.y + box.height / 2);
-  await sleep(200);
-  const onHover = await p.evaluate((sel) => getComputedStyle(document.querySelector(sel + ' .unshortener-row-avatar')).display, rowSel);
+  const onHover = await until(() => p.evaluate((sel) => getComputedStyle(document.querySelector(sel + ' .unshortener-row-avatar')).display, rowSel), d => d === 'none', 5000);
   check('inbox list: on hover the picture steps aside and the checkbox shows', onHover === 'none', onHover);
   await p.locator(rowSel + ' [role=checkbox]').click();
-  await p.mouse.move(5, 5); await sleep(200);
-  const ticked = await p.evaluate((sel) => ({ checked: document.querySelector(sel + ' [role=checkbox]').getAttribute('aria-checked'), shown: getComputedStyle(document.querySelector(sel + ' .unshortener-row-avatar')).display }), rowSel);
+  await p.mouse.move(5, 5);
+  const ticked = await until(() => p.evaluate((sel) => ({ checked: document.querySelector(sel + ' [role=checkbox]').getAttribute('aria-checked'), shown: getComputedStyle(document.querySelector(sel + ' .unshortener-row-avatar')).display }), rowSel), t => t.checked === 'true' && t.shown === 'none', 5000);
   check('inbox list: the checkbox works, and a ticked row shows its checkbox, not the picture', ticked.checked === 'true' && ticked.shown === 'none', ticked);
   // Colleagues' photos from anywhere Gmail shows them (a hover card here), without opening their
   // emails; never a picture inside an email, an outsider's, or one from Gmail's image proxy.
@@ -92,7 +91,7 @@ const { launch, servePage, sleep, waitFor, check, done } = require('./harness');
     add('<div class="chat"><img data-hovercard-id="lee2.colleague@school.org" src="https://ci3.googleusercontent.com/meips/proxy-not-real"></div>');
   });
   const harvested = await waitFor(async () => (await logs()).some(m => /kim\.colleague@school\.org/.test(m)), 10000);
-  await sleep(3500);                                   // one more 3-second check, for the others
+  await settled(p);                                    // the same pass looked at the others: its answers are in
   const hl = await logs();
   check('a colleague\'s photo shown anywhere in Gmail (a hover card) is learned without opening an email', harvested && hl.some(m => /photo for kim\.colleague@school\.org/.test(m)), hl.filter(m => /kim\./.test(m)));
   check('never a picture inside an email, an outsider\'s, or one from Gmail\'s image proxy', !hl.some(m => /ceo\.colleague|outsider@example\.org|lee2\.colleague/.test(m)), hl.filter(m => /ceo\.|outsider|lee2/.test(m)));

@@ -1,7 +1,7 @@
 // "Call this number" scams: a subject with a phone number and the scam's wording is red from the list
 // (whoever sent it, even a company's own system); a plain number with "call" is a caution only; the
 // setting switches it off. Opened, the subject and body count too. (Fictional 555 numbers only.)
-const { launch, servePage, until, sleep, check, part, runParts } = require('./harness');
+const { launch, servePage, until, settled: settledPage, ready, check, part, runParts } = require('./harness');
 const SCAM = 'Your order of Windows Defender was successfully purchased. If this purchase was not made by you, please contact Microsoft Customer Support Immediately at 1(555)010-0188.';
 const label = (page, t) => page.evaluate((t) => {
   const el = document.querySelector(`[data-thread-id="#thread-f:${t}"]`);
@@ -16,7 +16,7 @@ async function list(settings = {}) {
   await servePage(ctx, 'fake-gmail-list.html');
   const page = await ctx.newPage();
   await page.goto('https://mail.google.com/mail/u/0/#inbox');
-  await sleep(500);
+  await ready(page);
   await page.evaluate((scam) => window.__arrive([
     { t: 9301, email: 'msonlineservicesteam@microsoftonline.com', name: 'msonlineservicesteam@microsoftonline.com', subj: scam, unread: true },
     { t: 9302, email: 'orders@shop.example', name: 'Example Shop', subj: 'Your order is ready - call (555) 010-0123 to pick it up', unread: true }]), SCAM);
@@ -35,7 +35,7 @@ part('list', async () => {
 part('off', async () => {
   const { ctx, page } = await list({ enableCallbackScamCheck: false });
   await until(() => label(page, 9301), settled, 8000);
-  await sleep(1000);
+  await settledPage(page);
   const a = await label(page, 9301);
   check('switched off: not flagged for it', a && !/call this number/.test(a.title), a);
   await ctx.close();

@@ -2,7 +2,7 @@
 // from their accessibility structure): read-only sender features, the webmail's own warnings, and
 // never a click.
 const fs = require('fs');
-const { launch, sleep, until, check, done } = require('./harness');
+const { launch, until, settled, check, done } = require('./harness');
 const serve = (ctx, pattern, file) => ctx.route(pattern, r => r.fulfill({ status: 200, contentType: 'text/html', body: fs.readFileSync(__dirname + '/' + file, 'utf8') }));
 const chips = (page) => page.evaluate(() => [...document.querySelectorAll('.unshortener-sender-chip')].map(c => ({ status: c.dataset.status, title: c.title, inRow: !!c.closest('[role=option],[role=listitem]') })));
 (async () => {
@@ -28,7 +28,7 @@ const chips = (page) => page.evaluate(() => [...document.querySelectorAll('.unsh
   check('generic opened email: a brand\'s name on an address that isn\'t the brand\'s is red, as in the inbox list', opened.length === 1 && opened[0].status === 'flagged' && /isn't PayPal's address/.test(opened[0].title), opened);
   const linkChecked = await page.evaluate(() => !!document.querySelector('[aria-label="Message body"] a[data-unshortened]'));
   check('link checks still run on the site', linkChecked, linkChecked);
-  await sleep(3000);                                 // long enough for a (wrong) click to have happened
+  await settled(page);                               // everything checked and decided: no (wrong) click
   let clicks = await page.evaluate(() => window.__clicks);
   check('never a click on a generic site: no checkbox, no Junk button (flagged sender in the list)', clicks.length === 0, clicks);
   await page.close();
@@ -39,7 +39,7 @@ const chips = (page) => page.evaluate(() => [...document.querySelectorAll('.unsh
   await page.goto('https://outlook.office.com/mail/inbox?warn=1');
   c = await until(() => chips(page), c => c.some(x => !x.inRow && x.status === 'flagged'));
   await until(() => page.evaluate(() => !!document.querySelector('.unshortener-email-banner')), v => v, 5000);
-  await sleep(2000);                                 // long enough for a (wrong) click to have happened
+  await settled(page);                               // everything checked and decided: no (wrong) click
   const o = c.filter(x => !x.inRow);
   check('the webmail\'s own warning flags the opened email, quoting it', o.length === 1 && o[0].status === 'flagged' && /Outlook on the web itself warns about this sender: “This sender failed our fraud detection checks/.test(o[0].title), o);
   const banner = await page.evaluate(() => (document.querySelector('.unshortener-email-banner') || {}).textContent || '');
@@ -73,7 +73,7 @@ const chips = (page) => page.evaluate(() => [...document.querySelectorAll('.unsh
   await set(Object.assign({}, base, { enableSenderIdentity: false, enableSenderDomainCheck: false, enableSenderAddressCheck: false }));
   page = await ctx.newPage();
   await page.goto('https://outlook.office.com/mail/inbox?warn=1');
-  await sleep(3500);
+  await settled(page);
   c = await chips(page);
   check('sender features off: no labels on a generic site', c.length === 0, c);
   await page.close();
@@ -81,7 +81,7 @@ const chips = (page) => page.evaluate(() => [...document.querySelectorAll('.unsh
   await set(Object.assign({}, base, { enableOutlookSupport: false }));
   page = await ctx.newPage();
   await page.goto('https://outlook.office.com/mail/inbox');
-  await sleep(3500);
+  await settled(page);
   const any = await page.evaluate(() => document.querySelectorAll('[class*="unshortener-"], a[data-unshortened]').length);
   check('Outlook support switched off: the extension leaves the page alone', any === 0, any);
   await page.close();

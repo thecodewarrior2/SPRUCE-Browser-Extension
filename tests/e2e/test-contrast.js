@@ -1,7 +1,7 @@
 // Sender icons stay readable in Gmail's dark and light themes: a black icon with a see-through
 // background gets a light circle on the dark theme (and a light plate beside the flag in Compact), a
 // white one gets a dark circle on the light theme, and an icon that already shows keeps its own tint.
-const { launch, servePage, until, sleep, check, part, runParts } = require('./harness');
+const { launch, servePage, until, settled, ready, check, part, runParts } = require('./harness');
 
 // A fresh browser with three site icons drawn as see-through rings: black, white and blue.
 async function start(density, theme) {
@@ -23,7 +23,7 @@ async function start(density, theme) {
   const page = await ctx.newPage();
   await page.goto(`https://mail.google.com/mail/u/0/?density=${density}#inbox`);
   if (theme === 'dark') await page.evaluate(() => { document.body.style.background = '#202124'; document.body.style.color = '#e8eaed'; });
-  await sleep(500);
+  await ready(page);
   await page.evaluate(() => window.__arrive([
     { t: 8401, email: 'news@blackicon.example', name: 'Black Icon', subj: 'Dark logo', unread: true },
     { t: 8402, email: 'news@whiteicon.example', name: 'White Icon', subj: 'Light logo', unread: true },
@@ -68,7 +68,7 @@ part('compact-dark', async () => {
   const { ctx, page } = await start('compact', 'dark');
   const black = await until(() => look(page, 8401, [0, 0, 0]), l => l && !l.circle && l.plate, 8000);
   check('Compact, dark theme: a black icon beside the flag gets a light plate', black && !black.circle && black.plate && black.contrast >= 3, black);
-  await sleep(1000);
+  await settled(page);
   const blue = await look(page, 8403, [25, 103, 210]);
   check('…a blue icon there needs none', blue && !blue.circle && !blue.plate, blue);
   await ctx.close();

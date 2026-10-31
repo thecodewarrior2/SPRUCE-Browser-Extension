@@ -74,6 +74,7 @@ function initPopup() {
         }
         loadListCounts(cfg);
         loadCounts();
+        document.documentElement.dataset.loaded = '1';   // settings applied (the tests wait for this)
     }).catch((err) => reportToLog('error', 'Toolbar popup', `Settings could not be loaded: ${err.message || err}`));
 }
 
