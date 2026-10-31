@@ -95,18 +95,31 @@ function errorText(e) {
     return String(e.message || e).slice(0, 300);
 }
 
+// Which mailbox a message from a webmail page came from, as shown in the logs: the signed-in address
+// when the page shows it, else the webmail's name (with Gmail's account number from its address,
+// /mail/u/1/ → "account 2"). '' for what isn't about one mailbox (list updates, Settings, the popup).
+function accountLabel(request) {
+    const req = request && typeof request === 'object' ? request.mailbox : null;
+    if (!req || typeof req !== 'object') return '';
+    const a = typeof req.account === 'string' && /^[^\s@<>"]{1,64}@[A-Za-z0-9.-]{1,190}$/.test(req.account) ? req.account.toLowerCase() : '';
+    if (a) return a;
+    const site = typeof req.site === 'string' ? req.site.replace(/[^\w .-]/g, '').slice(0, 40) : '';
+    const slot = typeof req.slot === 'string' && /^\d{1,2}$/.test(req.slot) ? Number(req.slot) : null;
+    return site ? (slot !== null ? `${site}, account ${slot + 1}` : site) : '';
+}
+
 // Pure: returns the new error-log array (newest first) with the entry added or merged.
-function addLogEntry(logs, level, source, message, now) {
+function addLogEntry(logs, level, source, message, now, account = '') {
     const list = Array.isArray(logs) ? logs.slice() : [];
     const i = list.slice(0, 30).findIndex(l => l && l.level === level && l.source === source && l.message === message &&
-                                             now - (l.timestampMs || 0) < LOG_DEDUPE_MS);
+                                             (l.account || '') === account && now - (l.timestampMs || 0) < LOG_DEDUPE_MS);
     if (i > -1) {
         const merged = Object.assign({}, list[i], { count: (list[i].count || 1) + 1, timestampMs: now, time: new Date(now).toLocaleString() });
         list.splice(i, 1);
         list.unshift(merged);
         return { logs: list, merged: true };
     }
-    list.unshift({ time: new Date(now).toLocaleString(), timestampMs: now, level, source, message, count: 1 });
+    list.unshift(Object.assign({ time: new Date(now).toLocaleString(), timestampMs: now, level, source, message, count: 1 }, account ? { account } : {}));
     return { logs: list.slice(0, MAX_ERROR_LOGS), merged: false };
 }
 
@@ -145,38 +158,41 @@ function scheduleLogFlush() {
     if (!logFlushTimer) logFlushTimer = setTimeout(flushLogBuffers, LOG_FLUSH_MS);
 }
 
-function writeLog(level, source, message) {
+// account: accountLabel() of the page the event came from ('' when it isn't about one mailbox).
+function writeLog(level, source, message, account = '') {
     if (!LOG_LEVELS.includes(level)) level = 'error';
     source = String(source || 'Extension').slice(0, 60);
     message = String(message || '').slice(0, 500);
+    account = String(account || '').slice(0, 260);
     if (level === 'error') console.warn(`[${source}] ${message}`);
-    logBuffer.push({ kind: 'log', level, source, message, now: Date.now() });
+    logBuffer.push({ kind: 'log', level, source, message, account, now: Date.now() });
     scheduleLogFlush();
 }
 
-const logError   = (message, source = 'Extension') => writeLog('error', source, message);
-const logWarning = (message, source = 'Extension') => writeLog('warning', source, message);
-const logInfo    = (message, source = 'Extension') => writeLog('info', source, message);
+const logError   = (message, source = 'Extension', account = '') => writeLog('error', source, message, account);
+const logWarning = (message, source = 'Extension', account = '') => writeLog('warning', source, message, account);
+const logInfo    = (message, source = 'Extension', account = '') => writeLog('info', source, message, account);
 
 // An entry for the popup's recent activity only (e.g. emails moved to Spam).
-function logActivity(type, text) {
-    logBuffer.push({ kind: 'activity', type, text: String(text).slice(0, 300), now: Date.now() });
+function logActivity(type, text, account = '') {
+    logBuffer.push({ kind: 'activity', type, text: String(text).slice(0, 300), account: String(account || '').slice(0, 260), now: Date.now() });
     scheduleLogFlush();
 }
 
 // verdict: 'safe' | 'unsafe' | 'unknown' (not verified) | 'blocked' (blocklisted, destination hidden) | 'pixel'
-function logHistoryEntry({ shortUrl, finalUrl, verdict, reason, resolvedIp, resolver, dedupeMs = 0 }) {
-    logBuffer.push({ kind: 'history', shortUrl, finalUrl, verdict, reason, resolvedIp, resolver, dedupeMs, now: Date.now() });
+function logHistoryEntry({ shortUrl, finalUrl, verdict, reason, resolvedIp, resolver, dedupeMs = 0, account = '' }) {
+    logBuffer.push({ kind: 'history', shortUrl, finalUrl, verdict, reason, resolvedIp, resolver, dedupeMs, account: String(account || '').slice(0, 260), now: Date.now() });
     scheduleLogFlush();
 }
 
 function historyActivity(h) {
     const time = new Date(h.now).toLocaleTimeString();
-    if (h.verdict === 'pixel') return { time, timestampMs: h.now, type: 'Pixel Blocked', text: `${h.reason}: ${h.shortUrl}` };
-    if (h.verdict === 'blocked') return { time, timestampMs: h.now, type: 'Blocked', text: `${h.shortUrl} [${h.reason}]` };
+    const acct = h.account ? { account: h.account } : {};
+    if (h.verdict === 'pixel') return Object.assign({ time, timestampMs: h.now, type: 'Pixel Blocked', text: `${h.reason}: ${h.shortUrl}` }, acct);
+    if (h.verdict === 'blocked') return Object.assign({ time, timestampMs: h.now, type: 'Blocked', text: `${h.shortUrl} [${h.reason}]` }, acct);
     const status = h.verdict === 'safe' ? 'Resolved (Safe)'
         : h.verdict === 'unknown' ? `Resolved (not verified${h.reason ? ': ' + h.reason : ''})` : `Flagged (${h.reason || 'Unsafe'})`;
-    return { time, timestampMs: h.now, type: h.verdict === 'unsafe' ? 'Security Warning' : 'Success', text: `${h.shortUrl} → ${h.finalUrl} [${status}]` };
+    return Object.assign({ time, timestampMs: h.now, type: h.verdict === 'unsafe' ? 'Security Warning' : 'Success', text: `${h.shortUrl} → ${h.finalUrl} [${status}]` }, acct);
 }
 
 // Writes everything buffered in one read and one write. Returns the log queue promise.
@@ -199,15 +215,15 @@ function flushLogBuffers() {
 
         for (const e of batch) {
             if (e.kind === 'log') {
-                const r = addLogEntry(logs, e.level, e.source, e.message, e.now);
+                const r = addLogEntry(logs, e.level, e.source, e.message, e.now, e.account);
                 logs = r.logs;
                 updates.errorLogs = logs;
                 if (e.level === 'error' && !r.merged) {
-                    activity.unshift({ time: new Date(e.now).toLocaleTimeString(), timestampMs: e.now, type: 'Error', text: `${e.source}: ${e.message}` });
+                    activity.unshift(Object.assign({ time: new Date(e.now).toLocaleTimeString(), timestampMs: e.now, type: 'Error', text: `${e.source}: ${e.message}` }, e.account ? { account: e.account } : {}));
                     updates.recentActivity = activity;
                 }
             } else if (e.kind === 'activity') {
-                activity.unshift({ time: new Date(e.now).toLocaleTimeString(), timestampMs: e.now, type: e.type, text: e.text });
+                activity.unshift(Object.assign({ time: new Date(e.now).toLocaleTimeString(), timestampMs: e.now, type: e.type, text: e.text }, e.account ? { account: e.account } : {}));
                 updates.recentActivity = activity;
             } else if (historyOn) {
                 if (e.dedupeMs && history.slice(0, 20).some(h => h.shortUrl === e.shortUrl && h.verdict === e.verdict && e.now - (h.timestampMs || 0) < e.dedupeMs)) continue;
@@ -218,7 +234,8 @@ function flushLogBuffers() {
                     isSafe: e.verdict === 'safe' || e.verdict === 'unknown',
                     reason: e.reason || (e.verdict === 'safe' ? 'Clean' : e.verdict === 'unknown' ? 'Not verified' : ''),
                     resolvedIp: e.resolvedIp || 'N/A',
-                    resolver: e.resolver || ''
+                    resolver: e.resolver || '',
+                    account: e.account || ''
                 });
                 activity.unshift(historyActivity(e));
                 updates.resolutionHistory = history;
@@ -2097,7 +2114,14 @@ async function checkSender(s, ownDomain, cfg) {
 }
 
 const STATUS_WORD = { flagged: 'Flagged', caution: 'Caution', clean: 'Checked, nothing found', trusted: 'Trusted', unverified: 'Not verified', unknown: 'Unknown' };
-async function checkSenders(list, ownDomain) {
+// account: the mailbox asking (accountLabel), remembered on each sender as where it was seen
+// (Logging → Senders), and on its log line.
+const SENDER_SEEN_IN_MAX = 10;
+function withSeenIn(v, account) {
+    const seen = Array.isArray(v.seenIn) ? v.seenIn.filter(a => a !== account) : [];
+    return account ? [account, ...seen].slice(0, SENDER_SEEN_IN_MAX) : seen;
+}
+async function checkSenders(list, ownDomain, account = '') {
     const cfg = await getConfig();
     const S = cfg.values;
     if (!S.enableSenderIdentity && !S.enableSenderDomainCheck && !S.enableSenderAddressCheck) return [];
@@ -2113,14 +2137,19 @@ async function checkSenders(list, ownDomain) {
             const key = `${parsed ? parsed.address : String(items[i].address || '').trim()}|${parsed && parsed.malformed.length ? 'malformed' : ''}|${normalizeDomain(ownDomain || '')}|${stamp}`;
             try {
                 const hit = await senderResultCache.get(key);
-                if (hit && !hit.retry) { results[i] = hit.r; continue; }
+                if (hit && !hit.retry) {
+                    results[i] = hit.r;
+                    // Seen in another mailbox too: noted (keeping the entry's age, so it still expires on time).
+                    if (account && !(Array.isArray(hit.seenIn) && hit.seenIn[0] === account)) senderResultCache.set(key, Object.assign({}, hit, { seenIn: withSeenIn(hit, account) }));
+                    continue;
+                }
                 const r = await checkSender(items[i], ownDomain, cfg);
                 results[i] = r;
                 // Every sender is kept for Logging → Senders; a "not verified" one is checked again next time.
-                senderResultCache.set(key, { r, retry: r.status === 'unverified' });
+                senderResultCache.set(key, { r, retry: r.status === 'unverified', seenIn: withSeenIn(hit || {}, account) });
                 const where = r.country ? `; country: ${countryName(r.country)} (${r.countrySource === 'host' ? 'website hosted there' : 'domain ending'})` : '';
                 writeLog(r.status === 'flagged' ? 'warning' : 'info', 'Sender checks',
-                    `Sender ${r.address}: ${STATUS_WORD[r.status] || r.status}${r.move ? ' (its email will be moved to Spam)' : ''}. ${r.reasons.join(' ')} Checked: ${r.checks}${where}.`);
+                    `Sender ${r.address}: ${STATUS_WORD[r.status] || r.status}${r.move ? ' (its email will be moved to Spam)' : ''}. ${r.reasons.join(' ')} Checked: ${r.checks}${where}.`, account);
             } catch (e) {
                 results[i] = { address: String(items[i].address || ''), status: 'unverified', reasons: ['The check failed.'], move: false };
                 logWarning(`Checking the sender ${String(items[i].address || '').slice(0, 120)} failed (${errorText(e)}).`, 'Sender checks');
@@ -2137,15 +2166,33 @@ async function checkSenders(list, ownDomain) {
 // keeps its newest SPAM_MEMORY_MAX; there is no time limit. When the moved list is full, its oldest
 // entries go first: Gmail deletes Spam after 30 days, so those conversations no longer exist unless
 // the user took them out of Spam, and a rescue clicked in Gmail on the web is in the other list.
-// log: false (remember only) | 'moved' | 'failed' | 'rescued': written to the application log, the
-// popup's activity and spamMoveLog (Logging → Moved to Spam). Resolves to true once saved.
+// log: false (remember only) | 'moved' | 'failed' | 'rescued' (taken out of Spam) | 'kept' (Keep it on
+// a row about to move): written to the application log, the popup's activity and spamMoveLog (Logging
+// → Moved to Spam), each entry with the mailbox it happened in (account: accountLabel). A rescue of an
+// email the extension moved doesn't add a line: the move's own line is marked "taken out of Spam",
+// with when (rescuedTs), so each email has one line with its whole story. Only a rescue with no move
+// on record (Gmail or the user put it in Spam, or the list was cleared) gets a line of its own.
+// Resolves to true once saved.
 const SPAM_LOG_MAX = 1000;
 const SPAM_MEMORY_MAX = 50000;
 let spamMemoryQueue = Promise.resolve();
 let spamMemoryFullLogged = false;
-function recordSpamMoves(moves, log = 'moved') {
+// Pure: the Spam log with the rescues applied. Each rescue marks the newest "moved" line for its
+// conversation in the same mailbox (a line from before mailboxes were recorded matches any); the
+// rescues that match none get new lines, newest first.
+function applySpamRescues(log, rescues, now, account) {
+    const list = Array.isArray(log) ? log.slice() : [];
+    const fresh = [];
+    for (const m of rescues) {
+        const i = list.findIndex(e => e && e.action === 'moved' && e.thread === m.thread && (!e.account || !account || e.account === account));
+        if (i > -1) list[i] = Object.assign({}, list[i], { rescuedTs: now });
+        else fresh.push({ ts: now, action: 'rescued', thread: m.thread, sender: m.address || '', reason: m.reason || '', how: m.how || '', account });
+    }
+    return [...fresh, ...list];
+}
+function recordSpamMoves(moves, log = 'moved', account = '') {
     const saved = spamMemoryQueue.then(async () => {
-        const key = log === 'rescued' ? 'spamRescuedThreads' : 'spamMovedThreads';
+        const key = log === 'rescued' || log === 'kept' ? 'spamRescuedThreads' : 'spamMovedThreads';
         const stored = await storageGet('local', { [key]: {} });
         const map = stored[key] && typeof stored[key] === 'object' ? stored[key] : {};
         const now = Date.now();
@@ -2164,8 +2211,9 @@ function recordSpamMoves(moves, log = 'moved') {
         const updates = { [key]: Object.fromEntries(entries) };
         if (log) {
             const old = await storageGet('local', { spamMoveLog: [] });
-            const entries = moves.map(m => ({ ts: now, action: log, thread: m.thread, sender: m.address || '', reason: m.reason || '', how: m.how || '' }));
-            updates.spamMoveLog = [...entries, ...(Array.isArray(old.spamMoveLog) ? old.spamMoveLog : [])].slice(0, SPAM_LOG_MAX);
+            const prior = Array.isArray(old.spamMoveLog) ? old.spamMoveLog : [];
+            updates.spamMoveLog = (log === 'rescued' ? applySpamRescues(prior, moves, now, account)
+                : [...moves.map(m => ({ ts: now, action: log, thread: m.thread, sender: m.address || '', reason: m.reason || '', how: m.how || '', account })), ...prior]).slice(0, SPAM_LOG_MAX);
         }
         await chrome.storage.local.set(updates);
         return true;
@@ -2176,11 +2224,12 @@ function recordSpamMoves(moves, log = 'moved') {
     spamMemoryQueue = saved;
     for (const m of moves) {
         if (log === 'moved') {
-            logInfo(`Moved to Spam: an email from ${m.address} (conversation ${m.thread}), ${m.how || 'automatically'}. Why: ${m.reason} It won't be moved again if you take it out of Spam.`, 'Sender checks');
-            logActivity('Moved to Spam', `${m.address}: ${m.reason}`);
+            logInfo(`Moved to Spam: an email from ${m.address} (conversation ${m.thread}), ${m.how || 'automatically'}. Why: ${m.reason} It won't be moved again if you take it out of Spam.`, 'Sender checks', account);
+            logActivity('Moved to Spam', `${m.address}: ${m.reason}`, account);
         } else if (log === 'failed') {
-            logWarning(`Not moved to Spam: an email from ${m.address} (conversation ${m.thread}) was flagged, but ${m.how || 'Gmail did not confirm the move'}. It is still marked. Why it was flagged: ${m.reason}`, 'Sender checks');
-        } else if (log === 'rescued') logInfo(`Taken out of Spam by you: conversation ${m.thread}. The extension will never move it back.`, 'Sender checks');
+            logWarning(`Not moved to Spam: an email from ${m.address} (conversation ${m.thread}) was flagged, but ${m.how || 'Gmail did not confirm the move'}. It is still marked. Why it was flagged: ${m.reason}`, 'Sender checks', account);
+        } else if (log === 'rescued') logInfo(`Taken out of Spam by you: conversation ${m.thread}. The extension will never move it back.`, 'Sender checks', account);
+        else if (log === 'kept') logInfo(`Kept in the inbox by you (Keep it): an email from ${m.address || 'a flagged sender'} (conversation ${m.thread}). The extension will never move it.`, 'Sender checks', account);
     }
     return saved;
 }
@@ -2382,7 +2431,7 @@ function applyCloudCheck(safety, url, extra) {
 // on) looked up via unshorten.me. One-time-link protection still applies during a reveal.
 async function resolveLink(shortUrl, linkText, opts = {}) {
     // Links you're sending are checked the same way, but History is for links you received.
-    const logHistory = opts.outgoing ? () => {} : logHistoryEntry;
+    const logHistory = opts.outgoing ? () => {} : (h) => logHistoryEntry(Object.assign({ account: opts.account || '' }, h));
     if (typeof shortUrl !== 'string') return null;
     const shortHost = hostOf(shortUrl);
     if (!shortHost) return null;
@@ -2782,8 +2831,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     // Sender checks for the inbox list and opened emails (Gmail).
     if (request.action === 'checkSenders') {
         if (!sender || sender.id !== chrome.runtime.id || !Array.isArray(request.senders)) { sendResponse([]); return false; }
-        checkSenders(request.senders.filter(x => x && typeof x.address === 'string'), typeof request.ownDomain === 'string' ? request.ownDomain : '')
-            .then(sendResponse).catch((e) => { logError(`Sender checks failed: ${errorText(e)}`, 'Sender checks'); sendResponse([]); });
+        checkSenders(request.senders.filter(x => x && typeof x.address === 'string'), typeof request.ownDomain === 'string' ? request.ownDomain : '', accountLabel(request))
+            .then(sendResponse).catch((e) => { logError(`Sender checks failed: ${errorText(e)}`, 'Sender checks', accountLabel(request)); sendResponse([]); });
         return true;
     }
     // Country of the server that handed an email to Gmail (from the email's own headers).
@@ -2912,7 +2961,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         const moves = request.moves.filter(m => m && typeof m.thread === 'string' && /^thread-f:\d{1,25}$/.test(m.thread)).slice(0, 100)
             .map(m => ({ thread: m.thread, address: String(m.address || '').slice(0, 200), reason: String(m.reason || '').slice(0, 1000), how: String(m.how || '').slice(0, 200) }));
         if (!moves.length) { sendResponse(false); return false; }
-        recordSpamMoves(moves, ['moved', 'failed', 'rescued'].includes(request.log) ? request.log : false).then(sendResponse, () => sendResponse(false));
+        recordSpamMoves(moves, ['moved', 'failed', 'rescued', 'kept'].includes(request.log) ? request.log : false, accountLabel(request)).then(sendResponse, () => sendResponse(false));
         return true;
     }
 
@@ -2941,7 +2990,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     // Errors and events reported by the Gmail content script, the popup and the Options page.
     if (request.action === 'logEvent') {
         if (!sender || sender.id !== chrome.runtime.id) { sendResponse({ status: 'ignored' }); return false; }
-        writeLog(LOG_LEVELS.includes(request.level) ? request.level : 'error', request.source || 'Extension', request.message);
+        writeLog(LOG_LEVELS.includes(request.level) ? request.level : 'error', request.source || 'Extension', request.message, accountLabel(request));
         sendResponse({ status: 'logged' });
         return false;
     }
@@ -2967,7 +3016,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 
     if (request.action === 'logPixel') {
-        logHistoryEntry({ shortUrl: request.url, finalUrl: request.url, verdict: 'pixel', reason: `Tracking pixel ${request.removed ? 'removed' : 'neutralized'}`, resolver: 'Pixel Detector' });
+        logHistoryEntry({ shortUrl: request.url, finalUrl: request.url, verdict: 'pixel', reason: `Tracking pixel ${request.removed ? 'removed' : 'neutralized'}`, resolver: 'Pixel Detector', account: accountLabel(request) });
         sendResponse({ status: "Logged" });
         return true;
     }
@@ -3066,10 +3115,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 
     if (request.action === 'resolveUrl') {
-        resolveLink(request.url, request.linkText || '', { reveal: request.reveal === true })
+        resolveLink(request.url, request.linkText || '', { reveal: request.reveal === true, account: accountLabel(request) })
             .then(r => sendResponse(r || null))
             .catch((e) => {
-                logError(`Analyzing a link on ${logUrl(request.url)} failed: ${errorText(e)}. The link was left unchanged.`, 'Link analysis');
+                logError(`Analyzing a link on ${logUrl(request.url)} failed: ${errorText(e)}. The link was left unchanged.`, 'Link analysis', accountLabel(request));
                 sendResponse(null);
             });
         return true;

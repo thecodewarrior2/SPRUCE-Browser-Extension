@@ -204,8 +204,25 @@ const processedLinksMap = new Map(); // Standard Map with explicit lifecycle cle
 function reportEvent(level, message) {
     try {
         if (!chrome.runtime || !chrome.runtime.id) return;   // extension reloaded: this tab's script is orphaned
-        chrome.runtime.sendMessage({ action: 'logEvent', level, source: SITE.name, message: String(message) }, () => { void chrome.runtime.lastError; });
+        chrome.runtime.sendMessage(withAccount({ action: 'logEvent', level, source: SITE.name, message: String(message) }), () => { void chrome.runtime.lastError; });
     } catch (e) { /* nothing more can be done from an orphaned script */ }
+}
+
+// Which mailbox this page is (several accounts can be signed in, each in its own tab): every message to
+// the background carries it, so each log entry says which account an action was taken in. account is
+// the signed-in address where the webmail shows it (Gmail: in the page title), else ''; site is the
+// webmail's name, and Gmail's account number in the address (/mail/u/1/) tells signed-in accounts
+// apart before the title is there. In a try: this runs before the mail profile below is set up.
+function mailAccount() {
+    let address = '';
+    try { address = accountAddress(); } catch (e) { /* profile not ready yet */ }
+    const u = /\/mail\/u\/(\d+)/.exec(location.pathname);
+    return { account: address, site: (SITE && SITE.name) || location.hostname, slot: u ? u[1] : '' };
+}
+// Under its own key (mailbox), so it can never clash with a message's own fields (senderIcon has a site).
+function withAccount(message) {
+    if (!message || typeof message !== 'object' || message.mailbox !== undefined) return message;
+    return Object.assign({}, message, { mailbox: mailAccount() });
 }
 
 function originOf(url) {
@@ -305,7 +322,7 @@ function safeSend(message, callback) {
     const done = callback ? workStarted() : null;
     const answer = (response) => { try { callback(response); } finally { done(); } };
     try {
-        chrome.runtime.sendMessage(message, (response) => {
+        chrome.runtime.sendMessage(withAccount(message), (response) => {
             if (chrome.runtime.lastError) { if (callback) answer(null); return; }
             if (callback) answer(response);
         });
@@ -3269,7 +3286,7 @@ function keepThreadInInbox(thread) {
     const it = spamQueue.get(thread) || {};
     spamQueue.delete(thread);
     spamAttempted.add(thread);
-    rememberSpamThreads([{ thread, address: it.address || '', reason: 'kept in the inbox by you' }], 'rescued');
+    rememberSpamThreads([{ thread, address: it.address || '', reason: it.reason || '', how: 'Keep it, on the row about to move' }], 'kept');
     syncMoveGuards();
     publishBusy();
     scheduleBadgeUpdate();

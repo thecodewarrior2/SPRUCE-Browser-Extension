@@ -215,6 +215,45 @@ test('recordSpamMoves: no time limit, newest 50,000 kept, first time kept; rescu
   assert.ok(!b2.__store.spamMovedThreads['thread-f:r2']);
 });
 
+test('Spam log: a rescue marks its move\'s own line (same mailbox), with when; one with no move gets a line', async () => {
+  const t0 = Date.now() - 3600e3;
+  const b = loadBackground({ spamMoveLog: [
+    { ts: t0, action: 'moved', thread: 'thread-f:7', sender: 'a@evil.test', reason: 'r', how: 'h', account: 'me@school.org' },
+    { ts: t0, action: 'moved', thread: 'thread-f:7', sender: 'a@evil.test', reason: 'r', how: 'h', account: 'other@gmail.com' },
+    { ts: t0, action: 'moved', thread: 'thread-f:8', sender: 'b@evil.test', reason: 'r', how: 'h' }] });
+  await vm.runInContext(`recordSpamMoves([{ thread: 'thread-f:7' }], 'rescued', 'other@gmail.com')`, b);
+  let log = b.__store.spamMoveLog;
+  assert.equal(log.length, 3, 'no new line for a rescue of a move on record');
+  assert.ok(!log[0].rescuedTs, 'the other mailbox\'s line is left alone');
+  assert.ok(log[1].rescuedTs >= t0 && log[1].action === 'moved' && log[1].account === 'other@gmail.com');
+  // A line written before mailboxes were recorded matches a rescue from any mailbox.
+  await vm.runInContext(`recordSpamMoves([{ thread: 'thread-f:8' }], 'rescued', 'me@school.org')`, b);
+  assert.equal(b.__store.spamMoveLog.length, 3);
+  assert.ok(b.__store.spamMoveLog[2].rescuedTs);
+  // Nothing on record (Gmail put it in Spam): a line of its own, with the mailbox.
+  await vm.runInContext(`recordSpamMoves([{ thread: 'thread-f:9' }], 'rescued', 'me@school.org')`, b);
+  log = b.__store.spamMoveLog;
+  assert.equal(log.length, 4);
+  assert.deepEqual([log[0].action, log[0].thread, log[0].account], ['rescued', 'thread-f:9', 'me@school.org']);
+  // Moves and Keep it carry the mailbox; Keep it is remembered with the rescues.
+  await vm.runInContext(`recordSpamMoves([{ thread: 'thread-f:10', address: 'c@evil.test', reason: 'r' }], 'kept', 'me@school.org')`, b);
+  assert.deepEqual([b.__store.spamMoveLog[0].action, b.__store.spamMoveLog[0].account], ['kept', 'me@school.org']);
+  assert.ok(b.__store.spamRescuedThreads['thread-f:10']);
+});
+
+test('accountLabel: the address when shown, else the webmail (with Gmail\'s account number); never anything else', () => {
+  const b = loadBackground({});
+  const L = (r) => vm.runInContext(`accountLabel(${JSON.stringify({ action: 'x', mailbox: r })})`, b);
+  assert.equal(L({ account: 'Me@School.org', site: 'Gmail', slot: '0' }), 'me@school.org');
+  assert.equal(L({ account: '', site: 'Gmail', slot: '1' }), 'Gmail, account 2');
+  assert.equal(L({ account: '', site: 'Outlook on the web', slot: '' }), 'Outlook on the web');
+  assert.equal(L({ account: '<img src=x>@a.b', site: 'Gmail<script>', slot: '99999' }), 'Gmailscript');
+  assert.equal(L({}), '');
+  assert.equal(L(null), '');
+  // The message's own fields are never read as the mailbox (senderIcon has a site of its own).
+  assert.equal(vm.runInContext(`accountLabel({ action: 'senderIcon', site: 'example.com', account: 'x@y.z' })`, b), '');
+});
+
 test('backup includes and restores the phishing-sender list', () => {
   const backup = S('buildBackup')({ customTrustedSenders: ['A@B.co', 'junk'] }, 't');
   assert.deepEqual(backup.customTrustedSenders, ['a@b.co']);

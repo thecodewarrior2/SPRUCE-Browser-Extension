@@ -216,6 +216,12 @@ hidden tab) is re-checked every 3 seconds, and the moment the view or tab change
 whose Report spam click Gmail ignored backs off, and repeated failures pause it (15 s doubling to
 10 min). The toolbar popup counts the emails waiting and why.
 
+Accounts: every message from a webmail page carries the mailbox it came from (the signed-in address
+from Gmail's page title, else the site name and Gmail's /mail/u/N/ number), and every log entry
+written for it — application log, History, the popup's activity, Moved to Spam, and "Seen in" on
+Senders — records it. Taking a moved email out of Spam marks that move's own line in Moved to Spam
+(`rescuedTs`) in the same account instead of adding a line.
+
 ## 8. QR codes and attachments
 
 Images in an email and attachments up to 10 MB are read **on the device**. The hidden scanner page
