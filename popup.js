@@ -128,7 +128,7 @@ function loadActivity() {
                 // Built with textContent: log entries contain URLs taken from emails.
                 const li = document.createElement('li');
                 const head = document.createElement('strong');
-                head.textContent = `[${item.time}] (${item.type})`;
+                head.textContent = `[${item.time}] (${item.type})${item.account ? ` · ${item.account}` : ''}`;
                 li.appendChild(head);
                 li.appendChild(document.createElement('br'));
                 li.appendChild(document.createTextNode(String(item.text)));

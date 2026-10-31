@@ -140,7 +140,11 @@ watch each step: every layer unwrapped, where it really goes, and what the threa
 - **URL cache**: remembered link results, with where each one goes and what found it.
 - **Senders: icons & flags**: the remembered sender icons, countries and verdicts.
 - **Moved to Spam**: emails the extension moved to Spam, moves that didn't work, and conversations you
-  took out of Spam (never moved again).
+  took out of Spam or kept in the inbox (never moved again). Taking a moved email back out of Spam
+  marks its own line (*Taken out of Spam by you*, with the date and time) rather than adding one.
+- **Several accounts**: every log names the account each entry happened in (the address in Gmail's
+  page title; other webmail by its site name), and searching a log for an address shows only that
+  account's entries. Entries from before 5.85 have none.
 
 ## Help
 

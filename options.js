@@ -573,6 +573,17 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // The mailbox an entry happened in (several accounts can be signed in), under the entry's time.
+    // Entries from before 5.85, and ones not about a mailbox (list updates, Settings), have none.
+    function accountNote(td, account) {
+        if (!account) return;
+        const d = document.createElement('div');
+        d.className = 'log-account';
+        d.textContent = account;
+        d.title = 'The mailbox this happened in';
+        td.appendChild(d);
+    }
+
     function renderHistory() {
         chrome.storage.local.get({ resolutionHistory: [] }, (result) => {
             const tbody = document.querySelector('#historyTable tbody');
@@ -588,7 +599,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const entryIsoDate = formatIsoLocalDate(item.timestampMs, item.timestamp);
                 const dateMatches = !filterDate || (entryIsoDate === filterDate);
                 const status = historyStatus(item);
-                const textMatches = [item.shortUrl, item.finalUrl, item.resolvedIp || '', item.timestamp, status.text, item.resolver || '']
+                const textMatches = [item.shortUrl, item.finalUrl, item.resolvedIp || '', item.timestamp, status.text, item.resolver || '', item.account || '']
                     .some(v => String(v).toLowerCase().includes(filterText));
 
                 if (dateMatches && textMatches) {
@@ -598,6 +609,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     const tdTime = document.createElement('td');
                     tdTime.textContent = item.timestamp;
+                    accountNote(tdTime, item.account);
 
                     const tdShort = document.createElement('td');
                     const codeShort = document.createElement('code');
@@ -882,7 +894,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 statItem('sites without an icon', iconRecs.length - withIcon.length));
             for (const v of rows) {
                 const r = v.r;
-                const text = `${r.address} ${r.domain} ${r.status} ${(r.reasons || []).join(' ')} ${r.checks || ''}`.toLowerCase();
+                const seenIn = Array.isArray(v.seenIn) ? v.seenIn : [];
+                const text = `${r.address} ${r.domain} ${r.status} ${(r.reasons || []).join(' ')} ${r.checks || ''} ${seenIn.join(' ')}`.toLowerCase();
                 if (q && !text.includes(q)) continue;
                 const tr = document.createElement('tr');
                 const who = cell();
@@ -915,14 +928,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 const why = cell();
                 (r.reasons || []).forEach(t => { const d = document.createElement('div'); d.textContent = t; why.appendChild(d); });
                 if (r.checks) { const d = document.createElement('div'); d.style.cssText = 'font-size: 11px; color: var(--text-muted); margin-top: 4px;'; d.textContent = `Checked: ${r.checks}`; why.appendChild(d); }
-                tr.append(who, look, st, why, cell(new Date(v.ts).toLocaleString(), 'white-space: nowrap; font-size: 12px;'));
+                const when = cell(new Date(v.ts).toLocaleString(), 'white-space: nowrap; font-size: 12px;');
+                if (seenIn.length) { const d = document.createElement('div'); d.className = 'log-account'; d.textContent = `Seen in: ${seenIn.join(', ')}`; d.style.whiteSpace = 'normal'; when.appendChild(d); }
+                tr.append(who, look, st, why, when);
                 tbody.appendChild(tr);
             }
             if (!tbody.children.length) emptyRow(tbody, 5, rows.length ? 'No sender matches your search.' : 'No senders checked yet. Open Gmail with sender checks on.');
         });
     }
 
-    const SPAM_ACTIONS = { moved: ['badge-unsafe', 'Moved to Spam'], failed: ['badge-warning', 'Not moved (failed)'], rescued: ['badge-safe', 'Taken out of Spam by you'] };
+    const SPAM_ACTIONS = { moved: ['badge-unsafe', 'Moved to Spam'], failed: ['badge-warning', 'Not moved (failed)'], rescued: ['badge-safe', 'Taken out of Spam by you'],
+                           kept: ['badge-safe', 'Kept in the inbox by you'] };
     function renderSpamLog() {
         chrome.storage.local.get({ spamMoveLog: [] }, (items) => {
             const tbody = document.querySelector('#spamLogTable tbody');
@@ -931,22 +947,36 @@ document.addEventListener('DOMContentLoaded', () => {
             const log = Array.isArray(items.spamMoveLog) ? items.spamMoveLog : [];
             const q = (document.getElementById('spamLogSearch').value || '').toLowerCase().trim();
             const n = (a) => log.filter(e => e.action === a).length;
-            document.getElementById('spamLogStats').replaceChildren(statItem('moved', n('moved')), statItem('not moved', n('failed')), statItem('taken out of Spam by you', n('rescued')));
+            const accounts = new Set(log.map(e => e.account).filter(Boolean));
+            document.getElementById('spamLogStats').replaceChildren(statItem('moved', n('moved')), statItem('not moved', n('failed')),
+                statItem('taken out of Spam by you', n('rescued') + log.filter(e => e.rescuedTs).length), statItem('kept in the inbox by you', n('kept')),
+                statItem(accounts.size === 1 ? 'account' : 'accounts', accounts.size));
             for (const e of log) {
-                if (q && !`${e.sender} ${e.reason} ${e.how}`.toLowerCase().includes(q)) continue;
+                if (q && !`${e.sender} ${e.reason} ${e.how} ${e.account || ''}`.toLowerCase().includes(q)) continue;
                 const tr = document.createElement('tr');
                 const act = cell();
                 const [cls, label] = SPAM_ACTIONS[e.action] || ['badge-neutral', e.action];
                 const badge = document.createElement('span'); badge.className = `badge ${cls}`; badge.textContent = label; act.appendChild(badge);
+                // A move the user undid later: the same line says so, with when.
+                if (e.rescuedTs) {
+                    const back = document.createElement('div'); back.style.marginTop = '4px';
+                    const b2 = document.createElement('span'); b2.className = 'badge badge-safe'; b2.textContent = 'Taken out of Spam by you';
+                    const t = document.createElement('div'); t.style.cssText = 'font-size: 11px; color: var(--text-muted); margin-top: 2px; white-space: nowrap;'; t.textContent = new Date(e.rescuedTs).toLocaleString();
+                    back.append(b2, t); act.appendChild(back);
+                }
                 const who = cell();
                 if (e.sender) { const c = document.createElement('code'); c.textContent = e.sender; who.appendChild(c); } else who.textContent = '—';
                 const why = cell();
                 const r = document.createElement('div'); r.textContent = e.reason || (e.action === 'rescued' ? 'You took this conversation out of Spam; it will never be moved back.' : ''); why.appendChild(r);
+                if (e.rescuedTs || e.action === 'kept') { const k = document.createElement('div'); k.style.cssText = 'font-size: 11px; color: var(--text-muted); margin-top: 4px;';
+                    k.textContent = e.action === 'kept' ? 'You chose Keep it before it was moved; it will never be moved.' : 'You took it back out of Spam; it will never be moved again.'; why.appendChild(k); }
                 if (e.how) { const h = document.createElement('div'); h.style.cssText = 'font-size: 11px; color: var(--text-muted); margin-top: 4px;'; h.textContent = e.action === 'failed' ? `Why it wasn't moved: ${e.how}` : `How: ${e.how}`; why.appendChild(h); }
-                tr.append(cell(new Date(e.ts).toLocaleString(), 'white-space: nowrap; font-size: 12px;'), act, who, why);
+                const acct = cell(e.account || '—', 'font-size: 12px; word-break: break-all;');
+                if (!e.account) acct.title = 'Recorded before accounts were noted (version 5.85)';
+                tr.append(cell(new Date(e.ts).toLocaleString(), 'white-space: nowrap; font-size: 12px;'), acct, act, who, why);
                 tbody.appendChild(tr);
             }
-            if (!tbody.children.length) emptyRow(tbody, 4, log.length ? 'Nothing matches your search.' : 'No emails have been moved to Spam.');
+            if (!tbody.children.length) emptyRow(tbody, 5, log.length ? 'Nothing matches your search.' : 'No emails have been moved to Spam.');
         });
     }
     document.getElementById('senderSearch').addEventListener('input', renderSenderLog);
@@ -977,7 +1007,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!log) return;
                 const level = LEVEL_BADGES[log.level] ? log.level : 'error';      // entries from before 5.14 have no level
                 if (levelFilter && level !== levelFilter) return;
-                const fields = [log.time, level, log.source, log.message].map(v => String(v || '').toLowerCase());
+                const fields = [log.time, level, log.source, log.message, log.account].map(v => String(v || '').toLowerCase());
                 if (filterText && !fields.some(f => f.includes(filterText))) return;
 
                 const tr = document.createElement('tr');
@@ -990,6 +1020,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 tdLevel.appendChild(badge);
                 const tdSource = document.createElement('td');
                 tdSource.textContent = log.source || '—';
+                accountNote(tdSource, log.account);
                 const tdMsg = document.createElement('td');
                 tdMsg.textContent = log.message || '';
                 if (log.count > 1) {
@@ -1093,9 +1124,9 @@ document.addEventListener('DOMContentLoaded', () => {
             if (history.length === 0) { alert("No history to export."); return; }
 
             const q = (v) => `"${String(v === undefined || v === null ? '' : v).replace(/"/g, '""')}"`;
-            const headers = ["Timestamp", "Original URL", "Resolved Destination", "Resolved IP", "Status", "Resolved By"];
+            const headers = ["Timestamp", "Account", "Original URL", "Resolved Destination", "Resolved IP", "Status", "Resolved By"];
             const csvRows = history.filter(Boolean).map(item =>
-                [q(item.timestamp), q(item.shortUrl), q(item.finalUrl), q(item.resolvedIp || 'N/A'), q(historyStatus(item).text), q(item.resolver || '')].join(','));
+                [q(item.timestamp), q(item.account || ''), q(item.shortUrl), q(item.finalUrl), q(item.resolvedIp || 'N/A'), q(historyStatus(item).text), q(item.resolver || '')].join(','));
 
             const blob = new Blob([[headers.join(','), ...csvRows].join('\n')], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
@@ -1228,8 +1259,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (logs.length === 0) { alert("No diagnostic logs to export."); return; }
 
             const q = (v) => `"${String(v === undefined || v === null ? '' : v).replace(/"/g, '""')}"`;
-            const headers = ["Timestamp", "Level", "Source", "Message", "Count"];
-            const csvRows = logs.filter(Boolean).map(log => [q(log.time), q(log.level || 'error'), q(log.source || ''), q(log.message), q(log.count || 1)].join(','));
+            const headers = ["Timestamp", "Level", "Source", "Account", "Message", "Count"];
+            const csvRows = logs.filter(Boolean).map(log => [q(log.time), q(log.level || 'error'), q(log.source || ''), q(log.account || ''), q(log.message), q(log.count || 1)].join(','));
 
             const blob = new Blob([[headers.join(','), ...csvRows].join('\n')], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);

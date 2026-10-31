@@ -1,5 +1,10 @@
 # Changelog
 
+## 5.85 — Every log says which account; a rescue updates its own line (Firefox build, same as Chrome 5.85)
+
+- **Several accounts signed in? Every log now says which one.** Each entry records the account it happened in: a new **Account** column in Logging → Moved to Spam, a line under the time in History and under the source in the application log, **Seen in** on Logging → Senders, and the address after the time in the toolbar popup's recent activity. Searching any log for an address shows only that account's entries, and the CSV exports gain an Account column. The account is the address Gmail shows in its page title (other webmail is named by its site). It stays in this browser with the logs and is never sent anywhere. Entries from earlier versions have no account.
+- **Taking an email back out of Spam no longer adds a second line.** The email's own "Moved to Spam" line in Logging → Moved to Spam is marked **Taken out of Spam by you**, with the date and time, so each email keeps one line with its whole story. Only an email with no move on record (Gmail or you put it in Spam, or the list was cleared) gets a line of its own. A **Keep it** on a row about to move is now listed as **Kept in the inbox by you**.
+
 ## 5.84 — Flagged emails leave the inbox sooner, say so while they wait, and can't be clicked (Firefox build, same as Chrome 5.84)
 
 - **Moving to Spam no longer waits out every mouse movement.** Moving used to wait until 10 seconds after *any* activity — including the mouse merely moving over the list — so reading your inbox with the mouse resting on it could hold flagged emails back indefinitely. The 10-second wait now applies only to a click or a key (so a move never replaces the Undo of something you just did); after the mouse last moved or the list scrolled, moving waits just 2 seconds, so flagged emails leave about 2 seconds after your pointer rests.
