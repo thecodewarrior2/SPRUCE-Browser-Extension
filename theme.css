@@ -104,3 +104,15 @@ html:not(.ui-ready) .slider, html:not(.ui-ready) .slider:before { transition: no
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; scroll-behavior: auto !important; }
 }
+
+/* Drop-down menus follow the appearance, the open list included: Firefox draws that list from the menu's
+   own colors, so a see-through menu showed light-grey options on white in the dark appearance. */
+select {
+    background-color: var(--surface);
+    color: var(--text);
+}
+select option,
+select optgroup {
+    background-color: var(--surface);
+    color: var(--text);
+}
