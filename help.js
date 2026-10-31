@@ -334,6 +334,24 @@
         // This installation
         chrome.storage.local.get(null, (items) => {
             const ls = items.listState || {};
+            // Every list the extension downloads, with its terms and its state here.
+            const link = (name, href) => el('a', { href, target: '_blank', rel: 'noopener noreferrer' }, name);
+            const when = (t) => t ? `updated ${new Date(t).toLocaleString()}` : 'not downloaded yet';
+            const pop = items.popularDomains || {};
+            const popSources = pop.sources || {};
+            const shortenerRow = (name, home, u) => { const src = (ls.sources || {})[u];
+                return [link(name, home), 'which sites are link shorteners (only those links are looked up)', 'once a day', 'see the project', S.enableRemoteListSync
+                    ? (src && src.lastSuccess ? `${(src.active || []).length.toLocaleString()} domains, ${when(src.lastSuccess)}` : when(0)) : 'off (Keep the shortener list up to date)']; };
+            const feedUse = { openphish: 'known phishing links', phishingarmy: 'known phishing sites', sefinekemails: 'known scam and phishing sender addresses (Gmail)' };
+            fill('archAllLists', table(['List', 'Used for', 'Downloaded', 'License or terms', 'On this computer'], [
+                shortenerRow('PeterDaveHello/url-shorteners', 'https://github.com/PeterDaveHello/url-shorteners', REMOTE_LIST_URLS[0]),
+                shortenerRow('boutetnico/url-shorteners', 'https://github.com/boutetnico/url-shorteners', REMOTE_LIST_URLS[1]),
+                ...PHISH_FEEDS.map(f => { const r = items[`feed_${f.id}`]; const on = S.enablePhishingFeeds && (!f.requires || S[f.requires]);
+                    return [link(f.name, f.home), feedUse[f.id] || '', 'once a day', f.license, on ? (r ? `${r.count.toLocaleString()} entries, ${when(r.updated)}` : when(0)) : 'off']; }),
+                ...[['Chrome UX Report top list', 'https://github.com/zakird/crux-top-lists', 'crux', 'data by Google, CC BY 4.0'], ['Tranco', 'https://tranco-list.eu', 'tranco', 'free research list (KU Leuven and others)']].map(([name, home, id, terms]) =>
+                    [link(name, home), 'popular sites (top 10,000) protected from look-alike senders', 'once a month', terms, S.enableLookalikeCheck && S.enableRemoteListSync
+                        ? (popSources[id] ? `${when(popSources[id])} (${(pop.count || 0).toLocaleString()} sites from both lists)` : when(0)) : 'off (Catch look-alike senders)'])
+            ]));
             const srcRows = REMOTE_LIST_URLS.map(u => {
                 const src = (ls.sources || {})[u];
                 return [code(u.split('/').slice(3, 5).join('/')),

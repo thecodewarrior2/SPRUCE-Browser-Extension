@@ -1,5 +1,10 @@
 # Changelog
 
+## 5.82 — Every downloaded list shown and credited (Safari build, same as Chrome 5.82)
+
+- **The Architecture deep dive lists all seven downloaded lists**, not only the two short-link lists: the two short-link lists, the OpenPhish and Phishing Army phishing lists, the Sefinek scam-sender list, and the Chrome UX Report and Tranco popular-site lists used by the look-alike check. For each: what it's used for, how often it's downloaded, its license or terms, and its state on this computer. The section is now called "Downloaded lists"; the short-link update rules follow it. The architecture guide (`docs/ARCHITECTURE.md`) has the same table.
+- **About & credits now credits every list and online service**: added the Sefinek scam-sender list (MIT), the Chrome UX Report top sites (data by Google, CC BY 4.0, from Zakir Durumeric's copy) and Tranco (KU Leuven and others), and the services used for sender details (Google's and DuckDuckGo's icon services, country.is, IANA's registry directory). A test checks that each is named.
+
 ## 5.81 — Readable drop-down menus in the dark appearance (Safari build, same as Chrome 5.81)
 
 - **Fixed: the appearance menu (System / Light / Dark) in the toolbar popup was unreadable in the dark appearance**, as were the other drop-down menus in Settings: the menus were see-through, and Firefox draws the open list from the menu's own colors, so the options showed light grey on white. Every drop-down menu now uses the appearance's own background and text (light text on the dark surface, 11.9:1 contrast), and a test checks it.
