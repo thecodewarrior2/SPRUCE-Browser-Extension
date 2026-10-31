@@ -8,7 +8,8 @@
 **Spam & Phishing Risk URL Checker Extension+**: a browser extension that helps you spot phishing and
 scam emails in Gmail and other webmail.
 
-<p><a href="https://www.paypal.com/donate/?hosted_button_id=NA8SK5RBLWGW6"><img src="https://img.shields.io/badge/Donate-PayPal-0070ba?logo=paypal&amp;logoColor=white" alt="Donate with PayPal"></a></p>
+<p><a href="https://www.paypal.com/donate/?hosted_button_id=NA8SK5RBLWGW6"><img src="https://img.shields.io/badge/Donate-PayPal-0070ba?logo=paypal&amp;logoColor=white" alt="Donate with PayPal"></a>
+<a href="https://github.com/thecodewarrior2/SPRUCE-Browser-Extension/actions/workflows/tests.yml"><img src="https://github.com/thecodewarrior2/SPRUCE-Browser-Extension/actions/workflows/tests.yml/badge.svg?branch=main" alt="Tests"></a></p>
 
 > **A helper, not a guarantee.** S.P.R.U.C.E+ makes a best effort to point out warning signs, but it
 > can miss dangerous emails and links, and it can flag genuine ones. It is one small layer of
