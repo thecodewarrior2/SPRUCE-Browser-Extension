@@ -1,6 +1,6 @@
 // Row highlighter and warnings about overlapping extensions (simulated Gmail and Outlook pages).
 const fs = require('fs');
-const { launch, servePage, sleep, waitFor, check, part, runParts } = require('./harness');
+const { launch, servePage, sleep, waitFor, until, check, part, runParts } = require('./harness');
 // A fresh browser per part (the parts run in parallel). The extension's id comes from the browser.
 async function setup() {
   const { ctx, sw } = await launch();
@@ -50,12 +50,16 @@ part('highlighter', async () => {
   check('a ticked email under the mouse shows the mouse color', /rgba\(255, 213, 0, 0\.3/.test(h.image), h);
   await page.close();
   // Settings: the same color for both is allowed, with a warning.
-  const optHl = await ctx.newPage(); await optHl.goto(`chrome-extension://${ID}/options.html`); await optHl.waitForSelector('#rowHlSameWarning', { state: 'attached' }); await sleep(300);
+  // Settings has loaded once the color menu is listening for changes (data-bound); a change made before
+  // that would never be saved.
+  const optHl = await ctx.newPage(); await optHl.goto(`chrome-extension://${ID}/options.html`);
+  await optHl.waitForSelector('select[data-setting="rowHighlightSelectedColor"][data-bound]', { state: 'attached' });
   const warn = () => optHl.evaluate(() => !document.getElementById('rowHlSameWarning').hidden);
   const w0 = await warn();
-  await optHl.selectOption('select[data-setting="rowHighlightSelectedColor"]', 'yellow'); await sleep(800);
-  const w1 = await warn();
-  const saved = await sw.evaluate(async () => (await chrome.storage.local.get('rowHighlightSelectedColor')).rowHighlightSelectedColor);
+  await optHl.selectOption('select[data-setting="rowHighlightSelectedColor"]', 'yellow');
+  const savedColor = () => sw.evaluate(async () => (await chrome.storage.local.get('rowHighlightSelectedColor')).rowHighlightSelectedColor);
+  const after = await until(async () => ({ w1: await warn(), saved: await savedColor() }), r => r.w1 && r.saved === 'yellow', 8000);
+  const { w1, saved } = after;
   check('Settings: different colors by default, no warning', w0 === false, w0);
   check('Settings: the same color for both is saved, with a warning', w1 === true && saved === 'yellow', { w1, saved });
   await optHl.close();
@@ -92,13 +96,13 @@ part('conflicts', async () => {
   check('a known extension in the page (Gmail Sender Icons): warned, recommends keeping ours', n && /Gmail Sender Icons also does sender icons in the inbox/.test(n.text) && /recommend keeping S\.P\.R\.U\.C\.E\+ on/.test(n.text), n);
   check('…with the three choices', n && n.buttons.some(b => /Turn off Gmail Sender Icons/.test(b)) && n.buttons.some(b => /Turn off ours \(sender icons and labels\)/.test(b)) && n.buttons.includes('Ignore'), n && n.buttons);
   await page.locator('.unshortener-conflict-notice button', { hasText: 'Turn off ours' }).click();
-  await sleep(800);
-  const off = await sw.evaluate(async () => (await chrome.storage.local.get('enableSenderIdentity')).enableSenderIdentity);
+  const off = await until(() => sw.evaluate(async () => (await chrome.storage.local.get('enableSenderIdentity')).enableSenderIdentity), v => v === false, 8000);
   check('"Turn off ours" turns our matching feature off', off === false, off);
   await page.close();
   // Settings → Other extensions lists it.
-  const opt = await ctx.newPage(); await opt.goto(`chrome-extension://${ID}/options.html#conflicts`); await sleep(1500);
-  const listed = await opt.evaluate(() => { const i = document.querySelector('#conflictList .conflict-item'); return i && { text: i.textContent, buttons: [...i.querySelectorAll('button')].map(b => b.textContent) }; });
+  const opt = await ctx.newPage(); await opt.goto(`chrome-extension://${ID}/options.html#conflicts`);
+  const listed = await until(() => opt.evaluate(() => { const i = document.querySelector('#conflictList .conflict-item'); return i && { text: i.textContent, buttons: [...i.querySelectorAll('button')].map(b => b.textContent) }; }),
+    l => l && /Gmail Sender Icons/.test(l.text) && /Safari → Settings → Extensions/.test(l.text), 8000);
   check('Settings → Other extensions lists it, with the steps to turn it off in Safari (no management API)', listed && /Gmail Sender Icons/.test(listed.text) && /Safari → Settings → Extensions/.test(listed.text) && !listed.buttons.some(b => /^Turn off Gmail Sender Icons/.test(b)), listed);
   await opt.close();
   // Ignore: not warned again.
@@ -115,8 +119,8 @@ part('conflicts', async () => {
   n = await notice(page);
   check('two overlapping settings: a button for each, and one for all', n && n.buttons.includes('Turn off only our sender photos and company logos') && n.buttons.includes('Turn off only our tracking-pixel blocking') && n.buttons.includes('Turn off all of ours'), n && n.buttons);
   await page.locator('.unshortener-conflict-notice button', { hasText: 'Turn off only our sender photos' }).click();
-  await sleep(800); await page.close();
-  const st = await sw.evaluate(async () => chrome.storage.local.get(['enableSenderAvatars', 'enableTrackingPixelBlocking', 'keptConflictFeatures']));
+  const st = await until(() => sw.evaluate(async () => chrome.storage.local.get(['enableSenderAvatars', 'enableTrackingPixelBlocking', 'keptConflictFeatures'])), v => v.enableSenderAvatars === false, 8000);
+  await page.close();
   check('only that setting is turned off; the other stays on', st.enableSenderAvatars === false && st.enableTrackingPixelBlocking !== false, st);
   page = await ctx.newPage(); await page.goto('https://mail.google.com/mail/u/0/?ext=simplify#inbox'); await sleep(4000);
   check('settled: not warned again while it stays off', !(await notice(page)));
