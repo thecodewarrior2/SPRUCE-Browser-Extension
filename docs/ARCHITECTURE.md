@@ -227,6 +227,25 @@ flowchart LR
 Email text, subjects, attachments, recipients and your address never leave the device. The complete
 list, with who receives what, is in [PRIVACY.md](../PRIVACY.md).
 
+### Downloaded lists
+
+Seven public lists, downloaded as plain files (nothing about you is sent) and matched on the device.
+Each is tracked on its own, so one failing to update never removes another's entries. Their state on
+your computer is in Settings → Help → Architecture deep dive → Downloaded lists.
+
+| List | Used for | Downloaded | License or terms |
+|---|---|---|---|
+| [PeterDaveHello/url-shorteners](https://github.com/PeterDaveHello/url-shorteners) | which sites are link shorteners | daily | see the project |
+| [boutetnico/url-shorteners](https://github.com/boutetnico/url-shorteners) | which sites are link shorteners | daily | see the project |
+| [OpenPhish community feed](https://openphish.com) | known phishing links | daily | OpenPhish Terms of Use |
+| [Phishing Army](https://phishing.army) (extended) | known phishing sites | daily | CC BY-NC 4.0 |
+| [Sefinek Blacklisted-Emails](https://github.com/sefinek/Blacklisted-Emails) | known scam sender addresses (Gmail) | daily | MIT |
+| [Chrome UX Report top list](https://github.com/zakird/crux-top-lists) (copy by Zakir Durumeric) | popular sites protected from look-alike senders (top 10,000) | monthly | data by Google, CC BY 4.0 |
+| [Tranco](https://tranco-list.eu) | popular sites protected from look-alike senders (top 10,000) | monthly | free research list (KU Leuven and others) |
+
+Short-link lists are treated as untrusted: a new domain counts only once it has been seen on several
+days, and major sites are never accepted from them.
+
 ## 10. Storage
 
 | Where | What | How long |
