@@ -23,6 +23,9 @@ line per suite with its checks and time, then a summary. A full run takes about 
 | `node --test unit/unit.test.js` | Only the unit tests |
 | `PART=flaky node e2e/test-stuck.js` | One part of a suite on its own |
 
+On GitHub, the **Tests** workflow (`.github/workflows/tests.yml`) runs the unit tests and every
+suite on each push to `testing` and `main`; when it fails, the logs are under the run's Artifacts.
+
 Each suite's full output is in `logs/<suite>.log`. The runner remembers how long each suite took
 (`.timings.json`) and starts the slowest first next time.
 

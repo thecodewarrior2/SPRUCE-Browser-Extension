@@ -1,0 +1,15 @@
+{
+  "name": "testing",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": {
+    "ref_name": {
+      "include": ["refs/heads/testing"],
+      "exclude": []
+    }
+  },
+  "rules": [
+    { "type": "deletion" }
+  ],
+  "bypass_actors": []
+}

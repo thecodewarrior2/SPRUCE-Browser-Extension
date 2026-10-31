@@ -17,7 +17,8 @@ async function launch() {
   profiles.push(userDir);
   const ctx = await chromium.launchPersistentContext(userDir, {
     headless: true, channel: 'chromium',
-    args: [`--disable-extensions-except=${EXT}`, `--load-extension=${EXT}`, `--proxy-server=${process.env.HTTPS_PROXY}`, '--ignore-certificate-errors'],
+    // Behind a proxy (HTTPS_PROXY), the browser uses it too; GitHub's runners connect directly.
+    args: [`--disable-extensions-except=${EXT}`, `--load-extension=${EXT}`, ...(process.env.HTTPS_PROXY ? [`--proxy-server=${process.env.HTTPS_PROXY}`] : []), '--ignore-certificate-errors'],
   });
   // Short default waits: a missing element fails in seconds instead of hanging for 30.
   ctx.setDefaultTimeout(Number(process.env.STEP_TIMEOUT) || 10000);

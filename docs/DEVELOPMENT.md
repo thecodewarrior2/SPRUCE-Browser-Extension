@@ -21,6 +21,27 @@ For people working on the extension itself: the Chrome and Edge build (branch `m
 
 Nothing goes to `main`, `firefox` or `safari` that hasn't been on `testing` first.
 
+### Checks and branch rules on GitHub
+
+The **Tests** workflow (`.github/workflows/tests.yml`) runs the unit and browser tests on every push
+to `testing` and `main` and on pull requests into `main`. Its check is named **Unit and browser
+tests**.
+
+The repository's rulesets are kept in [`.github/rulesets/`](../.github/rulesets). To set them up (or
+after changing one), on GitHub open **Settings → Rules → Rulesets → New ruleset → Import a ruleset**
+and import each file:
+
+| File | Applies to | Rules |
+|---|---|---|
+| `release-branches.json` | `main`, `firefox`, `safari` | No deleting, no force pushes, linear history (fast-forward merges) |
+| `main.json` | `main` | The **Unit and browser tests** check must have passed on the commit, so a commit can only reach `main` after it passed on `testing` |
+| `testing.json` | `testing` | No deleting |
+| `release-tags.json` | Tags `v*` | Release tags can't be deleted or moved |
+
+No one is on the bypass lists, so the rules apply to everyone, administrators included. If the
+check fails on `testing`, fix it there and push again; `main` accepts the commit once its check is
+green.
+
 ## Run it from source (load unpacked)
 
 The repository's top folder is the extension. See
