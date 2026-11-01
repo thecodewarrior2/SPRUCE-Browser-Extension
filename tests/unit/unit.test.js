@@ -254,6 +254,109 @@ test('accountLabel: the address when shown, else the webmail (with Gmail\'s acco
   assert.equal(vm.runInContext(`accountLabel({ action: 'senderIcon', site: 'example.com', account: 'x@y.z' })`, b), '');
 });
 
+test('brand ownership: proofs need the brand\'s DNS or a corporate registrar; a hint alone is nothing', async () => {
+  const { IDBFactory } = require('fake-indexeddb');
+  const day = 86400000, now = Date.now();
+  // Public records as if looked up: DMARC records, name servers, the registry and registrars.
+  const txt = {
+    '_dmarc.amazon.com': 'v=DMARC1; p=quarantine; rua=mailto:report@dmarc.amazon.com',
+    '_dmarc.amazonmusic.com': 'v=DMARC1; p=reject; rua=mailto:report@dmarc.amazon.com',
+    '_dmarc.facebook.com': 'v=DMARC1; p=reject; rua=mailto:a@dmarc.facebookmail.com',
+    '_dmarc.facebookmail.com': 'v=DMARC1; p=reject; rua=mailto:a@dmarc.facebookmail.com',
+    '_dmarc.paypal.com': 'v=DMARC1; p=reject; rua=mailto:d@rua.paypal.com',
+    '_dmarc.paypal-notices.com': 'v=DMARC1; p=reject; rua=mailto:d@rua.paypal.com',
+    'paypal-notices.com._report._dmarc.paypal.com': 'v=DMARC1',
+    '_dmarc.paypal-wild.com': 'v=DMARC1; p=none; rua=mailto:x@paypal.com',
+    '_dmarc.amaz0n-billing.com': 'v=DMARC1; p=none; rua=mailto:report@dmarc.amazon.com',
+    '_dmarc.spotify.com': 'v=DMARC1; p=reject', '_dmarc.spotifymail.com': 'v=DMARC1; p=quarantine; rua=mailto:x@ag.dmarcian.example'
+  };
+  const ns = {
+    'amazon.com': ['ns-1447.awsdns-52.org', 'ns-264.awsdns-33.com'], 'amazonmusic.com': ['ns-105.awsdns-13.com', 'ns-913.awsdns-50.net'],
+    'facebook.com': ['a.ns.facebook.com', 'b.ns.facebook.com'], 'facebookmail.com': ['a.ns.facebook.com', 'b.ns.facebook.com'],
+    'spotify.com': ['dns1.p07.nsone.net', 'ns-cloud-a1.googledomains.com'], 'spotifymail.com': ['dns1.p07.nsone.net', 'dns2.p07.nsone.net', 'ns-cloud-a1.googledomains.com'],
+    'paypal.com': ['pdns100.ultradns.com', 'pdns100.ultradns.net'], 'paypal-notices.com': ['pdns100.ultradns.com', 'pdns100.ultradns.net'],
+    'paypal-wild.com': ['pdns100.ultradns.com', 'pdns100.ultradns.net'], 'amaz0n-billing.com': ['ns1.cheap-host.example']
+  };
+  const registry = {
+    'amazonmusic.com': { created: now - 10000 * day, registrar: 'MarkMonitor Inc.', link: 'https://rdap.markmonitor.example/rdap/domain/AMAZONMUSIC.COM' },
+    'amaz0n-billing.com': { created: now - 700 * day, registrar: 'Cheap Registrar LLC', link: 'https://rdap.cheap.example/domain/AMAZ0N-BILLING.COM' },
+    'paypal-wild.com': { created: now - 3000 * day, registrar: 'MarkMonitor Inc.', link: 'https://rdap.markmonitor.example/rdap/domain/PAYPAL-WILD.COM' },
+    'facebookmail.com': { created: now - 7000 * day, registrar: 'RegistrarSafe, LLC' }, 'spotifymail.com': { created: now - 6000 * day, registrar: 'Abion AB' },
+    'paypal-notices.com': { created: now - 3 * day, registrar: 'Cheap Registrar LLC' }
+  };
+  const registrant = { 'AMAZONMUSIC.COM': 'Amazon Technologies, Inc.', 'AMAZ0N-BILLING.COM': 'Amazon Technologies Inc', 'PAYPAL-WILD.COM': 'Statutory Masking Enabled' };
+  const vcard = (role, org) => ({ roles: [role], vcardArray: ['vcard', [['fn', {}, 'text', org], ['org', {}, 'text', org]]] });
+  const fetchLog = [];
+  const fetch = async (u) => {
+    u = String(u); fetchLog.push(u);
+    const q = /dns-query\?name=([^&]+)&type=(TXT|NS)/.exec(u);
+    if (q) {
+      const name = decodeURIComponent(q[1]);
+      if (q[2] === 'TXT') { const t = txt[name]; return { ok: true, status: 200, json: async () => ({ Status: t ? 0 : 3, Answer: t ? [{ type: 16, data: `"${t}"` }] : [] }) }; }
+      const list = ns[name]; return { ok: true, status: 200, json: async () => ({ Status: list ? 0 : 3, Answer: (list || []).map(h => ({ type: 2, data: h + '.' })) }) };
+    }
+    if (u === 'https://data.iana.org/rdap/dns.json') return { ok: true, status: 200, json: async () => ({ services: [[['com'], ['https://rdap.registry.example/']]] }) };
+    let d = /^https:\/\/rdap\.registry\.example\/domain\/([^/?]+)$/.exec(u);
+    if (d) {
+      const r = registry[decodeURIComponent(d[1])];
+      return r ? { ok: true, status: 200, json: async () => ({ events: [{ eventAction: 'registration', eventDate: new Date(r.created).toISOString() }], entities: [vcard('registrar', r.registrar)], links: r.link ? [{ rel: 'related', href: r.link }] : [] }) } : { ok: false, status: 404, json: async () => ({}) };
+    }
+    d = /\/domain\/([^/?]+)$/.exec(u);
+    if (d) { const who = registrant[d[1]]; return { ok: true, status: 200, json: async () => ({ entities: who ? [vcard('registrant', who)] : [] }) }; }
+    throw new Error('unexpected ' + u);
+  };
+  const b = loadBackground({}, { indexedDB: new IDBFactory(), fetch });
+  const own = async (domain, brand, S = { enableDnsThreatCheck: true }) => vm.runInContext(`brandOwnership(${JSON.stringify(domain)}, ${JSON.stringify(brand)}, ${JSON.stringify(S)})`, b);
+  let r = await own('amazonmusic.com', 'Amazon');
+  assert.equal(r.state, 'owned', 'MarkMonitor + a registrant naming Amazon (the reported false positive)');
+  assert.match(r.how, /Amazon Technologies, Inc\. through MarkMonitor/);
+  r = await own('facebookmail.com', 'Meta');
+  assert.equal(r.state, 'owned'); assert.match(r.how, /facebook\.com sends its own DMARC reports to it/, 'the brand\'s DNS points at the domain');
+  r = await own('spotifymail.com', 'Spotify');
+  assert.equal(r.state, 'owned'); assert.match(r.how, /same name servers as spotify\.com \(dns1\.p07\.nsone\.net\)/, 'a per-customer name-server pool');
+  r = await own('paypal-notices.com', 'PayPal');
+  assert.equal(r.state, 'owned'); assert.match(r.how, /publishes the authorization/, 'reports to the brand, with the brand\'s authorization record; shared UltraDNS servers count for nothing');
+  r = await own('paypal-wild.com', 'PayPal');
+  assert.equal(r.state, 'likely', 'reports to the brand without authorization, a masked registrant: MarkMonitor plus hints');
+  assert.match(r.how, /DMARC reports go to paypal\.com/); assert.match(r.how, /corporate registrar/); assert.match(r.how, /years ago/);
+  r = await own('amaz0n-billing.com', 'Amazon');
+  assert.equal(r.state, 'unknown', 'a forger: reports pointed at Amazon, a registrant typed as "Amazon", an old domain, but no corporate registrar and no brand DNS');
+  assert.deepEqual(await own('amazonmusic.com', 'Amazon', { enableDnsThreatCheck: false }), { state: 'unknown', how: '' }, 'Offline only: nothing is asked');
+  assert.equal((await own('anything.com', 'NoSuchBrand')).state, 'unknown');
+  // Remembered: asking again reads nothing.
+  const before = fetchLog.length;
+  assert.equal((await own('amazonmusic.com', 'Amazon')).state, 'owned');
+  assert.equal(fetchLog.length, before, 'the answer is remembered');
+  // The look-alike check: a brand's own second domain with a brand pattern isn't an imitation.
+  const v = async (d) => { const x = await vm.runInContext(`lookalikeVerdict(${JSON.stringify(d)}, '', { enableDnsThreatCheck: true })`, b); return x && x.level; };
+  assert.equal(await v('paypal-notices.com'), null, 'brand plus a scare word, but proven PayPal\'s');
+  assert.equal(await v('paypal-billing.com'), 'strong', 'brand plus a scare word, unknown: still strong');
+});
+
+test('name and address: a proven brand domain clears the name, a likely one is amber, anything else red', () => {
+  const signs = (own) => S('nameAddressSigns')('Amazon Music', 'no-reply@amazonmusic-news.example', '', new Set(), own);
+  assert.deepEqual(signs(null).map(x => x.weight), [5]);
+  assert.deepEqual(signs({ state: 'unknown', how: '' }).map(x => x.weight), [5]);
+  const likely = signs({ state: 'likely', how: 'registered through MarkMonitor Inc., a corporate registrar; registered 9 years ago' });
+  assert.deepEqual(likely.map(x => x.weight), [3]); assert.match(likely[0].text, /looks like Amazon's \(registered through MarkMonitor/);
+  const owned = signs({ state: 'owned', how: 'registered to Amazon Technologies, Inc. through MarkMonitor Inc.' });
+  assert.deepEqual(owned.map(x => x.weight), [0]); assert.match(owned[0].text, /amazonmusic-news\.example is Amazon's: registered to Amazon Technologies/);
+  // Known second domains need no lookup at all.
+  assert.deepEqual(S('nameAddressSigns')('Amazon Music', 'no-reply@amazonmusic.com', '', new Set(), null), []);
+  assert.deepEqual(S('nameAddressSigns')('Spotify', 'no-reply@spotifymail.com', '', new Set(), null), []);
+  const e = S('evaluateSender')({ displayName: 'Amazon Music', address: 'no-reply@amazonmusic-news.example', auth: null, bodyText: '', ownership: { state: 'likely', how: 'x' } });
+  assert.equal(e.findings[0].severity, 'caution');
+  assert.equal(S('evaluateSender')({ displayName: 'Amazon Music', address: 'no-reply@amazonmusic-news.example', auth: null, bodyText: '', ownership: { state: 'owned', how: 'x' } }).findings.length, 0);
+  // Registrant matching: the brand's name or an unambiguous token, never an ambiguous word.
+  const rn = (who, brand) => vm.runInContext(`registrantNamesBrand(${JSON.stringify(who)}, senderBrandByName(${JSON.stringify(brand)}))`, bg);
+  assert.equal(rn('Amazon Technologies, Inc.', 'Amazon'), true);
+  assert.equal(rn('AT&T SERVICES, INC.', 'AT&T'), true);
+  assert.equal(rn('Spotify AB', 'Spotify'), true);
+  assert.equal(rn('Apple Valley Farms LLC', 'Apple'), false, '"apple" alone is an ordinary word');
+  assert.equal(rn('Chase Design Studio', 'Chase'), false);
+  assert.equal(rn('REDACTED FOR PRIVACY', 'Amazon'), false);
+});
+
 test('backup includes and restores the phishing-sender list', () => {
   const backup = S('buildBackup')({ customTrustedSenders: ['A@B.co', 'junk'] }, 't');
   assert.deepEqual(backup.customTrustedSenders, ['a@b.co']);
