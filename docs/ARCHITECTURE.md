@@ -239,7 +239,7 @@ flowchart LR
   D -- "public short link" --> UN["unshorten.me<br/>(or your own service)"]
   D -- "sender's site name" --> IC["Google / DuckDuckGo<br/>icon services"]
   D -- "sending server's IP" --> CI["country.is"]
-  D -- "look-alike domain's name" --> RD["Domain registry (RDAP)"]
+  D -- "look-alike domain's name,<br/>or a brand's name on an unknown domain" --> RD["Domain registry and registrar (RDAP)"]
   LS["openphish.com · phishing.army ·<br/>GitHub · tranco-list.eu"] -- "plain list downloads<br/>(nothing about you sent)" --> D
 ```
 

@@ -1597,11 +1597,11 @@ const bimiInFlight = new Map();
 // as some school and company networks do).
 // The one that answered last is asked first, so a blocked one costs its wait only once.
 const TXT_HOSTS = ['1.1.1.1', 'security.cloudflare-dns.com'];
-async function dnsTxt(name) {
+async function dnsQuery(name, type = 'TXT') {
     let data = null, lastError = null;
     for (const host of TXT_HOSTS.slice()) {
         try {
-            const res = await fetchWithTimeout(`https://${host}/dns-query?name=${encodeURIComponent(name)}&type=TXT`, { headers: { accept: 'application/dns-json' } }, 5000);
+            const res = await fetchWithTimeout(`https://${host}/dns-query?name=${encodeURIComponent(name)}&type=${type}`, { headers: { accept: 'application/dns-json' } }, 5000);
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const json = await res.json();
             // Only a definite answer counts: records (NOERROR, 0) or no such name (NXDOMAIN, 3). A resolver
@@ -1614,8 +1614,45 @@ async function dnsTxt(name) {
         } catch (e) { lastError = e; }
     }
     if (!data) throw lastError;
+    return data.Answer || [];
+}
+async function dnsTxt(name) {
     // A TXT record can come in several quoted pieces: joined back together.
-    return (data.Answer || []).filter(r => r.type === 16).map(r => String(r.data || '').replace(/^"|"$/g, '').replace(/"\s*"/g, ''));
+    return (await dnsQuery(name, 'TXT')).filter(r => r.type === 16).map(r => String(r.data || '').replace(/^"|"$/g, '').replace(/"\s*"/g, ''));
+}
+// A domain's name servers (lower-case, sorted), remembered a week ("ns:<domain>").
+const nsInFlight = new Map();
+async function nameServers(domain) {
+    const key = 'ns:' + domain;
+    const hit = await iconStore.get(key).catch(() => null);
+    if (hit && Date.now() - hit.ts < BIMI_RECHECK_MS) { try { return hit.bytes ? JSON.parse(new TextDecoder().decode(hit.bytes)) : []; } catch (e) { /* asked again */ } }
+    if (nsInFlight.has(key)) return nsInFlight.get(key);
+    const p = (async () => {
+        try {
+            const list = (await dnsQuery(domain, 'NS')).filter(r => r.type === 2).map(r => String(r.data || '').toLowerCase().replace(/\.$/, '')).filter(Boolean).sort();
+            await iconStore.put(key, list.length ? 'application/json' : '', list.length ? new TextEncoder().encode(JSON.stringify(list)).buffer : null, list.length ? 'ns' : 'none').catch(() => {});
+            return list;
+        } finally { nsInFlight.delete(key); }
+    })();
+    nsInFlight.set(key, p);
+    return p;
+}
+// A domain's whole DMARC record (its tags), remembered a week ("dmarcrec:<org>"); null for none.
+const dmarcTagsInFlight = new Map();
+async function dmarcTags(org) {
+    const key = 'dmarcrec:' + org;
+    const hit = await iconStore.get(key).catch(() => null);
+    if (bimiFresh(hit)) { try { return hit.bytes ? JSON.parse(new TextDecoder().decode(hit.bytes)) : null; } catch (e) { /* asked again */ } }
+    if (dmarcTagsInFlight.has(key)) return dmarcTagsInFlight.get(key);
+    const p = (async () => {
+        try {
+            const rec = (await dnsTxt(`_dmarc.${org}`)).map(recordTags).find(t => /^dmarc1$/i.test(t.v || '')) || null;
+            await iconStore.put(key, rec ? 'application/json' : '', rec ? new TextEncoder().encode(JSON.stringify(rec)).buffer : null, rec ? 'dmarc' : 'none').catch(() => {});
+            return rec;
+        } finally { dmarcTagsInFlight.delete(key); }
+    })();
+    dmarcTagsInFlight.set(key, p);
+    return p;
 }
 // The tags of a "v=BIMI1; l=…" or "v=DMARC1; p=…" record, lower-case names.
 function recordTags(txt) {
@@ -1730,7 +1767,8 @@ async function bimiLogo(domain) {
 //     sender's domain was registered less than 90 days ago (public registry date, RDAP); a built-in
 //     brand also gets amber when older or of unknown age; otherwise nothing, since real companies with
 //     similar names exist (channel4/channel5).
-// The real domains (popular, built-in, own) never match; trusted senders are never judged.
+// The real domains (popular, built-in, own) never match; trusted senders are never judged. A domain
+// that public records show to be the brand's own (brandOwnership, below) isn't a look-alike of it.
 // ---------------------------------------------------------------------------
 const POPULAR_LIST_URL = 'https://raw.githubusercontent.com/zakird/crux-top-lists/main/data/global/current.csv.gz';
 const TRANCO_ID_URL = 'https://tranco-list.eu/top-1m-id';             // the latest list's id
@@ -1925,35 +1963,202 @@ async function rdapServerFor(tld) {
     })().catch((e) => { rdapServers = null; throw e; });
     return (await rdapServers)[tld] || '';
 }
+// The entities of an RDAP record (registrar, registrant…), nested ones included; and the name an
+// entity with a role gives (its organization, else its full name), unless it's withheld.
+function rdapEntities(data) {
+    const out = [];
+    const walk = (list, depth) => { if (depth > 3) return; for (const e of Array.isArray(list) ? list : []) if (e && typeof e === 'object') { out.push(e); walk(e.entities, depth + 1); } };
+    walk(data && data.entities, 0);
+    return out;
+}
+function rdapWho(data, role) {
+    for (const e of rdapEntities(data)) {
+        if (!(Array.isArray(e.roles) && e.roles.includes(role)) || !Array.isArray(e.vcardArray)) continue;
+        const props = Array.isArray(e.vcardArray[1]) ? e.vcardArray[1] : [];
+        const get = (k) => { const p = props.find(x => Array.isArray(x) && x[0] === k && typeof x[3] === 'string' && x[3].trim()); return p ? p[3].trim().slice(0, 120) : ''; };
+        const v = get('org') || get('fn');
+        if (v && !/redacted|privacy|protected|withheld|not disclosed|gdpr|data protected|statutory masking/i.test(v)) return v;
+    }
+    return '';
+}
+// The registrar's own RDAP record of the domain, linked from the registry's (the registry of .com and
+// others keeps only the registrar's name; the registrant is in the registrar's record).
+function rdapRegistrarLink(data, base) {
+    const pick = (links) => { for (const l of Array.isArray(links) ? links : []) { const h = String(l && l.href || ''); if (/^https:\/\//i.test(h) && /\/domain\//i.test(h) && !h.startsWith(base)) return h; } return ''; };
+    return pick(data && data.links) || rdapEntities(data).filter(e => Array.isArray(e.roles) && e.roles.includes('registrar')).map(e => pick(e.links)).find(Boolean) || '';
+}
+// What a domain's registry says about it, { created, registrar, registrant, deep }, remembered 30 days
+// ("age:<domain>"; created: ms, or null when the registry publishes no date). With registrant, the
+// registrar's record is read too when the registry's has no registrant (deep: that was done).
+// null when nothing could be read (not remembered: unknown is never a reason to flag on its own).
 const ageInFlight = new Map();
-async function domainAgeDays(reg) {
+async function domainRegistration(reg, registrant = false) {
     const key = 'age:' + reg;
     const hit = await iconStore.get(key).catch(() => null);
-    const fromRecord = (rec) => { try { const v = JSON.parse(new TextDecoder().decode(rec.bytes)); return v.created ? Math.floor((Date.now() - v.created) / 86400000) : null; } catch (e) { return null; } };
-    if (hit && Date.now() - hit.ts < RDAP_CACHE_MS) return hit.bytes ? fromRecord(hit) : null;
-    if (ageInFlight.has(key)) return ageInFlight.get(key);
+    const parse = (rec) => { try { return rec && rec.bytes ? JSON.parse(new TextDecoder().decode(rec.bytes)) : null; } catch (e) { return null; } };
+    if (hit && Date.now() - hit.ts < RDAP_CACHE_MS) {
+        const v = parse(hit) || { created: null, registrar: '', registrant: '' };
+        if (!registrant || v.deep || v.registrant) return v;
+    }
+    const flight = key + (registrant ? '+' : '');
+    if (ageInFlight.has(flight)) return ageInFlight.get(flight);
     const p = (async () => {
         try {
             const base = await rdapServerFor(reg.split('.').pop());
-            let created = null;
+            const v = { created: null, registrar: '', registrant: '', deep: registrant };
             if (base) {
                 const res = await fetchWithTimeout(`${base}domain/${encodeURIComponent(reg)}`, { credentials: 'omit', headers: { accept: 'application/rdap+json' } }, 8000);
                 if (res.ok) {
                     const data = await res.json();
                     const ev = (data.events || []).find(e => e && e.eventAction === 'registration' && e.eventDate);
                     const t = ev ? Date.parse(ev.eventDate) : NaN;
-                    if (Number.isFinite(t)) created = t;
+                    if (Number.isFinite(t)) v.created = t;
+                    v.registrar = rdapWho(data, 'registrar');
+                    v.registrant = rdapWho(data, 'registrant');
+                    const more = registrant && !v.registrant ? rdapRegistrarLink(data, base) : '';
+                    if (more) {
+                        try {
+                            const r2 = await fetchWithTimeout(more, { credentials: 'omit', headers: { accept: 'application/rdap+json' } }, 8000);
+                            if (r2.ok) { const d2 = await r2.json(); v.registrant = rdapWho(d2, 'registrant'); v.registrar = v.registrar || rdapWho(d2, 'registrar'); }
+                        } catch (e) { /* the registrar's record is optional */ }
+                    }
                 }
             }
-            await iconStore.put(key, created ? 'application/json' : '', created ? new TextEncoder().encode(JSON.stringify({ created })).buffer : null, created ? 'rdap' : 'none').catch(() => {});
-            return created ? Math.floor((Date.now() - created) / 86400000) : null;
+            await iconStore.put(key, 'application/json', new TextEncoder().encode(JSON.stringify(v)).buffer, v.created ? 'rdap' : 'none').catch(() => {});
+            return v;
         } catch (e) {
-            return null;                                      // unknown: never a reason to flag on its own
+            return null;
         } finally {
-            ageInFlight.delete(key);
+            ageInFlight.delete(flight);
         }
     })();
-    ageInFlight.set(key, p);
+    ageInFlight.set(flight, p);
+    return p;
+}
+// How old a domain is, in days, or null when unknown.
+async function domainAgeDays(reg) {
+    const v = await domainRegistration(reg);
+    return v && v.created ? Math.floor((Date.now() - v.created) / 86400000) : null;
+}
+
+// ---------------------------------------------------------------------------
+// Does a domain belong to the brand a sender's name claims (brandOwnership)? Asked only once a name
+// claims a brand its domain isn't known to be (nameAddressSigns), or a domain's pattern imitates a
+// brand's (lookalikeVerdict), and only online; the answer is remembered 30 days ("own:<domain>|<brand>";
+// an unknown one, a day). Only public records are read: DNS through the resolvers already used for the
+// threat checks, the domain's registry (RDAP, as for its age) and, when the registry keeps no
+// registrant, the registrar's RDAP record. The sender's own servers are never contacted.
+//   owned — proof that needs the brand's own DNS or a registrar a forger can't use:
+//     • the brand's DMARC record sends its reports to the domain (facebook.com → facebookmail.com);
+//     • the domain's DMARC record sends reports to the brand, and the brand publishes the RFC 7489
+//       authorization for it (<domain>._report._dmarc.<brand>; a wildcard that answers for any name
+//       vouches for no one, so it doesn't count);
+//     • its name servers are under the brand's domain (a.ns.facebook.com), or the same as the brand's
+//       where that means the same customer: a per-customer pool (NS1, Dyn, Cloudflare) or an identical
+//       set elsewhere (not at providers whose servers every customer shares);
+//     • a corporate brand-protection registrar (MarkMonitor, CSC…) and a registrant naming the brand
+//       (Amazon Technologies, Inc.).
+//   likely — a corporate registrar plus one more link to the brand (reports sent to it, a registrant
+//     naming it, or a year or more of age): shown amber, never moved to Spam.
+//   unknown — anything less, or offline: judged as before.
+// ---------------------------------------------------------------------------
+const OWN_CACHE_MS = 30 * 24 * 60 * 60 * 1000, OWN_UNKNOWN_MS = 24 * 60 * 60 * 1000;
+const CORPORATE_REGISTRARS = /markmonitor|csc corporate domains|corporation service company|com laude|nom-iq|safenames|godaddy corporate domains|brandsight|lexsynergy|nameshield|ip twins|registrarsafe|abion\b|appdetex|safebrands/i;
+// Name servers assigned per customer: the same pool at two domains means the same customer.
+const NS_CUSTOMER_POOL = [/^dns\d+\.(p\d+)\.nsone\.net$/, /^ns\d+\.(p\d+)\.dynect\.net$/, /^([a-z]+)\.ns\.cloudflare\.com$/];
+// Providers whose name servers many customers share: identical sets there mean nothing.
+const NS_SHARED = /(^|\.)(ultradns\.(com|net|org|biz|info|co\.uk)|googledomains\.com|azure-dns\.(com|net|org|info)|domaincontrol\.com|registrar-servers\.com|he\.net|wixdns\.net|squarespacedns\.com|name-services\.com|worldnic\.com|ui-dns\.(com|de|org|biz)|ionos\.(com|de)|hostgator\.com|bluehost\.com|dreamhost\.com|siteground\.net|ovh\.net|cloudns\.net|dnsmadeeasy\.com)$/i;
+// The organization domains a DMARC record sends its reports to (rua, ruf).
+function dmarcReportDomains(tags) {
+    const out = new Set();
+    if (tags) for (const k of ['rua', 'ruf']) for (const part of String(tags[k] || '').split(',')) {
+        const m = /mailto:[^@\s!,;]+@([a-z0-9.-]+)/i.exec(part.trim());
+        if (m) { const d = registrableDomain(m[1].toLowerCase()); if (d) out.add(d); }
+    }
+    return out;
+}
+// The brand publishes the authorization for the domain's reports to come to it (RFC 7489 §7.1): the
+// exact name, not a wildcard (checked with a name that can't exist).
+async function dmarcReportAuthorized(domain, home) {
+    const has = async (name) => (await dnsTxt(name)).some(t => /^\s*v\s*=\s*dmarc1\b/i.test(t));
+    if (!await has(`${domain}._report._dmarc.${home}`)) return false;
+    return !await has(`probe-${Math.random().toString(36).slice(2, 10)}._report._dmarc.${home}`);
+}
+// A name server the two lists share in a way that means one operator, or ''.
+function sameOperatorNs(a, b) {
+    if (!a.length || !b.length) return '';
+    const pool = (h) => { for (let i = 0; i < NS_CUSTOMER_POOL.length; i++) { const m = NS_CUSTOMER_POOL[i].exec(h); if (m) return `${i}:${m[1]}`; } return ''; };
+    const poolsB = new Set(b.map(pool).filter(Boolean));
+    const shared = a.find(h => pool(h) && poolsB.has(pool(h)));
+    if (shared) return shared;
+    const A = a.filter(h => !NS_SHARED.test(h) && !pool(h)), B = b.filter(h => !NS_SHARED.test(h) && !pool(h));
+    return A.length && A.length === B.length && A.every((h, i) => h === B[i]) ? A[0] : '';
+}
+// Whether a registrant's name names the brand (its name or an unambiguous token of it).
+function registrantNamesBrand(registrant, brand) {
+    const text = foldName(registrant).replace(/[^a-z0-9& ]+/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!text) return false;
+    const words = new Set(text.split(' '));
+    const ambiguous = new Set(brand.ambiguousTokens || []);
+    const names = [brand.name.toLowerCase(), ...brand.tokens].filter(n => !ambiguous.has(n));
+    return names.some(n => n.includes(' ') ? ` ${text} `.includes(` ${n} `) : words.has(n));
+}
+const ownInFlight = new Map();
+async function brandOwnership(domain, brandName, S, account = '') {
+    const brand = senderBrandByName(brandName);
+    const reg = registrableDomain(normalizeDomain(domain));
+    const unknown = { state: 'unknown', how: '' };
+    if (!brand || !SENDER_DOMAIN_RE.test(reg) || isPersonalMailDomain(reg) || !S || !S.enableDnsThreatCheck) return unknown;
+    const key = `own:${reg}|${brand.name}`;
+    const hit = await iconStore.get(key).catch(() => null);
+    if (hit && hit.bytes) {
+        try { const v = JSON.parse(new TextDecoder().decode(hit.bytes)); if (v && v.state && Date.now() - hit.ts < (v.state === 'unknown' ? OWN_UNKNOWN_MS : OWN_CACHE_MS)) return { state: v.state, how: v.how || '' }; } catch (e) { /* asked again */ }
+    }
+    if (ownInFlight.has(key)) return ownInFlight.get(key);
+    const p = (async () => {
+        const proof = [], hints = [];
+        const homes = brandHomeDomains(brand).filter(h => h !== reg);
+        const settle = async (fn) => { try { return await fn(); } catch (e) { return null; } };
+        // 1. DMARC reporting, either way.
+        const mine = await settle(() => dmarcTags(reg));
+        const myReports = dmarcReportDomains(mine);
+        for (const home of homes) {
+            const theirs = await settle(() => dmarcTags(home));
+            if (dmarcReportDomains(theirs).has(reg)) { proof.push(`${home} sends its own DMARC reports to it`); break; }
+            if (myReports.has(home)) {
+                if (await settle(() => dmarcReportAuthorized(reg, home))) proof.push(`its DMARC reports go to ${home}, which publishes the authorization for them`);
+                else hints.push(`its DMARC reports go to ${home}`);
+                break;
+            }
+        }
+        // 2. Name servers.
+        if (!proof.length) {
+            const ns = (await settle(() => nameServers(reg))) || [];
+            for (const home of homes) {
+                const under = ns.find(h => h === home || h.endsWith('.' + home));
+                if (under) { proof.push(`its name servers are ${brand.name}'s (${under})`); break; }
+                const same = ns.length ? sameOperatorNs(ns, (await settle(() => nameServers(home))) || []) : '';
+                if (same) { proof.push(`it uses the same name servers as ${home} (${same})`); break; }
+            }
+        }
+        // 3. The registry and the registrar.
+        const info = (await settle(() => domainRegistration(reg, true))) || {};
+        const corporate = !!info.registrar && CORPORATE_REGISTRARS.test(info.registrar);
+        const named = !!info.registrant && registrantNamesBrand(info.registrant, brand);
+        if (corporate && named) proof.push(`registered to ${info.registrant} through ${info.registrar}`);
+        else {
+            if (named) hints.push(`registered to ${info.registrant}`);
+            if (corporate) hints.push(`registered through ${info.registrar}, a corporate registrar`);
+        }
+        const age = info.created ? Math.floor((Date.now() - info.created) / 86400000) : null;
+        if (age !== null && age >= 365) hints.push(`registered ${Math.floor(age / 365)} year${age >= 730 ? 's' : ''} ago`);
+        const state = proof.length ? 'owned' : corporate && hints.length >= 2 ? 'likely' : 'unknown';
+        const v = { state, how: state === 'owned' ? proof.join('; ') : state === 'likely' ? hints.join('; ') : '' };
+        await iconStore.put(key, 'application/json', new TextEncoder().encode(JSON.stringify(v)).buffer, 'own').catch(() => {});
+        if (state !== 'unknown') logInfo(`Sender domain ${reg}: ${state === 'owned' ? `shown to be ${brand.name}'s` : `looks like ${brand.name}'s`} (${v.how}). Its emails named “${brand.name}” are ${state === 'owned' ? 'not' : 'no longer'} flagged for that${state === 'likely' ? ', only marked for caution' : ''}.`, 'Sender checks', account);
+        return v;
+    })().finally(() => ownInFlight.delete(key));
+    ownInFlight.set(key, p);
     return p;
 }
 
@@ -2011,11 +2216,16 @@ async function lookalikeVerdict(domain, ownDomain, S) {
         for (const t of nearLabels(label, idx)) for (const d of idx.byLabel.all(t)) near.push({ target: d, why: `is one letter away from ${d}` });
         for (const d of idx.byLabel.all(label)) if (d !== reg) near.push({ target: d, why: `uses the name of ${d} under another ending` });
     }
+    // A domain public records show to be the brand's own (a second domain of the brand) imitates nothing.
+    const ownedBy = async (c) => { const b = online && c.target !== ownReg ? senderBrandOfDomain(c.target) : null; if (!b) return false; const o = await brandOwnership(reg, b.name, S).catch(() => null); return !!o && o.state === 'owned'; };
     for (const c of strong) {
-        if (c.target === ownReg || await protectedTarget(c.target)) return { level: 'strong', text: `The sender's domain ${reg} ${c.why}: a look-alike address.` };
+        if (c.target === ownReg || await protectedTarget(c.target)) {
+            if (await ownedBy(c)) continue;
+            return { level: 'strong', text: `The sender's domain ${reg} ${c.why}: a look-alike address.` };
+        }
     }
     const nearOk = [];
-    for (const c of near) if (c.target === ownReg || await protectedTarget(c.target)) nearOk.push(c);
+    for (const c of near) if ((c.target === ownReg || await protectedTarget(c.target)) && !await ownedBy(c)) nearOk.push(c);
     if (!nearOk.length) return null;
     const age = online ? await domainAgeDays(reg) : null;
     const c = nearOk[0];
@@ -2829,6 +3039,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 
     // Sender checks for the inbox list and opened emails (Gmail).
+    // Whether an address's domain is the brand's its sender name claims (public records; see brandOwnership).
+    if (request.action === 'brandOwnership') {
+        if (!sender || sender.id !== chrome.runtime.id || typeof request.domain !== 'string' || typeof request.brand !== 'string') { sendResponse(null); return false; }
+        getConfig().then(cfg => cfg.values.enableLookalikeCheck ? brandOwnership(request.domain.slice(0, 253), request.brand.slice(0, 40), cfg.values, accountLabel(request)) : { state: 'unknown', how: '' })
+            .then(v => sendResponse({ state: v.state, how: v.how || '' }))
+            .catch((e) => { logWarning(`Checking who owns a sender's domain failed (${errorText(e)}).`, 'Sender checks', accountLabel(request)); sendResponse(null); });
+        return true;
+    }
+
     if (request.action === 'checkSenders') {
         if (!sender || sender.id !== chrome.runtime.id || !Array.isArray(request.senders)) { sendResponse([]); return false; }
         checkSenders(request.senders.filter(x => x && typeof x.address === 'string'), typeof request.ownDomain === 'string' ? request.ownDomain : '', accountLabel(request))

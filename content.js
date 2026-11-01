@@ -2046,10 +2046,12 @@ function scanSenders() {
         const sender = openedSenderOf(body);
         if (!sender || !sender.address) continue;
         body.dataset.senderChecked = '1';
-        const needsVerdict = !!displayNameBrand(sender.name) || [...body.querySelectorAll('a[href]')].some(a => companyOnlyShortener(a.href));
-        const finish = (auth) => guarded('Checking the sender', () => {
+        const claimed = displayNameBrand(sender.name);
+        const needsVerdict = !!claimed || [...body.querySelectorAll('a[href]')].some(a => companyOnlyShortener(a.href));
+        const ownership = claimed && !senderDomainOwnedBy(claimed, domainOfAddress(sender.address)) ? brandOwnershipFor(domainOfAddress(sender.address), claimed.name, lastSettings) : Promise.resolve(null);
+        const finish = (auth, owned) => guarded('Checking the sender', () => {
             if (!body.isConnected) return;
-            const r = evaluateSender({ displayName: sender.name, address: sender.address, auth, bodyText: auth ? body.innerText.slice(0, 20000) : '' });
+            const r = evaluateSender({ displayName: sender.name, address: sender.address, auth, bodyText: auth ? body.innerText.slice(0, 20000) : '', ownership: owned });
             // A brand's or a colleague's name on another address counts in the email's verdict (as in
             // the inbox list; see updateOpenedVerdict), which the banner shows: not repeated here.
             if (lastSettings.enableLookalikeCheck !== false) r.findings = r.findings.filter(f => !/^The sender's name says/.test(f.message));
@@ -2057,7 +2059,7 @@ function scanSenders() {
             for (const line of r.info) reportEvent('info', line);
             for (const f of r.findings) reportEvent(f.severity === 'danger' ? 'warning' : 'info', `Sender check: ${f.message}`);
         });
-        if (needsVerdict) getMessageAuth(body).then(finish); else finish(null);
+        if (needsVerdict) Promise.all([getMessageAuth(body), ownership]).then(([auth, owned]) => finish(auth, owned)); else finish(null, null);
     }
 }
 
@@ -2226,6 +2228,32 @@ function senderResultsFor(raws) {
         });
     }
     return Promise.all(raws.map(a => senderResults.get(a)));
+}
+
+// Whether an address's domain is the brand's that its sender name claims, from public records (the
+// background's brandOwnership): { state: 'owned' | 'likely' | 'unknown', how }, or null when not
+// looked up (Offline only, the check off, or no answer), which judges the name as before. Asked once
+// per domain and brand per page; the background remembers answers 30 days.
+const brandOwnerships = new Map();
+const BRAND_OWNERSHIPS_MAX = 500;
+function brandOwnershipFor(domain, brandName, S) {
+    if (!S || !S.enableDnsThreatCheck || !S.enableLookalikeCheck) return Promise.resolve(null);
+    const reg = registrableDomain(domain) || domain;
+    const key = `${brandName}|${reg}`;
+    if (!brandOwnerships.has(key)) {
+        if (brandOwnerships.size >= BRAND_OWNERSHIPS_MAX) brandOwnerships.delete(brandOwnerships.keys().next().value);
+        const p = new Promise(resolve => safeSend({ action: 'brandOwnership', domain: reg, brand: brandName }, (r) => resolve(r && r.state ? { state: r.state, how: r.how || '' } : null)));
+        brandOwnerships.set(key, p);
+        p.then(v => { if (!v && brandOwnerships.get(key) === p) brandOwnerships.delete(key); });      // no answer: asked again next time
+    }
+    return brandOwnerships.get(key);
+}
+// The lookups for the senders whose name claims a brand their domain isn't known to be; null elsewhere.
+function ownershipsFor(senders, S) {
+    return Promise.all(senders.map(s => {
+        const b = S.enableLookalikeCheck && s.name ? displayNameBrand(s.name) : null;
+        return b && s.domain && !isPersonalMailDomain(s.domain) && !senderDomainOwnedBy(b, s.domain) ? brandOwnershipFor(s.domain, b.name, S) : Promise.resolve(null);
+    }));
 }
 
 // FNV-1a of the lower-case address: enough to tell whether the headers belong to the sender shown.
@@ -2764,14 +2792,14 @@ function scanSenderRows(S) {
         const infoP = readHeaders ? messageInfo(msgId) : Promise.resolve(null);
         if (readHeaders && unread && thread) infoP.then(info => { if (info && headersFetched.has(msgId)) unreadHeaderReads.set(thread, Date.now()); });
         const subjectText = MAIL.list.subject ? ((firstMatch(row, MAIL.list.subject) || {}).textContent || '') : '';
-        const show = (results, info, ours) => guarded('Showing who sent an email', () => {
+        const show = (results, info, ours, owns) => guarded('Showing who sent an email', () => {
             if (!row.isConnected || row.dataset.unshortenerSender !== key) return;
             // Signs in this email: the names shown, and the headers when they belong to the last sender.
             const org = ownOrgDomain();
             const finals = results.map((r, k) => {
                 const signals = displayNameAnomalies(senders[k].name);
                 // The name doesn't belong with the address (a brand's name, or a colleague's, outside).
-                if (S.enableLookalikeCheck && r && r.status !== 'trusted') signals.push(...nameAddressSigns(senders[k].name, senders[k].address, org, loadColleagueHashes()));
+                if (S.enableLookalikeCheck && r && r.status !== 'trusted') signals.push(...nameAddressSigns(senders[k].name, senders[k].address, org, loadColleagueHashes(), owns && owns[k]));
                 // The name is the user's own address or mailbox name, on someone else's address.
                 if (S.enableOwnNameCheck && r && r.status !== 'trusted') signals.push(...ownNameSigns(senders[k].name, senders[k].address, accountAddress()));
                 // A "call this number" subject (whoever sent it).
@@ -2807,10 +2835,10 @@ function scanSenderRows(S) {
                 ? { kind: 'row', address: senders[0].address, reason: finals[0].reasons.join(' '), msgId, unread, how: isSearchView(location.hash, MAIL.views) ? 'automatically, from search results' : 'automatically, from the inbox list' } : null;
             if (row.unshortenerSpam && S.enableAutoSpam) queueSpamMove(thread, row.unshortenerSpam);
         });
-        Promise.all([senderResultsFor(senders.map(s => s.raw)), spamFolder ? spamMovedReasons() : null]).then(([results, moved]) => {
+        Promise.all([senderResultsFor(senders.map(s => s.raw)), spamFolder ? spamMovedReasons() : null, ownershipsFor(senders, S)]).then(([results, moved, owns]) => {
             const ours = moved && thread ? moved.get(thread) : null;
-            show(results, null, ours);
-            infoP.then(info => { if (info) show(results, info, ours); });
+            show(results, null, ours, owns);
+            infoP.then(info => { if (info) show(results, info, ours, owns); });
         });
     }
     scheduleGuardSync();        // rows the webmail redrew for another conversation lose a stale guard
@@ -2909,7 +2937,7 @@ function updateOpenedVerdict(body) {
     if (!st || !st.base || !st.nameEl.isConnected) return;
     const signals = [...displayNameAnomalies(st.name), ...(st.info && st.info.fh === addressFingerprint(st.address) ? st.info.an : []), ...emailContentSignals(body),
                      ...serviceWarningSigns(webmailTextAround(body), SITE.name),
-                     ...(lastSettings.enableLookalikeCheck !== false && st.base.status !== 'trusted' ? nameAddressSigns(st.name, st.address, ownOrgDomain(), loadColleagueHashes()) : []),
+                     ...(lastSettings.enableLookalikeCheck !== false && st.base.status !== 'trusted' ? nameAddressSigns(st.name, st.address, ownOrgDomain(), loadColleagueHashes(), st.ownership) : []),
                      ...(lastSettings.enableOwnNameCheck !== false && st.base.status !== 'trusted' ? ownNameSigns(st.name, st.address, accountAddress()) : []),
                      ...(lastSettings.enableCallbackScamCheck !== false && st.base.status !== 'trusted' ? [...subjectScamSigns(openedSubject()), ...bodyScamSigns(body.innerText)] : [])];
     const final = applyEmailSignals(st.base, signals);
@@ -2969,12 +2997,13 @@ function scanOpenedSenders(S) {
             }
         }
         const msgId = messageIdOf(body);
-        const st = { nameEl, chip, icon, address: who.address, domain: who.domain, name: who.name, msgId, thread: currentThreadKey(), base: null, info: null, authLine: [] };
+        const st = { nameEl, chip, icon, address: who.address, domain: who.domain, name: who.name, msgId, thread: currentThreadKey(), base: null, info: null, authLine: [], ownership: null };
         openedStates.set(body, st);
-        Promise.all([senderResultsFor([who.raw]), messageInfo(msgId), getMessageAuth(body)]).then(([[r], info, auth]) => guarded('Showing who sent an email', () => {
+        Promise.all([senderResultsFor([who.raw]), messageInfo(msgId), getMessageAuth(body), ownershipsFor([who], S)]).then(([[r], info, auth, [owned]]) => guarded('Showing who sent an email', () => {
             if (!nameEl.isConnected || nameEl.dataset.unshortenerSender !== key || !r || openedStates.get(body) !== st) return;
             st.base = r;
             st.info = info;
+            st.ownership = owned;
             harvestAvatar(body, who, auth);
             st.authLine = auth ? [`${SITE.name}'s sender verification: DMARC ${auth.dmarc}, SPF ${auth.spf}, DKIM ${auth.dkim}.`] : [];
             if (icon && S.enableSenderCountry) {

@@ -1551,14 +1551,17 @@ function brandOfSender(domain) {
 
 // Brands people impersonate in sender names. ambiguous: also an ordinary word or name ("Apple
 // Smith", "Chase"), so it only counts next to words like Support, Security or Billing.
+// domains: sending domains known to be the brand's besides its own name (checked against their public
+// registrant records); home: the brand's main domain(s), whose DNS speaks for the brand when another
+// domain's ownership is checked (brandOwnership in background.js; defaults to domains).
 const SENDER_NAME_BRANDS = [
-    { name: 'Google', tokens: ['google', 'gmail', 'google workspace', 'youtube'] },
-    { name: 'Microsoft', tokens: ['microsoft', 'office 365', 'microsoft 365', 'outlook', 'onedrive', 'sharepoint', 'teams'], ambiguousTokens: ['outlook', 'teams'] },
-    { name: 'Apple', tokens: ['apple', 'icloud', 'itunes', 'app store'], ambiguousTokens: ['apple'] },
-    { name: 'Amazon', tokens: ['amazon', 'amazon prime', 'aws'] },
-    { name: 'PayPal', tokens: ['paypal'] },
-    { name: 'Meta', tokens: ['facebook', 'instagram', 'whatsapp', 'meta'], ambiguousTokens: ['meta'] },
-    { name: 'LinkedIn', tokens: ['linkedin'] },
+    { name: 'Google', tokens: ['google', 'gmail', 'google workspace', 'youtube'], home: ['google.com'] },
+    { name: 'Microsoft', tokens: ['microsoft', 'office 365', 'microsoft 365', 'outlook', 'onedrive', 'sharepoint', 'teams'], ambiguousTokens: ['outlook', 'teams'], home: ['microsoft.com'] },
+    { name: 'Apple', tokens: ['apple', 'icloud', 'itunes', 'app store'], ambiguousTokens: ['apple'], home: ['apple.com'] },
+    { name: 'Amazon', tokens: ['amazon', 'amazon prime', 'aws'], domains: ['amazonmusic.com'], home: ['amazon.com'] },
+    { name: 'PayPal', tokens: ['paypal'], home: ['paypal.com'] },
+    { name: 'Meta', tokens: ['facebook', 'instagram', 'whatsapp', 'meta'], ambiguousTokens: ['meta'], home: ['facebook.com', 'meta.com', 'instagram.com'] },
+    { name: 'LinkedIn', tokens: ['linkedin'], home: ['linkedin.com'] },
     { name: 'Netflix', tokens: ['netflix'], domains: ['netflix.com'] },
     { name: 'DocuSign', tokens: ['docusign'], domains: ['docusign.com', 'docusign.net'] },
     { name: 'Dropbox', tokens: ['dropbox'], domains: ['dropbox.com', 'dropboxmail.com'] },
@@ -1568,7 +1571,7 @@ const SENDER_NAME_BRANDS = [
     { name: 'Coinbase', tokens: ['coinbase'], domains: ['coinbase.com'] },
     { name: 'Adobe', tokens: ['adobe'], domains: ['adobe.com'] },
     { name: 'FedEx', tokens: ['fedex'], domains: ['fedex.com'] },
-    { name: 'UPS', tokens: ['ups'], ambiguousTokens: ['ups'], domains: ['ups.com'] },
+    { name: 'UPS', tokens: ['ups'], ambiguousTokens: ['ups'], domains: ['ups.com', 'upsemail.com'] },
     { name: 'DHL', tokens: ['dhl'], domains: ['dhl.com', 'dhl.de'] },
     { name: 'USPS', tokens: ['usps', 'postal service'], domains: ['usps.com', 'usps.gov'] },
     { name: 'IRS', tokens: ['irs', 'internal revenue service'], domains: ['irs.gov'] },
@@ -1582,9 +1585,9 @@ const SENDER_NAME_BRANDS = [
     { name: 'Walmart', tokens: ['walmart'], domains: ['walmart.com'] },
     { name: 'Costco', tokens: ['costco'], domains: ['costco.com'] },
     { name: 'Verizon', tokens: ['verizon'], domains: ['verizon.com', 'verizonwireless.com'] },
-    { name: 'AT&T', tokens: ['at&t', 'att'], ambiguousTokens: ['att'], domains: ['att.com', 'att.net'] },
+    { name: 'AT&T', tokens: ['at&t', 'att'], ambiguousTokens: ['att'], domains: ['att.com', 'att.net', 'att-mail.com'] },
     { name: 'Xfinity', tokens: ['xfinity', 'comcast'], domains: ['xfinity.com', 'comcast.com', 'comcast.net'] },
-    { name: 'Spotify', tokens: ['spotify'], domains: ['spotify.com'] },
+    { name: 'Spotify', tokens: ['spotify'], domains: ['spotify.com', 'spotifymail.com'] },
     { name: 'Steam', tokens: ['steam'], ambiguousTokens: ['steam'], domains: ['steampowered.com', 'steamcommunity.com'] },
     { name: 'Intuit', tokens: ['intuit', 'quickbooks', 'turbotax'], domains: ['intuit.com', 'quickbooks.com', 'turbotax.com'] },
     { name: 'Zoom', tokens: ['zoom'], ambiguousTokens: ['zoom'], domains: ['zoom.us', 'zoom.com'] }
@@ -1608,6 +1611,23 @@ function displayNameBrand(displayName) {
         }
     }
     return null;
+}
+
+// A brand by its name, and the domains whose DNS speaks for it (home, else its known domains).
+function senderBrandByName(name) { return SENDER_NAME_BRANDS.find(b => b.name === name) || null; }
+function brandHomeDomains(brand) { return brand ? (brand.home || brand.domains || []).slice(0, 3) : []; }
+// The brand a protected domain belongs to (paypal.com → PayPal), for the look-alike check.
+function senderBrandOfDomain(domain) {
+    const d = String(domain || '').toLowerCase();
+    return SENDER_NAME_BRANDS.find(b => brandHomeDomains(b).includes(d) || (b.domains || []).includes(d)) || null;
+}
+
+// The words of a sender-check reason about a domain's ownership (brandOwnership in background.js):
+// { state: 'owned' | 'likely' | 'unknown', how }. owned: public records prove the domain is the
+// brand's; likely: a corporate registrar plus a link to the brand, which a forger is unlikely to have.
+function ownershipNote(ownership, domain, brand) {
+    if (!ownership || !ownership.how) return '';
+    return ownership.state === 'owned' ? `${domain} is ${brand}'s: ${ownership.how}` : `${domain} looks like ${brand}'s (${ownership.how})`;
 }
 
 // Whether a sending domain belongs to the brand named in the display name.
@@ -1639,14 +1659,21 @@ function colleagueNameHash(name) {
 // Signs that a sender's name and address don't belong together: a well-known brand's name on an
 // address that isn't the brand's (red: moved to Spam), or the name of someone in the user's own
 // organization on an outside address (amber: colleagues sometimes write from a personal address).
-// own: the user's organization domain; colleagues: Set of colleagueNameHash values.
-function nameAddressSigns(name, address, own, colleagues) {
+// own: the user's organization domain; colleagues: Set of colleagueNameHash values; ownership: what
+// public records say about the address's domain and the brand the name claims (ownershipNote):
+// proven the brand's, nothing is wrong with the name; looking like the brand's, amber (never moved)
+// instead of red; unknown (or not looked up: Offline only), red as before.
+function nameAddressSigns(name, address, own, colleagues, ownership) {
     const out = [];
     const domain = domainOfAddress(address);
     if (!name || !domain || (own && isOwnDomain(domain, own))) return out;
     const claimed = displayNameBrand(name);
     if (claimed && !senderDomainOwnedBy(claimed, domain)) {
-        out.push({ weight: 5, text: `The sender's name says “${String(name).trim().slice(0, 60)}”, but ${address} isn't ${claimed.name}'s address.` });
+        const shown = String(name).trim().slice(0, 60);
+        const reg = registrableDomain(domain) || domain;
+        if (ownership && ownership.state === 'owned') out.push({ weight: 0, text: `The sender's name says “${shown}”; ${ownershipNote(ownership, reg, claimed.name)}.` });
+        else if (ownership && ownership.state === 'likely') out.push({ weight: SIGNAL_CAUTION_SCORE, text: `The sender's name says “${shown}”, and ${address} isn't a known ${claimed.name} address, though ${ownershipNote(ownership, reg, claimed.name)}. Make sure it's really who you expect.` });
+        else out.push({ weight: 5, text: `The sender's name says “${shown}”, but ${address} isn't ${claimed.name}'s address.` });
     }
     const h = colleagues && colleagues.size ? colleagueNameHash(name) : '';
     if (h && colleagues.has(h)) {
@@ -1756,13 +1783,16 @@ const SCAM_PHONE_RE = /(?:\+?1[\s.-]?)?(?:\(\d{3}\)[\s.-]?|\b\d{3}[\s.-])\d{3}[\
 const SCAM_WORDS_RE = /\b(payment|charged|charge|invoice|refund|order|subscription|renewal|purchase|transaction|bitcoin|crypto|gift ?cards?|call (us|now|immediately)|cancel)\b/i;
 
 // Findings about the sender: [{ severity, message }], plus info for the log.
-function evaluateSender({ displayName, address, auth, bodyText }) {
+function evaluateSender({ displayName, address, auth, bodyText, ownership }) {
     const findings = [];
     const info = [];
     const domain = domainOfAddress(address);
     const claimed = displayNameBrand(displayName);
     if (claimed && !senderDomainOwnedBy(claimed, domain)) {
-        findings.push({ severity: 'danger', message: `The sender's name says “${String(displayName).trim()}”, but the address ${address} isn't ${claimed.name}'s. Don't trust links, attachments or phone numbers in this email.` });
+        const reg = registrableDomain(domain) || domain;
+        if (ownership && ownership.state === 'owned') info.push(`The sender's name says “${String(displayName).trim()}”; ${ownershipNote(ownership, reg, claimed.name)}.`);
+        else if (ownership && ownership.state === 'likely') findings.push({ severity: 'caution', message: `The sender's name says “${String(displayName).trim()}”, and ${address} isn't a known ${claimed.name} address, though ${ownershipNote(ownership, reg, claimed.name)}. Make sure it's really who you expect.` });
+        else findings.push({ severity: 'danger', message: `The sender's name says “${String(displayName).trim()}”, but the address ${address} isn't ${claimed.name}'s. Don't trust links, attachments or phone numbers in this email.` });
     }
     const la = domain && !isPersonalMailDomain(domain) ? lookalikeOf(domain) : null;
     if (la) findings.push({ severity: 'danger', message: `The sender's address (${domain}) ${la}.` });

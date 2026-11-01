@@ -313,6 +313,7 @@
             [code('raw.githubusercontent.com'), 'scam-sender list: once a day', 'nothing (plain download)', 'Check sender addresses against phishing lists', onOff(S.enablePhishingFeeds && S.enableSenderAddressCheck)],
             [code('raw.githubusercontent.com') + ' · ' + code('tranco-list.eu'), 'popular-sites lists: once a month', 'nothing (plain download)', 'Catch look-alike senders', onOff(S.enableLookalikeCheck && S.enableRemoteListSync)],
             [code('data.iana.org') + ' · the domain\'s registry', 'a sender domain one letter away from a protected one, or a popular name plus a word like "billing" (at most once a month each)', 'the sender\'s domain, for its registration date', 'Catch look-alike senders', onOff(S.enableLookalikeCheck && S.enableDnsThreatCheck)],
+            [code('the domain\'s registry and registrar') + ' · Cloudflare DNS', 'a sender name claiming a well-known brand on a domain not known as the brand\'s, or a domain pattern imitating a brand\'s (at most once a month per domain)', 'the sender\'s domain: its registry and registrar record (registrant, registrar, date), its DMARC and name-server records', 'Catch look-alike senders', onOff(S.enableLookalikeCheck && S.enableDnsThreatCheck)],
             [code('www.whois.com'), 'only when you click a WHOIS button', 'the IP address shown', 'you', '—']
         ]));
 

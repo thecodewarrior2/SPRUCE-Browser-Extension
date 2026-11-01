@@ -18,6 +18,10 @@ const { launch, servePage, until, settled, ready, check, done } = require('./har
     await iconStore.put('dmarc:brandsite.example', 'application/json', json({ p: 'reject', sp: '', pct: 100 }), 'dmarc');
     await iconStore.put('age:brandsitte.example', 'application/json', json({ created: now - 12 * day }), 'rdap');
     await iconStore.put('age:brandsitee.example', 'application/json', json({ created: now - 4000 * day }), 'rdap');
+    // Brand ownership answers, as if looked up (own:<domain>|<brand>): proven Amazon's, only likely, and nothing known.
+    await iconStore.put('own:amazonmusic.example|Amazon', 'application/json', json({ state: 'owned', how: 'registered to Amazon Technologies, Inc. through MarkMonitor Inc.' }), 'own');
+    await iconStore.put('own:amazon-notices.example|Amazon', 'application/json', json({ state: 'likely', how: 'its DMARC reports go to amazon.com; registered through MarkMonitor Inc., a corporate registrar' }), 'own');
+    await iconStore.put('own:random-shop.example|PayPal', 'application/json', json({ state: 'unknown', how: '' }), 'own');
     invalidateConfig();
   });
   const page = await ctx.newPage();
@@ -32,7 +36,9 @@ const { launch, servePage, until, settled, ready, check, done } = require('./har
     { t: 8304, email: 'news@brandsitee.example', name: 'Brandsitee', subj: 'Our newsletter', unread: true },
     { t: 8305, email: 'help@random-shop.example', name: 'PayPal Service', subj: 'Payment received', unread: true },
     { t: 8306, email: 'pat.colleague.home@gmail.com', name: 'Pat Colleague', subj: 'Quick favor', unread: true },
-    { t: 8307, email: 'billing@paypal-support.example', name: 'Support', subj: 'Trusted vendor', unread: true }]));
+    { t: 8307, email: 'billing@paypal-support.example', name: 'Support', subj: 'Trusted vendor', unread: true },
+    { t: 8308, email: 'no-reply@amazonmusic.example', name: 'Amazon Music', subj: 'Your Halloween soundtrack awaits', unread: true },
+    { t: 8309, email: 'news@amazon-notices.example', name: 'Amazon', subj: 'Your order', unread: true }]));
   const status = (t) => page.evaluate((t) => { const c = document.querySelector(`[data-thread-id="#thread-f:${t}"]`); const chip = c && c.closest('tr').querySelector('.unshortener-sender-chip'); return chip ? { status: chip.dataset.status, title: chip.title } : (c ? null : 'moved'); }, t);
   const moved = () => page.evaluate(() => window.__spammed.slice());
   const m = await until(moved, s => ['#thread-f:8302', '#thread-f:8303', '#thread-f:8305'].every(t => s.includes(t)), 20000);
@@ -48,6 +54,10 @@ const { launch, servePage, until, settled, ready, check, done } = require('./har
   check('a colleague\'s name on an outside address: amber, with the reason', col && col.status === 'caution' && /name of someone in your organization/.test(col.title), col);
   const trusted = await status(8307);
   check('a trusted sender is never judged', trusted && trusted.status === 'trusted', trusted);
+  const owned = await status(8308);
+  check('a brand\'s name on a domain proven the brand\'s (public records): not flagged, not moved, the reason says why', owned && owned !== 'moved' && owned.status !== 'flagged' && owned.status !== 'caution' && /is Amazon's: registered to Amazon Technologies/.test(owned.title), owned);
+  const likely = await until(() => status(8309), s => s && s.status === 'caution', 8000);
+  check('a brand\'s name on a domain that looks like the brand\'s: amber, not moved, with the evidence', likely && likely.status === 'caution' && !after.includes('#thread-f:8309') && /looks like Amazon's \(its DMARC reports go to amazon\.com/.test(likely.title), likely);
   const log = await sw.evaluate(async () => ((await chrome.storage.local.get('errorLogs')).errorLogs || []).map(e => e.message).filter(x => /look-alike/.test(x)));
   check('the log says why (look-alike address)', log.some(x => /paypal-billing\.example/.test(x)) && log.some(x => /registered only 12 days ago/.test(x)), log);
   await ctx.close();
