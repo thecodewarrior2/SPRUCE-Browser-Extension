@@ -159,7 +159,7 @@ weights add up: **5 or more is red** (flagged, and moved to Spam), **3 or 4 is a
 flowchart TD
   subgraph Row["Inbox list, nothing opened"]
     A1["Sender's address verdict"]
-    A2["Name vs address:<br/>a brand's name on another address (5)<br/>a colleague's name outside (3)<br/>your own name or address (5)"]
+    A2["Name vs address:<br/>a brand's name on another address (5;<br/>3 if records say probably the brand's,<br/>0 if they prove it)<br/>a colleague's name outside (3)<br/>your own name or address (5)"]
     A3["Look-alike domain:<br/>pаypal, paypal-billing,<br/>your-school-support (5)"]
     A4["Subject: 'call this number' scam (5)"]
   end
@@ -180,6 +180,42 @@ flowchart TD
 Some senders are never judged as a whole: trusted senders (yours or your organization's), your own
 organization's domain, and big providers' domains such as gmail.com, where only an exact address on a
 list counts. Names of colleagues are kept only as one-way codes (hashes).
+
+### Is a domain the brand's? (brand ownership)
+
+Companies send from more domains than their main one, so before a brand's name on a domain not known as
+the brand's counts (weight 5), the background reads public records about that domain once, online only
+(`brandOwnership`; the answer is remembered 30 days per domain and brand, an unknown one a day). It also
+runs before a look-alike *pattern* (a brand's name plus "billing") counts, so a brand's own second domain
+isn't an imitation of it.
+
+```mermaid
+flowchart TD
+  N["Name claims a brand;<br/>domain not one of its known ones"] --> Q{"Offline only?"}
+  Q -- yes --> R5["unknown: weight 5 (red)"]
+  Q -- no --> E["Read public records<br/>(DNS via the resolvers already used;<br/>registry RDAP, then the registrar's)"]
+  E --> P{"Proof only the brand<br/>could have made?"}
+  P -- yes --> OWN["owned: weight 0,<br/>reason says why"]
+  P -- no --> L{"Corporate registrar<br/>+ one more link?"}
+  L -- yes --> LIK["likely: weight 3 (amber,<br/>never moved)"]
+  L -- no --> R5
+```
+
+| Evidence | Counts as | Why a forger can't fake it |
+|---|---|---|
+| The brand's DMARC record sends its reports to the domain (facebook.com → facebookmail.com) | proof | needs the brand's DNS |
+| The domain sends reports to the brand **and** the brand publishes `<domain>._report._dmarc.<brand>` (RFC 7489); a wildcard that answers for any name doesn't count | proof | needs the brand's DNS |
+| Name servers under the brand's domain (a.ns.facebook.com), or shared with it where that means one customer (a per-customer pool such as `dns1.p07.nsone.net`, or an identical set outside shared providers like UltraDNS or Azure DNS) | proof | needs the brand's DNS operator account |
+| A corporate brand-protection registrar (MarkMonitor, CSC, Com Laude…) **and** a registrant naming the brand | proof | such registrars serve only vetted large companies |
+| The domain's reports go to the brand (no authorization) | hint | anyone can point reports anywhere |
+| A registrant naming the brand, alone | hint | anyone can type a company's name |
+| A corporate registrar, alone; a year or more of age | hint | — |
+
+A corporate registrar plus one more hint is **likely**; anything less is **unknown**. A registrant
+counts only if it names the brand unambiguously (Apple, Chase, Meta are ordinary words, so "Apple Valley
+Farms" never counts). Registry records for .com and many endings name only the registrar; the
+registrant comes from the registrar's own RDAP record, linked from the registry's. Only the domain name
+leaves the device; the sender's own servers are never contacted.
 
 ## 7. Moving an email to Spam
 
