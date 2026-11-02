@@ -14,12 +14,16 @@ For people working on the extension itself: the Chrome and Edge build (branch `m
 
 1. Work on `testing` (start from the latest `main`: `git checkout testing && git merge main`).
 2. Run the tests (below) and try the change in the browser. Commit and push `testing`.
-3. When `testing` is ready, bring it into `main` (`git checkout main && git merge --ff-only testing`)
-   and push.
-4. Port the change to `firefox` and `safari` (their files differ in places: the background page,
-   policies, browser APIs), run their tests, and push them.
+3. **Stop here.** The change stays on `testing` — however green the tests and the GitHub check are —
+   until the maintainer has loaded the `testing` build in their own browser, tried the change, and
+   **explicitly approved releasing it**. Green tests are not approval. Further work keeps landing on
+   `testing` in the meantime.
+4. Only with that approval: bring `testing` into `main` (`git checkout main && git merge --ff-only testing`)
+   and push, then port the change to `firefox` and `safari` (their files differ in places: the
+   background page, policies, browser APIs), run their tests, and push them.
 
-Nothing goes to `main`, `firefox` or `safari` that hasn't been on `testing` first.
+Nothing goes to `main`, `firefox` or `safari` that hasn't been on `testing` first — and nothing
+leaves `testing` without the maintainer's explicit approval after testing the build locally.
 
 ### Checks and branch rules on GitHub
 
