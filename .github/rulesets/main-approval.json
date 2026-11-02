@@ -1,0 +1,20 @@
+{
+  "name": "main: approved by the maintainer",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": {
+    "ref_name": {
+      "include": ["refs/heads/main"],
+      "exclude": []
+    }
+  },
+  "rules": [
+    {
+      "type": "required_deployments",
+      "parameters": {
+        "required_deployment_environments": ["release"]
+      }
+    }
+  ],
+  "bypass_actors": []
+}

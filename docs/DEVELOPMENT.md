@@ -14,22 +14,47 @@ Edge, Firefox and Safari. Everyone else needs only the [README](../README.md); a
 
 1. Work on `testing` (start from the latest `main`: `git checkout testing && git merge main`).
 2. Run the tests (below) and try the change in the browser. Commit and push `testing`.
-3. **Stop here.** The change stays on `testing` — however green the tests and the GitHub check are —
-   until the maintainer has loaded the `testing` build in their own browser, tried the change, and
-   **explicitly approved releasing it**. Green tests are not approval. Further work keeps landing on
-   `testing` in the meantime.
-4. Only with that approval: bring `testing` into `main` (`git checkout main && git merge --ff-only testing`)
-   and push. Every browser's package is then built from `main` (below); there is nothing to port.
+3. **Stop here.** The change stays on `testing` — however green the tests and the GitHub checks are —
+   until the maintainer has loaded the `testing` build on their own computer, tried the change, and
+   **approved releasing it**. Green tests are not approval, and nothing (no person, script or AI
+   assistant) moves `testing` to `main` automatically. Further work keeps landing on `testing` meanwhile.
+4. The maintainer approves on GitHub: in the **Tests** run of that `testing` commit (Actions), **Review
+   deployments** → tick `release` → **Approve and deploy**. When an AI assistant does the release, the
+   maintainer also tells it so in the conversation.
+5. Only then: bring `testing` into `main` (`git checkout main && git merge --ff-only testing`, or
+   `git push origin testing:main`) and push. GitHub refuses a commit that wasn't approved. Every browser's
+   package is then built from `main` (below); there is nothing to port.
 
 Nothing goes to `main` that hasn't been on `testing` first — and nothing leaves `testing` without the
-maintainer's explicit approval after testing the build locally.
+maintainer's approval after testing the build on their own computer.
+
+### Release approval (set up once)
+
+The **Release approval** step of the Tests workflow runs, for a push to `testing`, after every check passed;
+it waits until the maintainer approves it, and `main` accepts only a commit whose approval succeeded. Set it
+up once, on GitHub:
+
+1. **Settings → Environments → New environment**, named `release` (a push to `testing` may already have made
+   it, with no protection: open it then).
+2. Tick **Required reviewers** and add yourself. Leave **Prevent self-review** off: the run is started by
+   your own pushes, and you couldn't approve it otherwise.
+3. **Deployment branches and tags → Selected branches and tags** → add `testing`. Save.
+4. **Settings → Rules → Rulesets → New ruleset → Import a ruleset** →
+   [`main-approval.json`](../.github/rulesets/main-approval.json).
+5. Try it once: before approving a new `testing` commit, `git push origin testing:main` must be refused;
+   after approving it, the same push goes through.
+
+Until the environment has a required reviewer, the step fails on every `testing` push (and so `main` stays
+closed): without a reviewer GitHub would run it without asking anyone. After setting it up, open the run
+and **Re-run failed jobs**, then approve. A newer push to `testing` cancels the older run's waiting
+approval: approve the build you tried, which is normally the latest.
 
 ### Checks and branch rules on GitHub
 
 The **Tests** workflow (`.github/workflows/tests.yml`) runs on every push to `testing` and `main` and on
 pull requests into `main`: the unit and browser tests in Chromium (the check named **Unit and browser
 tests**), and the Firefox suite in the current Firefox ESR and in 140 ESR (**Firefox (esr)**,
-**Firefox (140)**). The **Safari build** workflow (`.github/workflows/safari.yml`) builds the Safari app
+**Firefox (140)**); for a push to `testing`, then **Release approval** (above). The **Safari build** workflow (`.github/workflows/safari.yml`) builds the Safari app
 on a GitHub Mac for every push to `main`, or when started by hand.
 
 The repository's rulesets are kept in [`.github/rulesets/`](../.github/rulesets). To set them up (or
@@ -40,6 +65,7 @@ and import each file:
 |---|---|---|
 | `release-branches.json` | `main`, `firefox`, `safari` | No deleting, no force pushes, linear history (fast-forward merges) |
 | `main.json` | `main` | The **Unit and browser tests** check must have passed on the commit, so a commit can only reach `main` after it passed on `testing` |
+| `main-approval.json` | `main` | The commit's **Release approval** (environment `release`) must have succeeded: the maintainer approved it after trying the build |
 | `testing.json` | `testing` | No deleting |
 | `release-tags.json` | Tags `v*` | Release tags can't be deleted or moved |
 

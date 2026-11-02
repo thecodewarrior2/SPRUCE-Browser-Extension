@@ -3,6 +3,10 @@
 # on every push to testing and main and on pull requests into main. The ruleset in
 # .github/rulesets/main.json makes the "Unit and browser tests" check required, so a commit reaches main
 # only after it passed here (on testing first).
+# Then, for a push to testing, "Release approval" waits for the maintainer: it runs only once they have
+# tried the testing build on their own computer and clicked Approve (environment "release", whose
+# required reviewer they are). .github/rulesets/main-approval.json lets a commit reach main only after
+# that approval succeeded for it. See docs/DEVELOPMENT.md, "Release approval".
 name: Tests
 on:
   push:
@@ -77,3 +81,34 @@ jobs:
           WAIT_SCALE: 3
           FXBIN: ${{ github.workspace }}/tests/.firefox/${{ matrix.firefox }}/firefox/firefox
         run: node firefox/run.js
+  approval:
+    name: Release approval
+    # Every check above passed on this testing commit; now a person decides.
+    needs: [test, firefox]
+    if: github.ref == 'refs/heads/testing' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: release
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: A person must approve (the release environment has a required reviewer)
+        # Without a required reviewer GitHub would run this job at once, so the approval would prove
+        # nothing: then it fails, and main stays closed to this commit, until the environment is set up.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -o pipefail
+          if ! n=$(gh api "repos/${{ github.repository }}/environments/release" --jq '[.protection_rules[]? | select(.type == "required_reviewers") | .reviewers[]?] | length'); then
+            echo "::error::Could not read the release environment's settings, so this approval can't be shown to come from a person. main stays closed to this commit."
+            exit 1
+          fi
+          if [ "${n:-0}" -lt 1 ]; then
+            echo "::error::The release environment has no required reviewer, so this ran without anyone approving it and main stays closed to this commit. Set the environment up as docs/DEVELOPMENT.md describes (Release approval), then re-run this job and approve it."
+            exit 1
+          fi
+      - name: Approved
+        run: |
+          echo "The maintainer approved ${{ github.sha }} for release."
+          echo "main now accepts it: git push origin ${{ github.sha }}:main"
