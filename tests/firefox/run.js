@@ -38,9 +38,12 @@ const settings = (page) => openExt(page, 'options.html', () => document.querySel
   }), SCAM);
   const bg = await opt.evaluate(async () => ({
     settings: !!((await chrome.runtime.sendMessage({ action: 'getSettings' })) || {}).values,
-    unwrap: ((await chrome.runtime.sendMessage({ action: 'testUnwrap', url: 'https://www.google.com/url?q=https://example.com/x' })) || {}).unwrappedUrl
+    unwrap: ((await chrome.runtime.sendMessage({ action: 'testUnwrap', url: 'https://www.google.com/url?q=https://example.com/x' })) || {}).unwrappedUrl,
+    // [5.90-2] The single-company endings (the bundled copy, read by the background page).
+    endings: await chrome.runtime.sendMessage({ action: 'getCompanyEndings' }).then(d => d && d.endings && d.operators ? { amex: d.operators[d.endings.amex] || '', app: 'app' in d.endings, count: Object.keys(d.endings).length } : null)
   }));
   check('background page answers (settings, link decoding)', bg.settings && bg.unwrap === 'https://example.com/x', bg);
+  check('[5.90-2] background page hands out the single-company endings (ICANN\'s list: .amex, not .app)', bg.endings && /American Express/.test(bg.endings.amex) && !bg.endings.app && bg.endings.count >= 100, bg.endings);
   const variants = await opt.evaluate(() => ({
     browser: document.documentElement.dataset.browser,
     ownCard: !!document.getElementById('copyFirefoxPolicyBtn') && !!document.getElementById('checkExtensionsBtn'),

@@ -6,18 +6,23 @@ A genuine American Express email was marked dangerous: its link text showed amer
 link went to go.amex. `.amex` is American Express's own ending, which nobody else can register, and Gmail
 had verified that the email came from American Express. The same kind of mistake hit other companies'
 second domains, and in the other direction any domain with PayPal's, Google's or Amazon's name was trusted
-by its name alone. Four changes, each on its own switch (`COMPANY_MATCHING` in `shared.js`, see below):
+by its name alone. Five changes, each on its own switch (`COMPANY_MATCHING` in `shared.js`, see below):
 
 - **[5.90-1] One table of company domains for links and senders.** The link check now knows every domain
   the sender check lists for a company: text bankofamerica.com with a link to bofa.com, docusign.com to
   docusign.net, ups.com to upsemail.com or intuit.com to quickbooks.com is no longer marked (54 such pairs
   were, 26 of them red). No domains were added.
-- **[5.90-2] A company's own ending.** An address under an ending only one company can register (ICANN
-  brand endings, each checked in IANA's root zone database: `.amex`, `.americanexpress`, `.google`, `.gle`,
-  `.microsoft`, `.apple`, `.amazon`, `.aws`, `.netflix`, `.chase`, `.jpmorgan`, `.bofa`, `.fedex`, `.ups`,
-  `.dhl`) is that company's: go.amex, blog.google. Endings a company runs for the public (Google's `.app`
-  or `.dev`) are not. American Express's sender verification is now recognized too ("Sender passed
-  American Express's sender authentication", or red when it fails).
+- **[5.90-2] A company's own ending.** Some internet endings may be used by one company only (ICANN's
+  "brand" endings, 366 of them: `.amex`, `.google`, `.chase`…). Which they are comes from ICANN's own list
+  of endings, downloaded once a month with the other lists (Update lists on); until the first download,
+  the copy bundled with the extension (`company-endings.json`, made from the same list by
+  `tools/refresh-snapshot.js`). Nothing about them is written by hand, and endings a company runs for the
+  public (Google's `.app`, `.dev` or `.gle`) aren't on it. An address under such an ending counts as the
+  company's when the other side is a domain known to be a company's whose name is one of that company's
+  endings: americanexpress.com and go.amex (`.amex` and `.americanexpress` have the same registry),
+  google.com and blog.google, bofa.com and any `.bofa` address. A domain that merely carries the name
+  (chase.*anything*) doesn't count. A link to such an ending that can't be tied to the text's company is
+  amber at most, never red: no one else can have an address there.
 - **[5.90-3] The verified sender's own links (Gmail).** Link text showing a well-known brand's site while
   going elsewhere is red. When Gmail's DMARC check passed for that same company, and the link isn't in a
   quoted or forwarded part, it becomes amber: the sender chose where its own link goes. Without the
@@ -31,9 +36,13 @@ by its name alone. Four changes, each on its own switch (`COMPANY_MATCHING` in `
   enforces sender verification (every Amazon store, Google's country sites), or the brand-ownership
   check proves it (PayPal's country sites, by their name servers). Until then the link, or a sender
   named for the company at that domain, is amber, never red and never moved to Spam; a domain like that
-  failing its sender verification is still red. Offline only (no lookups), they stay amber. Lookups:
-  the domain's DMARC record and, when needed, the brand-ownership records, at most once a month per
-  domain (see the privacy policy).
+  failing its sender verification is still red. Lookups: the domain's DMARC record and, when needed,
+  the brand-ownership records, at most once a month per domain (see the privacy policy).
+- **[5.90-5] Offline only uses what is already stored.** Every lookup is remembered (who owns a domain:
+  30 days, an unknown answer 1 day; a domain's DMARC policy: 7 days; the popular-site lists: until the
+  next monthly download). Until now Offline only ignored those answers; now it uses them and asks
+  nothing new, so a domain shown to be a company's before switching to Offline only stays so (a link to
+  amazon.de, a sender's brand name on its second domain), instead of turning amber or red.
 
 **Also fixed:** while an opened email had no warning about its sender, its banner was redrawn every
 150 ms for as long as the email stayed open (nothing visible changed; it only cost processor time). It
@@ -41,9 +50,9 @@ is now redrawn only when something changes; a banner still to be drawn counts as
 test of any opened email would catch such a loop.
 
 **Rolling one back:** in `shared.js`, set its switch in `COMPANY_MATCHING` to `false` (`oneTable`,
-`ownEndings`, `verifiedSender`, `nameNeedsProof`) and rebuild; that change then works as in 5.89 and the
-others keep working. Every line a change touches carries its tag (`[5.90-1]` … `[5.90-4]`), and a test
-checks that with all four switched off every answer is 5.89's. Details: `docs/ARCHITECTURE.md`,
+`ownEndings`, `verifiedSender`, `nameNeedsProof`, `storedOffline`) and rebuild; that change then works as
+in 5.89 and the others keep working. Every line a change touches carries its tag (`[5.90-1]` …
+`[5.90-5]`), and a test checks that with all of them switched off every answer is 5.89's. Details: `docs/ARCHITECTURE.md`,
 "Text and destination of the same company".
 
 ## 5.89 — One set of files for every browser

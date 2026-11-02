@@ -37,9 +37,11 @@ function loadBackground(local = {}, extra = {}) {
     Blob, Response, CompressionStream, DecompressionStream, TextDecoderStream,
     fetch: async (u) => { fetchLog.push(String(u)); throw new Error('offline'); }, self: { addEventListener() {} } };
   Object.assign(ctx, extra);
-  ctx.importScripts = (...files) => files.forEach(f => vm.runInContext(fs.readFileSync(path.join(EXT, f), 'utf8'), ctx, { filename: f }));
+  // extra.patchSource(file, text): changes a file's text before it runs (e.g. a switch turned off).
+  const sourceOf = (f) => { const t = fs.readFileSync(path.join(EXT, f), 'utf8'); return typeof extra.patchSource === 'function' ? extra.patchSource(f, t) : t; };
+  ctx.importScripts = (...files) => files.forEach(f => vm.runInContext(sourceOf(f), ctx, { filename: f }));
   vm.createContext(ctx);
-  const bgSrc = fs.readFileSync(path.join(EXT, 'background.js'), 'utf8');
+  const bgSrc = sourceOf('background.js');
   // Firefox build: background.html loads these before background.js (no importScripts).
   if (!/importScripts\(/.test(bgSrc)) ctx.importScripts('shared.js', 'decoders.js', 'custom-endpoints.js', 'qr-decoder.js', ...(fs.existsSync(path.join(EXT, 'icon-store.js')) ? ['icon-store.js'] : []));
   vm.runInContext(bgSrc, ctx, { filename: 'background.js' });
@@ -329,7 +331,11 @@ test('brand ownership: proofs need the brand\'s DNS or a corporate registrar; a 
   assert.match(r.how, /DMARC reports go to paypal\.com/); assert.match(r.how, /corporate registrar/); assert.match(r.how, /years ago/);
   r = await own('amaz0n-billing.com', 'Amazon');
   assert.equal(r.state, 'unknown', 'a forger: reports pointed at Amazon, a registrant typed as "Amazon", an old domain, but no corporate registrar and no brand DNS');
-  assert.deepEqual(await own('amazonmusic.com', 'Amazon', { enableDnsThreatCheck: false }), { state: 'unknown', how: '' }, 'Offline only: nothing is asked');
+  // [5.90-5] Offline only: the answer stored a moment ago still counts, and nothing new is asked.
+  const asked = fetchLog.length;
+  assert.equal((await own('amazonmusic.com', 'Amazon', { enableDnsThreatCheck: false })).state, 'owned', 'Offline only: the stored answer');
+  assert.deepEqual(await own('amazon-never-seen.com', 'Amazon', { enableDnsThreatCheck: false }), { state: 'unknown', how: '' }, 'Offline only, nothing stored: unknown');
+  assert.equal(fetchLog.length, asked, 'Offline only: nothing is asked');
   assert.equal((await own('anything.com', 'NoSuchBrand')).state, 'unknown');
   // Remembered: asking again reads nothing.
   const before = fetchLog.length;
@@ -1200,9 +1206,12 @@ function loadShared(off = []) {
   const ctx = { console, URL, URLSearchParams, TextEncoder, TextDecoder, atob, btoa, Intl, chrome: { runtime: { getURL: p => 'chrome-extension://x/' + p, id: 'x' } }, location: { href: 'https://mail.google.com/' } };
   vm.createContext(ctx);
   vm.runInContext(src, ctx, { filename: 'shared.js' });
+  // The bundled company endings, as the background hands them to the webmail page ([5.90-2]).
+  ctx.__endings = JSON.parse(fs.readFileSync(path.join(EXT, 'company-endings.json'), 'utf8'));
+  vm.runInContext('setCompanyEndings(__endings)', ctx);
   return (code) => vm.runInContext(code, ctx);
 }
-const ALL_SWITCHES = ['oneTable', 'ownEndings', 'verifiedSender', 'nameNeedsProof'];
+const ALL_SWITCHES = ['oneTable', 'ownEndings', 'verifiedSender', 'nameNeedsProof', 'storedOffline'];
 const linkSays = (R, text, url) => R(`detectLinkProblem(${JSON.stringify(text)}, ${JSON.stringify(url)}, ${JSON.stringify(url)}, null)`);
 const severityOf = (R, problem) => R(`linkProblemSeverity(${JSON.stringify(problem)})`);
 
@@ -1221,20 +1230,83 @@ test('[5.90-1] one company table: every pair of domains the sender check knows a
   assert.equal(Off('brandOfSender("info.bofa.com")'), null);
 });
 
-test('[5.90-2] company endings: go.amex is American Express\'s, blog.google Google\'s; open endings are not; off: red again', () => {
+test('[5.90-2] company endings from ICANN\'s list: go.amex is American Express\'s, blog.google Google\'s; open endings and look-alike names are not; off: red again', () => {
   const R = loadShared();
   assert.equal(linkSays(R, 'americanexpress.com/phishing', 'https://go.amex/phishing-us??comm_track_id=1&dotAmexDomain=go'), null);
   assert.equal(linkSays(R, 'google.com', 'https://blog.google/products/'), null);
   assert.equal(linkSays(R, 'chase.com', 'https://www.chase/x'), null);
-  assert.equal(R('brandOfSender("go.amex")'), 'American Express');
-  assert.equal(R('brandOfSender("welcome.americanexpress.com")'), 'American Express');
-  // An ending a company runs for the public, or a lookalike under an ordinary ending, is not the company's.
+  assert.equal(linkSays(R, 'bankofamerica.com', 'https://secure.bofa/x'), null, 'through bofa.com, Bank of America\'s other domain');
+  assert.equal(linkSays(R, 'www.chase', 'https://www.jpmorgan/x'), null, 'two endings of one registry');
+  // Endings a company runs for the public are not on ICANN's single-company list.
   assert.equal(severityOf(R, linkSays(R, 'google.com', 'https://login-check.app/x')), 'danger');
+  assert.equal(severityOf(R, linkSays(R, 'google.com', 'https://x.gle/x')), 'danger', '.gle is Google\'s but not single-company');
   assert.equal(severityOf(R, linkSays(R, 'americanexpress.com', 'https://americanexpress.co/x')), 'danger');
+  // A domain merely carrying the name, on another ending, is not tied to the company's ending.
+  assert.notEqual(linkSays(R, 'www.chase', 'https://chase.example/login'), null);
+  assert.equal(R('sameCompanyByEnding("www.chase", "chase.example")'), false);
+  // Can't be tied to the text's company, but no one else can have the address: amber, with the registry.
+  const citi = linkSays(R, 'citibank.com', 'https://online.citi/x');
+  assert.match(citi, /only Citigroup Inc\. can have/);
+  assert.equal(severityOf(R, citi), 'caution');
   assert.equal(R('companyOfDomain("amex")'), null, 'a bare ending is no domain');
+  assert.equal(R('brandOfSender("go.amex")'), null, 'sender checks unchanged');
   const Off = loadShared(['ownEndings']);
   assert.equal(severityOf(Off, linkSays(Off, 'americanexpress.com/phishing', 'https://go.amex/phishing-us')), 'danger');
-  assert.equal(Off('brandOfSender("go.amex")'), null);
+  assert.equal(severityOf(Off, linkSays(Off, 'citibank.com', 'https://online.citi/x')), 'danger');
+});
+
+test('[5.90-2] ICANN\'s list: only single-company endings that are in use; bad data is refused; the bundled copy is that list', () => {
+  const R = loadShared();
+  const icann = { gTLDs: [
+    { gTLD: 'amex', registryOperator: 'Amex Co', specification13: true, contractTerminated: false, delegationDate: '2016-08-02', removalDate: null },
+    { gTLD: 'americanexpress', registryOperator: 'Amex Co', specification13: true, contractTerminated: false, delegationDate: '2016-08-02', removalDate: null },
+    { gTLD: 'app', registryOperator: 'Open Registry', specification13: false, contractTerminated: false, delegationDate: '2015-06-25', removalDate: null },
+    { gTLD: 'gone', registryOperator: 'Old Co', specification13: true, contractTerminated: true, delegationDate: '2015-01-01', removalDate: '2019-01-01' },
+    { gTLD: 'later', registryOperator: 'New Co', specification13: true, contractTerminated: false, delegationDate: null, removalDate: null },
+    { gTLD: 'Bad Label!', registryOperator: 'X', specification13: true, contractTerminated: false, delegationDate: '2016-01-01', removalDate: null }] };
+  const d = JSON.parse(JSON.stringify(R(`companyEndingsFromIcann(${JSON.stringify(icann)})`)));
+  assert.deepEqual(d, { operators: ['Amex Co'], endings: { amex: 0, americanexpress: 0 }, count: 2 });
+  assert.equal(R('setCompanyEndings({ operators: "x", endings: {} })'), false);
+  assert.equal(R('setCompanyEndings(null)'), false);
+  assert.equal(linkSays(R, 'americanexpress.com', 'https://go.amex/x'), null, 'refused data changes nothing');
+  const snap = JSON.parse(fs.readFileSync(path.join(EXT, 'company-endings.json'), 'utf8'));
+  assert.match(snap.source, /^https:\/\/www\.icann\.org\//);
+  assert.ok(Object.keys(snap.endings).length >= R('COMPANY_ENDINGS_MIN'), 'the bundled copy is the real list');
+  assert.equal(snap.operators[snap.endings.amex], snap.operators[snap.endings.americanexpress]);
+  for (const open of ['app', 'dev', 'page', 'gle', 'com', 'support', 'help', 'zip']) assert.ok(!(open in snap.endings), open);
+});
+
+test('[5.90-2] background: ICANN\'s list downloaded once a month; a bad download keeps the previous copy; the bundled copy until then', async () => {
+  const icannUrl = 'https://www.icann.org/resources/registries/gtlds/v2/gtlds.json';
+  const many = Array.from({ length: 150 }, (_, i) => ({ gTLD: `brand${i}`, registryOperator: `Co ${i}`, specification13: true, contractTerminated: false, delegationDate: '2016-01-01', removalDate: null }));
+  let reply = { updatedOn: '2026-11-01', gTLDs: many };
+  const asked = [];
+  const b = loadBackground({ enableRemoteListSync: true, enableMismatchWarnings: true }, {
+    fetch: async (u) => {
+      asked.push(String(u));
+      if (String(u) === 'company-endings.json') return { ok: true, status: 200, json: async () => JSON.parse(fs.readFileSync(path.join(EXT, 'company-endings.json'), 'utf8')) };
+      if (String(u) === icannUrl) return { ok: true, status: 200, json: async () => reply };
+      throw new Error('offline');
+    } });
+  const run = (c) => vm.runInContext(c, b);
+  const first = await run('ensureCompanyEndings()');
+  assert.equal(first.source, 'bundled');
+  assert.ok('amex' in first.endings);
+  assert.equal(b.__store.companyEndings.source, 'bundled');
+  const r1 = await run('syncCompanyEndings()');
+  assert.equal(r1.count, 150);
+  assert.equal(b.__store.companyEndings.source, 'icann');
+  assert.equal(b.__store.companyEndings.listUpdated, '2026-11-01');
+  assert.ok('brand7' in b.__store.companyEndings.endings);
+  assert.deepEqual(await run('syncCompanyEndings()'), { skipped: true }, 'within a month: not downloaded again');
+  reply = { gTLDs: many.slice(0, 20) };
+  const r2 = await run('syncCompanyEndings(true)');
+  assert.ok(r2.failed);
+  assert.equal(Object.keys(b.__store.companyEndings.endings).length, 150, 'too few to be the real list: the previous copy is kept');
+  assert.equal(asked.filter(u => u === icannUrl).length, 2);
+  b.__store.enableRemoteListSync = false;
+  run('invalidateConfig()');
+  assert.deepEqual(await run('syncCompanyEndings(true)'), { skipped: true }, 'Update lists off: nothing downloaded');
 });
 
 test('[5.90-3] verified sender: a red link whose text shows the verified sender\'s own site becomes amber, nothing else does; off: stays red', () => {
@@ -1255,6 +1327,9 @@ test('[5.90-3] verified sender: a red link whose text shows the verified sender\
   // The same company by the table: text bofa.com in an email from bankofamerica.com.
   R(`globalThis.__g = {}; detectLinkProblem('bankofamerica.com', 'https://evil.example/x', 'https://evil.example/x', null, __g)`);
   assert.equal(severityOf(R, R(`verifiedSenderLinkProblem(__g, { dmarc: 'pass', headerFrom: 'email.bofa.com' }, false)`)), 'caution');
+  // Text under the sender's company's own ending (go.amex in an email from americanexpress.com).
+  R(`globalThis.__h = {}; detectLinkProblem('go.amex/offers', 'https://evil.example/x', 'https://evil.example/x', null, __h)`);
+  assert.equal(severityOf(R, R(`verifiedSenderLinkProblem(__h, { dmarc: 'pass', headerFrom: 'welcome.americanexpress.com' }, false)`)), 'caution');
   const Off = loadShared(['verifiedSender']);
   Off(`globalThis.__f = {}; detectLinkProblem('americanexpress.com', 'https://www.aexp.com/x', 'https://www.aexp.com/x', null, __f)`);
   assert.equal(Off(`verifiedSenderLinkProblem(__f, { dmarc: 'pass', headerFrom: 'welcome.americanexpress.com' }, false)`), null);
@@ -1317,7 +1392,7 @@ test('[5.90-4] background: a popular site that enforces DMARC and carries the na
   vm.runInContext(`
     globalThis.__asked = [];
     loadLookalikeIndex = async () => ({ kind: new Map([['amazon.de', 'popular'], ['amazon.nl', 'popular'], ['netflix.de', 'popular']]) });
-    dmarcEnforced = async (d) => d !== 'amazon.nl';
+    dmarcEnforced = async (d, storedOnly) => !storedOnly && d !== 'amazon.nl';   // nothing stored
     brandOwnership = async (d, brand) => { __asked.push(d + '|' + brand); return { state: 'unknown', how: '' }; };`, b);
   const S = { enableDnsThreatCheck: true, enableLookalikeCheck: true };
   const ev = (d, brand, s = S) => vm.runInContext(`companyDomainEvidence(${JSON.stringify(d)}, ${JSON.stringify(brand)}, ${JSON.stringify(s)})`, b);
@@ -1326,6 +1401,35 @@ test('[5.90-4] background: a popular site that enforces DMARC and carries the na
   assert.equal((await ev('amazon.nl', 'Amazon')).state, 'unknown', 'popular without enforced DMARC: not enough');
   assert.equal((await ev('paypal.cm', 'PayPal')).state, 'unknown', 'not popular');
   assert.equal((await ev('netflix.de', 'Netflix')).state, 'unknown', 'only for companies that use their name under many endings');
-  assert.equal((await ev('amazon.de', 'Amazon', { enableDnsThreatCheck: false, enableLookalikeCheck: true })).state, 'unknown', 'no lookups: no evidence');
+  assert.equal((await ev('amazon.de', 'Amazon', { enableDnsThreatCheck: false, enableLookalikeCheck: true })).state, 'unknown', 'no lookups and nothing stored: no evidence');
   assert.deepEqual([...vm.runInContext('__asked', b)], ['amazon.nl|Amazon', 'paypal.cm|PayPal', 'netflix.de|Netflix', 'amazon.de|Amazon']);
+});
+
+test('[5.90-5] Offline only: stored ownership answers and DMARC policies count, nothing new is looked up; off: ignored as before', async () => {
+  const make = (extra = {}) => {
+    const b = loadBackground({}, extra);   // extra.patchSource can turn a switch off
+    vm.runInContext(`
+      globalThis.__stored = new Map();
+      iconStore.get = async (k) => __stored.get(k) || null;
+      iconStore.put = async (k, type, bytes) => { __stored.set(k, { ts: Date.now(), type, bytes }); };
+      loadLookalikeIndex = async () => ({ kind: new Map([['amazon.de', 'popular'], ['amazon.fr', 'popular']]) });`, b);
+    return b;
+  };
+  const enc = (v) => `new TextEncoder().encode(${JSON.stringify(JSON.stringify(v))}).buffer`;
+  const offline = { enableDnsThreatCheck: false, enableLookalikeCheck: true };
+  const b = make();
+  vm.runInContext(`
+    __stored.set('own:amazonmusic.com|Amazon', { ts: Date.now(), bytes: ${enc({ state: 'owned', how: 'registered to Amazon Technologies, Inc. through MarkMonitor Inc.' })} });
+    __stored.set('dmarc:amazon.de', { ts: Date.now(), bytes: ${enc({ p: 'quarantine', sp: '', pct: 100 })} });`, b);
+  const own = await vm.runInContext(`brandOwnership('amazonmusic.com', 'Amazon', ${JSON.stringify(offline)})`, b);
+  assert.equal(own.state, 'owned', 'a stored answer counts offline');
+  assert.equal((await vm.runInContext(`brandOwnership('example-shop.com', 'Amazon', ${JSON.stringify(offline)})`, b)).state, 'unknown', 'nothing stored: unknown');
+  const de = await vm.runInContext(`companyDomainEvidence('amazon.de', 'Amazon', ${JSON.stringify(offline)})`, b);
+  assert.equal(de.state, 'owned', 'popular list and a stored DMARC policy');
+  assert.equal((await vm.runInContext(`companyDomainEvidence('amazon.fr', 'Amazon', ${JSON.stringify(offline)})`, b)).state, 'unknown', 'no DMARC policy stored: not looked up');
+  assert.deepEqual(b.__fetchLog, [], 'nothing was asked over the network');
+  const Off = make({ patchSource: (f, t) => f === 'shared.js' ? t.replace('storedOffline: true', 'storedOffline: false') : t });
+  assert.equal(vm.runInContext('COMPANY_MATCHING.storedOffline', Off), false);
+  vm.runInContext(`__stored.set('own:amazonmusic.com|Amazon', { ts: Date.now(), bytes: ${enc({ state: 'owned', how: 'x' })} });`, Off);
+  assert.equal((await vm.runInContext(`brandOwnership('amazonmusic.com', 'Amazon', ${JSON.stringify(offline)})`, Off)).state, 'unknown', 'switched off: Offline only ignores stored answers, as before');
 });

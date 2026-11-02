@@ -912,7 +912,7 @@ function unshortenLinks() {
                     action: 'resolveUrl',
                     url: originalUrl,
                     linkText: linkTextForCheck
-                }, (response) => {
+                }, (response) => companyEndingsReady.then(() => {   // [5.90-2] the endings are known before any link is judged
                     const elements = pendingHrefs.get(originalUrl) || [];
 
                     elements.forEach(el => guarded(`Applying the result for a link on ${originOf(originalUrl)}`, () => {
@@ -1001,7 +1001,7 @@ function unshortenLinks() {
                     }
 
                     pendingHrefs.delete(originalUrl);
-                });
+                }));
             } else {
                 pendingHrefs.get(originalUrl).push(link);
             }
@@ -1514,6 +1514,17 @@ function verifyCompanyLink(el, d, company) {
         scheduleBadgeUpdate();
     }));
 }
+
+// [5.90-2] The single-company endings (ICANN's list, kept by the background): asked for once, before the
+// first link is judged (at most 3 seconds: without an answer, links are judged without them), then
+// followed as the background updates them.
+const companyEndingsReady = new Promise(resolve => {
+    const t = setTimeout(resolve, 3000);
+    safeSend({ action: 'getCompanyEndings' }, (data) => { try { setCompanyEndings(data); } catch (e) { /* none */ } clearTimeout(t); resolve(); });
+});
+chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes.companyEndings && changes.companyEndings.newValue) setCompanyEndings(changes.companyEndings.newValue);
+});
 
 // A link whose text shows another site, looked at again once more is known. It is marked at once
 // (a red link asks before opening from the start); then:
@@ -2344,12 +2355,14 @@ function senderResultsFor(raws) {
 
 // Whether an address's domain is the brand's that its sender name claims, from public records (the
 // background's brandOwnership): { state: 'owned' | 'likely' | 'unknown', how }, or null when not
-// looked up (Offline only, the check off, or no answer), which judges the name as before. Asked once
+// looked up (the check off, or no answer), which judges the name as before; at Offline only only an
+// answer the background stored earlier comes back ([5.90-5]). Asked once
 // per domain and brand per page; the background remembers answers 30 days.
 const brandOwnerships = new Map();
 const BRAND_OWNERSHIPS_MAX = 500;
 function brandOwnershipFor(domain, brandName, S) {
-    if (!S || !S.enableDnsThreatCheck || !S.enableLookalikeCheck) return Promise.resolve(null);
+    // [5.90-5] With lookups off (Offline only) the background still answers from what it has stored.
+    if (!S || !S.enableLookalikeCheck || (!S.enableDnsThreatCheck && !COMPANY_MATCHING.storedOffline)) return Promise.resolve(null);
     const reg = registrableDomain(domain) || domain;
     const key = `${brandName}|${reg}`;
     if (!brandOwnerships.has(key)) {

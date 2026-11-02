@@ -588,11 +588,13 @@ chrome.runtime.onInstalled.addListener(async (details) => {
         if (details && details.reason === 'update') { purgeOneTimeEntries(); clearSenderDomainCache(); }
         await migrateStoredData();
         await ensureListState();      // bundled snapshot on a fresh install: coverage before any download
+        await ensureCompanyEndings(); // [5.90-2] the same for the company endings
         ensureAlarms();
         const cfg = await getConfig();
         updateRemoteLists();
         syncPhishFeeds().catch(() => {});          // a list added by this version is fetched now, not tomorrow
         syncPopularDomains().catch(() => {});
+        syncCompanyEndings().catch(() => {});      // [5.90-2]
         await pruneExpiredData(cfg.values.retentionDays);
         if (details && (details.reason === 'install' || details.reason === 'update')) {
             logInfo(details.reason === 'install' ? `Installed version ${chrome.runtime.getManifest().version}.`
@@ -606,7 +608,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 chrome.alarms.onAlarm.addListener(async (alarm) => {
     try {
         if (alarm.name === 'syncLists') updateRemoteLists();
-        if (alarm.name === 'syncPhishFeeds') { await syncPhishFeeds(); await syncPopularDomains(); }
+        if (alarm.name === 'syncPhishFeeds') { await syncPhishFeeds(); await syncPopularDomains(); await syncCompanyEndings(); }   // the last two at most monthly
         if (alarm.name === 'pruneExpiredEntries') {
             const cfg = await getConfig();
             await pruneExpiredData(cfg.values.retentionDays);
@@ -1674,12 +1676,13 @@ async function bimiRecordFor(org) {
 // A domain's DMARC policy ({ p, sp, pct } of its organization domain, or null for none), remembered
 // in the icon store under "dmarc:<org>" (a week; none, a day).
 const dmarcInFlight = new Map();
-async function dmarcPolicy(org) {
+async function dmarcPolicy(org, storedOnly = false) {
     const key = 'dmarc:' + org;
     const hit = await iconStore.get(key).catch(() => null);
     if (bimiFresh(hit)) {
         try { return hit.bytes ? JSON.parse(new TextDecoder().decode(hit.bytes)) : null; } catch (e) { /* asked again */ }
     }
+    if (storedOnly) return null;                              // [5.90-5] Offline only: not looked up
     if (dmarcInFlight.has(key)) return dmarcInFlight.get(key);
     const p = (async () => {
         try {
@@ -1695,10 +1698,10 @@ async function dmarcPolicy(org) {
 // Whether mail claiming to be from this domain and failing DMARC is rejected or sent to spam: the
 // organization's policy (its subdomain policy sp= for a subdomain), applied to all of it (pct=100).
 // Only then can a picture shown for its senders not be borrowed by a forger.
-async function dmarcEnforced(domain) {
+async function dmarcEnforced(domain, storedOnly = false) {
     const d = normalizeDomain(domain);
     const org = registrableDomain(d) || d;
-    const pol = await dmarcPolicy(org);
+    const pol = await dmarcPolicy(org, storedOnly);
     if (!pol || !(pol.pct >= 100)) return false;
     return /^(quarantine|reject)$/.test(d !== org ? pol.sp || pol.p : pol.p);
 }
@@ -2064,7 +2067,8 @@ async function domainAgeDays(reg) {
 //       (Amazon Technologies, Inc.).
 //   likely — a corporate registrar plus one more link to the brand (reports sent to it, a registrant
 //     naming it, or a year or more of age): shown amber, never moved to Spam.
-//   unknown — anything less, or offline: judged as before.
+//   unknown — anything less, or offline with nothing stored: judged as before. [5.90-5] Offline only
+//     still uses an answer stored from an earlier lookup (30 days; unknown 1 day), and asks nothing new.
 // ---------------------------------------------------------------------------
 const OWN_CACHE_MS = 30 * 24 * 60 * 60 * 1000, OWN_UNKNOWN_MS = 24 * 60 * 60 * 1000;
 const CORPORATE_REGISTRARS = /markmonitor|csc corporate domains|corporation service company|com laude|nom-iq|safenames|godaddy corporate domains|brandsight|lexsynergy|nameshield|ip twins|registrarsafe|abion\b|appdetex|safebrands/i;
@@ -2116,12 +2120,15 @@ async function brandOwnership(domain, brandName, S, account = '') {
     const brand = senderBrandByName(brandName);
     const reg = registrableDomain(normalizeDomain(domain));
     const unknown = { state: 'unknown', how: '' };
-    if (!brand || !SENDER_DOMAIN_RE.test(reg) || isPersonalMailDomain(reg) || !S || !S.enableDnsThreatCheck) return unknown;
+    const online = !!(S && S.enableDnsThreatCheck);
+    // [5.90-5] With lookups off (Offline only), an answer stored from an earlier lookup still counts.
+    if (!brand || !SENDER_DOMAIN_RE.test(reg) || isPersonalMailDomain(reg) || !S || (!online && !COMPANY_MATCHING.storedOffline)) return unknown;
     const key = `own:${reg}|${brand.name}`;
     const hit = await iconStore.get(key).catch(() => null);
     if (hit && hit.bytes) {
         try { const v = JSON.parse(new TextDecoder().decode(hit.bytes)); if (v && v.state && Date.now() - hit.ts < (v.state === 'unknown' ? OWN_UNKNOWN_MS : OWN_CACHE_MS)) return { state: v.state, how: v.how || '' }; } catch (e) { /* asked again */ }
     }
+    if (!online) return unknown;                              // nothing new is looked up
     if (ownInFlight.has(key)) return ownInFlight.get(key);
     const p = (async () => {
         const proof = [], hints = [];
@@ -2174,6 +2181,62 @@ async function brandOwnership(domain, brandName, S, account = '') {
     return p;
 }
 
+// [5.90-2] ICANN's list of single-company endings (see companyEndings in shared.js): downloaded once a
+// month with the other lists (Update lists on), kept in storage as { updated, source, listUpdated,
+// operators, endings }; the copy bundled with the extension (company-endings.json) until then. A download
+// that fails, or has too few endings to be the real list, keeps the previous copy.
+const COMPANY_ENDINGS_REFRESH_MS = 30 * 24 * 60 * 60 * 1000;
+let companyEndingsData = null;
+async function bundledCompanyEndings() {
+    const res = await fetch(chrome.runtime.getURL('company-endings.json'));
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const j = await res.json();
+    return { updated: 0, source: 'bundled', listUpdated: String(j.listUpdated || ''), operators: j.operators, endings: j.endings };
+}
+// The list in use (stored, else the bundled copy, which is then stored); also set in this context.
+async function ensureCompanyEndings() {
+    if (companyEndingsData) return companyEndingsData;
+    const st = await storageGet('local', { companyEndings: null });
+    let data = st.companyEndings && parseCompanyEndings(st.companyEndings) ? st.companyEndings : null;
+    if (!data) {
+        try { data = await bundledCompanyEndings(); await chrome.storage.local.set({ companyEndings: data }); }
+        catch (e) { logError(`The bundled list of company endings could not be loaded (${errorText(e)}); it is downloaded with the other lists.`, 'List sync'); return null; }
+    }
+    setCompanyEndings(data);
+    companyEndingsData = data;
+    return data;
+}
+chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes.companyEndings) companyEndingsData = null;   // read again when next asked
+});
+let companyEndingsSyncInFlight = null;
+function syncCompanyEndings(force = false) {
+    if (!companyEndingsSyncInFlight) companyEndingsSyncInFlight = syncCompanyEndingsNow(force).finally(() => { companyEndingsSyncInFlight = null; });
+    return companyEndingsSyncInFlight;
+}
+async function syncCompanyEndingsNow(force) {
+    const cfg = await getConfig();
+    if (!COMPANY_MATCHING.ownEndings || !cfg.values.enableRemoteListSync || !cfg.values.enableMismatchWarnings) return { skipped: true };
+    const prev = (await storageGet('local', { companyEndings: null })).companyEndings;
+    if (!force && prev && prev.source === 'icann' && Date.now() - prev.updated < COMPANY_ENDINGS_REFRESH_MS) return { skipped: true };
+    try {
+        const res = await fetchWithTimeout(COMPANY_ENDINGS_URL, { credentials: 'omit' }, 30000);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        const data = companyEndingsFromIcann(json);
+        if (data.count < COMPANY_ENDINGS_MIN) throw new Error(`only ${data.count} single-company endings`);
+        const stored = { updated: Date.now(), source: 'icann', listUpdated: String(json.updatedOn || ''), operators: data.operators, endings: data.endings };
+        await chrome.storage.local.set({ companyEndings: stored });
+        companyEndingsData = null;
+        await ensureCompanyEndings();
+        logInfo(`Company endings (for links to a company's own ending, such as go.amex): updated from ICANN's list (${data.count} endings that only one company can use).`, 'List sync');
+        return { skipped: false, count: data.count };
+    } catch (e) {
+        logWarning(`ICANN's list of company endings could not be updated (${errorText(e)}); ${prev ? 'the previous copy is kept' : 'the copy bundled with the extension is used'}.`, 'List sync');
+        return { skipped: false, failed: true };
+    }
+}
+
 // What public records say about whether a domain is the company's (brandOwnership), and [5.90-4] for
 // a domain that carries the company's name under another ending (amazon.de, google.co.uk; until 5.90
 // the name alone made it the company's): also whether it is one of the most visited websites in the
@@ -2183,9 +2246,12 @@ async function brandOwnership(domain, brandName, S, account = '') {
 // whose name isn't an ordinary word another company could have.
 async function companyDomainEvidence(domain, brandName, S, account = '') {
     const reg = registrableDomain(normalizeDomain(domain));
-    if (COMPANY_MATCHING.nameNeedsProof && S && S.enableDnsThreatCheck && companyNameOf(reg) === brandName) {
+    const online = !!(S && S.enableDnsThreatCheck);
+    // [5.90-5] Offline only: the popular-site list already stored and a DMARC policy already stored count;
+    // nothing new is downloaded or looked up.
+    if (COMPANY_MATCHING.nameNeedsProof && S && (online || COMPANY_MATCHING.storedOffline) && companyNameOf(reg) === brandName) {
         const idx = await loadLookalikeIndex().catch(() => null);
-        if (idx && idx.kind.get(reg) === 'popular' && await dmarcEnforced(reg).catch(() => false)) {
+        if (idx && idx.kind.get(reg) === 'popular' && await dmarcEnforced(reg, !online).catch(() => false)) {
             return { state: 'owned', how: `it carries ${brandName}'s name, is one of the most visited websites (Chrome UX Report, Tranco) and enforces sender verification (DMARC)` };
         }
     }
@@ -2247,7 +2313,8 @@ async function lookalikeVerdict(domain, ownDomain, S) {
         for (const d of idx.byLabel.all(label)) if (d !== reg) near.push({ target: d, why: `uses the name of ${d} under another ending` });
     }
     // A domain public records show to be the brand's own (a second domain of the brand) imitates nothing.
-    const ownedBy = async (c) => { const b = online && c.target !== ownReg ? senderBrandOfDomain(c.target) : null; if (!b) return false; const o = await brandOwnership(reg, b.name, S).catch(() => null); return !!o && o.state === 'owned'; };
+    // [5.90-5] Offline only: an ownership answer already stored counts (brandOwnership looks nothing up).
+    const ownedBy = async (c) => { const b = (online || COMPANY_MATCHING.storedOffline) && c.target !== ownReg ? senderBrandOfDomain(c.target) : null; if (!b) return false; const o = await brandOwnership(reg, b.name, S).catch(() => null); return !!o && o.state === 'owned'; };
     for (const c of strong) {
         if (c.target === ownReg || await protectedTarget(c.target)) {
             if (await ownedBy(c)) continue;
@@ -3085,6 +3152,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             }
             sendResponse(out);
         }).catch(() => sendResponse(null));
+        return true;
+    }
+
+    // [5.90-2] The single-company endings, for the link checks in the webmail page.
+    if (request.action === 'getCompanyEndings') {
+        if (!sender || sender.id !== chrome.runtime.id) { sendResponse(null); return false; }
+        ensureCompanyEndings().then(d => sendResponse(d ? { operators: d.operators, endings: d.endings } : null)).catch(() => sendResponse(null));
         return true;
     }
 

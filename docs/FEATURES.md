@@ -30,13 +30,15 @@ settings can't be locked). What leaves your device, and to whom, is in the [priv
 - **A company's own domains count as one.** Link text showing one of a company's sites and a link to
   another of its domains is not a warning: Bank of America's bankofamerica.com and bofa.com, DocuSign's
   docusign.com and docusign.net, and any address under an ending only that company can register
-  (go.amex for American Express, blog.google for Google). In Gmail, text showing the site of the email's
+  (go.amex for American Express, blog.google for Google): ICANN's list of such "brand" endings is
+  downloaded once a month, so nothing about them is written into the extension by hand. A link to such
+  an ending is never red, since no one else can have an address there. In Gmail, text showing the site of the email's
   own sender, verified by Gmail's DMARC check, is amber at most, wherever the link goes: the sender chose
   its own link. A company's name under another ending (amazon.de, google.co.uk, or paypal.*anything*)
   counts as the company's only when public records show it: it is one of the most visited sites and
-  enforces sender verification, or its DNS records tie it to the company (looked up once a month, online
-  only). Until then such a link, or a sender with the company's name at such a domain, is amber, never
-  red or moved to Spam.
+  enforces sender verification, or its DNS records tie it to the company (looked up at most once a month;
+  at Offline only, what was looked up earlier still counts). Until then such a link, or a sender with the
+  company's name at such a domain, is amber, never red or moved to Spam.
 - **One calm banner per email.** Findings about the email as a whole are summarized at the top,
   with **Show details** and **What should I do?**; an email with many unusual links gets one
   sentence instead of a marking on every link. It follows Gmail's light or dark theme.
@@ -59,7 +61,8 @@ settings can't be locked). What leaves your device, and to whom, is in the [priv
   only the brand could have made (its own DNS pointing at the domain, a corporate brand-protection
   registrar with a registrant naming the brand) prove the domain is the brand's, and the email isn't
   flagged; a corporate registrar plus one more link to the brand makes it amber (never moved); anything
-  less, or Offline only, is red as before. Answers are remembered 30 days per domain.
+  less is red as before. Answers are remembered 30 days per domain, and at Offline only those already
+  stored still count (nothing new is looked up).
 - **Phishing senders go to Spam (Gmail).** Sender addresses are compared with a community scam-sender
   list (there is no block list to maintain; Gmail's own Report spam covers anything missed); sender domains with the phishing lists and the DNS threat filters
   (a domain that doesn't exist is flagged too, unless it's a subdomain of a company domain that does). Each email is also checked for signs of forgery: malformed

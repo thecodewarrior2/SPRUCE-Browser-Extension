@@ -484,13 +484,16 @@ const FILE_EXTENSION_TLDS = new Set([
 // as in 5.89 again, and the others keep working. Every place a change touches carries its tag.
 //   [5.90-1] oneTable        the link check knows every company domain the sender check knows
 //                            (text bankofamerica.com, link bofa.com: the same company)
-//   [5.90-2] ownEndings      an address under a company's own ending is the company's (go.amex, blog.google)
+//   [5.90-2] ownEndings      an address under a company's own ending is the company's (go.amex, blog.google),
+//                            by ICANN's list of such endings, downloaded once a month (no list by hand)
 //   [5.90-3] verifiedSender  link text showing the site of the email's verified sender (DMARC pass) is
 //                            never red, wherever the link goes: amber at most
 //   [5.90-4] nameNeedsProof  a company's name under another ending (amazon.de, paypal.<anything>) is no
 //                            longer the company's by its name alone: amber until public records show it
+//   [5.90-5] storedOffline   with lookups off (Offline only), answers already stored from earlier lookups
+//                            (who owns a domain, its DMARC policy) are still used; nothing new is asked
 // ---------------------------------------------------------------------------
-const COMPANY_MATCHING = Object.freeze({ oneTable: true, ownEndings: true, verifiedSender: true, nameNeedsProof: true });
+const COMPANY_MATCHING = Object.freeze({ oneTable: true, ownEndings: true, verifiedSender: true, nameNeedsProof: true, storedOffline: true });
 
 // Companies that own several domains, including their own short-link domains. Link text and destination
 // within one family are consistent (text "gmail.com" pointing to google.com, or Google's c.gle).
@@ -507,22 +510,83 @@ const BRAND_FAMILIES = [
     { name: 'X',         labels: [], domains: ['twitter.com', 'x.com', 't.co'] }
 ];
 
-// [5.90-2] Endings (top-level domains) that belong to one company, which alone has addresses under
-// them: ICANN's "brand" endings, each checked in IANA's root zone database, which names the company (or
-// its subsidiary) as the registry. Only for companies this extension already knows; never an ending a
-// company runs for the public (anyone can register under Google's .app, .dev or .page). home: the
-// company's main domain, when the tables don't have the company (IANA's website for the ending).
-const COMPANY_ENDINGS = Object.freeze({
-    amex: { name: 'American Express', home: 'americanexpress.com' }, americanexpress: { name: 'American Express', home: 'americanexpress.com' },
-    google: { name: 'Google' }, gle: { name: 'Google' }, microsoft: { name: 'Microsoft' }, apple: { name: 'Apple' },
-    amazon: { name: 'Amazon' }, aws: { name: 'Amazon' }, netflix: { name: 'Netflix' },
-    chase: { name: 'Chase' }, jpmorgan: { name: 'Chase' }, bofa: { name: 'Bank of America' },
-    fedex: { name: 'FedEx' }, ups: { name: 'UPS' }, dhl: { name: 'DHL' }
-});
+// [5.90-2] Endings (top-level domains) that belong to one company, which alone may have addresses under
+// them: ICANN's "brand" endings (Specification 13 of their registry agreement), each with its registry
+// (the company, or its subsidiary). Nothing here is written by hand: ICANN's list of endings is downloaded
+// once a month (syncCompanyEndings in background.js); until the first download, the copy bundled with
+// the extension (company-endings.json, made by tools/refresh-snapshot.js) is used. Endings a company runs
+// for the public (Google's .app, .dev or .gle) aren't on it.
+// Stored as { operators: [registry names], endings: { ending: index into operators } }.
+const COMPANY_ENDINGS_URL = 'https://www.icann.org/resources/registries/gtlds/v2/gtlds.json';
+const COMPANY_ENDINGS_MIN = 100;            // fewer in a download: not the real list (the previous copy is kept)
+const companyEndings = { byEnding: new Map(), byOperator: new Map() };
+const ENDING_LABEL_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+function parseCompanyEndings(data) {
+    if (!data || typeof data !== 'object' || !Array.isArray(data.operators) || !data.endings || typeof data.endings !== 'object') return null;
+    const operators = data.operators.slice(0, 5000).map(o => String(o || '').slice(0, 200));
+    const byEnding = new Map(), byOperator = new Map();
+    for (const [ending, i] of Object.entries(data.endings)) {
+        if (!ENDING_LABEL_RE.test(ending) || !Number.isInteger(i) || !operators[i]) continue;
+        byEnding.set(ending, operators[i]);
+        if (!byOperator.has(operators[i])) byOperator.set(operators[i], new Set());
+        byOperator.get(operators[i]).add(ending);
+    }
+    return { byEnding, byOperator };
+}
+// The single-company endings in ICANN's list of endings (gtlds.json): those under Specification 13,
+// delegated, and neither removed nor terminated. Returns { operators, endings, count } (the stored form).
+function companyEndingsFromIcann(json) {
+    const list = json && Array.isArray(json.gTLDs) ? json.gTLDs : [];
+    const operators = [], index = new Map(), endings = {};
+    for (const t of list) {
+        if (!t || t.specification13 !== true || t.contractTerminated || !t.delegationDate || t.removalDate) continue;
+        const ending = String(t.gTLD || '').toLowerCase(), operator = String(t.registryOperator || '').trim().slice(0, 200);
+        if (!ENDING_LABEL_RE.test(ending) || !operator) continue;
+        if (!index.has(operator)) { index.set(operator, operators.length); operators.push(operator); }
+        endings[ending] = index.get(operator);
+    }
+    return { operators, endings, count: Object.keys(endings).length };
+}
+// Replaces the endings in use; false (nothing changed) for data that isn't such a list.
+function setCompanyEndings(data) {
+    const parsed = parseCompanyEndings(data);
+    if (!parsed) return false;
+    companyEndings.byEnding = parsed.byEnding;
+    companyEndings.byOperator = parsed.byOperator;
+    return true;
+}
+// The single-company ending a registrable domain is under, with its registry: { ending, operator }, or null.
+function companyEndingOf(regDomain) {
+    const d = String(regDomain || '').toLowerCase();
+    if (!d.includes('.')) return null;
+    const ending = d.slice(d.lastIndexOf('.') + 1);
+    const operator = companyEndings.byEnding.get(ending);
+    return operator ? { ending, operator } : null;
+}
+// [5.90-2] Whether two registrable domains are one company's through its own ending. Either both are
+// under endings with the same registry (the same company), or one is under such an ending and the
+// other is a domain known to be a company's (the tables here, or a protected brand) whose name, or the
+// name of one of its company's other domains, is one of that registry's endings: google.com and
+// blog.google; americanexpress.com and go.amex (.amex and .americanexpress have the same registry);
+// bankofamerica.com and x.bofa (bofa.com is Bank of America's). A domain merely carrying the name
+// (chase.<anything>) doesn't count: anyone could have registered it.
+function sameCompanyByEnding(a, b) {
+    if (!COMPANY_MATCHING.ownEndings) return false;
+    const ea = companyEndingOf(a), eb = companyEndingOf(b);
+    if (ea && eb) return ea.operator === eb.operator;
+    const e = ea || eb, other = String((ea ? b : a) || '').toLowerCase();
+    if (!e || !other) return false;
+    const company = companyOfDomain(other);
+    if (!company && !PROTECTED_BRANDS.includes(other)) return false;
+    const endings = companyEndings.byOperator.get(e.operator);
+    const names = new Set([other.split('.')[0]]);
+    if (company) for (const [d, c] of companyIndex()) if (c === company) names.add(d.split('.')[0]);
+    for (const n of names) if (endings.has(n)) return true;
+    return false;
+}
 
-// Every known company domain → its company: the families above, [5.90-1] the sender check's brands
-// (SENDER_NAME_BRANDS, further down) and [5.90-2] the main domains of the companies with their own
-// ending. Built on first use, after this whole file has loaded.
+// Every known company domain → its company: the families above and [5.90-1] the sender check's brands
+// (SENDER_NAME_BRANDS, further down). Built on first use, after this whole file has loaded.
 let companyIndexMemo = null;
 function companyIndex() {
     if (companyIndexMemo) return companyIndexMemo;
@@ -530,17 +594,13 @@ function companyIndex() {
     const add = (d, name) => { if (d && !index.has(d)) index.set(d, name); };
     for (const b of BRAND_FAMILIES) b.domains.forEach(d => add(d, b.name));
     if (COMPANY_MATCHING.oneTable) for (const b of SENDER_NAME_BRANDS) [...(b.home || []), ...(b.domains || [])].forEach(d => add(d, b.name));   // [5.90-1]
-    if (COMPANY_MATCHING.ownEndings) for (const e of Object.values(COMPANY_ENDINGS)) add(e.home, e.name);                                          // [5.90-2]
     return (companyIndexMemo = index);
 }
 // The company a registrable domain is known to belong to, or null.
 function companyOfDomain(regDomain) {
     const d = String(regDomain || '').toLowerCase();
     if (!d) return null;
-    const known = companyIndex().get(d);
-    if (known) return known;
-    if (COMPANY_MATCHING.ownEndings && d.includes('.')) { const e = COMPANY_ENDINGS[d.slice(d.lastIndexOf('.') + 1)]; if (e) return e.name; }   // [5.90-2]
-    return null;
+    return companyIndex().get(d) || null;
 }
 // [5.90-4] The company whose name a domain carries under an ending not known to be the company's
 // (amazon.de, paypal.cm), or null. Whose it really is takes evidence: the background's
@@ -608,7 +668,8 @@ function detectLinkProblem(visibleText, originalUrl, finalUrl, trackerDomains, f
     const destDomain = registrableDomain(host);
     if (textDomain === destDomain) return null;
     const textCompany = brandOfDomain(textDomain), destCompany = brandOfDomain(destDomain);
-    if (textCompany && textCompany === destCompany) return null;   // same company ([5.90-1] [5.90-2]: more of them known)
+    if (textCompany && textCompany === destCompany) return null;   // same company ([5.90-1]: more of them known)
+    if (sameCompanyByEnding(textDomain, destDomain)) return null;   // [5.90-2] through the company's own ending
 
     let originalHost = '';
     try { originalHost = new URL(originalUrl).hostname.toLowerCase(); } catch (e) {}
@@ -627,6 +688,12 @@ function detectLinkProblem(visibleText, originalUrl, finalUrl, trackerDomains, f
             return `link text shows ${textHost} but the link goes to ${host}; ${unproven.join(' and ')} ${one ? 'carries' : 'carry'} ${textName}'s name under another ending but ${one ? 'isn\'t' : 'aren\'t'} known to be ${textName}'s`;
         }
     }
+    // [5.90-2] A link to an address under a single-company ending: nobody else can have one, so it can't
+    // be an imitation's: amber at most (the text and the ending couldn't be tied to one company).
+    if (COMPANY_MATCHING.ownEndings) {
+        const e = companyEndingOf(destDomain);
+        if (e) return `link text shows ${textHost} but the link goes to ${host}, an address only ${e.operator} can have`;
+    }
     // Text that shows a well-known brand's address while going elsewhere is a classic phishing trick.
     if (PROTECTED_BRANDS.includes(textDomain)) return `link text shows ${textHost} (a well-known brand) but the link goes to ${host}`;
     return `link text shows ${textHost} but the link goes to ${host}`;
@@ -643,7 +710,7 @@ function verifiedSenderLinkProblem(facts, auth, inQuote) {
     if (!auth || auth.dmarc !== 'pass' || !auth.headerFrom) return null;
     const from = registrableDomain(domainOfAddress(auth.headerFrom));
     const fromCompany = brandOfDomain(from);
-    if (from !== facts.textDomain && !(fromCompany && fromCompany === brandOfDomain(facts.textDomain))) return null;
+    if (from !== facts.textDomain && !(fromCompany && fromCompany === brandOfDomain(facts.textDomain)) && !sameCompanyByEnding(from, facts.textDomain)) return null;
     return `link text shows ${facts.textHost}, the site of this email's verified sender (${from}), but the link goes to ${facts.host}`;
 }
 // [5.90-4] Whether the evidence for every domain that carries a company's name under another ending
@@ -1796,7 +1863,8 @@ function colleagueNameHash(name) {
 // own: the user's organization domain; colleagues: Set of colleagueNameHash values; ownership: what
 // public records say about the address's domain and the brand the name claims (ownershipNote):
 // proven the brand's, nothing is wrong with the name; looking like the brand's, amber (never moved)
-// instead of red; unknown (or not looked up: Offline only), red as before.
+// instead of red; unknown (or not looked up), red as before. [5.90-5] Offline only uses an answer stored
+// from an earlier lookup.
 function nameAddressSigns(name, address, own, colleagues, ownership) {
     const out = [];
     const domain = domainOfAddress(address);

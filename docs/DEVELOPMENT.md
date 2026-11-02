@@ -146,19 +146,22 @@ installs only add-ons signed by Mozilla, so never publish the zip itself.
 The [releases page](https://github.com/thecodewarrior2/SPRUCE-Browser-Extension/releases) is for people
 who install the extension themselves. Store installs update on their own; manual installs don't.
 
-1. On `main`, with the version in `manifest.json` and a `CHANGELOG.md` entry for it, run
+1. Before the release (on `testing`), refresh the bundled copies of the downloaded lists, which a fresh
+   install uses until its first download: `node tools/refresh-snapshot.js` (the shortener list and
+   ICANN's single-company endings; nothing in them is written by hand). Commit the result.
+2. On `main`, with the version in `manifest.json` and a `CHANGELOG.md` entry for it, run
    `node tools/build.js`. Among the files it builds is `build/spruce-<version>-chrome-manual-install.zip`:
    one folder, `S.P.R.U.C.E+-<version>`, with the extension and `INSTALL.md`. Unlike the store zip it
    **keeps the `key`**, so every manual install has the same extension ID as the test version and
    managed policies reach it.
-2. Firefox: release Firefox only installs add-ons signed by Mozilla, so never attach an unsigned zip.
+3. Firefox: release Firefox only installs add-ons signed by Mozilla, so never attach an unsigned zip.
    Once the version is approved on addons.mozilla.org, download its signed `.xpi` from the developer
    hub and name it `spruce-<version>-firefox.xpi`. (Without a public listing, submit it as
    "On your own" to get a signed `.xpi`.)
-3. Safari: don't attach anything until there is a signed and notarized app (it needs an Apple
+4. Safari: don't attach anything until there is a signed and notarized app (it needs an Apple
    Developer account). An unsigned build only runs with Safari's "Allow unsigned extensions",
    which resets every time Safari restarts.
-4. Write the release notes from the draft in [`docs/releases/`](releases) (one file per version), fill
+5. Write the release notes from the draft in [`docs/releases/`](releases) (one file per version), fill
    in the store links and the checksums (`sha256sum` of each file), create the release with the tag
    `v<version>` on `main`, and attach the files.
 
@@ -180,7 +183,7 @@ who install the extension themselves. Store installs update on their own; manual
 | `theme.css` / `theme.js` | Design tokens and light/dark appearance (WCAG 2.1 AA) |
 | `lib/` | Bundled pdf.js (Apache-2.0), used only for PDF attachments |
 | `icons/` | Toolbar and store icons |
-| `tools/` | `build.js` (every browser's package), `build-safari.sh` (the Safari app, on a Mac), `refresh-snapshot.js` (the bundled shortener list) |
+| `tools/` | `build.js` (every browser's package), `build-safari.sh` (the Safari app, on a Mac), `refresh-snapshot.js` (the bundled shortener list and company endings; run before a release) |
 | `docs/` | Features, admin guide, architecture, this guide, install steps, policy example, release notes drafts (`docs/releases/`) |
 | `store/` | Chrome Web Store listing text and images, and the script that makes the images |
 | `branding/` | Logos, icons and the donation QR code (PNG and SVG) |

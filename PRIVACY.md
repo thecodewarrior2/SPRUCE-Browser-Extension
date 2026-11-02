@@ -47,7 +47,7 @@ service contacted sees your computer's IP address, as with any web request.
 | Look-alike sender check | A sender domain that looks like a protected one: its name, to learn when it was registered | That domain's registry (public RDAP records), found through IANA's public list |
 | Brand ownership check | Only when a sender's name claims a well-known brand on a domain not known as the brand's, or a link's text and destination name the same company but one of them only carries Google's, Amazon's or PayPal's name under another ending (amazon.de): that domain's name, to learn who registered it and whether its DNS records tie it to the brand | That domain's registry and (when the registry keeps no registrant) its registrar, both public RDAP records; the DNS resolvers above for its DMARC and name-server records |
 | QR codes in email images (Gmail) | Nothing new: the image is fetched again from Gmail's own image proxy, which already showed it | Google |
-| List updates | Nothing about you: plain downloads of public lists (short-link services, phishing sites, scam senders, popular sites), at most once a day or once a month | GitHub (raw.githubusercontent.com), openphish.com, phishing.army, tranco-list.eu |
+| List updates | Nothing about you: plain downloads of public lists (short-link services, phishing sites, scam senders, popular sites, and ICANN's list of internet endings, for those only one company may use), at most once a day or once a month | GitHub (raw.githubusercontent.com), openphish.com, phishing.army, tranco-list.eu, www.icann.org |
 
 **Moving emails to Spam:** when an email is flagged, the extension can click your webmail's own
 **Report spam** button for you, exactly as if you clicked it. Your webmail provider receives that

@@ -129,28 +129,31 @@ pages hosted in public cloud storage.
 
 ### Text and destination of the same company (company matching)
 
-Text showing one site and a link to another is fine when both belong to one company. Since 5.90 four
+Text showing one site and a link to another is fine when both belong to one company. Since 5.90 these
 steps decide that, each with its own switch in `COMPANY_MATCHING` (`shared.js`); every line of code a step
 touches carries its tag:
 
 | Step | What it does | Switch it off (set to `false`, rebuild) and |
 |---|---|---|
 | `[5.90-1]` `oneTable` | One table of company domains for links and senders: the link check also knows every domain the sender check lists for a brand (`companyIndex`) | text bankofamerica.com, link bofa.com is red again |
-| `[5.90-2]` `ownEndings` | An ICANN brand ending (`COMPANY_ENDINGS`: `.amex`, `.google`, `.chase`…, each checked in IANA's root zone database) is its company's: any address under it | text americanexpress.com, link go.amex is red again |
+| `[5.90-2]` `ownEndings` | An ending only one company may use (ICANN "brand" endings, Specification 13), from ICANN's list of endings (`gtlds.json`, downloaded monthly by `syncCompanyEndings`; until then `company-endings.json`, made by `tools/refresh-snapshot.js`). An address under one is the company's when the other side is a domain known to be a company's whose name is one of that registry's endings (`sameCompanyByEnding`: americanexpress.com and go.amex); a link to such an ending that can't be tied is amber at most | text americanexpress.com, link go.amex is red again |
 | `[5.90-3]` `verifiedSender` | A red "text shows a brand's site" link is looked at again once Gmail's DMARC result is read (`reviewLinkProblem` → `verifiedSenderLinkProblem`): passed for that same company, not in a quoted part → amber. An opened email's queued move to Spam is withdrawn when its verdict no longer moves it (`withdrawOpenedMove`) | such links stay red |
+| `[5.90-5]` `storedOffline` | At Offline only (lookups off), the ownership answers and DMARC policies stored from earlier lookups, and the popular-site list already downloaded, still count; nothing new is asked (`brandOwnership`, `companyDomainEvidence`, `dmarcPolicy(…, storedOnly)`) | Offline only ignores what's stored, as before |
 | `[5.90-4]` `nameNeedsProof` | A domain that only carries the name of a company that uses its name under many endings (Google, Amazon, PayPal: `labels` in `BRAND_FAMILIES`) is not the company's by its name (`companyNameOf`): the link is amber and the background is asked (`companyDomainEvidence`): on the popular-site lists and enforcing DMARC, or `brandOwnership` proof → not marked. A sender named for the company at such a domain is amber, never red or moved | the name alone makes it the company's, as before 5.90 (paypal.*anything* trusted) |
 
-With all four off, every answer is 5.89's (a unit test checks it).
+With all of them off, every answer is 5.89's (a unit test checks it).
 
 ```mermaid
 flowchart TD
-  T["Text shows site A,<br/>link goes to site B"] --> S{"A and B one company?<br/>(table [5.90-1], brand ending [5.90-2])"}
+  T["Text shows site A,<br/>link goes to site B"] --> S{"A and B one company?<br/>(table [5.90-1], ICANN brand ending [5.90-2])"}
   S -- yes --> OK["Not marked"]
   S -- no --> N{"Same company's name,<br/>one side only by name? [5.90-4]"}
   N -- yes --> AM["Amber; background asked"] --> P{"Popular + DMARC enforced,<br/>or ownership proof?"}
   P -- yes --> OK
   P -- no --> AM2["Stays amber"]
-  N -- no --> B{"A is a well-known brand?"}
+  N -- no --> EN{"B under an ending only one<br/>company may use? [5.90-2]"}
+  EN -- yes --> C
+  EN -- no --> B{"A is a well-known brand?"}
   B -- no --> C["Amber"]
   B -- yes --> R["Red"] --> V{"Gmail: DMARC passed for A's company,<br/>not quoted? [5.90-3]"}
   V -- yes --> C
@@ -221,9 +224,9 @@ isn't an imitation of it.
 
 ```mermaid
 flowchart TD
-  N["Name claims a brand;<br/>domain not one of its known ones"] --> Q{"Offline only?"}
+  N["Name claims a brand;<br/>domain not one of its known ones"] --> Q{"Offline only, and no answer<br/>stored in the last 30 days?"}
   Q -- yes --> R5["unknown: weight 5 (red)"]
-  Q -- no --> E["Read public records<br/>(DNS via the resolvers already used;<br/>registry RDAP, then the registrar's)"]
+  Q -- no --> E["Read public records<br/>(DNS via the resolvers already used;<br/>registry RDAP, then the registrar's),<br/>or the stored answer"]
   E --> P{"Proof only the brand<br/>could have made?"}
   P -- yes --> OWN["owned: weight 0,<br/>reason says why"]
   P -- no --> L{"Corporate registrar<br/>+ one more link?"}
