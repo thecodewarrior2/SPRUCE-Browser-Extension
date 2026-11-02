@@ -27,6 +27,29 @@ line per suite with its checks and time, then a summary. A full run takes about 
 On GitHub, the **Tests** workflow (`.github/workflows/tests.yml`) runs the unit tests and every
 suite on each push to `testing` and `main`; when it fails, the logs are under the run's Artifacts.
 
+### The Firefox suite
+
+`firefox/run.js` runs the **Firefox build** (the `firefox` branch) in real Firefox, through
+puppeteer-core and WebDriver BiDi, on the same simulated pages: the background page and its QR/PDF
+scanner, the spam mover's clicks into Gmail, message frames, permission requests (Firefox accepts them
+only directly inside a click), site access switched off, and enterprise policy. On this branch (the
+Chrome build) it only says so and stops; on the `firefox` branch GitHub runs it on every push, in the
+current Firefox ESR and in 140 ESR, the oldest version the add-on supports. Locally (Linux):
+
+```bash
+firefox/get-firefox.sh
+```
+
+```bash
+node firefox/run.js
+```
+
+| Command | What it does |
+| --- | --- |
+| `firefox/get-firefox.sh 140` | Downloads 140 ESR into `.firefox/140` (default: the current ESR, `.firefox/esr`) |
+| `FXBIN=.firefox/140/firefox/firefox node firefox/run.js` | Runs in that Firefox |
+| `FXEXT=/path/to/firefox-build node firefox/run.js` | Tests another checkout of the Firefox build |
+
 Each suite's full output is in `logs/<suite>.log`. The runner remembers how long each suite took
 (`.timings.json`) and starts the slowest first next time.
 
@@ -36,10 +59,12 @@ Each suite's full output is in `logs/<suite>.log`. The runner remembers how long
 - `e2e/harness.js`: starts Chromium with the extension, serves the simulated pages, and has the
   helpers below.
 - `e2e/test-*.js`: the suites. `e2e/fake-*.html`: simulated Gmail (list and opened email),
-  Outlook and Yahoo pages.
+  Outlook and Yahoo pages, and a webmail that shows messages in frames (`fake-proton.html`).
+- `firefox/`: the Firefox suite (`run.js`), its harness and `get-firefox.sh`.
 - `unit/unit.test.js`: unit tests (`node:test`, `fake-indexeddb` for the icon store).
 - `fixtures/*.eml`: raw emails for the header checks. They come from real phishing samples, with
   every real domain and address replaced by a placeholder (`*.example`, `example.org`).
+  `fixtures/qr.png`, `qr.pdf`: a QR code, and a PDF with that QR code and a link, for the scanner.
 
 ## Writing tests
 

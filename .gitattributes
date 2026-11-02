@@ -8,3 +8,5 @@ branding export-ignore
 store export-ignore
 .github export-ignore
 docs export-ignore
+# Instructions for AI assistants working in the repository.
+CLAUDE.md export-ignore

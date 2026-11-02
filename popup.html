@@ -101,6 +101,9 @@
         .sg span { display: block; font-size: 9.5px; line-height: 1.2; color: var(--text-muted); }
         .sg.good b { color: var(--success-text); } .sg.bad b { color: var(--danger-text); } .sg.warn b { color: var(--info-text); } .sg.caution b { color: var(--warn-text); } .sg.muted b { color: var(--text-muted); }
         .stats-note { font-size: 10px; color: var(--text-muted); margin: 2px 0 4px; min-height: 0; }
+        /* The webmail tab this popup was opened on isn't allowed to the extension (site access switched off). */
+        .site-access { background: var(--warn-bg); border: 1px solid var(--warn-border); color: var(--warn-text); border-radius: 6px; padding: 8px 10px; margin: 0 0 10px; font-size: 12px; line-height: 1.4; }
+        .site-access .btn-secondary { margin: 8px 0 0; }
 
     </style>
 </head>
@@ -113,6 +116,11 @@
                 <option value="light">☀ Light</option>
                 <option value="dark">🌙 Dark</option>
             </select>
+        </div>
+
+        <div id="siteAccess" class="site-access" role="alert" hidden>
+            <div id="siteAccessText"></div>
+            <button type="button" id="siteAccessBtn" class="btn-secondary">Allow on this site</button>
         </div>
         
         <div class="toggle-container">

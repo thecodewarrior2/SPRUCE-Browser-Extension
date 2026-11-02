@@ -1326,11 +1326,13 @@ const ROW_HIGHLIGHT_COLORS = {
 // a slower page. Known ones are recognized by their Chrome Web Store id: in the page (resources they
 // add, "chrome-extension://<id>/…") or, once the user allows it, in the list of installed extensions.
 //   features   our settings that do the same job (turning ours off is one way to end the conflict)
+// ids: Chrome Web Store IDs. geckoIds: the Firefox add-ons (addons.mozilla.org) that do the same job,
+// by their add-on ID; Contact Avatars and Copy Button have no Firefox version.
 const OVERLAPPING_EXTENSIONS = [
-    { name: 'Gmail Sender Icons', ids: ['jniljaamodclkmphgkgkooplflhkadpg'], features: ['enableSenderIdentity'], does: 'sender icons in the inbox' },
-    { name: 'Simplify Gmail', ids: ['pbmlfaiicoikhdbjagjbglnbfcbcojpj'], features: ['enableSenderAvatars', 'enableTrackingPixelBlocking'], does: 'sender photos and blocking tracking pixels' },
+    { name: 'Gmail Sender Icons', ids: ['jniljaamodclkmphgkgkooplflhkadpg'], geckoIds: ['{ca2f9d3a-29e1-4a1f-b8cb-77dfdff51440}'], features: ['enableSenderIdentity'], does: 'sender icons in the inbox' },
+    { name: 'Simplify Gmail', ids: ['pbmlfaiicoikhdbjagjbglnbfcbcojpj'], geckoIds: ['{a4c1064c-95dd-47a7-9b02-bb30213b7b29}'], features: ['enableSenderAvatars', 'enableTrackingPixelBlocking'], does: 'sender photos and blocking tracking pixels' },
     { name: 'Contact Avatars for Gmail', ids: ['pkljbdckinbcelpeipbnniamlhenoeon'], features: ['enableSenderAvatars'], does: 'sender photos in the inbox' },
-    { name: 'Row Highlighter for Gmail', ids: ['ijfolchflbmnfopmpmodilcelmdakbfl'], features: ['enableRowHighlighter'], does: 'highlighting the row under the mouse' },
+    { name: 'Row Highlighter for Gmail', ids: ['ijfolchflbmnfopmpmodilcelmdakbfl'], geckoIds: ['{37170401-c7aa-461d-bbc4-6273e166b07e}', '{488f97e9-93ff-4b89-9575-3ec85cb874fa}'], features: ['enableRowHighlighter'], does: 'highlighting the row under the mouse' },
     { name: 'Copy Button for Gmail', ids: ['djkkdiclffdbkgndofebmejnanhdeegj'], features: ['enableCopyAddress'], does: 'a button that copies the sender\'s address' }
 ];
 // Colors of the initial shown for a sender with no picture (white letter; each at least 5:1 contrast).

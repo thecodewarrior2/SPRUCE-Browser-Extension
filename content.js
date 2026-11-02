@@ -14,11 +14,30 @@ let visualOverridesActive = true;
 // are, how it proxies images, and its `mail` profile for the shared mail engine below. Gmail is one
 // entry of that table like the others.
 // ---------------------------------------------------------------------------
+// The host of the page that made an about:blank, srcdoc or blob: frame (such a frame has no host of
+// its own). location.ancestorOrigins names it in Chrome and in Firefox 148 and later; older Firefox
+// lacks it, so these are tried next, in order: the frame's inherited origin; its parent's address
+// (readable when they share an origin); its base address, which for a srcdoc frame is the parent's,
+// even in a sandbox without same-origin access (used only without a <base> element, which an email's
+// own HTML could add); the referrer.
+function frameCreatorHost() {
+    const tries = [
+        () => (location.ancestorOrigins && location.ancestorOrigins.length ? location.ancestorOrigins[0] : ''),
+        () => (location.origin !== 'null' ? location.origin : ''),
+        () => window.parent.location.href,
+        () => (location.href === 'about:srcdoc' && !document.querySelector('base[href]') ? document.baseURI : ''),
+        () => document.referrer
+    ];
+    for (const t of tries) {
+        try { const h = new URL(t() || 'x:').hostname; if (h) return h; } catch (e) { /* the next one */ }
+    }
+    return '';
+}
+
 const SITE = (() => {
     const inFrame = window !== window.top;
-    const parentOrigin = (location.ancestorOrigins && location.ancestorOrigins.length) ? location.ancestorOrigins[0] : '';
     let host = location.hostname;
-    if (!host && parentOrigin) { try { host = new URL(parentOrigin).hostname; } catch (e) { /* ignore */ } }   // about:blank / srcdoc frames
+    if (!host && inFrame) host = frameCreatorHost();
     const fromParam = (src, names) => {
         try { const u = new URL(src); for (const n of names) { const v = u.searchParams.get(n); if (v && /^https?:\/\//i.test(v)) return v; } } catch (e) { /* ignore */ }
         return src;
@@ -92,8 +111,10 @@ const observedFrames = new WeakSet();
 const frameFirstSeen = new WeakMap();          // frame document → when the page first saw it
 const FRAME_GRACE_MS = 1200;                   // time for the extension's own script to start in a frame
 
-// A frame the extension's own script runs in marks itself, so the page doesn't count it twice.
-if (window !== window.top) {
+// A frame the extension's own script runs in marks itself, so the page doesn't count it twice — but
+// only once it knows which webmail the frame belongs to. A frame that can't tell (its site is
+// 'other') leaves itself unmarked, so the page reads it instead and no message frame is skipped.
+if (window !== window.top && SITE.id !== 'other') {
     try { document.documentElement.setAttribute('data-unshortener-frame', '1'); } catch (e) { /* ignore */ }
 }
 
@@ -1407,8 +1428,13 @@ function getMessageHeadersById(id) {
     if (messageAuth.has(id)) return messageAuth.get(id);
     if (messageAuth.size >= MESSAGE_AUTH_MAX) messageAuth.delete(messageAuth.keys().next().value);
     const H = MAIL.headers;
-    const p = trackWork(fetch(headersUrl(id), { credentials: 'include' })
-        .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return readUntilHeadersEnd(r); })
+    // async/await rather than .then() on fetch's promise: Firefox reports an error thrown inside a
+    // .then() callback of the page's fetch as uncaught in the webmail's console, even when it's caught.
+    const p = trackWork((async () => {
+        const r = await fetch(headersUrl(id), { credentials: 'include' });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return readUntilHeadersEnd(r);
+    })()
         .then(text => {
             let raw = text;
             if (/<pre[\s>]/i.test(text)) {

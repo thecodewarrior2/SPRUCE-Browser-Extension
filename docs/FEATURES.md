@@ -103,6 +103,10 @@ Clicking the S.P.R.U.C.E+ button in the browser toolbar shows:
 - **Recent activity**: the latest things the extension did (links flagged, emails moved to Spam, errors),
   with **Clear activity**.
 - **Open Settings**, and a light, dark or system appearance switch.
+- **Not allowed on this site**: when your browser has the extension's access to the webmail switched
+  off (in Firefox, the extensions panel's per-site switch; in Chrome, *Site access*), nothing there is
+  checked and the page shows no sign of it, so the button says so, with **Allow on mail.google.com**
+  (or the webmail's own address): one click asks the browser for access again and reloads the tab.
 
 Organizations can hide **Open Settings** and **Recent activity** (see the admin guide).
 
@@ -119,7 +123,8 @@ Settings your organization set by policy show a 🔒 and can't be changed; the r
   emails can keep their own color.
 - **Other extensions**: when another extension does the same job in your webmail (both drawing sender
   icons, both highlighting rows), you're warned and can turn the other one off, or turn off only the
-  overlapping settings here.
+  overlapping settings here. **Check installed extensions** also lists the installed ones (Chrome Web
+  Store extensions and their Firefox counterparts).
 - **Lookups & threat checks**: online short-link lookups (unshorten.me), site-name threat checks with
   DNS security filters, the daily public shortener lists, and the public phishing lists (OpenPhish
   community feed and Phishing Army), each with its own switch.

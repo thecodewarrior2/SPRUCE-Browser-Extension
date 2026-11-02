@@ -1,0 +1,18 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Inbox | Proton Mail</title></head><body>
+<!-- A webmail that shows each message in a frame, in the four ways webmail apps do it. Each frame holds
+     one link; the test checks the extension got to every one, from inside the frame or from the page. -->
+<div data-shortcut-target="message-container" id="mc"></div>
+<script>
+const link = (n) => `<p>Message ${n}: <a href="https://bit.ly/frame${n}">https://www.paypal.com/frame${n}</a></p>`;
+const mc = document.getElementById('mc');
+// 1. a same-origin about:blank frame the page writes into
+const f1 = document.createElement('iframe'); f1.id = 'v1'; mc.appendChild(f1);
+f1.contentDocument.open(); f1.contentDocument.write('<html><body>' + link(1) + '</body></html>'); f1.contentDocument.close();
+// 2. a sandboxed srcdoc frame without allow-same-origin (opaque origin: the page can't read it)
+const f2 = document.createElement('iframe'); f2.id = 'v2'; f2.setAttribute('sandbox', 'allow-popups'); f2.srcdoc = '<html><body>' + link(2) + '</body></html>'; mc.appendChild(f2);
+// 3. a blob: frame made by the page
+const f3 = document.createElement('iframe'); f3.id = 'v3'; f3.src = URL.createObjectURL(new Blob(['<html><body>' + link(3) + '</body></html>'], { type: 'text/html' })); mc.appendChild(f3);
+// 4. a sandboxed srcdoc frame with allow-same-origin (the usual webmail setup)
+const f4 = document.createElement('iframe'); f4.id = 'v4'; f4.setAttribute('sandbox', 'allow-same-origin allow-popups'); f4.srcdoc = '<html><body>' + link(4) + '</body></html>'; mc.appendChild(f4);
+</script></body></html>

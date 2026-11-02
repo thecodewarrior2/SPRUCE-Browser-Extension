@@ -1,5 +1,34 @@
 # Changelog
 
+## 5.88 — Firefox: every feature checked in Firefox itself, and four fixed
+
+A review of the Firefox build in real Firefox (the current ESR and 140 ESR, the oldest version it
+supports). Nearly everything already worked there — the spam mover, sender labels, opened-email checks,
+QR codes in images and PDFs, enterprise policy — and these changes fix what didn't. In Chrome nothing
+behaves differently, except the new notice in the toolbar button when site access is switched off.
+
+- **Messages shown in frames are checked in Firefox before version 148.** Proton Mail, iCloud, Zoho and
+  GMX show each message in a frame. To know which webmail a frame belongs to, the extension asked the
+  browser for the page that made it (`location.ancestorOrigins`), which Firefox only has from version 148;
+  before that, the extension's script in the frame marked the frame as its own and then did nothing,
+  so the page skipped it too and the message wasn't checked at all. The frame now also learns its webmail
+  from its own origin, its parent's address or (for a sandboxed frame) its base address, and marks itself
+  only once it knows; a frame that can't tell is read by the page instead.
+- **"Check installed extensions" works in Firefox.** Firefox accepts a permission request only directly
+  inside the click, and the button checked something else first, so Firefox refused without showing the
+  question and the button said your browser didn't give permission. It now asks at once. It also finds
+  the Firefox versions of the extensions that do the same job (Simplify Gmail, Sender Icons for Gmail,
+  Row Highlighter), and when the add-on was installed by your organization's policy — the only case
+  Firefox allows it — it can turn them off with one click.
+- **Site access switched off is noticed.** Browsers let you switch an extension's access to a site off
+  (Firefox's extensions panel, Chrome's *Site access*); the extension then did nothing in that webmail
+  with no sign why. The toolbar button now says the extension isn't allowed there, with a button that
+  allows it again and reloads the tab.
+- **No more errors in the webmail's console in Firefox.** Reading an email's headers when Gmail answered
+  with an error was handled, but Firefox still reported it as an uncaught error in Gmail's console.
+- **Tests:** a Firefox suite (`tests/firefox/`) runs the Firefox build in real Firefox on the simulated
+  webmail pages, and a new browser suite checks every kind of message frame in Chrome.
+
 ## 5.87 — A line-by-line review: twelve fixes, and faster where it counts
 
 - **Phishing-simulation rules with sending addresses now work.** A rule with `ips` (managedPhishSimulationRules) never matched, because the check never learned which server delivered the email — so a training email covered by such a rule was checked, flagged and even moved like any other mail, and looking up its links could register a "click" with the vendor. The delivering server is now read from the webmail's own Received header, as the admin guide always described.

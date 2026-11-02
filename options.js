@@ -1527,7 +1527,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!(await hasManagement()) || !chrome.management) return [];
         const all = await new Promise(r => chrome.management.getAll(r));
         return all.filter(x => x.enabled && x.id !== chrome.runtime.id).map(x => {
-            const known = OVERLAPPING_EXTENSIONS.find(k => k.ids.includes(x.id));
+            const known = OVERLAPPING_EXTENSIONS.find(k => k.ids.includes(x.id) || (k.geckoIds || []).includes(x.id));
             return known ? { key: x.id, name: x.name || known.name, does: known.does, features: known.features, via: 'installed', ts: Date.now() } : null;
         }).filter(Boolean);
     }
@@ -1545,6 +1545,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const keptOn = st.keptConflictFeatures || {};
         const items = Object.values(map).sort((a, b) => (b.ts || 0) - (a.ts || 0));
         const management = await hasManagement();
+        // Firefox lets an add-on turn others off only when it was itself installed by the organization's
+        // policy (management.setEnabled); otherwise the user turns them off in about:addons.
+        const policyInstalled = isFirefox && management && chrome.management && chrome.management.getSelf
+            ? await new Promise(r => { try { chrome.management.getSelf(s => { void chrome.runtime.lastError; r(!!s && s.installType === 'admin'); }); } catch (e) { r(false); } })
+            : false;
         if (seq !== renderSeq) return;
         const out = document.createDocumentFragment();
         if (!items.length) {
@@ -1564,13 +1569,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 : `Ours does the same with: ${oursOn.map(k => FEATURE_NAMES[k] || k).join(', ')}. We recommend keeping ours on and turning ${c.name === 'Another extension' ? 'the other one' : c.name} off, or turn off just the settings of ours that overlap.`;
             const actions = document.createElement('div'); actions.className = 'actions';
             const btn = (label, cls, fn) => { const x = document.createElement('button'); x.type = 'button'; x.className = cls; x.textContent = label; x.addEventListener('click', fn); actions.appendChild(x); return x; };
-            const isExtId = /^[a-p]{32}$/.test(c.key);
-            if (isExtId && !isFirefox) {
+            const canTurnOff = isFirefox ? c.via === 'installed' && policyInstalled : /^[a-p]{32}$/.test(c.key);
+            const extensionsPage = isFirefox ? 'about:addons' : 'chrome://extensions';
+            if (canTurnOff) {
                 btn(`Turn off ${c.name}`, 'btn-primary', async () => {
                     const granted = management || await new Promise(r => chrome.permissions.request({ permissions: ['management'] }, r));
-                    if (!granted) { note.textContent = 'Not allowed: your browser didn\'t give permission. You can turn it off yourself in chrome://extensions.'; return; }
+                    if (!granted) { note.textContent = `Not allowed: your browser didn't give permission. You can turn it off yourself in ${extensionsPage}.`; return; }
                     chrome.management.setEnabled(c.key, false, () => {
-                        if (chrome.runtime.lastError) { note.textContent = `${c.name} couldn't be turned off (${chrome.runtime.lastError.message}). Turn it off in chrome://extensions.`; return; }
+                        if (chrome.runtime.lastError) { note.textContent = `${c.name} couldn't be turned off (${chrome.runtime.lastError.message}). Turn it off in ${extensionsPage}.`; return; }
                         reportToLog('info', 'Options page', `${c.name} turned off by the user (it did the same job as this extension).`);
                         chrome.storage.local.get({ detectedConflicts: {} }, r => { const m = r.detectedConflicts || {}; delete m[c.key]; chrome.storage.local.set({ detectedConflicts: m }, render); });
                     });
@@ -1607,7 +1613,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     document.getElementById('checkExtensionsBtn').addEventListener('click', async () => {
-        const granted = (await hasManagement()) || await new Promise(r => { try { chrome.permissions.request({ permissions: ['management'] }, r); } catch (e) { r(false); } });
+        // Asked at once, inside the click: Firefox refuses a permission request made after anything
+        // else was awaited. A permission already given is answered "yes" without asking again.
+        const granted = await new Promise(r => {
+            try { chrome.permissions.request({ permissions: ['management'] }, (g) => { void chrome.runtime.lastError; r(!!g); }); } catch (e) { r(false); }
+        });
         document.getElementById('checkExtensionsNote').textContent = granted ? 'Checked just now.' : 'Not checked: your browser didn\'t give permission. Extensions found in the webmail page are still listed.';
         render();
     });

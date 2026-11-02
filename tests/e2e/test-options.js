@@ -97,6 +97,25 @@ const { launch, until, optionsReady, check, done } = require('./harness');
   await pop.goto(`chrome-extension://${ID}/popup.html`);
   await pop.waitForSelector('html[data-loaded]', { state: 'attached' });   // settings applied: loading is over
   check('popup has no errors', perr.length === 0, perr);
+  // The site-access notice: Chrome grants every supported webmail at install, so it stays hidden; when
+  // access is withheld (permissions.contains answers no) it names the site and offers the button.
+  const access = await pop.evaluate(async () => {
+    const box = () => !document.getElementById('siteAccess').hidden;
+    const r = { gmail: await renderSiteAccess({ id: 1, url: 'https://mail.google.com/mail/u/0/#inbox' }), gmailShown: box(),
+                other: await renderSiteAccess({ id: 1, url: 'https://example.com/' }) };
+    const real = chrome.permissions.contains;
+    chrome.permissions.contains = (q, cb) => cb(false);
+    r.withheld = await renderSiteAccess({ id: 1, url: 'https://mail.google.com/mail/u/0/#inbox' });
+    r.withheldShown = box();
+    r.label = document.getElementById('siteAccessBtn').textContent;
+    r.text = document.getElementById('siteAccessText').textContent;
+    chrome.permissions.contains = real;
+    await renderSiteAccess({ id: 1, url: 'https://mail.google.com/mail/u/0/#inbox' });
+    r.hiddenAgain = !box();
+    return r;
+  });
+  check('popup: no site-access notice while the extension has access (or off webmail)', access.gmail === false && !access.gmailShown && access.other === false, access);
+  check('popup: access withheld → notice names the site, with an Allow button', access.withheld === true && access.withheldShown && access.label === 'Allow on mail.google.com' && /isn't allowed on mail\.google\.com/.test(access.text) && access.hiddenAgain, access);
   // Drop-down menus in the dark appearance: the open list uses the menu's own colors (Firefox), so the
   // menu and its options must have an opaque dark background and readable text.
   await sw.evaluate(() => chrome.storage.local.set({ uiTheme: 'dark' }));

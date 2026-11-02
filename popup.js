@@ -94,9 +94,10 @@ function loadListCounts(cfg) {
 // Statistics of the active tab, combined by the background from the page and its message frames.
 // The tab's address (available because the popup was opened from the toolbar) only names the site.
 function loadCounts() {
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
         const tab = tabs && tabs[0];
         if (!tab) return;
+        if (await renderSiteAccess(tab)) return;          // nothing is checked there until it's allowed
         chrome.runtime.sendMessage({ action: 'getTabState', tabId: tab.id }, (state) => {
             void chrome.runtime.lastError;
             const site = tab.url ? webmailSiteFor(tab.url) : null;
@@ -112,6 +113,37 @@ function loadCounts() {
                 : 'Open an email in Gmail or another supported webmail to see its link statistics.');
         });
     });
+}
+
+// A supported webmail tab the extension isn't allowed on: users can switch an extension's site access
+// off (Firefox's extensions panel, Chrome's "Site access"), and then nothing there is checked and the
+// page shows no sign of it. Says so, with a button that asks for access again and reloads the tab.
+// Returns true when access is missing.
+async function renderSiteAccess(tab) {
+    const box = document.getElementById('siteAccess');
+    if (!box || !tab || !tab.url || !webmailSiteFor(tab.url)) return false;
+    let u;
+    try { u = new URL(tab.url); } catch (e) { return false; }
+    const origins = [`${u.origin}/*`];
+    const allowed = await new Promise(r => {
+        try { chrome.permissions.contains({ origins }, (has) => { void chrome.runtime.lastError; r(has !== false); }); } catch (e) { r(true); }
+    });
+    box.hidden = allowed;
+    if (allowed) return false;
+    const text = document.getElementById('siteAccessText');
+    text.textContent = `S.P.R.U.C.E+ isn't allowed on ${u.hostname}, so nothing there is being checked.`;
+    const btn = document.getElementById('siteAccessBtn');
+    btn.textContent = `Allow on ${u.hostname}`;
+    btn.onclick = () => {
+        // Asked at once, inside the click: Firefox refuses a permission request made after anything was awaited.
+        chrome.permissions.request({ origins }, (granted) => {
+            void chrome.runtime.lastError;
+            if (!granted) { text.textContent = `Not allowed. To allow it later, use this button again or your browser's extension settings.`; return; }
+            reportToLog('info', 'Toolbar popup', `Access to ${u.hostname} was allowed again by the user; the tab was reloaded.`);
+            chrome.tabs.reload(tab.id, () => { void chrome.runtime.lastError; window.close(); });
+        });
+    };
+    return true;
 }
 
 function loadActivity() {
