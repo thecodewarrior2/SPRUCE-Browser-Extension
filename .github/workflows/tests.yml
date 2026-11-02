@@ -1,6 +1,8 @@
-# Runs the unit tests and the browser tests (Playwright, Chromium, simulated webmail pages) on every
-# push to testing and main and on pull requests into main. The ruleset in .github/rulesets/main.json
-# makes this check required, so a commit reaches main only after it passed here (on testing first).
+# Runs the unit tests and the browser tests (Playwright, Chromium, simulated webmail pages), and the
+# Firefox suite (the Firefox build, made by tools/build.js, in real Firefox: the current ESR and 140 ESR)
+# on every push to testing and main and on pull requests into main. The ruleset in
+# .github/rulesets/main.json makes the "Unit and browser tests" check required, so a commit reaches main
+# only after it passed here (on testing first).
 name: Tests
 on:
   push:
@@ -48,3 +50,30 @@ jobs:
           name: test-logs
           path: tests/logs/
           if-no-files-found: ignore
+  firefox:
+    name: Firefox (${{ matrix.firefox }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        firefox: [esr, '140']
+    defaults:
+      run:
+        working-directory: tests
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Install test dependencies
+        run: npm ci
+      - name: Download Firefox
+        run: firefox/get-firefox.sh ${{ matrix.firefox }}
+      - name: Firefox suite
+        # Builds build/firefox from this commit (tools/build.js) and tests it. GitHub's runners are slower
+        # than a desktop: every wait gets 3 times its deadline.
+        env:
+          WAIT_SCALE: 3
+          FXBIN: ${{ github.workspace }}/tests/.firefox/${{ matrix.firefox }}/firefox/firefox
+        run: node firefox/run.js

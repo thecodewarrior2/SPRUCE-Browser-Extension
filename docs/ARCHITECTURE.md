@@ -332,15 +332,26 @@ phishing-training rules, a simpler popup, and hiding the Donate button. The full
 
 ## 12. The three builds
 
-| | Chrome and Edge (`main`) | Firefox (`firefox`) | Safari (`safari`) |
-|---|---|---|---|
-| Background | service worker | background page | background page |
-| Policy | managed storage (schema.json) | policies.json → 3rdparty | none |
-| QR scanner | offscreen document | hidden page | hidden page |
-| Package | `tools/build-webstore.sh` | the branch as a zip | `tools/build-safari.sh` (Xcode app) |
+All three are built from the same files by `tools/build.js`. The top-level `manifest.json` is the Chrome
+one, so the repository itself loads in Chrome as it is; the Firefox and Safari manifests are made from it
+by the build, so a permission or a site added for one browser is added for all of them.
 
-The engine and every check are the same code; each release is made on `main` and carried to the other
-two branches.
+| | Chrome and Edge | Firefox | Safari |
+|---|---|---|---|
+| Background | `background.js` as a service worker | `background.html` (event page) | `background.html` (non-persistent page) |
+| QR scanner | offscreen document (`scanner.html`) | `scanner.js` in the background page | `scanner.js` in the background page |
+| Policy | managed storage (`schema.json`) | `policies.json` → `3rdparty` | none |
+| Managing other extensions | yes (asked first) | only when installed by policy | no |
+| Package | `node tools/build.js chrome` | `node tools/build.js firefox` | `tools/build-safari.sh` (Xcode app, on a Mac) |
+
+The code tells the browsers apart in two ways. At run time, `BROWSER` (in `shared.js`, from the extension's
+own address: `chrome-extension://`, `moz-extension://` or `safari-web-extension://`) picks the few code
+paths that differ — whether `background.js` loads the shared files itself (`importScripts`, Chrome) or
+`background.html` loads them, and whether the QR scanner is an offscreen document or runs in the background
+page. In the extension's own pages, passages written for one browser are marked `data-only="chrome"`
+(or `firefox`, `safari`, several at once); `shared.js` removes the other browsers' versions before the
+page's scripts run, and `theme.css` keeps marked passages hidden until then. Settings → Help therefore shows
+each browser its own deployment steps.
 
 ## 13. Testing
 

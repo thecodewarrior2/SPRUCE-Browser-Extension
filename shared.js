@@ -1,11 +1,37 @@
-// shared.js — loaded by the service worker (importScripts), the Gmail content script,
-// the popup and the options page, so every part of the extension uses ONE definition of
-// settings, domain lists and link-analysis rules.
+// shared.js — loaded by the background (Chrome's service worker, through importScripts; the background
+// page in Firefox and Safari), the webmail content script, the popup and the options page, so every
+// part of the extension uses ONE definition of settings, domain lists and link-analysis rules.
+
+// The browser this copy runs in, from its own address (chrome-extension://, moz-extension://,
+// safari-web-extension://). The same files are used for every browser; the few places that differ
+// (the background, the QR scanner's host, policy, managing other extensions) ask this.
+// Chrome stands for every Chromium browser (Edge included).
+const BROWSER = (() => {
+    let base = '';
+    try { base = chrome.runtime.getURL(''); } catch (e) { /* no extension context */ }
+    return /^moz-extension:/.test(base) ? 'firefox' : /^safari-web-extension:/.test(base) ? 'safari' : 'chrome';
+})();
+
+// The extension's own pages (Settings, popup) hold the few passages that differ by browser in each
+// browser's version, marked data-only="chrome firefox safari" (any of them). The other browsers'
+// versions are removed here, before the page's own scripts run (shared.js is loaded first); until
+// then theme.css keeps every marked passage hidden. Never runs in a webmail page or the background.
+(function keepThisBrowsersPassages() {
+    if (typeof document === 'undefined' || !document.documentElement) return;
+    try { if (!location.href.startsWith(chrome.runtime.getURL(''))) return; } catch (e) { return; }
+    document.documentElement.dataset.browser = BROWSER;
+    document.querySelectorAll('[data-only]').forEach(el => {
+        if (el.getAttribute('data-only').split(/\s+/).includes(BROWSER)) el.setAttribute('data-shown', '');
+        else el.remove();
+    });
+})();
 
 // ---------------------------------------------------------------------------
 // SETTINGS
 // Every setting can be changed by the user (stored in chrome.storage.local) and can be
-// locked by a Google Workspace / Chrome policy (chrome.storage.managed, keys = managedKey).
+// locked by an enterprise policy (chrome.storage.managed, keys = managedKey): Google Workspace,
+// Intune or Group Policy for Chrome and Edge; policies.json, Group Policy or a macOS profile for
+// Firefox. Safari has no extension policy, so there nothing is ever locked.
 // A managed value always wins and the UI shows the setting as locked.
 // All features are ON by default.
 // ---------------------------------------------------------------------------
@@ -125,7 +151,10 @@ const SETTING_DEFS = [
 const SETTING_BY_KEY = Object.fromEntries(SETTING_DEFS.map(d => [d.key, d]));
 
 function coerceSetting(def, value) {
-    if (def.type === 'boolean') return typeof value === 'boolean' ? value : undefined;
+    if (def.type === 'boolean') {
+        if (typeof value === 'boolean') return value;
+        return value === 1 || value === 0 ? value === 1 : undefined;   // a Windows registry DWORD
+    }
     if (def.type === 'string') return typeof value === 'string' ? value.trim() : undefined;
     if (def.type === 'enum') {
         if (typeof value !== 'string') return undefined;

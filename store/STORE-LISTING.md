@@ -1,8 +1,8 @@
 # Chrome Web Store listing: S.P.R.U.C.E+
 
 Text for each field of the Chrome Web Store developer dashboard, ready to copy. The same answers work
-for Microsoft Edge Add-ons. Upload the zip made by `tools/build-webstore.sh` (from the top folder)
-(`build/spruce-<version>-webstore.zip`).
+for Microsoft Edge Add-ons. Upload `build/spruce-<version>-webstore.zip`, made by `node tools/build.js chrome`
+(from the top folder).
 
 ## Store listing tab
 

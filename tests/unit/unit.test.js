@@ -30,6 +30,8 @@ function loadBackground(local = {}, extra = {}) {
     tabs: { onUpdated: listeners(), onRemoved: listeners(), sendMessage() {} },
     action: { setIcon() {}, setBadgeText() {}, setBadgeBackgroundColor() {}, setTitle() {} }
   };
+  // extra.patchChrome(chrome): add browser APIs before the background loads (e.g. Chrome's offscreen).
+  if (typeof extra.patchChrome === 'function') extra.patchChrome(chrome);
   const fetchLog = [];
   const ctx = { chrome, console, setTimeout, clearTimeout, URL, URLSearchParams, TextDecoder, TextEncoder, AbortController, atob, btoa, Intl, BigInt,
     Blob, Response, CompressionStream, DecompressionStream, TextDecoderStream,
@@ -376,13 +378,17 @@ test('backup includes and restores the phishing-sender list', () => {
 test('every new setting is on by default and has a policy key in schema.json', () => {
   const hasSchema = fs.existsSync(path.join(EXT, 'schema.json'));
   const schema = hasSchema ? JSON.parse(fs.readFileSync(path.join(EXT, 'schema.json'), 'utf8')) : null;
-  let example = JSON.parse(fs.readFileSync(path.join(EXT, 'docs', 'policy-example.json'), 'utf8'));
-  if (example.policies) example = example.policies['3rdparty'].Extensions['spruce@spruce-browser-extension'];
+  const example = JSON.parse(fs.readFileSync(path.join(EXT, 'docs', 'policy-example.json'), 'utf8'));
+  const ffFile = JSON.parse(fs.readFileSync(path.join(EXT, 'docs', 'policy-example-firefox.json'), 'utf8'));
+  const ffExample = ffFile.policies['3rdparty'].Extensions['spruce@spruce-browser-extension'];
   for (const d of S('SETTING_DEFS')) {
     if (schema) assert.ok(schema.properties[d.managedKey], 'schema: ' + d.managedKey);
-    if (/Sender|Spam/.test(d.managedKey)) assert.ok(d.managedKey in example, 'example: ' + d.managedKey);
+    if (/Sender|Spam/.test(d.managedKey)) {
+      assert.ok(d.managedKey in example, 'Chrome example: ' + d.managedKey);
+      assert.ok(d.managedKey in ffExample, 'Firefox example: ' + d.managedKey);
+    }
   }
-  assert.ok(!('managedPhishingSenders' in example));
+  assert.ok(!('managedPhishingSenders' in example) && !('managedPhishingSenders' in ffExample));
   for (const k of ['enableSenderIdentity', 'enableSenderCountry', 'enableSenderDomainCheck', 'enableSenderAddressCheck', 'enableAutoSpam', 'enableSpamNotice']) assert.equal(S('SETTING_BY_KEY')[k].def, true, k);
   if (schema) assert.ok(!schema.properties.managedPhishingSenders && schema.properties.managedTrustedSenders);
 });
@@ -1122,4 +1128,64 @@ test('list sync throttle: a numeric lastSyncTime within a day skips; the pre-5.8
   assert.notEqual(r2.fresh, true, 'the old stored string never skips the download');
   // The failed sync (offline here) changes nothing; only a successful one writes the new number.
   assert.equal(typeof b2.__store.lastSyncTime, 'string', 'untouched by a failed download');
+});
+
+// ---------------------------------------------------------------------------
+// One codebase for every browser: the generated manifests, browser detection, the background's two
+// ways of hosting the QR scanner.
+// ---------------------------------------------------------------------------
+test('build: Firefox and Safari manifests come from the Chrome one, with only their known differences', () => {
+  const { manifestFor, BROWSERS } = require(path.join(EXT, 'tools', 'build.js'));
+  const chrome = JSON.parse(fs.readFileSync(path.join(EXT, 'manifest.json'), 'utf8'));
+  assert.deepEqual(manifestFor('chrome', chrome), chrome, 'Chrome uses manifest.json as it is');
+  const ff = manifestFor('firefox', chrome), sf = manifestFor('safari', chrome);
+  for (const [name, m] of [['firefox', ff], ['safari', sf]]) {
+    assert.ok(!('key' in m) && !('storage' in m), `${name}: no Chrome key, no Chrome policy schema`);
+    assert.deepEqual(m.background, name === 'firefox' ? { page: 'background.html' } : { page: 'background.html', persistent: false });
+    assert.deepEqual(m.permissions, chrome.permissions.filter(p => p !== 'offscreen'), `${name}: the same permissions, minus offscreen`);
+    assert.deepEqual(m.host_permissions, chrome.host_permissions, `${name}: the same sites`);
+    assert.deepEqual(m.content_scripts.map(c => c.matches), chrome.content_scripts.map(c => c.matches), `${name}: the same webmail`);
+    assert.equal(m.version, chrome.version);
+    for (const f of BROWSERS[name].without) assert.ok(!JSON.stringify(m).includes(`"${f}"`), `${name}: refers to no left-out file (${f})`);
+  }
+  assert.equal(ff.browser_specific_settings.gecko.id, 'spruce@spruce-browser-extension');
+  assert.ok(ff.content_scripts.some(c => c.match_origin_as_fallback), 'Firefox (128+) runs in sandboxed message frames too');
+  assert.deepEqual(ff.optional_permissions, chrome.optional_permissions, 'Firefox can manage other add-ons (asked first)');
+  assert.ok(!('optional_permissions' in sf), 'Safari has no management API');
+  assert.ok(sf.content_scripts.every(c => !('match_origin_as_fallback' in c)), 'Safari before 18.4 lacks match_origin_as_fallback');
+  assert.equal(sf.browser_specific_settings.safari.strict_min_version, '18.2');
+  // Every file a manifest names is in the repository.
+  for (const m of [chrome, ff, sf]) {
+    const named = [m.background.service_worker, m.background.page, m.action.default_popup, m.options_ui.page,
+      ...Object.values(m.icons), ...Object.values(m.action.default_icon), ...m.content_scripts.flatMap(c => [...(c.js || []), ...(c.css || [])])].filter(Boolean);
+    for (const f of named) assert.ok(fs.existsSync(path.join(EXT, f)), `${f} exists`);
+  }
+});
+
+test('BROWSER is told from the extension\'s own address', () => {
+  for (const [base, want] of [['chrome-extension://abc/', 'chrome'], ['moz-extension://1234/', 'firefox'], ['safari-web-extension://5678/', 'safari']]) {
+    const ctx = { chrome: { runtime: { getURL: (p) => base + p } }, console };
+    vm.createContext(ctx);
+    vm.runInContext(fs.readFileSync(path.join(EXT, 'shared.js'), 'utf8') + '\n;globalThis.__b = BROWSER;', ctx);
+    assert.equal(ctx.__b, want, base);
+  }
+});
+
+test('QR scanner: Chrome asks its offscreen document; Firefox and Safari call the scanner in the background page', async () => {
+  // Chrome: chrome.offscreen exists, so the document is created and asked through a message.
+  const created = [], sent = [];
+  const b = loadBackground({}, { patchChrome: (c) => {
+    c.offscreen = { createDocument: async (o) => { created.push(o.url); }, closeDocument: async () => {} };
+    c.runtime.getContexts = async () => [];
+    c.runtime.sendMessage = async (m) => { sent.push(m.target); return { ok: true, codes: [{ text: 'https://a.example/' }] }; };
+  } });
+  assert.equal(vm.runInContext('SCANNER_OFFSCREEN', b), true);
+  const r1 = await vm.runInContext('scanForQr({ b64: "AA==", mime: "image/png" })', b);
+  assert.deepEqual([created, sent, r1.codes[0].text], [['scanner.html'], ['scanner'], 'https://a.example/']);
+  // Firefox and Safari: no chrome.offscreen; scanner.js registers its scan function with the background.
+  const b2 = loadBackground({});
+  assert.equal(vm.runInContext('SCANNER_OFFSCREEN', b2), false, 'without chrome.offscreen the background page hosts the scanner');
+  vm.runInContext('registerLocalScanner(async (job) => ({ ok: true, codes: [{ text: job.mime }] }))', b2);
+  const r2 = await vm.runInContext('scanForQr({ b64: "AA==", mime: "application/pdf" })', b2);
+  assert.equal(r2.codes[0].text, 'application/pdf', 'the job reached the local scanner');
 });

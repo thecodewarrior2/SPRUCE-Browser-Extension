@@ -38,8 +38,11 @@ Every feature in detail, and which webmail supports what: [docs/FEATURES.md](doc
   [releases page](https://github.com/thecodewarrior2/SPRUCE-Browser-Extension/releases) and follow
   [docs/INSTALL-FOR-TESTERS.md](docs/INSTALL-FOR-TESTERS.md).
 - **Firefox (desktop):** once it is published, from addons.mozilla.org; the releases page also has the
-  Mozilla-signed `.xpi`.
-- **Safari:** not available as a download yet (the source is on the `safari` branch).
+  Mozilla-signed `.xpi`. To try a test version, see the same install guide.
+- **Safari:** not available as a download yet. It is built from this repository on a Mac
+  (`tools/build-safari.sh`, or the **Safari build** workflow on GitHub); see the install guide.
+
+Every browser's version is built from the same files in this repository (`node tools/build.js`).
 
 ## Documentation
 

@@ -1,11 +1,12 @@
 # What S.P.R.U.C.E+ does
 
-Every feature, in detail, for the Chrome and Edge build. S.P.R.U.C.E+ is a helper, not a guarantee: it makes a best effort to point out warning signs, but it can
+Every feature, in detail, for Chrome and Edge, Firefox (desktop) and Safari; where a browser differs, it says so. S.P.R.U.C.E+ is a helper, not a guarantee: it makes a best effort to point out warning signs, but it can
 miss dangerous emails and links, and it can flag genuine ones. Keep your webmail's own spam filtering,
 your organization's email security and your own judgment.
 
-Each feature has its own switch in Settings, and organizations can set or lock any of them
-(see the [admin guide](ADMIN-GUIDE.md)). What leaves your device, and to whom, is in the [privacy policy](../PRIVACY.md).
+Each feature has its own switch in Settings, and organizations can set or lock any of them in Chrome,
+Edge and Firefox (see the [admin guide](ADMIN-GUIDE.md); Safari has no extension policies, so there
+settings can't be locked). What leaves your device, and to whom, is in the [privacy policy](../PRIVACY.md).
 
 ## Contents
 
@@ -90,7 +91,8 @@ Each feature has its own switch in Settings, and organizations can set or lock a
   if the check can't finish.
 - **Privacy levels.** *Standard*, *Private* (no link sent to any lookup service; site names still
   go to the DNS threat filters) or *Offline only* (nothing leaves the browser). Every feature can
-  be switched off individually, and every one can be set and locked by your administrator.
+  be switched off individually, and every one can be set and locked by your administrator (Chrome, Edge
+  and Firefox; Safari has no extension policies).
 
 ## The toolbar button
 
@@ -108,7 +110,7 @@ Clicking the S.P.R.U.C.E+ button in the browser toolbar shows:
   checked and the page shows no sign of it, so the button says so, with **Allow on mail.google.com**
   (or the webmail's own address): one click asks the browser for access again and reloads the tab.
 
-Organizations can hide **Open Settings** and **Recent activity** (see the admin guide).
+Organizations can hide **Open Settings** and **Recent activity** (see the admin guide; not in Safari).
 
 ## Settings
 
@@ -139,7 +141,8 @@ Settings your organization set by policy show a 🔒 and can't be changed; the r
   days, or **Delete everything now**. Nothing is synced or uploaded.
 - **Backup**: **Back up** saves the settings you changed and your lists to a file (API keys are never
   included); **Restore…** shows exactly what will change before anything does. **Copy as policy JSON** turns your current settings into a policy for Google Workspace or Microsoft
-  Intune (see the [admin guide](ADMIN-GUIDE.md)).
+  Intune (in Firefox: **Copy policies.json** and a script for Intune or Group Policy; see the
+  [admin guide](ADMIN-GUIDE.md)). Safari has no extension policies: share a backup instead.
 
 ## Link Inspector
 
@@ -168,6 +171,8 @@ troubleshooting, limitations, deploying in organizations, an architecture deep d
 settings reference and the state of this installation, the permissions it asks for, and **About**
 (credits, license, accessibility). About has a small **Donate** button, which organizations can
 hide by policy.
+
+In Safari the two phishing-simulation rows don't apply: their rules are set by policy, which Safari doesn't have.
 
 ## Feature compatibility
 

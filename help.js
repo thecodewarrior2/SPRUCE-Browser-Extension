@@ -148,45 +148,58 @@
 
     function renderStatic() {
         renderEngine();
+        // The few rows that differ by browser (see BROWSER in shared.js): where the background runs, the
+        // QR scanner's host, the policy schema.
+        const chrome_ = BROWSER === 'chrome';
+        const NAME = { chrome: 'Chrome', firefox: 'Firefox', safari: 'Safari' }[BROWSER];
+        const bg = chrome_ ? 'service worker' : 'background page', to = chrome_ ? 'worker' : 'background';
+        const only = (cond, row) => (cond ? [row] : []);
         fill('archFiles', table(['File', 'Runs in', 'Responsibility'], [
-            [code('manifest.json'), 'Chrome', 'Manifest V3: permissions, service worker, content script, policy schema.'],
+            [code('manifest.json'), NAME, { chrome: 'Manifest V3: permissions, service worker, content script, policy schema.',
+                firefox: 'Manifest V3: add-on ID, permissions, background page, content scripts (made from the Chrome manifest by tools/build.js).',
+                safari: 'Manifest V3: permissions, background page, content scripts (made from the Chrome manifest by tools/build.js), wrapped in a Mac or iPhone/iPad app by Apple\'s converter.' }[BROWSER]],
+            ...only(!chrome_, [code('background.html'), 'background page', 'Loads the background scripts and the scanner (event page).']),
             [code('shared.js'), 'everywhere', 'Settings model and policy merging, domain lists, one-time detection, misleading-link checks, backup/restore, shared constants.'],
             [code('content.js'), 'webmail tab', 'Finds opened messages, sends links for analysis, rewrites and marks links, blocks pixels, reveal flow, error reporting. Its mail engine reads the inbox list, senders, toolbar and compose window of any webmail from that site\'s entry in WEBMAIL_SITES (shared.js): one code path for every site, Gmail included.'],
-            [code('qr-decoder.js'), 'scanner', 'Self-contained QR Code reader (ISO/IEC 18004): finder patterns, perspective correction, Reed-Solomon. Used where Chrome has no built-in BarcodeDetector.'],
-            [code('scanner.html / scanner.js'), 'hidden offscreen document', 'Decodes QR codes in images and PDF pages and lists PDF links; created on demand, closed after a minute idle.'],
+            [code('qr-decoder.js'), 'scanner', chrome_ ? 'Self-contained QR Code reader (ISO/IEC 18004): finder patterns, perspective correction, Reed-Solomon. Used where Chrome has no built-in BarcodeDetector.'
+                : 'Self-contained QR Code reader (ISO/IEC 18004): finder patterns, perspective correction, Reed-Solomon.'],
+            chrome_ ? [code('scanner.html / scanner.js'), 'hidden offscreen document', 'Decodes QR codes in images and PDF pages and lists PDF links; created on demand, closed after a minute idle.']
+                : [code('scanner.js'), 'background page', 'Decodes QR codes in images and PDF pages and lists PDF links.'],
+            [code('compat.js'), 'scanner', 'Small shims for JavaScript features pdf.js uses that older browsers lack.'],
             [code('lib/pdf.min.mjs, lib/pdf.worker.min.mjs'), 'scanner', 'pdf.js (Mozilla, Apache-2.0) for rendering PDF attachments.'],
             [code('content.css'), 'Gmail tab', 'Shows the 🔍 on email tracking links only while the link is hovered or focused; styles the sender icons, domain labels, the moved-to-Spam notice and the "Moving to Spam…" row guard.'],
-            [code('background.js'), 'service worker', 'Link pipeline, threat checks, lookups, list sync and safeguards, logging, cleanup, message API, badge.'],
-            [code('decoders.js'), 'service worker, Options', 'All offline decoders and the unwrapping loop.'],
-            [code('custom-endpoints.js'), 'service worker', 'Request building and reply parsing for your own threat resolver and unshortener.'],
+            [code('background.js'), bg, 'Link pipeline, threat checks, lookups, list sync and safeguards, logging, cleanup, message API, badge.'],
+            [code('decoders.js'), `${bg}, Options`, 'All offline decoders and the unwrapping loop.'],
+            [code('custom-endpoints.js'), bg, 'Request building and reply parsing for your own threat resolver and unshortener.'],
             [code('options.html / options.js'), 'Options page', 'Settings, Link Inspector, Logging (application log, history, URL cache), backup/restore.'],
             [code('help.js'), 'Options page', 'This Help tab and its live tables.'],
             [code('theme.js'), 'Options page, popup', 'Light/dark appearance: follows the system by default and remembers the user\'s choice.'],
             [code('popup.html / popup.js'), 'toolbar popup', 'Counts for the open message, visual toggle, recent activity.'],
-            [code('schema.json'), 'Chrome policy', 'Google Workspace policy schema (every managed key).'],
-            [code('shortener-snapshot.txt'), 'service worker', 'Bundled shortener list used before the first download.'],
-            [code('icons/'), 'Chrome', 'Toolbar and extension-page icons (16, 32, 48, 128 px).'],
+            ...only(chrome_, [code('schema.json'), 'Chrome policy', 'Google Workspace policy schema (every managed key).']),
+            [code('shortener-snapshot.txt'), bg, 'Bundled shortener list used before the first download.'],
+            [code('icons/'), NAME, 'Toolbar and extension-page icons (16, 32, 48, 128 px).'],
+            [code('tools/build.js'), 'your computer (Node)', 'Builds the Chrome, Firefox and Safari packages from these same files.'],
             [code('tools/refresh-snapshot.js'), 'your computer (Node)', 'Optional: refreshes the bundled snapshot before packaging.']
         ]));
 
         fill('archMessages', table(['Message', 'From → to', 'Purpose'], [
-            [code('getSettings'), 'Gmail → worker', 'Effective settings (user values merged with policy) and lists.'],
-            [code('resolveUrl'), 'Gmail → worker', 'Analyze one link ({url, linkText, reveal}); returns destination, verdict, notes, and whether a 🔍 reveal can be offered.'],
-            [code('logPixel'), 'Gmail → worker', 'Record a blocked tracking pixel in History.'],
-            [code('checkSenders'), 'Gmail → worker', 'Sender checks for the inbox list and opened emails ({senders, ownDomain}); returns status (flagged, caution, clean, trusted, unverified, unknown), reasons, whether to move to Spam, and the country.'],
-            [code('senderCountry'), 'Gmail → worker', 'Country of the server that delivered an email (IP from the email\'s headers).'],
-            [code('recordSpamMoves'), 'Gmail → worker', 'Remember conversations moved to Spam or taken out of it (never moved again) and log moves, failed moves and rescues.'],
-            [code('senderIcon'), 'Gmail → worker', 'A sender site\'s icon as a data: URL, or none; fetched once and remembered.'],
-            [code('updateBadge'), 'Gmail → worker', 'Per-tab count on the toolbar button.'],
-            [code('logEvent'), 'Gmail, pages → worker', 'Write an application log entry (accepted only from this extension).'],
-            [code('testUnwrap'), 'Options → worker', 'Link Inspector: the pipeline without caching or logging, with explanations.'],
-            [code('testResolver / testCustomThreat / testCustomUnshortener'), 'Options → worker', 'Resolver test buttons.'],
-            [code('forceSync'), 'Options → worker', 'Settings → "Update now": run the list update immediately.'],
+            [code('getSettings'), `Gmail → ${to}`, 'Effective settings (user values merged with policy) and lists.'],
+            [code('resolveUrl'), `Gmail → ${to}`, 'Analyze one link ({url, linkText, reveal}); returns destination, verdict, notes, and whether a 🔍 reveal can be offered.'],
+            [code('logPixel'), `Gmail → ${to}`, 'Record a blocked tracking pixel in History.'],
+            [code('checkSenders'), `Gmail → ${to}`, 'Sender checks for the inbox list and opened emails ({senders, ownDomain}); returns status (flagged, caution, clean, trusted, unverified, unknown), reasons, whether to move to Spam, and the country.'],
+            [code('senderCountry'), `Gmail → ${to}`, 'Country of the server that delivered an email (IP from the email\'s headers).'],
+            [code('recordSpamMoves'), `Gmail → ${to}`, 'Remember conversations moved to Spam or taken out of it (never moved again) and log moves, failed moves and rescues.'],
+            [code('senderIcon'), `Gmail → ${to}`, 'A sender site\'s icon as a data: URL, or none; fetched once and remembered.'],
+            [code('updateBadge'), `Gmail → ${to}`, 'Per-tab count on the toolbar button.'],
+            [code('logEvent'), `Gmail, pages → ${to}`, 'Write an application log entry (accepted only from this extension).'],
+            [code('testUnwrap'), `Options → ${to}`, 'Link Inspector: the pipeline without caching or logging, with explanations.'],
+            [code('testResolver / testCustomThreat / testCustomUnshortener'), `Options → ${to}`, 'Resolver test buttons.'],
+            [code('forceSync'), `Options → ${to}`, 'Settings → "Update now": run the list update immediately.'],
             [code('toggleVisuals'), 'popup → Gmail', 'Switch the visual link highlights in the open tab.'],
-            [code('getTabState'), 'popup → worker', 'Counts and link statistics for the active tab, and what the spam mover is waiting for.']
+            [code('getTabState'), `popup → ${to}`, 'Counts and link statistics for the active tab, and what the spam mover is waiting for.']
         ]));
 
-        fill('archStorage', table(['Key (chrome.storage.local)', 'Contents'], [
+        fill('archStorage', table([chrome_ ? 'Key (chrome.storage.local)' : 'Key (storage.local)', 'Contents'], [
             [code('<setting keys>'), 'Only settings you changed; defaults are not stored. See the settings reference.'],
             [code('customAllowlist / customBlocklist'), 'Your site lists (organization lists come from policy and are merged at read time).'],
             [code('customTrustedSenders'), 'Your trusted senders (addresses or domains), never flagged or moved to Spam; the organization\'s list (managedTrustedSenders) is merged at read time.'],
@@ -204,16 +217,18 @@
             [code('listState'), 'List sync state per source: {active[], pending{domain: {count, last}}, lastSuccess}, plus fallback and syncDisabledSince.'],
             [code('remoteShorteners'), 'The combined list of synced shortener domains currently in use.'],
             [code('lastSyncTime / cacheSchema / welcomeDismissed'), 'Bookkeeping.'],
-            [code('chrome.storage.managed'), 'Read-only: Google Workspace policy (managed… keys).']
+            { chrome: [code('chrome.storage.managed'), 'Read-only: Google Workspace policy (managed… keys).'],
+              firefox: [code('storage.managed'), 'Read-only: Firefox enterprise policy (managed… keys).'],
+              safari: [code('storage.managed'), 'Not available in Safari (no extension policies); read as empty.'] }[BROWSER]
         ]));
 
         fill('archPlatform',
-            el('p', null, el('b', null, 'Chrome extension APIs: '),
-               'storage (local, managed, onChanged), alarms (daily list update and cleanup), runtime (messaging, install/update events, packaged files), action (toolbar badge), tabs (popup → Gmail tab), permissions (one-host access for your own services).'),
+            el('p', null, el('b', null, chrome_ ? 'Chrome extension APIs: ' : 'WebExtension APIs: '),
+               (BROWSER === 'safari' ? 'storage (local, onChanged; managed is read but Safari has none)' : 'storage (local, managed, onChanged)') + ', alarms (daily list update and cleanup), runtime (messaging, install/update events, packaged files), action (toolbar badge), tabs (popup → Gmail tab), permissions (one-host access for your own services).'),
             el('p', null, el('b', null, 'Web platform: '),
                'fetch with AbortController timeouts, MutationObserver, URL and URLSearchParams, atob/btoa (base64), DataView (DNS wire format, RFC 8484), BigInt (Flickr base-58), the Clipboard API.'),
             el('p', null, el('b', null, 'Third-party code: '),
-               'none. No libraries, frameworks, build tools, remote scripts or analytics; Manifest V3 forbids remote code in any case.'));
+               'only pdf.js (Mozilla, bundled in lib/) for PDF attachments. No frameworks, build tools, remote scripts or analytics; Manifest V3 forbids remote code in any case.'));
     }
 
     async function renderLive(cfg) {
@@ -324,12 +339,12 @@
             `Identical messages within ${fmtMs(LOG_DEDUPE_MS)} are merged with a count.`,
             `Limits: ${MAX_ERROR_LOGS} log entries, ${MAX_HISTORY} history entries, ${MAX_ACTIVITY} popup activity entries; all are also deleted after the auto-delete period (${S.retentionDays} days now).`,
             'Error messages contain only a link\'s origin (https://host/…), never its path or query. History keeps full links except one-time links, which are redacted.',
-            'Uncaught errors in the service worker, Options page and popup are captured; from Gmail only this extension\'s own failures are reported.'
+            `Uncaught errors in the ${BROWSER === 'chrome' ? 'service worker' : 'background page'}, Options page and popup are captured; from Gmail only this extension's own failures are reported.`
         ]));
 
         // Settings reference
         const typeText = (d) => d.type === 'integer' ? `integer ${d.min}–${d.max}` : d.type === 'enum' ? d.values.join(' | ') : d.type;
-        fill('archSettings', table(['Setting', 'Policy key', 'Type', 'Default', 'Now'], SETTING_DEFS.map(d => [
+        fill('archSettings', table(['Setting', BROWSER === 'safari' ? 'Policy key (Chrome, Firefox)' : 'Policy key', 'Type', 'Default', 'Now'], SETTING_DEFS.map(d => [
             code(d.key), code(d.managedKey), typeText(d), d.def === '' ? '(empty)' : String(d.def),
             d.secret ? (S[d.key] ? '•••••• (hidden)' : '(empty)') + (cfg.locked[d.key] ? ' 🔒' : '')
                      : (S[d.key] === '' ? '(empty)' : String(S[d.key])) + (cfg.locked[d.key] ? ' 🔒' : '')

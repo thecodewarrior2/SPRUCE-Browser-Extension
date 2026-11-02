@@ -1,5 +1,5 @@
 // content.js — runs inside each supported webmail (isolated world). Watches for opened messages, sends
-// each link to the service worker for analysis, then rewrites or marks it; blocks tracking pixels;
+// each link to the background for analysis, then rewrites or marks it; blocks tracking pixels;
 // handles the 🔍 reveal; reads senders, the inbox list and the toolbar through the shared mail engine
 // (one code path for every webmail, driven by its WEBMAIL_SITES entry); reports its own failures to
 // the application log. Never reports the webmail's own errors.
@@ -391,14 +391,38 @@ function trackWork(promise) {
     return promise;
 }
 
-const DANGER_SVG = `<svg width="22" height="22" viewBox="0 0 24 24" style="vertical-align: middle; display: inline-block;"><polygon points="7,2 17,2 22,7 22,17 17,22 7,22 2,17 2,7" fill="#d93025" stroke="#ffffff" stroke-width="1.5"/><path d="M12,6.5 L12,12.5" stroke="#ffd700" stroke-width="2.5" stroke-linecap="round"/><circle cx="12" cy="16.5" r="1.5" fill="#ffd700"/></svg>`;
+// Link marker icons as [size, extra <svg> attributes, [tag, attributes]…]; built with DOM calls, never
+// parsed from markup. Dangerous link: red octagon with a yellow "!".
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const DANGER_SVG = [22, {}, [
+    ['polygon', { points: '7,2 17,2 22,7 22,17 17,22 7,22 2,17 2,7', fill: '#d93025', stroke: '#ffffff', 'stroke-width': '1.5' }],
+    ['path', { d: 'M12,6.5 L12,12.5', stroke: '#ffd700', 'stroke-width': '2.5', 'stroke-linecap': 'round' }],
+    ['circle', { cx: '12', cy: '16.5', r: '1.5', fill: '#ffd700' }]]];
 // Suspicious but not dangerous (text shows another site, raw IP…): amber warning triangle.
-const CAUTION_SVG = `<svg width="20" height="20" viewBox="0 0 24 24" style="vertical-align: middle; display: inline-block;" aria-hidden="true"><path d="M12 2.5 L22.5 21 H1.5 Z" fill="#f9ab00" stroke="#5f3b00" stroke-width="1.2" stroke-linejoin="round"/><rect x="11" y="9" width="2" height="6.5" rx="1" fill="#202124"/><circle cx="12" cy="18" r="1.2" fill="#202124"/></svg>`;
+const CAUTION_SVG = [20, { 'aria-hidden': 'true' }, [
+    ['path', { d: 'M12 2.5 L22.5 21 H1.5 Z', fill: '#f9ab00', stroke: '#5f3b00', 'stroke-width': '1.2', 'stroke-linejoin': 'round' }],
+    ['rect', { x: '11', y: '9', width: '2', height: '6.5', rx: '1', fill: '#202124' }],
+    ['circle', { cx: '12', cy: '18', r: '1.2', fill: '#202124' }]]];
 // Blocklisted link with a hidden destination: magnifier on a red disc. Click = "reveal?" prompt.
-const REVEAL_SVG = `<svg width="22" height="22" viewBox="0 0 24 24" style="vertical-align: middle; display: inline-block;"><circle cx="12" cy="12" r="11" fill="#d93025" stroke="#ffffff" stroke-width="1.5"/><circle cx="10.5" cy="10.5" r="4.2" fill="none" stroke="#ffffff" stroke-width="2"/><path d="M13.6,13.6 L17.5,17.5" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round"/><path d="M10.5,8.6 L10.5,10.9 M10.5,12.4 L10.5,12.5" stroke="#ffd700" stroke-width="1.8" stroke-linecap="round"/></svg>`;
+const REVEAL_SVG = [22, {}, [
+    ['circle', { cx: '12', cy: '12', r: '11', fill: '#d93025', stroke: '#ffffff', 'stroke-width': '1.5' }],
+    ['circle', { cx: '10.5', cy: '10.5', r: '4.2', fill: 'none', stroke: '#ffffff', 'stroke-width': '2' }],
+    ['path', { d: 'M13.6,13.6 L17.5,17.5', stroke: '#ffffff', 'stroke-width': '2.4', 'stroke-linecap': 'round' }],
+    ['path', { d: 'M10.5,8.6 L10.5,10.9 M10.5,12.4 L10.5,12.5', stroke: '#ffd700', 'stroke-width': '1.8', 'stroke-linecap': 'round' }]]];
 
 // Email tracking link: small blue magnifier, shown when the link is hovered (see content.css).
-const TRACKER_REVEAL_SVG = `<svg width="16" height="16" viewBox="0 0 24 24" style="vertical-align: middle; display: inline-block;"><circle cx="12" cy="12" r="11" fill="#1a73e8" stroke="#ffffff" stroke-width="1.5"/><circle cx="10.5" cy="10.5" r="4.2" fill="none" stroke="#ffffff" stroke-width="2"/><path d="M13.6,13.6 L17.5,17.5" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round"/></svg>`;
+const TRACKER_REVEAL_SVG = [16, {}, [
+    ['circle', { cx: '12', cy: '12', r: '11', fill: '#1a73e8', stroke: '#ffffff', 'stroke-width': '1.5' }],
+    ['circle', { cx: '10.5', cy: '10.5', r: '4.2', fill: 'none', stroke: '#ffffff', 'stroke-width': '2' }],
+    ['path', { d: 'M13.6,13.6 L17.5,17.5', stroke: '#ffffff', 'stroke-width': '2.4', 'stroke-linecap': 'round' }]]];
+
+function buildSvg([size, attrs, shapes]) {
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    const set = (el, a) => { for (const [k, v] of Object.entries(a)) el.setAttribute(k, v); };
+    set(svg, Object.assign({ width: String(size), height: String(size), viewBox: '0 0 24 24', style: 'vertical-align: middle; display: inline-block;' }, attrs));
+    for (const [tag, a] of shapes) { const el = document.createElementNS(SVG_NS, tag); set(el, a); svg.appendChild(el); }
+    return svg;
+}
 
 let lastSettings = {};
 let lastPolicy = {};    // administrator-only policies (phishing simulation rules…)   // settings used for the most recent scan (needed when a link is revealed later)
@@ -452,7 +476,7 @@ function setIcon(link, kind, title) {
         icon.style.marginLeft = '4px';
         icon.style.cursor = '';
     } else {
-        icon.innerHTML = kind === 'danger' ? DANGER_SVG : kind === 'caution' ? CAUTION_SVG : kind === 'trackreveal' ? TRACKER_REVEAL_SVG : REVEAL_SVG; // static markup only
+        icon.replaceChildren(buildSvg(kind === 'danger' ? DANGER_SVG : kind === 'caution' ? CAUTION_SVG : kind === 'trackreveal' ? TRACKER_REVEAL_SVG : REVEAL_SVG));
         icon.style.marginLeft = kind === 'trackreveal' ? '3px' : '6px';
         icon.style.cursor = 'pointer';
     }
@@ -3111,7 +3135,8 @@ function applyRowHighlighter(S) {
 
 // --- Other extensions that do the same job ---------------------------------------------------------
 // Found from what they add to the page: their own resources (a "chrome-extension://<id>/…" image or
-// stylesheet, which names the extension; matched against OVERLAPPING_EXTENSIONS) and their effects
+// stylesheet, which names the extension; matched against OVERLAPPING_EXTENSIONS. In Firefox and Safari
+// the address holds a random per-install UUID instead, so there only the effects tell) and their effects
 // (sender icons or photos in inbox rows that aren't ours). Each one found is reported to the
 // background (shown in Settings → Other extensions), and a notice offers the fixes: turn the other
 // one off (recommended: ours also checks senders for phishing), turn our matching feature off, or
@@ -3125,13 +3150,13 @@ function detectConflicts(S) {
     if (!S.enableConflictWarnings || Date.now() - conflictsCheckedAt < 20000) return;
     conflictsCheckedAt = Date.now();
     const found = new Map();                                          // key → { key, name, does, features, via }
-    const ownId = chrome.runtime.id;
+    const ownId = chrome.runtime.id, ownHost = new URL(chrome.runtime.getURL('')).host;   // Firefox, Safari: a per-install UUID
     // 1. Resources another extension added to the page.
     const urls = [...document.querySelectorAll('[src*="-extension://"], [href*="-extension://"]')].map(e => e.getAttribute('src') || e.getAttribute('href') || '');
     for (const sh of document.styleSheets) { try { if (sh.href) urls.push(sh.href); } catch (e) { /* ignore */ } }
     for (const u of urls) {
-        const m = /^(?:chrome|moz)-extension:\/\/([^/]+)\//i.exec(u);
-        if (!m || m[1] === ownId) continue;
+        const m = /^(?:chrome|moz|safari-web)-extension:\/\/([^/]+)\//i.exec(u);
+        if (!m || m[1] === ownId || m[1] === ownHost) continue;
         const known = OVERLAPPING_EXTENSIONS.find(x => x.ids.includes(m[1]));
         if (known) found.set(known.ids[0], { key: known.ids[0], name: known.name, does: known.does, features: known.features, via: 'page' });
     }

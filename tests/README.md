@@ -29,12 +29,13 @@ suite on each push to `testing` and `main`; when it fails, the logs are under th
 
 ### The Firefox suite
 
-`firefox/run.js` runs the **Firefox build** (the `firefox` branch) in real Firefox, through
+`firefox/run.js` runs the **Firefox build** (`build/firefox`, made from this working tree by
+`tools/build.js` each time the suite starts) in real Firefox, through
 puppeteer-core and WebDriver BiDi, on the same simulated pages: the background page and its QR/PDF
 scanner, the spam mover's clicks into Gmail, message frames, permission requests (Firefox accepts them
-only directly inside a click), site access switched off, and enterprise policy. On this branch (the
-Chrome build) it only says so and stops; on the `firefox` branch GitHub runs it on every push, in the
-current Firefox ESR and in 140 ESR, the oldest version the add-on supports. Locally (Linux):
+only directly inside a click), site access switched off, and enterprise policy. GitHub runs it on every
+push to `testing` and `main`, in the current Firefox ESR and in 140 ESR, the oldest version the add-on
+supports. Locally (Linux):
 
 ```bash
 firefox/get-firefox.sh
@@ -48,7 +49,7 @@ node firefox/run.js
 | --- | --- |
 | `firefox/get-firefox.sh 140` | Downloads 140 ESR into `.firefox/140` (default: the current ESR, `.firefox/esr`) |
 | `FXBIN=.firefox/140/firefox/firefox node firefox/run.js` | Runs in that Firefox |
-| `FXEXT=/path/to/firefox-build node firefox/run.js` | Tests another checkout of the Firefox build |
+| `FXEXT=/path/to/firefox-build node firefox/run.js` | Tests another Firefox build instead of building one |
 
 Each suite's full output is in `logs/<suite>.log`. The runner remembers how long each suite took
 (`.timings.json`) and starts the slowest first next time.

@@ -1,0 +1,35 @@
+# Builds the Safari app on a GitHub Mac (tools/build-safari.sh, which makes the Safari package with
+# tools/build.js and wraps it with Apple's converter) and offers it for download under the run's
+# Artifacts: the Mac app signed "to run locally" and the Xcode project to sign and archive.
+# Mac runners count 10× against the Actions minutes of a private repository; a build takes a few minutes.
+name: Safari build
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['**.md', 'tests/**']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build the app
+        run: tools/build-safari.sh
+      - name: Upload the Mac app
+        uses: actions/upload-artifact@v7
+        with:
+          name: safari-mac-app
+          path: build/safari/*.zip
+          if-no-files-found: error
+      - name: Upload the Xcode project and logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: safari-xcode-project
+          path: |
+            build/safari/SPRUCE/
+            build/safari/*.log
+          if-no-files-found: ignore

@@ -1,13 +1,16 @@
 // Firefox harness: runs the add-on in real Firefox (WebDriver BiDi through puppeteer-core), serves the
 // simulated webmail pages at their real addresses, and opens the add-on's own pages.
 //   FXBIN  the Firefox binary (default: tests/.firefox/esr/firefox/firefox, from get-firefox.sh)
-//   FXEXT  the add-on folder (default: this checkout)
+//   FXEXT  the Firefox build to test (default: build/firefox, made from this working tree by
+//          tools/build.js each time the suite starts)
 const fs = require('fs');
 const path = require('path');
+const { execFileSync } = require('child_process');
 const puppeteer = require('puppeteer-core');
 
 const ROOT = path.resolve(__dirname, '..', '..');
-const EXT = process.env.FXEXT || ROOT;
+if (!process.env.FXEXT) execFileSync(process.execPath, [path.join(ROOT, 'tools', 'build.js'), 'firefox', '--working-tree'], { stdio: 'ignore' });
+const EXT = process.env.FXEXT || path.join(ROOT, 'build', 'firefox');
 const E2E = path.join(__dirname, '..', 'e2e');
 const FXBIN = process.env.FXBIN || path.join(__dirname, '..', '.firefox', 'esr', 'firefox', 'firefox');
 const ADDON = 'spruce@spruce-browser-extension';
@@ -15,7 +18,7 @@ const UUID = '11111111-2222-4333-8444-555555555555';   // fixed, so the add-on's
 const BASE = `moz-extension://${UUID}`;
 const WAIT_SCALE = Number(process.env.WAIT_SCALE) || 1;
 
-// The Firefox build has a background page; the Chrome build (a service worker) can't run in Firefox.
+// The Firefox build has a background page; the Chrome one (a service worker) can't run in Firefox.
 function isFirefoxBuild() {
   const m = JSON.parse(fs.readFileSync(path.join(EXT, 'manifest.json'), 'utf8'));
   return !!(m.background && (m.background.page || m.background.scripts));

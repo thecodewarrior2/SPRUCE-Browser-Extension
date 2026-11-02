@@ -116,3 +116,7 @@ select optgroup {
     background-color: var(--surface);
     color: var(--text);
 }
+
+/* Passages written for one browser (data-only, see shared.js) stay hidden until shared.js has kept this
+   browser's and removed the others'. */
+[data-only]:not([data-shown]) { display: none !important; }

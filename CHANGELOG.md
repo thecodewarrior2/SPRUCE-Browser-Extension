@@ -1,5 +1,30 @@
 # Changelog
 
+## 5.89 — One set of files for every browser
+
+**No change in what the extension does** in Chrome, Edge or Firefox: this version changes how every
+browser's version is made. Until now Chrome and Edge, Firefox and Safari each had a branch of their own,
+changed by hand after every release; the copies drifted apart, and a fix could reach one browser weeks
+after another. Now the same files make all three:
+
+- **`node tools/build.js` builds every browser's package** — the Chrome and Edge zips, the Firefox zip
+  for addons.mozilla.org and the Safari package for Apple's converter (`tools/build-safari.sh` on a Mac).
+  The Firefox and Safari manifests are made from the Chrome one, so a permission or webmail site added
+  for one browser is added for all; a test checks every generated manifest.
+- **The code tells the browsers apart where it must:** Chrome's background is a service worker and its
+  QR scanner an offscreen document; in Firefox and Safari both run in a background page. Settings → Help
+  shows each browser its own deployment steps (Google Workspace and Intune for Chrome and Edge;
+  `policies.json`, Group Policy and macOS profiles for Firefox; app deployment for Safari).
+- **One set of documents:** the admin guide, install guide and feature list cover every browser, with
+  Firefox's policy example in `docs/policy-example-firefox.json`.
+- **Small improvements reach every browser,** from whichever branch had them: link markers and the Link
+  Inspector are built without any HTML parsing (as addons.mozilla.org requires), conflict detection
+  recognizes Safari's extension addresses, and pdf.js gets the stream shim Safari needed. Safari gets
+  all of 5.88's fixes.
+- **Tests:** GitHub runs the Firefox suite on every push, in the current ESR and 140 ESR, on the Firefox
+  package the build makes; the Safari app is built on a GitHub Mac for every release.
+- The `firefox` and `safari` branches keep their history; nothing new goes to them.
+
 ## 5.88 — Firefox: every feature checked in Firefox itself, and four fixed
 
 A review of the Firefox build in real Firefox (the current ESR and 140 ESR, the oldest version it
@@ -194,6 +219,13 @@ behaves differently, except the new notice in the toolbar button when site acces
 - **Fixed: US school and local-government domains** such as `yourdistrict.k12.fl.us` were treated as part of `fl.us`: the district's own BIMI logo wasn't found, its DMARC policy was looked up in the wrong place (so colleagues' photos were refused), and learned logos were shared across all such domains. UK school domains (`sch.uk`) and other two-level endings are fixed too.
 - **Lists stored compressed and without duplicates:** the downloaded phishing lists and the popular-sites lists are kept compressed, each entry once: Phishing Army's 150,000 domains take about 1.4 MB instead of 3.2 MB, the popular sites about 100 KB. Domains your mail verified aren't stored again when already protected.
 - New host permission `tranco-list.eu` (for the Tranco list). Installs managed by policy get it automatically; others are asked once on update.
+
+## 5.62 — First Safari build (same features as Chrome 5.62)
+
+- **Safari 18.2 or later** on macOS (and iOS/iPadOS with a build signed by your organization). The extension is the Firefox build's code with a non-persistent background page, wrapped in a small app by Apple's converter: `tools/build-safari.sh` builds it on a Mac with Xcode, and the **Safari build** GitHub workflow builds it on a GitHub Mac and offers it for download.
+- **No extension policies in Safari:** nothing can be set or locked by an administrator, so the policy buttons (Copy policies.json, Intune script) and `policy-example.json` are gone. Help → Deploying in organizations and ADMIN-GUIDE.md now describe building, signing, distributing (App Store, TestFlight or Developer ID), Apple's Safari extensions management (always on, allowed on your webmail; macOS 15, iOS 18, iPadOS 18) and sharing settings with a backup file. The policy-only options (a simpler popup, phishing-simulation rules) aren't available.
+- **Other extensions:** Safari doesn't let an extension see or turn off other extensions, so only the ones found in the webmail page are listed, with the steps to turn them off in Safari's settings.
+- **PDF scanning:** two small shims (`Map.getOrInsert`, reading a stream with `for await`) for features pdf.js uses that Safari lacks.
 
 ## 5.61 — Safer pictures, colleague photos without opening emails, address labels, and a copy button
 
@@ -419,6 +451,16 @@ From a phishing sample that wasn't caught (a fake "AHS Warranty" email): it now 
 - **New permission:** `https://api.country.is/*` (sender country). Documented in Help → Permissions.
 - **Help:** new topic *Sender icons & Spam*; updates to How it works, Your privacy (what is sent), Troubleshooting, Limitations, Deploying, Permissions and the architecture reference (messages, storage keys, network requests). README.md and ADMIN-GUIDE.md (new section *Sender icons and moving phishing to Spam*) updated.
 - **Tested** with unit tests (verdict rules, list parsing, country and view rules, background checks, backup) and browser tests of the extension on simulated Gmail inbox and conversation pages: moves only flagged emails, never twice; dialogs; the user's own selection, typing and split view; every view; each switch on and off live; trusted domains; policy-locked switches and lists; phishing-training rules; non-English labels; an address in a subject line; real DNS answers (security block moved, adult filter caution, non-existent domain unknown); real country lookups. Gmail's page structure was simulated from public information, so moving to Spam should be checked on the live site after a Gmail layout change.
+
+## 5.39 — Firefox build (branch `firefox`, based on 5.38)
+
+- **The add-on now targets Firefox 140 or later only.** The entries below describe the Chrome versions this build comes from.
+- **Background:** a background event page (`background.html`) replaces the Chrome service worker. The QR/PDF scanner (`scanner.js`) runs in that page, which already has a DOM, so the Chrome offscreen document (`scanner.html`, the `offscreen` permission) is gone. Chrome's built-in `BarcodeDetector` path is removed; the bundled QR decoder reads every code.
+- **Manifest:** a Gecko add-on ID and a data-collection declaration replace the Chrome `key`; `managed_schema` and `match_origin_as_fallback` are removed.
+- **Enterprise policy:** settings are locked with Firefox enterprise policy (`policies` → `3rdparty` → `Extensions` → add-on ID). Settings → **Copy policies.json** replaces *Copy as policy JSON* (Google Workspace) and *Copy registry script* (Edge/Chrome). `schema.json` is removed; `policy-example.json`, ADMIN-GUIDE.md and Help → Deploying in organizations describe Firefox deployment.
+- **Microsoft Intune / Group Policy:** Settings → **Copy Intune script** generates PowerShell that writes the policy to `HKLM\SOFTWARE\Policies\Mozilla\Firefox` (install via `ExtensionSettings`, the add-on's settings as one JSON value under `3rdparty\Extensions`). On/off settings also accept registry DWORD 1/0. Help and ADMIN-GUIDE.md cover Intune, Group Policy and macOS profiles.
+- **addons.mozilla.org validation:** no more `innerHTML` with dynamic values: the Link Inspector, the empty cache table and the link marker icons are built with DOM calls (link text can never be parsed as markup). Firefox for Android minimum set to 142, the first version that understands the data-collection declaration.
+- **Clean-up:** removed shims for JavaScript features Firefox 140 already has, the retry for a Chromium storage bug, and a Chromium-only style workaround.
 
 ## 5.38 — Best practices for phishing training; shared platforms refused as training domains
 

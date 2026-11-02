@@ -1,0 +1,13 @@
+<!doctype html>
+<!-- The background in Firefox and Safari (an event page; Chrome uses background.js as a service worker
+     instead): the link pipeline (background.js) and the QR/PDF scanner (scanner.js), which needs this
+     page's DOM for canvases and pdf.js. Chrome builds leave this file out. -->
+<meta charset="utf-8">
+<script src="compat.js"></script>
+<script src="shared.js"></script>
+<script src="decoders.js"></script>
+<script src="custom-endpoints.js"></script>
+<script src="qr-decoder.js"></script>
+<script src="icon-store.js"></script>
+<script src="background.js"></script>
+<script type="module" src="scanner.js"></script>

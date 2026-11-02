@@ -4,15 +4,15 @@
 // accepts them only directly inside a click), site access that the user can switch off, and policy.
 //
 //     tests/firefox/get-firefox.sh          once: downloads Firefox ESR into tests/.firefox/
-//     node tests/firefox/run.js             on the firefox branch (this checkout is the add-on)
-//     FXBIN=… FXEXT=… node tests/firefox/run.js   another Firefox, or another checkout of the Firefox build
+//     node tests/firefox/run.js             builds build/firefox from this working tree and tests it
+//     FXBIN=… FXEXT=… node tests/firefox/run.js   another Firefox, or another Firefox build
 const fs = require('fs');
 const path = require('path');
 const { launch, openExt, serve, until, errorsOf, check, done, isFirefoxBuild, FXBIN, EXT } = require('./harness');
 
 if (!isFirefoxBuild()) {
-  console.log(`SKIP: ${EXT} is the Chrome build (a service worker). Run this suite on the firefox branch, or set FXEXT to a Firefox-build checkout.`);
-  process.exit(0);
+  console.log(`FAIL: ${EXT} isn't a Firefox build (its manifest has no background page). Leave FXEXT unset to build one with tools/build.js.`);
+  process.exit(1);
 }
 
 const SCAM = 'billing@evil-scam.test\nphisher@evil-scam.test\nrescued@evil-scam.test';
@@ -41,6 +41,14 @@ const settings = (page) => openExt(page, 'options.html', () => document.querySel
     unwrap: ((await chrome.runtime.sendMessage({ action: 'testUnwrap', url: 'https://www.google.com/url?q=https://example.com/x' })) || {}).unwrappedUrl
   }));
   check('background page answers (settings, link decoding)', bg.settings && bg.unwrap === 'https://example.com/x', bg);
+  const variants = await opt.evaluate(() => ({
+    browser: document.documentElement.dataset.browser,
+    ownCard: !!document.getElementById('copyFirefoxPolicyBtn') && !!document.getElementById('checkExtensionsBtn'),
+    othersGone: !document.getElementById('copyPolicyJsonBtn') && !document.getElementById('copyRegScriptBtn'),
+    allMarkedShown: [...document.querySelectorAll('[data-only]')].every(e => e.hasAttribute('data-shown') && e.getAttribute('data-only').split(' ').includes('firefox')),
+    deployHelp: /policies\.json/.test(document.getElementById('help-deploy').textContent) && !/Google Admin console/.test(document.getElementById('help-deploy').textContent)
+  }));
+  check('settings page: Firefox\'s own passages kept (policies.json tools and Help), Chrome\'s and Safari\'s removed', variants.browser === 'firefox' && variants.ownCard && variants.othersGone && variants.allMarkedShown && variants.deployHelp, variants);
 
   // --- Inbox: labels, and moving flagged emails with Gmail's own Report spam.
   const inbox = await browser.newPage();

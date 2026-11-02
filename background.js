@@ -1,9 +1,11 @@
-// background.js — the service worker. Owns the link pipeline (resolveLink), threat checks, short-link
-// lookups, the community-list sync and its safeguards, logging, cleanup alarms, the toolbar badge and
-// the message API used by Gmail, the popup and the Options page. It holds no long-running work: every
-// task is triggered by a message, an alarm or a storage change, and in-memory caches are bounded.
+// background.js — the background: Chrome's service worker, or the event page background.html in Firefox
+// and Safari. Owns the link pipeline (resolveLink), threat checks, short-link lookups, the community-list
+// sync and its safeguards, logging, cleanup alarms, the toolbar badge and the message API used by
+// Gmail, the popup and the Options page. It holds no long-running work: every task is triggered by a
+// message, an alarm or a storage change, and in-memory caches are bounded.
 
-importScripts('shared.js', 'decoders.js', 'custom-endpoints.js', 'qr-decoder.js', 'icon-store.js');
+// Chrome's service worker loads the shared files here; background.html loads them before this file.
+if (typeof importScripts === 'function') importScripts('shared.js', 'decoders.js', 'custom-endpoints.js', 'qr-decoder.js', 'icon-store.js');
 
 // ---------------------------------------------------------------------------
 // SETTINGS CACHE
@@ -124,7 +126,7 @@ function addLogEntry(logs, level, source, message, now, account = '') {
 }
 
 // Log events are buffered in memory and written together, so an email with 100 links causes one
-// storage write instead of hundreds. LOG_FLUSH_MS is short enough that the service worker (kept
+// storage write instead of hundreds. LOG_FLUSH_MS is short enough that the background (kept
 // alive by the event that produced the entry) always flushes before it can be stopped.
 const LOG_FLUSH_MS = 500;
 let logBuffer = [];          // [{ kind: 'log' | 'history', ... }] in the order they happened
@@ -2542,7 +2544,7 @@ function setFrameState(tabId, frameId, report) {
     setTabState(tabId, s.active, s.linkCount, s.pixelCount);
 }
 
-// After the service worker restarts it has forgotten the frames' reports, so it asks them again.
+// After the background restarts it has forgotten the frames' reports, so it asks them again.
 async function getTabState(tabId) {
     if (!tabFrames.has(tabId)) {
         try { chrome.tabs.sendMessage(tabId, { action: 'reportState' }, () => void chrome.runtime.lastError); } catch (e) { /* no content script */ }
@@ -2558,10 +2560,14 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
 chrome.tabs.onRemoved.addListener((tabId) => tabFrames.delete(tabId));
 
 // ---------------------------------------------------------------------------
-// QR SCANNER (hidden offscreen document)
-// Created only when an image or attachment needs scanning, at most SCANNER_PARALLEL scans at once,
-// and closed after SCANNER_IDLE_MS without work, so it uses no memory between emails.
+// QR SCANNER — scanner.js, which needs a DOM for its canvases and pdf.js. At most SCANNER_PARALLEL
+// scans run at once.
+//   Chrome: a hidden offscreen document (scanner.html), created only when an image or attachment
+//     needs scanning and closed after SCANNER_IDLE_MS without work, so it uses no memory between emails.
+//   Firefox, Safari: scanner.js runs in this same background page (no offscreen documents there) and
+//     hands its scan function over through registerLocalScanner.
 // ---------------------------------------------------------------------------
+const SCANNER_OFFSCREEN = !!(chrome.offscreen && chrome.offscreen.createDocument);
 const SCANNER_IDLE_MS = 60 * 1000;
 const SCANNER_PARALLEL = 2;
 const QR_RESULT_CACHE_MAX = 300;
@@ -2569,6 +2575,10 @@ let scannerReady = null, scannerIdleTimer = null, scansRunning = 0;
 let scannerClosing = null;   // set while the idle teardown below is under way
 const scanWaiters = [];
 const qrResults = new Map();      // image URL → result (session memory, bounded)
+
+let resolveLocalScanner;
+const localScanner = new Promise(r => { resolveLocalScanner = r; });
+globalThis.registerLocalScanner = (fn) => resolveLocalScanner(fn);
 
 function ensureScanner() {
     if (!scannerReady) {
@@ -2604,8 +2614,12 @@ async function scanForQr(req) {
     if (scansRunning >= SCANNER_PARALLEL) await new Promise(r => scanWaiters.push(r));
     scansRunning++;
     try {
-        await ensureScanner();
-        const res = await chrome.runtime.sendMessage({ target: 'scanner', url: req.url, b64: req.b64, mime: req.mime || '' });
+        const job = { url: req.url, b64: req.b64, mime: req.mime || '' };
+        let res;
+        if (SCANNER_OFFSCREEN) {
+            await ensureScanner();
+            res = await chrome.runtime.sendMessage(Object.assign({ target: 'scanner' }, job));
+        } else res = await (await localScanner)(job);
         if (!res || !res.ok) throw new Error(res && res.error ? res.error : 'no answer from the scanner');
         if (key) {
             if (qrResults.size >= QR_RESULT_CACHE_MAX) qrResults.delete(qrResults.keys().next().value);
@@ -2617,7 +2631,7 @@ async function scanForQr(req) {
         scansRunning--;
         const next = scanWaiters.shift();
         if (next) next();
-        scheduleScannerClose();
+        if (SCANNER_OFFSCREEN) scheduleScannerClose();
     }
 }
 

@@ -34,6 +34,10 @@ function sameAsOriginalCell(td, originalUrl, finalUrl, resolver) {
     td.appendChild(span);
 }
 
+// A click handler for a control that only some browsers' pages have (the others' are removed from the
+// page before this file runs: see data-only in options.html and shared.js).
+function onClick(id, fn) { const el = document.getElementById(id); if (el) el.addEventListener('click', fn); }
+
 document.addEventListener('DOMContentLoaded', () => {
     const tabs = document.querySelectorAll('.tab-btn');
     const contents = document.querySelectorAll('.tab-content');
@@ -87,7 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
 
-    // --- SETTINGS BINDING (user values + Google Workspace policy locks) ---
+    // --- SETTINGS BINDING (user values + enterprise policy locks) ---
     async function bindSettings() {
         const cfg = await loadEffectiveSettings();
         // This installation's own extension ID wherever Help shows the Settings address.
@@ -235,8 +239,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- RESET ---
     // Only the user's own choices are reset. Settings managed by the organization (Google Workspace,
-    // Intune, Group Policy) are left completely alone, including the user's stored value underneath
-    // them, so nothing changes if the organization later stops managing a setting.
+    // Intune or Group Policy; Firefox enterprise policy) are left completely alone, including the user's
+    // stored value underneath them, so nothing changes if the organization later stops managing a setting.
     document.getElementById('resetDefaultsBtn').addEventListener('click', async () => {
         const cfg = await loadEffectiveSettings();
         const managed = SETTING_DEFS.filter(d => cfg.locked[d.key]);
@@ -294,8 +298,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // Produces the JSON an administrator pastes into Admin console > Policy for extensions.
-    document.getElementById('copyPolicyJsonBtn').addEventListener('click', async () => {
+    // Chrome: the JSON an administrator pastes into Admin console > Policy for extensions.
+    onClick('copyPolicyJsonBtn', async () => {
         const cfg = await loadEffectiveSettings();
         const policy = {};
         SETTING_DEFS.forEach(d => { policy[d.managedKey] = { Value: cfg.values[d.key] }; });
@@ -313,6 +317,76 @@ document.addEventListener('DOMContentLoaded', () => {
             reportToLog('warning', 'Options page', `Copying the policy JSON to the clipboard failed: ${e.message || e}`);
         }
     });
+
+    // Firefox: the policy for the current settings, as policies.json or as a Windows script: install the add-on and
+    // lock every setting and both lists (policies → 3rdparty → Extensions → add-on ID, read by the
+    // extension as storage.managed). addons.mozilla.org finds an add-on by its ID as well as by its
+    // address there, so the install address needs nothing filled in.
+    const FIREFOX_INSTALL_URL = `https://addons.mozilla.org/firefox/downloads/latest/${chrome.runtime.id}/latest.xpi`;
+    async function currentPolicySettings() {
+        const cfg = await loadEffectiveSettings();
+        const settings = {};
+        SETTING_DEFS.forEach(d => { settings[d.managedKey] = cfg.values[d.key]; });
+        const local = await new Promise(r => chrome.storage.local.get({ customAllowlist: [], customBlocklist: [], customTrustedSenders: [] }, r));
+        settings.managedAllowlist = normalizeDomainList(local.customAllowlist);
+        settings.managedBlocklist = normalizeDomainList(local.customBlocklist);
+        settings.managedTrustedSenders = normalizeSenderList(local.customTrustedSenders);
+        return settings;
+    }
+
+    function buildPoliciesJson(settings) {
+        const id = chrome.runtime.id;
+        return JSON.stringify({ policies: {
+            ExtensionSettings: { [id]: { installation_mode: 'force_installed', install_url: FIREFOX_INSTALL_URL } },
+            '3rdparty': { Extensions: { [id]: settings } }
+        } }, null, 2);
+    }
+
+    // PowerShell for Intune (or any Windows management tool) that writes the same policy to the registry
+    // Firefox reads (HKLM\SOFTWARE\Policies\Mozilla\Firefox). The add-on's settings go in as one JSON
+    // string, which Firefox parses, so every value keeps its type. Keys are only created when missing:
+    // New-Item -Force on an existing key would wipe other add-ons' values under 3rdparty\Extensions.
+    function buildFirefoxIntuneScript(settings) {
+        const q = (v) => `'${String(v).replace(/'/g, "''")}'`;
+        return [
+            '# S.P.R.U.C.E+ — Firefox policy for Windows (Microsoft Intune, Group Policy or any management tool).',
+            `# Generated ${new Date().toISOString().slice(0, 10)} from the Options page (version ${chrome.runtime.getManifest().version}).`,
+            '# Intune: Devices → Scripts and remediations → Platform scripts → Add (Windows 10 and later);',
+            '# run as system (logged on credentials: No) in 64-bit PowerShell. Check the result at about:policies.',
+            '#',
+            '# The add-on is installed from addons.mozilla.org by its ID; to install your own signed .xpi instead,',
+            '# set $InstallUrl to its address. Delete any settings in $Settings you do not want to lock.',
+            `$AddonId = ${q(chrome.runtime.id)}`,
+            `$InstallUrl = ${q(FIREFOX_INSTALL_URL)}`,
+            `$Settings = ${q(JSON.stringify(settings))}`,
+            '',
+            "$Firefox = 'HKLM:\\SOFTWARE\\Policies\\Mozilla\\Firefox'",
+            '$Install = "$Firefox\\ExtensionSettings\\$AddonId"',
+            'if (-not (Test-Path $Install)) { New-Item -Path $Install -Force | Out-Null }',
+            "New-ItemProperty -Path $Install -Name 'installation_mode' -PropertyType String -Value 'force_installed' -Force | Out-Null",
+            "New-ItemProperty -Path $Install -Name 'install_url' -PropertyType String -Value $InstallUrl -Force | Out-Null",
+            '$Extensions = "$Firefox\\3rdparty\\Extensions"',
+            'if (-not (Test-Path $Extensions)) { New-Item -Path $Extensions -Force | Out-Null }',
+            'New-ItemProperty -Path $Extensions -Name $AddonId -PropertyType String -Value $Settings -Force | Out-Null',
+            ''
+        ].join('\r\n');
+    }
+
+    for (const [btn, result, build, done] of [
+        ['copyFirefoxPolicyBtn', 'copyFirefoxPolicyResult', buildPoliciesJson, 'Copied. Delete any settings you do not want to lock (and change the install address only for your own signed .xpi).'],
+        ['copyFirefoxIntuneBtn', 'copyFirefoxIntuneResult', buildFirefoxIntuneScript, 'Copied. Paste it into a .ps1 file; delete any settings you do not want to lock before deploying.']
+    ]) {
+        onClick(btn, async () => {
+            const out = document.getElementById(result);
+            try {
+                await navigator.clipboard.writeText(build(await currentPolicySettings()));
+                out.style.color = ''; out.textContent = done;
+            } catch (e) {
+                out.style.color = 'var(--danger-text)'; out.textContent = 'Copy failed.';
+                reportToLog('warning', 'Options page', `Copying the policy (${btn}) failed: ${e.message || e}`);
+            }
+        });
+    }
 
     // Endpoint address fields have a Save button (it asks the browser for access to the host).
     const ENDPOINT_FIELDS = [
@@ -521,7 +595,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (tbody.children.length === 0) {
                 const total = Object.keys(items).filter(k => k.startsWith('http')).length;
-                tbody.innerHTML = `<tr><td colspan="5" style="color: var(--text-muted);">${total ? 'No cached links match your filter.' : 'No cached links yet. Results appear here as you open emails in Gmail.'}</td></tr>`;
+                const td = node('td', { style: 'color: var(--text-muted);' }, total ? 'No cached links match your filter.' : 'No cached links yet. Results appear here as you open emails in Gmail.');
+                td.colSpan = 5;
+                tbody.replaceChildren(node('tr', null, td));
             }
         });
     }
@@ -1053,7 +1129,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // PowerShell that writes the current settings as extension policy for Edge and Chrome (Intune etc.).
+    // Chrome and Edge: PowerShell that writes the current settings as extension policy (Intune etc.).
     // Booleans and numbers → REG_DWORD, text → REG_SZ, lists → a subkey with values named 1, 2, 3…
     function buildRegistryScript(values, allow, block, senders = []) {
         const id = chrome.runtime.id;
@@ -1088,7 +1164,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return lines.join('\r\n');
     }
 
-    document.getElementById('copyRegScriptBtn').addEventListener('click', async () => {
+    onClick('copyRegScriptBtn', async () => {
         const out = document.getElementById('copyRegResult');
         try {
             const cfg = await loadEffectiveSettings();
@@ -1359,29 +1435,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 const directCard = document.createElement('div');
                 directCard.className = 'step-card';
                 directCard.style.borderLeftColor = 'var(--success-solid)';
-                directCard.innerHTML = `
-                    <div class="step-header" style="color: var(--success-text);">
-                        <span>✓ Direct link</span>
-                        <span class="step-label">Nothing to decode</span>
-                    </div>
-                    <div class="url-box">${escapeHtml(urlToInspect)}</div>
-                `;
+                directCard.append(
+                    node('div', { className: 'step-header', style: 'color: var(--success-text);' },
+                        node('span', null, '✓ Direct link'), node('span', { className: 'step-label' }, 'Nothing to decode')),
+                    node('div', { className: 'url-box' }, urlToInspect));
                 stepsContainer.appendChild(directCard);
             } else {
                 steps.forEach((step, idx) => {
                     const stepCard = document.createElement('div');
                     stepCard.className = 'step-card';
-                    stepCard.innerHTML = `
-                        <div class="step-header">
-                            <span>Layer ${step.layer}: ${escapeHtml(step.decoder)}</span>
-                            <span class="step-label">Pass ${idx + 1} of ${steps.length}</span>
-                        </div>
-                        <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;"><strong>Before:</strong></div>
-                        <div class="url-box" style="margin-bottom: 8px;">${escapeHtml(step.inputUrl)}</div>
-                        <div class="step-arrow">⬇ decoded ⬇</div>
-                        <div style="font-size: 11px; color: var(--success-text); margin-bottom: 4px;"><strong>After:</strong></div>
-                        <div class="url-box url-box-good">${escapeHtml(step.outputUrl)}</div>
-                    `;
+                    stepCard.append(
+                        node('div', { className: 'step-header' },
+                            node('span', null, `Layer ${step.layer}: ${step.decoder}`),
+                            node('span', { className: 'step-label' }, `Pass ${idx + 1} of ${steps.length}`)),
+                        node('div', { style: 'font-size: 11px; color: var(--text-muted); margin-bottom: 4px;' }, node('strong', null, 'Before:')),
+                        node('div', { className: 'url-box', style: 'margin-bottom: 8px;' }, step.inputUrl),
+                        node('div', { className: 'step-arrow' }, '⬇ decoded ⬇'),
+                        node('div', { style: 'font-size: 11px; color: var(--success-text); margin-bottom: 4px;' }, node('strong', null, 'After:')),
+                        node('div', { className: 'url-box url-box-good' }, step.outputUrl));
                     stepsContainer.appendChild(stepCard);
                 });
             }
@@ -1397,19 +1468,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 ? `Not verified: ${response.note || 'inconclusive'}`
                 : (isSafe ? 'Checked: nothing found' : `Flagged: ${response.reason || 'dangerous'}`);
 
-            destCard.innerHTML = `
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                    <strong style="font-size: 15px; color: ${!isSafe ? 'var(--danger-text)' : unverified ? 'var(--text-2)' : 'var(--success-text)'};">🎯 Where the link goes</strong>
-                    <span class="badge ${badgeClass}">${escapeHtml(statusLabel)}</span>
-                </div>
-                <div class="url-box" style="margin-bottom: 10px;">${escapeHtml(response.unwrappedUrl)}</div>
-                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--text-muted);">
-                    <div>
-                        <strong>Site address (IP):</strong> <code>${escapeHtml(response.resolvedIp || 'N/A')}</code>
-                        <span style="margin-left: 12px;"><strong>Checked by:</strong> ${escapeHtml(response.scanner === 'Multi-DoH' ? 'several security services' : (response.scanner || 'this device'))}</span>
-                    </div>
-                </div>
-            `;
+            destCard.append(
+                node('div', { style: 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;' },
+                    node('strong', { style: `font-size: 15px; color: ${!isSafe ? 'var(--danger-text)' : unverified ? 'var(--text-2)' : 'var(--success-text)'};` }, '🎯 Where the link goes'),
+                    node('span', { className: `badge ${badgeClass}` }, statusLabel)),
+                node('div', { className: 'url-box', style: 'margin-bottom: 10px;' }, response.unwrappedUrl || ''),
+                node('div', { style: 'display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--text-muted);' },
+                    node('div', null,
+                        node('strong', null, 'Site address (IP):'), ' ', node('code', null, response.resolvedIp || 'N/A'),
+                        node('span', { style: 'margin-left: 12px;' },
+                            node('strong', null, 'Checked by:'), ' ', response.scanner === 'Multi-DoH' ? 'several security services' : (response.scanner || 'this device')))));
 
             if (Array.isArray(response.notes) && response.notes.length) {
                 const hdr = document.createElement('div');
@@ -1437,14 +1505,15 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    function escapeHtml(string) {
-        if (!string) return '';
-        return String(string)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;');
+    // Builds an element; text children become text nodes, so nothing is ever parsed as HTML.
+    function node(tag, props, ...children) {
+        const e = document.createElement(tag);
+        if (props) {
+            if (props.className) e.className = props.className;
+            if (props.style) e.style.cssText = props.style;
+        }
+        e.append(...children.map(c => (c instanceof Node ? c : String(c))));
+        return e;
     }
 
     refreshAllViews();
@@ -1520,7 +1589,7 @@ document.addEventListener('DOMContentLoaded', () => {
 (() => {
     const listEl = document.getElementById('conflictList');
     if (!listEl) return;
-    const isFirefox = typeof browser !== 'undefined' && /firefox/i.test(navigator.userAgent);
+    const isFirefox = BROWSER === 'firefox';
     const hasManagement = () => new Promise(r => { try { chrome.permissions.contains({ permissions: ['management'] }, r); } catch (e) { r(false); } });
 
     async function installedConflicts() {
@@ -1583,7 +1652,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             } else {
                 const how = document.createElement('div'); how.className = 'setting-desc';
-                how.textContent = isFirefox ? `Firefox lets only you turn other add-ons off: open the menu ☰ → Add-ons and themes → Extensions, and turn ${c.name === 'Another extension' ? 'the other one' : c.name} off.`
+                const other = c.name === 'Another extension' ? 'the other one' : c.name;
+                how.textContent = BROWSER === 'safari' ? `Safari lets only you turn other extensions off: open Safari → Settings → Extensions and uncheck ${other} (on iPhone or iPad: the Settings app → Apps → Safari → Extensions).`
+                    : isFirefox ? `Firefox lets only you turn other add-ons off: open the menu ☰ → Add-ons and themes → Extensions, and turn ${other} off.`
                     : `To turn ${c.name === 'Another extension' ? 'it' : c.name} off: open chrome://extensions and switch it off there.`;
                 box.appendChild(how);
             }
@@ -1612,7 +1683,7 @@ document.addEventListener('DOMContentLoaded', () => {
         listEl.replaceChildren(out);
     }
 
-    document.getElementById('checkExtensionsBtn').addEventListener('click', async () => {
+    onClick('checkExtensionsBtn', async () => {
         // Asked at once, inside the click: Firefox refuses a permission request made after anything
         // else was awaited. A permission already given is answered "yes" without asking again.
         const granted = await new Promise(r => {

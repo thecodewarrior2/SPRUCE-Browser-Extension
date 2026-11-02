@@ -12,6 +12,15 @@ const { launch, until, optionsReady, check, done } = require('./harness');
   const toggles = await until(() => page.$$eval('[data-setting^="enableSender"], [data-setting="enableAutoSpam"], [data-setting="enableSpamNotice"]', els => els.map(e => [e.dataset.setting, e.checked, e.disabled])),
     t => t.length === 10 && t.every(x => x[1]), 10000);
   await optionsReady(page);                          // every control bound: loading is over (its errors, if any, are caught)
+  // The passages written per browser (data-only): Chrome's are kept, Firefox's and Safari's removed.
+  const variants = await page.evaluate(() => ({
+    browser: document.documentElement.dataset.browser,
+    ownCard: !!document.getElementById('copyPolicyJsonBtn') && !!document.getElementById('copyRegScriptBtn') && !!document.getElementById('checkExtensionsBtn'),
+    othersGone: !document.getElementById('copyFirefoxPolicyBtn') && !document.getElementById('copyFirefoxIntuneBtn'),
+    allMarkedShown: [...document.querySelectorAll('[data-only]')].every(e => e.hasAttribute('data-shown') && e.getAttribute('data-only').split(' ').includes('chrome')),
+    deployHelp: /Google Admin console/.test(document.getElementById('help-deploy').textContent) && !/policies\.json/.test(document.getElementById('help-deploy').textContent)
+  }));
+  check('settings page: Chrome\'s own passages kept (Workspace and registry tools, Help), Firefox\'s and Safari\'s removed', variants.browser === 'chrome' && variants.ownCard && variants.othersGone && variants.allMarkedShown && variants.deployHelp, variants);
   check('ten sender switches (incl. stand-in icons, photos and BIMI logos), all on, unlocked', toggles.length === 10 && toggles.some(t => t[0] === 'enableSenderBimi') && toggles.some(t => t[0] === 'enableSenderIconFallback') && toggles.some(t => t[0] === 'enableSenderAvatars') && toggles.every(t => t[1] && !t[2]), toggles);
   await page.evaluate(() => { document.getElementById('trustedSenderInput').closest('details').open = true; });
   await page.fill('#trustedSenderInput', '@Evil-Scam.test');

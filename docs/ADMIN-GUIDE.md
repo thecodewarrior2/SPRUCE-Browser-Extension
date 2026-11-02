@@ -1,23 +1,34 @@
 # S.P.R.U.C.E+ admin guide
 
-Every setting, plus the allowlist, blocklist and custom resolver, can be set and locked by policy.
-Locked settings show 🔒 in the Options page and the toolbar popup and cannot be changed by users.
-Anything you do **not** set stays under the user's control (all features are on by default).
+Every setting, plus the allowlist, blocklist and custom resolver, can be set and locked by policy: in
+**Chrome and Edge** with Google Workspace, Microsoft Intune or Group Policy, and in **Firefox** with
+`policies.json`, Group Policy / Intune or a macOS profile. Locked settings show 🔒 in the Options page and
+the toolbar popup and cannot be changed by users. Anything you do **not** set stays under the user's
+control (all features are on by default). **Safari** has no extension policies: see [Safari](#safari) for
+what device management can do there.
+
+The same keys work in Chrome, Edge and Firefox. Chrome and Edge wrap each value, as in
+`"managedRetentionDays": { "Value": 14 }`; Firefox's `policies.json` takes the value itself, as in
+`"managedRetentionDays": 14`. The examples below use the Chrome form unless they say otherwise.
 
 ## Contents
 
-- [Set the policy](#set-the-policy)
+- [Set the policy](#set-the-policy): [Chrome and Edge](#chrome-and-edge) · [Firefox](#firefox) · [Safari](#safari)
 - [Keys](#keys)
 - [Notes](#notes)
 - [Feature compatibility by webmail](#feature-compatibility-by-webmail)
 - [Sender icons and moving phishing to Spam (Gmail)](#sender-icons-and-moving-phishing-to-spam-gmail)
 - [Deploying](#deploying)
+- [Safari](#safari)
 - [Organization lists](#organization-lists)
 - [Administrator-only policies](#administrator-only-policies)
 - [Resetting settings](#resetting-settings)
 - [Google Web Risk for threat checks](#google-web-risk-for-threat-checks)
 
 ## Set the policy
+
+### Chrome and Edge
+
 1. Google Admin console → **Devices → Chrome → Apps & extensions → Users & browsers**.
 2. Choose the organizational unit, then add or select this extension.
 3. Open **Policy for extensions** and paste JSON in the form below. Delete every line you do not want to lock.
@@ -34,6 +45,90 @@ Anything you do **not** set stays under the user's control (all features are on 
 `docs/policy-example.json` lists every key with its default value. Users can also generate a starting point from
 **Options → Settings → Backup & Google Workspace → "Copy as policy JSON"**.
 
+### Firefox
+
+Firefox passes an add-on's policy from `policies` → `3rdparty` → `Extensions` → the add-on ID
+(`spruce@spruce-browser-extension`) to the add-on. The same `policies.json` can also install it:
+
+1. Create `policies.json` in the form below. Delete every setting you do not want to lock.
+2. Put it in a `distribution` folder in the Firefox installation folder (for example
+   `C:\Program Files\Mozilla Firefox\distribution\policies.json`,
+   `/Applications/Firefox.app/Contents/Resources/distribution/policies.json` or
+   `/usr/lib/firefox/distribution/policies.json`; on Linux `/etc/firefox/policies/policies.json` also
+   works), with any device-management tool. On Windows managed with Intune or Group Policy, use the
+   registry instead (see below).
+3. Restart Firefox and check `about:policies`.
+
+```json
+{
+  "policies": {
+    "ExtensionSettings": {
+      "spruce@spruce-browser-extension": {
+        "installation_mode": "force_installed",
+        "install_url": "https://addons.mozilla.org/firefox/downloads/latest/spruce@spruce-browser-extension/latest.xpi"
+      }
+    },
+    "3rdparty": {
+      "Extensions": {
+        "spruce@spruce-browser-extension": {
+          "managedEnableThirdPartyResolution": false,
+          "managedEnableRemoteListSync": false,
+          "managedRetentionDays": 14,
+          "managedAllowlist": ["internal.example.com"]
+        }
+      }
+    }
+  }
+}
+```
+
+addons.mozilla.org finds the add-on by its ID (`spruce@spruce-browser-extension`), so the address works
+as written; for a self-hosted signed `.xpi`, use its address instead. The examples below show only the add-on's own settings object (the part under
+the add-on ID). `docs/policy-example-firefox.json` lists every key with its default value. Users can also generate a
+starting point from **Options → Settings → Backup & enterprise policy → "Copy policies.json"**.
+
+#### Windows: Microsoft Intune and Group Policy
+
+On Windows, Firefox also reads policy from the registry (`HKLM\SOFTWARE\Policies\Mozilla\Firefox`),
+where Intune and Group Policy write it. When the registry and `policies.json` both set the same
+top-level policy (`ExtensionSettings` or `3rdparty`), **the registry wins** and that part of
+`policies.json` is ignored, so deliver this add-on's policy one way only.
+
+1. **Options → Settings → Backup & enterprise policy → "Copy Intune script"** produces a PowerShell
+   script that force-installs the add-on and writes the current settings. Delete the settings you don't
+   want to lock from the `$Settings` line (and set `$InstallUrl` only for a self-hosted `.xpi`).
+2. Intune admin center → **Devices → Scripts and remediations → Platform scripts → Add → Windows 10
+   and later**: upload the .ps1, set *Run this script using the logged on credentials* to **No** and
+   *Run script in 64 bit PowerShell host* to **Yes**, and assign it to a pilot group first.
+3. Restart Firefox on a test device and check `about:policies`.
+
+The script writes:
+
+```
+HKLM\SOFTWARE\Policies\Mozilla\Firefox\ExtensionSettings\spruce@spruce-browser-extension
+    installation_mode   REG_SZ   force_installed
+    install_url         REG_SZ   https://addons.mozilla.org/firefox/downloads/latest/spruce@spruce-browser-extension/latest.xpi
+HKLM\SOFTWARE\Policies\Mozilla\Firefox\3rdparty\Extensions
+    spruce@spruce-browser-extension   REG_SZ   {"managedRetentionDays":14,"managedBlocklist":["internal.example.com"]}
+```
+
+Firefox parses the add-on's value as JSON, so every setting keeps its type. On domain-joined computers
+the same values can be written with **Group Policy Preferences → Registry**. If you already manage
+Firefox with Mozilla's ADMX templates (Intune: **Devices → Configuration → Import ADMX**), you can
+install the add-on with their **Extensions → Extension Management** setting and keep only the
+`3rdparty` part of the script; the templates have no setting for an add-on's own policy.
+
+#### macOS
+
+Deliver the same policy as a configuration profile for the `org.mozilla.firefox` domain (Intune, Jamf
+or similar) with `EnterprisePoliciesEnabled` set to true and the `ExtensionSettings` and `3rdparty`
+dictionaries from `policies.json`. A `policies.json` inside the app bundle works too, but an app
+update can replace it. See <https://mozilla.github.io/policy-templates/>.
+
+### Safari
+
+Safari has no extension policies; see [Safari](#safari) below.
+
 ## Keys
 | Key | Type | Default | Purpose |
 |---|---|---|---|
@@ -41,7 +136,7 @@ Anything you do **not** set stays under the user's control (all features are on 
 | managedEnablePhishingFeeds | boolean | true | Download the OpenPhish community feed and Phishing Army (CC BY-NC 4.0) lists (at most once a day) and match links on the device |
 | managedDnsControlD / managedDnsDns4eu | boolean | true / false | Additional free security resolvers (Control D malware; DNS4EU Protective, EU) |
 | managedEnableSenderChecks | boolean | true | Gmail: read Gmail's sender verification when needed; trust company-only links (c.gle…) only in mail verified as from that company directly to the user; warn about brand impersonation |
-| managedHidePopupSettingsButton | boolean | false | Administrator only (no setting in the extension): remove "Open Settings" from the toolbar popup; Settings stays reachable at chrome-extension://<ID>/options.html |
+| managedHidePopupSettingsButton | boolean | false | Administrator only (no setting in the extension): remove "Open Settings" from the toolbar popup; Settings stays reachable at chrome-extension://<ID>/options.html (Firefox: about:addons → the add-on → Options) |
 | managedHideRecentActivity | boolean | false | Administrator only: remove "Recent activity" from the toolbar popup |
 | managedHideDonateButton | boolean | false | Administrator only: remove the Donate button from Settings → Help → About |
 | managedPhishSimulationDomains | array of strings | [] | Administrator only, every webmail: training-vendor link domains; an email whose links ALL go there is left unchecked |
@@ -101,7 +196,7 @@ Anything you do **not** set stays under the user's control (all features are on 
 - **Privacy-strict baseline:** set `managedEnableThirdPartyResolution`, `managedEnableDnsThreatCheck`,
   `managedEnableRemoteListSync` and `managedEnablePhishingFeeds` to `false` for a deployment that makes no third-party requests at all (links are still unwrapped offline; sender icons are left blank, and senders are checked only for malformed addresses and signs of forgery in the email).
 - **Custom endpoints and API keys:** headers set by policy (for example an API key) are masked in the Options page and never included in user backups. Examples for URLhaus, Google Safe Browsing and Bitly are in Settings → Your own services; check each service's terms of use.
-- **Custom endpoints and host access:** Chrome cannot grant new host access by policy. Either make sure the endpoint sends CORS headers,
+- **Custom endpoints and host access:** neither Chrome nor Firefox can grant new host access by policy. Either make sure the endpoint sends CORS headers,
   or allow users to approve the one-time host prompt when saving it.
 - **Remote shortener lists** update automatically every day and are treated as untrusted:
   - Entries for major sites are ignored, and list-only domains are sent to unshorten.me only for URLs shaped like short links.
@@ -239,6 +334,91 @@ The extension's **Help → Deploying in organizations** section has step-by-step
 
 Verify at `chrome://policy` / `edge://policy`. Menu names in admin consoles change over time, so expect small wording differences.
 
+**Firefox:** Publish the add-on on addons.mozilla.org (listed or unlisted; Firefox installs only signed add-ons),
+then deploy `policies.json` as above with `installation_mode` set to `force_installed` (users can't
+remove it) or `normal_installed`. Verify at `about:policies` and `about:addons`.
+
+**Safari:** see [Safari](#safari).
+
+## Safari
+
+Safari has **no extension policies**: unlike Chrome and Firefox, an administrator can't set or lock an
+extension's settings. What device management can do in Safari is install the app that carries the
+extension, keep the extension turned on, and allow it on your webmail sites. Everything inside the
+extension (all features are on by default) is up to each person, or comes from a backup file you share.
+
+### 1. Build the app
+
+A Safari extension comes inside a small app (Mac, and iPhone/iPad). Build it once from this folder:
+
+- **On a Mac with Xcode:** run `tools/build-safari.sh`. It uses Apple's converter
+  (`xcrun safari-web-extension-converter`) to make an Xcode project in `build/safari/`, with the
+  extension copied inside, and builds the Mac app (signed "to run locally"). Set `BUNDLE_ID` to an
+  identifier under your own domain (for example `org.yourdistrict.SPRUCE`), and `TEAM_ID` to
+  your Apple Developer team to sign with it.
+- **On GitHub:** the **Safari build** workflow (`.github/workflows/safari.yml`) runs the same script on a
+  GitHub Mac for every push to `main`, or when started by hand, and offers the app and the
+  Xcode project under the run's Artifacts. Mac runners count ten times against a private repository's
+  Actions minutes.
+- **To try it on one Mac without signing:** Safari → Settings → Advanced → **Show features for web
+  developers**, then Develop → **Allow Unsigned Extensions** (asked again after each Safari restart). Open
+  the app once, then turn the extension on in Safari → Settings → Extensions.
+
+Requires Safari 18.2 or later (macOS, iOS and iPadOS).
+
+### 2. Sign and distribute it
+
+Open the generated Xcode project, choose your team under **Signing & Capabilities** for both the app and
+the extension, then:
+
+- **App Store or TestFlight:** Product → Archive, then upload. Store apps can be assigned to devices with
+  Apple School Manager or Apple Business Manager and installed by your device-management tool. For iPhone
+  and iPad this is the only way.
+- **Mac, directly (Developer ID):** archive, export with Developer ID signing, have Apple notarize it, and
+  deploy the app with your device-management tool (Jamf, Intune, Mosyle…).
+
+### 3. Keep it on and allowed on your webmail
+
+Apple's **Safari extensions settings** declarative configuration (macOS 15, iOS 18 and iPadOS 18 or later,
+on supervised devices) manages an installed extension by its identifier, `Identifier (TeamIdentifier)`:
+read both from `codesign -dv` on the extension inside the app's `Contents/PlugIns` folder. It can:
+
+- keep the extension **always on** (people can't turn it off), or always off;
+- allow or block it in Private Browsing;
+- allow it on your webmail sites (for example `mail.google.com`) so people aren't asked, and deny it
+  elsewhere.
+
+How you add the configuration depends on your device-management tool; Apple's reference is in its
+[device-management repository](https://github.com/apple/device-management) under declarative
+configurations. Without it, each person turns the extension on in Safari → Settings → Extensions and
+chooses **Always Allow on This Website** the first time they open their webmail. The extension's
+background page also downloads its lists and runs its threat checks (the services in Settings → Help →
+Permissions); if Safari asks about those sites, allow them.
+
+### 4. The same settings for everyone
+
+Set the extension up once the way you want it, use Settings → **Back up**, and have each person
+**Restore** the file (or include it in your onboarding). Backups hold the settings you changed and the
+Allowlist, Blocklist and Trusted senders; API keys are never included. People can change their settings afterwards.
+
+- **No third-party requests at all:** choose the privacy level **Offline only** before making the backup.
+  Links are still unwrapped offline; sender icons are left blank, and senders are checked only for
+  malformed addresses and signs of forgery in the email.
+- **Your own lookup or threat-check service:** each person enters it, and its key, once.
+
+### What can't be managed in Safari
+
+- Locked settings (🔒), and resetting that leaves locked settings alone: nothing is locked in Safari.
+- The administrator-only options of the Chrome and Firefox builds: a simpler toolbar popup (no Settings
+  button or recent activity) and the rules that recognize phishing-simulation (training) emails; see below.
+- Your organization's lists of allowed and blocked sites and trusted senders, kept apart from each
+  person's own: in Safari they're only the lists in the backup you share.
+- A threat-check service whose API key is hidden from people.
+- **Phishing training:** the rules that recognize training emails (KnowBe4, Wizer…) are set by policy in the
+  Chrome and Firefox builds, so Safari doesn't have them. Add the training vendor's sending domains to Trusted
+  senders and its link domains to the Allowlist in the backup you share, or training emails may be flagged and
+  moved like real phishing.
+
 ## Organization lists
 
 Added to each user's own lists (users can add to them, not remove from them):
@@ -251,7 +431,7 @@ Added to each user's own lists (users can add to them, not remove from them):
 ## Administrator-only policies
 
 These keys exist only in the policy. The extension has no setting for them, users can't see or change
-them, and they're not included in backups. **Copy as policy JSON** doesn't produce them either, so add
+them, and they're not included in backups. **Copy as policy JSON** (Firefox: **Copy policies.json**) doesn't produce them either, so add
 them by hand.
 
 ### Hide the Settings button, recent activity and the Donate button
@@ -271,7 +451,8 @@ them by hand.
 - **Settings stay reachable** for IT staff and anyone who knows the address: type
   `chrome-extension://<extension ID>/options.html` in the address bar. The ID is shown on
   `chrome://extensions` (Edge: `edge://extensions`) and in the store page's address; the store gives the
-  published extension its own ID, different from the test version's. Hiding the button is a convenience, not a lock: to stop users
+  published extension its own ID, different from the test version's. In Firefox: `about:addons` → the
+  add-on → **Options**. Hiding the button is a convenience, not a lock: to stop users
   changing a setting, set that setting by policy.
 
 ### Phishing simulation (training) emails
@@ -435,7 +616,8 @@ protection.
 
 #### Verify and troubleshoot
 
-1. Confirm the policy arrived: `chrome://policy` (Edge: `edge://policy`) → this extension.
+1. Confirm the policy arrived: `chrome://policy` (Edge: `edge://policy`) → this extension; in Firefox,
+   `about:policies` lists `3rdparty` with this add-on's ID and no errors.
 2. Send a test campaign to yourself (or a pilot group) and open it in each webmail you use.
 3. In Settings → Logging, look for *"Phishing simulation email (…): left unchecked"*. The text in
    brackets shows what matched: the rule's name, or *links to <domain>*.
@@ -458,4 +640,4 @@ were read as lists.
 
 ## Google Web Risk for threat checks
 
-Google Workspace organizations can use Google's Web Risk API as the custom threat resolver. The steps and the policy JSON are in the extension's Help → Deploying in organizations → "Threat checks with Google Web Risk". Note that Web Risk receives full links, whereas the built-in checks send only site names. Google has no API to expand short links; use your own lookup service for that (Help → Limitations).
+Organizations (with Google Workspace or any Google Cloud project) can use Google's Web Risk API as the custom threat resolver. The steps and the policy JSON are in the extension's Help → Deploying in organizations → "Threat checks with Google Web Risk". Note that Web Risk receives full links, whereas the built-in checks send only site names. Google has no API to expand short links; use your own lookup service for that (Help → Limitations).
