@@ -15,7 +15,18 @@ const sender = P.get('from') || 'phisher@evil-scam.test';
 const tid = P.get('t') || '2001';
 const sname = P.get('name') || 'IT Support';
 const cloud = P.get('links') === 'cloud';
-const linkHtml = cloud ? [1,2,3,4].map(i => `<a href="https://oyl6s96s2xyr5tq6mj36.blob.core.windows.net/oyl6s96s2xyr5tq6mj36/link.html#qs=r-${i}ageikagdefbjkd">Message ${i}</a>`).join(' ') : 'Please sign in at <a href="https://example.com/login">example.com</a> today.';
+// ?links=company: a company's newsletter whose link text shows its main site (test-companies.js):
+// one link to its own ending (.amex), one to another domain of its; ?links=name: a company's name
+// under another ending.
+const LINKS = {
+  company: 'Report phishing at <a id="own" href="https://go.amex/phishing-us??comm_track_id=1&dotAmexDomain=go">americanexpress.com/phishing</a>. ' +
+           'Offers: <a id="other" href="https://www.aexp.com/offers">americanexpress.com/offers</a>.',
+  name: 'Your order: <a id="name" href="https://www.amazon.de/gp/your-orders">amazon.com/orders</a>.',
+  // ?links=allred: every link shows the company's main site and goes to a domain not known as its own.
+  allred: 'Offers: <a id="r1" href="https://www.aexp.com/offers">americanexpress.com/offers</a> and <a id="r2" href="https://www.aexp.com/travel">americanexpress.com/travel</a>.'
+};
+const linkHtml = cloud ? [1,2,3,4].map(i => `<a href="https://oyl6s96s2xyr5tq6mj36.blob.core.windows.net/oyl6s96s2xyr5tq6mj36/link.html#qs=r-${i}ageikagdefbjkd">Message ${i}</a>`).join(' ')
+  : LINKS[P.get('links')] || 'Please sign in at <a href="https://example.com/login">example.com</a> today.';
 setTimeout(() => {
   document.getElementById('main').innerHTML = `<h2 class="hP" data-thread-perm-id="thread-f:${tid}" data-legacy-thread-id="${Number(tid).toString(16)}">${P.get('subj') || 'Your password expires'}</h2>
   <div class="nH"><div class="adn ads" data-message-id="#msg-f:3001" data-legacy-message-id="${(3001).toString(16)}">

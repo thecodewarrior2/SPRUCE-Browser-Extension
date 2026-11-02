@@ -478,23 +478,84 @@ const FILE_EXTENSION_TLDS = new Set([
     'cpp', 'hpp', 'rb', 'go', 'ts', 'cs', 'lua', 'cmake', 'mod', 'sum', 'conf', 'env', 'csproj', 'sln', 'gradle'
 ]);
 
+// ---------------------------------------------------------------------------
+// COMPANY MATCHING (5.90): four changes to how a domain is matched to the company it belongs to, each
+// one switched on its own. To roll one back, set it to false here and rebuild: what it changed works
+// as in 5.89 again, and the others keep working. Every place a change touches carries its tag.
+//   [5.90-1] oneTable        the link check knows every company domain the sender check knows
+//                            (text bankofamerica.com, link bofa.com: the same company)
+//   [5.90-2] ownEndings      an address under a company's own ending is the company's (go.amex, blog.google)
+//   [5.90-3] verifiedSender  link text showing the site of the email's verified sender (DMARC pass) is
+//                            never red, wherever the link goes: amber at most
+//   [5.90-4] nameNeedsProof  a company's name under another ending (amazon.de, paypal.<anything>) is no
+//                            longer the company's by its name alone: amber until public records show it
+// ---------------------------------------------------------------------------
+const COMPANY_MATCHING = Object.freeze({ oneTable: true, ownEndings: true, verifiedSender: true, nameNeedsProof: true });
+
 // Companies that own several domains, including their own short-link domains. Link text and destination
 // within one family are consistent (text "gmail.com" pointing to google.com, or Google's c.gle).
+// labels: the company's name, which it also uses under many endings (amazon.de, google.co.uk). Until
+// 5.90 any domain with that name counted as the company's; now it needs evidence (companyNameOf, [5.90-4]).
 const BRAND_FAMILIES = [
-    { name: 'Google',    labels: ['google'], domains: ['gmail.com', 'youtube.com', 'youtu.be', 'android.com', 'withgoogle.com', 'blogger.com', 'googleblog.com', 'c.gle', 'g.co', 'goo.gle', 'goo.gl', 'gle'] },
+    { name: 'Google',    labels: ['google'], domains: ['google.com', 'gmail.com', 'youtube.com', 'youtu.be', 'android.com', 'withgoogle.com', 'blogger.com', 'googleblog.com', 'c.gle', 'g.co', 'goo.gle', 'goo.gl', 'gle'] },
     { name: 'Microsoft', labels: [], domains: ['microsoft.com', 'microsoftonline.com', 'live.com', 'office.com', 'outlook.com', 'microsoft365.com', 'office365.com', 'azure.com', 'windows.com', 'xbox.com', 'bing.com', 'skype.com', 'sharepoint.com', 'aka.ms', 'msft.it', 'onedrive.com', '1drv.ms', 'sharepointonline.com', 'microsoftpersonalcontent.com', 'svc.ms', 'microsoftstore.com', 'msn.com', 'azure.net', 'powerbi.com', 'dynamics.com', 'visualstudio.com'] },
-    { name: 'Amazon',    labels: ['amazon'], domains: ['amzn.to', 'amzn.eu', 'a.co', 'primevideo.com', 'audible.com'] },
+    { name: 'Amazon',    labels: ['amazon'], domains: ['amazon.com', 'amzn.to', 'amzn.eu', 'a.co', 'primevideo.com', 'audible.com'] },
     { name: 'Meta',      labels: [], domains: ['facebook.com', 'facebookmail.com', 'fb.com', 'fb.me', 'instagram.com', 'whatsapp.com', 'messenger.com', 'meta.com', 'threads.net'] },
     { name: 'PayPal',    labels: ['paypal'], domains: ['paypal.com'] },
     { name: 'Apple',     labels: [], domains: ['apple.com', 'icloud.com', 'apple.co', 'me.com'] },
     { name: 'LinkedIn',  labels: [], domains: ['linkedin.com', 'lnkd.in'] },
     { name: 'X',         labels: [], domains: ['twitter.com', 'x.com', 't.co'] }
 ];
+
+// [5.90-2] Endings (top-level domains) that belong to one company, which alone has addresses under
+// them: ICANN's "brand" endings, each checked in IANA's root zone database, which names the company (or
+// its subsidiary) as the registry. Only for companies this extension already knows; never an ending a
+// company runs for the public (anyone can register under Google's .app, .dev or .page). home: the
+// company's main domain, when the tables don't have the company (IANA's website for the ending).
+const COMPANY_ENDINGS = Object.freeze({
+    amex: { name: 'American Express', home: 'americanexpress.com' }, americanexpress: { name: 'American Express', home: 'americanexpress.com' },
+    google: { name: 'Google' }, gle: { name: 'Google' }, microsoft: { name: 'Microsoft' }, apple: { name: 'Apple' },
+    amazon: { name: 'Amazon' }, aws: { name: 'Amazon' }, netflix: { name: 'Netflix' },
+    chase: { name: 'Chase' }, jpmorgan: { name: 'Chase' }, bofa: { name: 'Bank of America' },
+    fedex: { name: 'FedEx' }, ups: { name: 'UPS' }, dhl: { name: 'DHL' }
+});
+
+// Every known company domain → its company: the families above, [5.90-1] the sender check's brands
+// (SENDER_NAME_BRANDS, further down) and [5.90-2] the main domains of the companies with their own
+// ending. Built on first use, after this whole file has loaded.
+let companyIndexMemo = null;
+function companyIndex() {
+    if (companyIndexMemo) return companyIndexMemo;
+    const index = new Map();
+    const add = (d, name) => { if (d && !index.has(d)) index.set(d, name); };
+    for (const b of BRAND_FAMILIES) b.domains.forEach(d => add(d, b.name));
+    if (COMPANY_MATCHING.oneTable) for (const b of SENDER_NAME_BRANDS) [...(b.home || []), ...(b.domains || [])].forEach(d => add(d, b.name));   // [5.90-1]
+    if (COMPANY_MATCHING.ownEndings) for (const e of Object.values(COMPANY_ENDINGS)) add(e.home, e.name);                                          // [5.90-2]
+    return (companyIndexMemo = index);
+}
+// The company a registrable domain is known to belong to, or null.
+function companyOfDomain(regDomain) {
+    const d = String(regDomain || '').toLowerCase();
+    if (!d) return null;
+    const known = companyIndex().get(d);
+    if (known) return known;
+    if (COMPANY_MATCHING.ownEndings && d.includes('.')) { const e = COMPANY_ENDINGS[d.slice(d.lastIndexOf('.') + 1)]; if (e) return e.name; }   // [5.90-2]
+    return null;
+}
+// [5.90-4] The company whose name a domain carries under an ending not known to be the company's
+// (amazon.de, paypal.cm), or null. Whose it really is takes evidence: the background's
+// companyDomainEvidence (a popular site that enforces DMARC, or public records proving it).
+function companyNameOf(regDomain) {
+    const d = String(regDomain || '').toLowerCase();
+    if (!d || companyOfDomain(d)) return null;
+    const label = d.split('.')[0];
+    const f = BRAND_FAMILIES.find(b => b.labels.includes(label));
+    return f ? f.name : null;
+}
+// The company a registrable domain belongs to, or null.
 function brandOfDomain(regDomain) {
     if (!regDomain) return null;
-    const label = regDomain.split('.')[0];
-    const f = BRAND_FAMILIES.find(b => b.domains.includes(regDomain) || b.labels.includes(label));
-    return f ? f.name : null;
+    return companyOfDomain(regDomain) || (COMPANY_MATCHING.nameNeedsProof ? null : companyNameOf(regDomain));   // [5.90-4] off: the name alone counts, as before
 }
 
 // How serious a problem found by detectLinkProblem is:
@@ -511,7 +572,10 @@ function linkProblemSeverity(problem) {
 //  originalUrl : href as written in the email
 //  finalUrl    : destination after unwrapping
 //  trackerDomains : Set of shortener / tracker domains (destination unresolved => skip text check)
-function detectLinkProblem(visibleText, originalUrl, finalUrl, trackerDomains) {
+//  facts          : optional object; for a link text that shows another site, filled with what a later
+//                   look can settle: { textHost, textDomain, host, destDomain } and, [5.90-4] for a
+//                   company's name under another ending, { company, unproven: [domains] }
+function detectLinkProblem(visibleText, originalUrl, finalUrl, trackerDomains, facts) {
     let dest;
     try { dest = new URL(finalUrl); } catch (e) { return null; }
     const host = dest.hostname.toLowerCase();
@@ -543,7 +607,8 @@ function detectLinkProblem(visibleText, originalUrl, finalUrl, trackerDomains) {
     const textDomain = registrableDomain(textHost);
     const destDomain = registrableDomain(host);
     if (textDomain === destDomain) return null;
-    { const brand = brandOfDomain(textDomain); if (brand && brand === brandOfDomain(destDomain)) return null; }   // same company
+    const textCompany = brandOfDomain(textDomain), destCompany = brandOfDomain(destDomain);
+    if (textCompany && textCompany === destCompany) return null;   // same company ([5.90-1] [5.90-2]: more of them known)
 
     let originalHost = '';
     try { originalHost = new URL(originalUrl).hostname.toLowerCase(); } catch (e) {}
@@ -551,9 +616,41 @@ function detectLinkProblem(visibleText, originalUrl, finalUrl, trackerDomains) {
     if (trackerDomains && (hostInSet(host, trackerDomains) || hostInSet(textHost, trackerDomains))) return null; // unresolved tracker
     if (emailTrackerProvider(finalUrl)) return null; // unresolved email tracker (incl. branded domains): its host says nothing about the destination
 
+    if (facts) Object.assign(facts, { textHost, textDomain, host, destDomain });
+    // [5.90-4] The same company's name on both sides, but at least one only as its name under another
+    // ending (text amazon.com, link amazon.de or paypal.<anything>): amber until evidence shows whose it is.
+    if (COMPANY_MATCHING.nameNeedsProof) {
+        const textName = textCompany || companyNameOf(textDomain);
+        if (textName && textName === (destCompany || companyNameOf(destDomain))) {
+            const unproven = [textDomain, destDomain].filter(d => !brandOfDomain(d)), one = unproven.length === 1;
+            if (facts) Object.assign(facts, { company: textName, unproven });
+            return `link text shows ${textHost} but the link goes to ${host}; ${unproven.join(' and ')} ${one ? 'carries' : 'carry'} ${textName}'s name under another ending but ${one ? 'isn\'t' : 'aren\'t'} known to be ${textName}'s`;
+        }
+    }
     // Text that shows a well-known brand's address while going elsewhere is a classic phishing trick.
     if (PROTECTED_BRANDS.includes(textDomain)) return `link text shows ${textHost} (a well-known brand) but the link goes to ${host}`;
     return `link text shows ${textHost} but the link goes to ${host}`;
+}
+
+// [5.90-3] A red "link text shows another site" finding, looked at again once the email's sender is
+// known (Gmail: the receiving server's DMARC result). When the text shows the site of the email's own
+// verified sender (the domain DMARC passed for, or the same company), the sender itself chose where its
+// link goes: that is not someone imitating it, so the link is amber ("make sure"), never red. Not for
+// links in a quoted or forwarded part, which the sender didn't write. Returns the new finding, or null
+// to keep the red one.
+function verifiedSenderLinkProblem(facts, auth, inQuote) {
+    if (!COMPANY_MATCHING.verifiedSender || !facts || !facts.textDomain || inQuote) return null;
+    if (!auth || auth.dmarc !== 'pass' || !auth.headerFrom) return null;
+    const from = registrableDomain(domainOfAddress(auth.headerFrom));
+    const fromCompany = brandOfDomain(from);
+    if (from !== facts.textDomain && !(fromCompany && fromCompany === brandOfDomain(facts.textDomain))) return null;
+    return `link text shows ${facts.textHost}, the site of this email's verified sender (${from}), but the link goes to ${facts.host}`;
+}
+// [5.90-4] Whether the evidence for every domain that carries a company's name under another ending
+// (facts.unproven) shows it is the company's: then the link is consistent after all.
+function nameEndingsProven(facts, evidence) {
+    if (!facts || !facts.unproven || !facts.unproven.length) return false;
+    return facts.unproven.every((d, i) => evidence && evidence[i] && evidence[i].state === 'owned');
 }
 
 // ---------------------------------------------------------------------------
@@ -1661,6 +1758,12 @@ function ownershipNote(ownership, domain, brand) {
     return ownership.state === 'owned' ? `${domain} is ${brand}'s: ${ownership.how}` : `${domain} looks like ${brand}'s (${ownership.how})`;
 }
 
+// [5.90-4] Whether a sender's domain carries the claimed brand's name under another ending (amazon.de
+// named "Amazon.de"): until 5.90 that alone made it the brand's; now, without evidence, it is amber
+// (never red, never moved to Spam: genuine country sites look exactly like this).
+function nameOnOtherEnding(brand, domain) {
+    return COMPANY_MATCHING.nameNeedsProof && !!brand && companyNameOf(registrableDomain(String(domain || '').toLowerCase())) === brand.name;
+}
 // Whether a sending domain belongs to the brand named in the display name.
 function senderDomainOwnedBy(brand, domain) {
     const d = String(domain || '').toLowerCase();
@@ -1704,6 +1807,7 @@ function nameAddressSigns(name, address, own, colleagues, ownership) {
         const reg = registrableDomain(domain) || domain;
         if (ownership && ownership.state === 'owned') out.push({ weight: 0, text: `The sender's name says “${shown}”; ${ownershipNote(ownership, reg, claimed.name)}.` });
         else if (ownership && ownership.state === 'likely') out.push({ weight: SIGNAL_CAUTION_SCORE, text: `The sender's name says “${shown}”, and ${address} isn't a known ${claimed.name} address, though ${ownershipNote(ownership, reg, claimed.name)}. Make sure it's really who you expect.` });
+        else if (nameOnOtherEnding(claimed, reg)) out.push({ weight: SIGNAL_CAUTION_SCORE, text: `The sender's name says “${shown}”, and ${reg} carries ${claimed.name}'s name under another ending, but it isn't known to be ${claimed.name}'s. Make sure it's really who you expect.` });   // [5.90-4] amber, never moved
         else out.push({ weight: 5, text: `The sender's name says “${shown}”, but ${address} isn't ${claimed.name}'s address.` });
     }
     const h = colleagues && colleagues.size ? colleagueNameHash(name) : '';
@@ -1823,14 +1927,16 @@ function evaluateSender({ displayName, address, auth, bodyText, ownership }) {
         const reg = registrableDomain(domain) || domain;
         if (ownership && ownership.state === 'owned') info.push(`The sender's name says “${String(displayName).trim()}”; ${ownershipNote(ownership, reg, claimed.name)}.`);
         else if (ownership && ownership.state === 'likely') findings.push({ severity: 'caution', message: `The sender's name says “${String(displayName).trim()}”, and ${address} isn't a known ${claimed.name} address, though ${ownershipNote(ownership, reg, claimed.name)}. Make sure it's really who you expect.` });
+        else if (nameOnOtherEnding(claimed, reg)) findings.push({ severity: 'caution', message: `The sender's name says “${String(displayName).trim()}”, and ${reg} carries ${claimed.name}'s name under another ending, but it isn't known to be ${claimed.name}'s. Make sure it's really who you expect.` });   // [5.90-4]
         else findings.push({ severity: 'danger', message: `The sender's name says “${String(displayName).trim()}”, but the address ${address} isn't ${claimed.name}'s. Don't trust links, attachments or phone numbers in this email.` });
     }
     const la = domain && !isPersonalMailDomain(domain) ? lookalikeOf(domain) : null;
     if (la) findings.push({ severity: 'danger', message: `The sender's address (${domain}) ${la}.` });
     if (auth) {
         const fromBrand = brandOfSender(auth.headerFrom);
-        if (fromBrand && auth.dmarc === 'fail') {
-            findings.push({ severity: 'danger', message: `This email claims to come from ${fromBrand} (${auth.headerFrom}) but failed ${fromBrand}'s sender verification. It is probably forged.` });
+        const forgedBrand = fromBrand || (COMPANY_MATCHING.nameNeedsProof ? companyNameOf(registrableDomain(domainOfAddress(auth.headerFrom))) : null);   // [5.90-4] amazon.de failing DMARC is forged all the same
+        if (forgedBrand && auth.dmarc === 'fail') {
+            findings.push({ severity: 'danger', message: `This email claims to come from ${forgedBrand} (${auth.headerFrom}) but failed ${forgedBrand}'s sender verification. It is probably forged.` });
         } else if (fromBrand && auth.dmarc === 'pass') {
             info.push(`Sender passed ${fromBrand}'s sender authentication (${auth.headerFrom}, DMARC pass).`);
             const text = String(bodyText || '');
@@ -2106,7 +2212,7 @@ const SHARED_PLATFORM_SUFFIXES = ['amazonaws.com', 'cloudfront.net', 'windows.ne
 function refusedSimulationDomain(d) {
     const reg = registrableDomain(d) || d;
     if (isPersonalMailDomain(d)) return 'a personal email provider';
-    if (brandOfDomain(reg) || brandOfDomain(d)) return 'a well-known company\'s domain, where anyone can host content';
+    if (brandOfDomain(reg) || brandOfDomain(d) || companyNameOf(reg)) return 'a well-known company\'s domain, where anyone can host content';   // [5.90-4] its name under any ending too
     if (typeof publicShorteners !== 'undefined' && (publicShorteners.includes(d) || publicShorteners.includes(reg))) return 'a public link shortener';
     if (SHARED_PLATFORM_SUFFIXES.some(s => d === s || d.endsWith('.' + s))) return 'a shared hosting or sending platform';
     return null;

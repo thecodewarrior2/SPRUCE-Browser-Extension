@@ -1,5 +1,46 @@
 # Changelog
 
+## 5.90 — A company's own links are no longer called dangerous
+
+A genuine American Express email was marked dangerous: its link text showed americanexpress.com, and the
+link went to go.amex. `.amex` is American Express's own ending, which nobody else can register, and Gmail
+had verified that the email came from American Express. The same kind of mistake hit other companies'
+second domains, and in the other direction any domain with PayPal's, Google's or Amazon's name was trusted
+by its name alone. Four changes, each on its own switch (`COMPANY_MATCHING` in `shared.js`, see below):
+
+- **[5.90-1] One table of company domains for links and senders.** The link check now knows every domain
+  the sender check lists for a company: text bankofamerica.com with a link to bofa.com, docusign.com to
+  docusign.net, ups.com to upsemail.com or intuit.com to quickbooks.com is no longer marked (54 such pairs
+  were, 26 of them red). No domains were added.
+- **[5.90-2] A company's own ending.** An address under an ending only one company can register (ICANN
+  brand endings, each checked in IANA's root zone database: `.amex`, `.americanexpress`, `.google`, `.gle`,
+  `.microsoft`, `.apple`, `.amazon`, `.aws`, `.netflix`, `.chase`, `.jpmorgan`, `.bofa`, `.fedex`, `.ups`,
+  `.dhl`) is that company's: go.amex, blog.google. Endings a company runs for the public (Google's `.app`
+  or `.dev`) are not. American Express's sender verification is now recognized too ("Sender passed
+  American Express's sender authentication", or red when it fails).
+- **[5.90-3] The verified sender's own links (Gmail).** Link text showing a well-known brand's site while
+  going elsewhere is red. When Gmail's DMARC check passed for that same company, and the link isn't in a
+  quoted or forwarded part, it becomes amber: the sender chose where its own link goes. Without the
+  verification it stays red. An opened email whose verdict no longer moves it (a red link turned amber)
+  is no longer moved to Spam by a move queued a moment earlier.
+- **[5.90-4] A company's name under another ending needs evidence.** Until now amazon.*anything*,
+  google.*anything* and paypal.*anything* counted as the company's: text paypal.com with a link to a
+  domain someone registered as paypal.*something* wasn't marked, and a sender named "PayPal" there even
+  got "Sender passed PayPal's sender authentication". Now such a domain is the company's only when
+  public records show it: it is on both popular-site lists the look-alike check already downloads and
+  enforces sender verification (every Amazon store, Google's country sites), or the brand-ownership
+  check proves it (PayPal's country sites, by their name servers). Until then the link, or a sender
+  named for the company at that domain, is amber, never red and never moved to Spam; a domain like that
+  failing its sender verification is still red. Offline only (no lookups), they stay amber. Lookups:
+  the domain's DMARC record and, when needed, the brand-ownership records, at most once a month per
+  domain (see the privacy policy).
+
+**Rolling one back:** in `shared.js`, set its switch in `COMPANY_MATCHING` to `false` (`oneTable`,
+`ownEndings`, `verifiedSender`, `nameNeedsProof`) and rebuild; that change then works as in 5.89 and the
+others keep working. Every line a change touches carries its tag (`[5.90-1]` … `[5.90-4]`), and a test
+checks that with all four switched off every answer is 5.89's. Details: `docs/ARCHITECTURE.md`,
+"Text and destination of the same company".
+
 ## 5.89 — One set of files for every browser
 
 **No change in what the extension does** in Chrome, Edge or Firefox: this version changes how every

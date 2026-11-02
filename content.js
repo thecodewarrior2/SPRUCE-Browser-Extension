@@ -925,8 +925,9 @@ function unshortenLinks() {
 
                             // Link-text vs destination, raw IPs, punycode, user:pass@ tricks.
                             let problem = null;
+                            const facts = {};   // what a second look can settle ([5.90-3] [5.90-4], reviewLinkProblem)
                             if (S.enableMismatchWarnings && !response.isAllowlisted) {
-                                problem = detectLinkProblem(textClaim, originalUrl, response.finalUrl, unresolvedTrackerSet);
+                                problem = detectLinkProblem(textClaim, originalUrl, response.finalUrl, unresolvedTrackerSet, facts);
                             }
                             // A company-only short link (c.gle…) whose destination couldn't be looked up is
                             // judged by who sent the email (see verifyCompanyLink), not marked right away.
@@ -989,6 +990,7 @@ function unshortenLinks() {
                             applyLinkStyles(el, linkData);
                             if (companyLink) verifyCompanyLink(el, linkData, companyLink);
                             else if (flagged) scheduleBannerRefresh(containerOf(el));
+                            if (response.isSafe && problem && facts.textDomain) reviewLinkProblem(el, linkData, facts);
                             if (linkData.countable) scheduleBadgeUpdate();
                         } else {
                             el.dataset.unshortened = 'failed';
@@ -1511,6 +1513,42 @@ function verifyCompanyLink(el, d, company) {
         scheduleBannerRefresh(body);
         scheduleBadgeUpdate();
     }));
+}
+
+// A link whose text shows another site, looked at again once more is known. It is marked at once
+// (a red link asks before opening from the start); then:
+//   [5.90-4] when every domain that carries a company's name under another ending is shown to be the
+//            company's (companyDomainEvidence in the background), the link is consistent: unmarked;
+//   [5.90-3] when the text shows the site of the email's verified sender, red becomes amber.
+function reviewLinkProblem(el, d, facts) {
+    const wantsProof = !!(facts.unproven && facts.unproven.length);
+    const wantsSender = COMPANY_MATCHING.verifiedSender && d.severity === 'danger' && senderChecksActive();
+    if (!wantsProof && !wantsSender) return;
+    const body = containerOf(el) || el;
+    const proofP = wantsProof ? Promise.all(facts.unproven.map(dom => brandOwnershipFor(dom, facts.company, lastSettings))) : Promise.resolve(null);
+    const authP = wantsSender ? getMessageAuth(body).catch(() => null) : Promise.resolve(null);
+    Promise.all([proofP, authP]).then(([evidence, auth]) => guarded('Looking again at a link that shows another site', () => {
+        if (!el.isConnected || processedLinksMap.get(el) !== d || d.isSafe) return;
+        if (wantsProof && nameEndingsProven(facts, evidence)) {
+            settleLinkProblem(el, d, null);
+            reportEvent('info', `A link's text shows ${facts.textHost} and it goes to ${facts.host}: ${facts.unproven.map((x, i) => ownershipNote(evidence[i], x, facts.company)).join('; ')}. It is the same company, so the link isn't marked.`);
+            return;
+        }
+        const amber = wantsSender ? verifiedSenderLinkProblem(facts, auth, inQuotedSection(el)) : null;
+        if (amber) {
+            settleLinkProblem(el, d, amber);
+            reportEvent('info', `A link's text shows ${facts.textHost}, the site of this email's verified sender (DMARC pass), but it goes to ${facts.host}: marked for caution instead of danger, since the sender chose where its own link goes.`);
+        }
+    }));
+}
+// Gives a checked link a new finding (or none) and redraws what depends on it.
+function settleLinkProblem(el, d, problem) {
+    const changed = d.finalUrl !== d.originalUrl && !d.isAllowlisted;
+    if (problem) Object.assign(d, { reason: problem.charAt(0).toUpperCase() + problem.slice(1), severity: linkProblemSeverity(problem) });
+    else Object.assign(d, { isSafe: true, reason: null, severity: null, keepText: false, countable: changed, needsStyling: changed || !!d.trackerRevealable });
+    applyLinkStyles(el, d);
+    scheduleBannerRefresh(containerOf(el));
+    scheduleBadgeUpdate();
 }
 
 // The opened message a body belongs to: { container, el } with the element showing its sender, or
@@ -3034,7 +3072,10 @@ function updateOpenedVerdict(body) {
         if (line) banner.sender.set('sender-identity', line); else banner.sender.delete('sender-identity');
         scheduleBannerRefresh(body);
     }
-    if (final.move && st.thread && lastSettings.enableAutoSpam) queueSpamMove(st.thread, { kind: 'thread', address: st.address, reason: final.reasons.join(' '), msgId: st.msgId, how: 'automatically, when the email was opened' });
+    if (final.move && st.thread && lastSettings.enableAutoSpam) queueSpamMove(st.thread, { kind: 'thread', address: st.address, reason: final.reasons.join(' '), msgId: st.msgId, how: OPENED_MOVE_HOW });
+    // [5.90-3] Its verdict no longer moves it (a red link turned out to be the verified sender's own,
+    // [5.90-4] or a company's own country site): a move this message's verdict queued and that hasn't started is withdrawn.
+    else if (st.thread && !final.move) withdrawOpenedMove(st.thread, st.msgId);
 }
 
 // The opened conversation's subject, where the webmail's entry says where it is.
@@ -3383,6 +3424,14 @@ function setRowGuard(row, thread) {
     const want = guardWaitText();
     if (t && t.textContent !== want) t.textContent = want;
 }
+const OPENED_MOVE_HOW = 'automatically, when the email was opened';
+function withdrawOpenedMove(thread, msgId) {
+    const it = spamQueue.get(thread);
+    if (!it || it.how !== OPENED_MOVE_HOW || it.started || it.msgId !== msgId) return;   // only the same message's own verdict takes it back
+    spamQueue.delete(thread);
+    syncMoveGuards();
+    publishBusy();
+}
 function moveThreadNow(thread) {
     const it = spamQueue.get(thread);
     if (!it) return;
@@ -3706,9 +3755,11 @@ async function runSpamMoves() {
         // move put off for the user isn't recorded as done.
         if (anySelection()) { wait = 'selection'; return; }
         if (open ? currentThreadKey() !== open.thread : !rowsStillMatch(batch)) return;
-        if (!await rememberSpamThreads(batch, false)) return;  // not remembered: don't move
+        if (open && spamQueue.get(open.thread) !== open) return;   // [5.90-3] withdrawn meanwhile (withdrawOpenedMove): its verdict changed
+        if (open) open.started = true;
+        if (!await rememberSpamThreads(batch, false)) { if (open) open.started = false; return; }  // not remembered: don't move
         const result = open ? await reportSpamOpenThread(open) : await reportSpamRows(batch, urgent);
-        if (!result) { await forgetSpamThreads(batch); wait = 'user busy'; return; }   // the user got busy first: nothing clicked
+        if (!result) { if (open) open.started = false; await forgetSpamThreads(batch); wait = 'user busy'; return; }   // the user got busy first: nothing clicked
         const { moved, ignored, failed } = result;
         for (const it of [...moved, ...failed]) { spamQueue.delete(it.thread); spamAttempted.add(it.thread); }
         if (moved.length) {

@@ -127,6 +127,36 @@ Misleading-link checks run against what the link shows: text naming a different 
 destination, a raw IP address, a `user:password@` trick, international look-alike letters (punycode),
 pages hosted in public cloud storage.
 
+### Text and destination of the same company (company matching)
+
+Text showing one site and a link to another is fine when both belong to one company. Since 5.90 four
+steps decide that, each with its own switch in `COMPANY_MATCHING` (`shared.js`); every line of code a step
+touches carries its tag:
+
+| Step | What it does | Switch it off (set to `false`, rebuild) and |
+|---|---|---|
+| `[5.90-1]` `oneTable` | One table of company domains for links and senders: the link check also knows every domain the sender check lists for a brand (`companyIndex`) | text bankofamerica.com, link bofa.com is red again |
+| `[5.90-2]` `ownEndings` | An ICANN brand ending (`COMPANY_ENDINGS`: `.amex`, `.google`, `.chase`…, each checked in IANA's root zone database) is its company's: any address under it | text americanexpress.com, link go.amex is red again |
+| `[5.90-3]` `verifiedSender` | A red "text shows a brand's site" link is looked at again once Gmail's DMARC result is read (`reviewLinkProblem` → `verifiedSenderLinkProblem`): passed for that same company, not in a quoted part → amber. An opened email's queued move to Spam is withdrawn when its verdict no longer moves it (`withdrawOpenedMove`) | such links stay red |
+| `[5.90-4]` `nameNeedsProof` | A domain that only carries the name of a company that uses its name under many endings (Google, Amazon, PayPal: `labels` in `BRAND_FAMILIES`) is not the company's by its name (`companyNameOf`): the link is amber and the background is asked (`companyDomainEvidence`): on the popular-site lists and enforcing DMARC, or `brandOwnership` proof → not marked. A sender named for the company at such a domain is amber, never red or moved | the name alone makes it the company's, as before 5.90 (paypal.*anything* trusted) |
+
+With all four off, every answer is 5.89's (a unit test checks it).
+
+```mermaid
+flowchart TD
+  T["Text shows site A,<br/>link goes to site B"] --> S{"A and B one company?<br/>(table [5.90-1], brand ending [5.90-2])"}
+  S -- yes --> OK["Not marked"]
+  S -- no --> N{"Same company's name,<br/>one side only by name? [5.90-4]"}
+  N -- yes --> AM["Amber; background asked"] --> P{"Popular + DMARC enforced,<br/>or ownership proof?"}
+  P -- yes --> OK
+  P -- no --> AM2["Stays amber"]
+  N -- no --> B{"A is a well-known brand?"}
+  B -- no --> C["Amber"]
+  B -- yes --> R["Red"] --> V{"Gmail: DMARC passed for A's company,<br/>not quoted? [5.90-3]"}
+  V -- yes --> C
+  V -- no --> R2["Stays red"]
+```
+
 ## 5. Is a website dangerous? The threat-check engine
 
 ```mermaid

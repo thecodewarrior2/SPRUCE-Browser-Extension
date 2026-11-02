@@ -24,8 +24,19 @@ settings can't be locked). What leaves your device, and to whom, is in the [priv
   SafeLinks, Barracuda, Trend Micro, …) are expanded so a hover card shows the real destination,
   with a **Copy address** button. More than 50 redirect formats are decoded offline.
 - **Two warning levels.** *Caution* (amber) for misleading links such as text that shows a
-  different site than the link goes to; *Danger* (red) for look-alike brand domains, phishing
-  lists, and dangerous schemes (`javascript:`, `data:`, …). Red links ask before opening.
+  different site than the link goes to; *Danger* (red) for look-alike brand domains, text showing a
+  well-known brand's site while going elsewhere, phishing lists, and dangerous schemes (`javascript:`,
+  `data:`, …). Red links ask before opening.
+- **A company's own domains count as one.** Link text showing one of a company's sites and a link to
+  another of its domains is not a warning: Bank of America's bankofamerica.com and bofa.com, DocuSign's
+  docusign.com and docusign.net, and any address under an ending only that company can register
+  (go.amex for American Express, blog.google for Google). In Gmail, text showing the site of the email's
+  own sender, verified by Gmail's DMARC check, is amber at most, wherever the link goes: the sender chose
+  its own link. A company's name under another ending (amazon.de, google.co.uk, or paypal.*anything*)
+  counts as the company's only when public records show it: it is one of the most visited sites and
+  enforces sender verification, or its DNS records tie it to the company (looked up once a month, online
+  only). Until then such a link, or a sender with the company's name at such a domain, is amber, never
+  red or moved to Spam.
 - **One calm banner per email.** Findings about the email as a whole are summarized at the top,
   with **Show details** and **What should I do?**; an email with many unusual links gets one
   sentence instead of a marking on every link. It follows Gmail's light or dark theme.

@@ -1189,3 +1189,143 @@ test('QR scanner: Chrome asks its offscreen document; Firefox and Safari call th
   const r2 = await vm.runInContext('scanForQr({ b64: "AA==", mime: "application/pdf" })', b2);
   assert.equal(r2.codes[0].text, 'application/pdf', 'the job reached the local scanner');
 });
+
+// --- 5.90 company matching: each change on its own switch (COMPANY_MATCHING in shared.js) ----------
+// shared.js alone, with some switches turned off (as a maintainer rolling one back would).
+function loadShared(off = []) {
+  let src = fs.readFileSync(path.join(EXT, 'shared.js'), 'utf8');
+  const decl = /const COMPANY_MATCHING = Object\.freeze\(\{([^}]*)\}\);/;
+  assert.ok(decl.test(src), 'COMPANY_MATCHING switches found');
+  for (const k of off) { assert.ok(new RegExp(`\\b${k}: true\\b`).test(src.match(decl)[1]), `switch ${k}`); src = src.replace(decl, (m) => m.replace(`${k}: true`, `${k}: false`)); }
+  const ctx = { console, URL, URLSearchParams, TextEncoder, TextDecoder, atob, btoa, Intl, chrome: { runtime: { getURL: p => 'chrome-extension://x/' + p, id: 'x' } }, location: { href: 'https://mail.google.com/' } };
+  vm.createContext(ctx);
+  vm.runInContext(src, ctx, { filename: 'shared.js' });
+  return (code) => vm.runInContext(code, ctx);
+}
+const ALL_SWITCHES = ['oneTable', 'ownEndings', 'verifiedSender', 'nameNeedsProof'];
+const linkSays = (R, text, url) => R(`detectLinkProblem(${JSON.stringify(text)}, ${JSON.stringify(url)}, ${JSON.stringify(url)}, null)`);
+const severityOf = (R, problem) => R(`linkProblemSeverity(${JSON.stringify(problem)})`);
+
+test('[5.90-1] one company table: every pair of domains the sender check knows as one company is consistent for links; off: red again', () => {
+  const R = loadShared();
+  const brands = R('SENDER_NAME_BRANDS');
+  let pairs = 0;
+  for (const b of brands) {
+    const ds = [...new Set([...(b.home || []), ...(b.domains || [])])];
+    for (const t of ds) for (const d of ds) if (t !== d) { pairs++; assert.equal(linkSays(R, t, `https://www.${d}/x`), null, `${t} → ${d}`); }
+  }
+  assert.ok(pairs >= 50, `pairs checked: ${pairs}`);
+  assert.equal(R('brandOfSender("info.bofa.com")'), 'Bank of America');
+  const Off = loadShared(['oneTable']);
+  assert.equal(severityOf(Off, linkSays(Off, 'bankofamerica.com', 'https://info.bofa.com/x')), 'danger');
+  assert.equal(Off('brandOfSender("info.bofa.com")'), null);
+});
+
+test('[5.90-2] company endings: go.amex is American Express\'s, blog.google Google\'s; open endings are not; off: red again', () => {
+  const R = loadShared();
+  assert.equal(linkSays(R, 'americanexpress.com/phishing', 'https://go.amex/phishing-us??comm_track_id=1&dotAmexDomain=go'), null);
+  assert.equal(linkSays(R, 'google.com', 'https://blog.google/products/'), null);
+  assert.equal(linkSays(R, 'chase.com', 'https://www.chase/x'), null);
+  assert.equal(R('brandOfSender("go.amex")'), 'American Express');
+  assert.equal(R('brandOfSender("welcome.americanexpress.com")'), 'American Express');
+  // An ending a company runs for the public, or a lookalike under an ordinary ending, is not the company's.
+  assert.equal(severityOf(R, linkSays(R, 'google.com', 'https://login-check.app/x')), 'danger');
+  assert.equal(severityOf(R, linkSays(R, 'americanexpress.com', 'https://americanexpress.co/x')), 'danger');
+  assert.equal(R('companyOfDomain("amex")'), null, 'a bare ending is no domain');
+  const Off = loadShared(['ownEndings']);
+  assert.equal(severityOf(Off, linkSays(Off, 'americanexpress.com/phishing', 'https://go.amex/phishing-us')), 'danger');
+  assert.equal(Off('brandOfSender("go.amex")'), null);
+});
+
+test('[5.90-3] verified sender: a red link whose text shows the verified sender\'s own site becomes amber, nothing else does; off: stays red', () => {
+  const R = loadShared();
+  const facts = {};
+  const red = R(`(() => { const f = {}; const p = detectLinkProblem('americanexpress.com', 'https://www.aexp.com/x', 'https://www.aexp.com/x', null, f); globalThis.__f = f; return p; })()`);
+  Object.assign(facts, R('__f'));
+  assert.equal(severityOf(R, red), 'danger');
+  assert.equal(facts.textDomain, 'americanexpress.com');
+  const again = (auth, inQuote = false) => R(`verifiedSenderLinkProblem(__f, ${JSON.stringify(auth)}, ${inQuote})`);
+  const amber = again({ dmarc: 'pass', headerFrom: 'welcome.americanexpress.com' });
+  assert.match(amber, /verified sender \(americanexpress\.com\)/);
+  assert.equal(severityOf(R, amber), 'caution');
+  assert.equal(again({ dmarc: 'fail', headerFrom: 'welcome.americanexpress.com' }), null, 'failed verification');
+  assert.equal(again({ dmarc: 'pass', headerFrom: 'evil.example' }), null, 'another sender');
+  assert.equal(again({ dmarc: 'pass', headerFrom: 'welcome.americanexpress.com' }, true), null, 'quoted part');
+  assert.equal(again(null), null, 'sender not checked');
+  // The same company by the table: text bofa.com in an email from bankofamerica.com.
+  R(`globalThis.__g = {}; detectLinkProblem('bankofamerica.com', 'https://evil.example/x', 'https://evil.example/x', null, __g)`);
+  assert.equal(severityOf(R, R(`verifiedSenderLinkProblem(__g, { dmarc: 'pass', headerFrom: 'email.bofa.com' }, false)`)), 'caution');
+  const Off = loadShared(['verifiedSender']);
+  Off(`globalThis.__f = {}; detectLinkProblem('americanexpress.com', 'https://www.aexp.com/x', 'https://www.aexp.com/x', null, __f)`);
+  assert.equal(Off(`verifiedSenderLinkProblem(__f, { dmarc: 'pass', headerFrom: 'welcome.americanexpress.com' }, false)`), null);
+});
+
+test('[5.90-4] a company\'s name under another ending needs evidence: amber until shown, never red or moved; off: trusted by its name', () => {
+  const R = loadShared();
+  const p = R(`(() => { globalThis.__f = {}; return detectLinkProblem('paypal.com', 'https://paypal.cm/x', 'https://paypal.cm/x', null, __f); })()`);
+  assert.match(p, /paypal\.cm carries PayPal's name under another ending/);
+  assert.equal(severityOf(R, p), 'caution');
+  assert.deepEqual([...R('__f.unproven')], ['paypal.cm']);
+  assert.equal(R('__f.company'), 'PayPal');
+  assert.equal(R(`nameEndingsProven(__f, [{ state: 'owned', how: 'x' }])`), true);
+  assert.equal(R(`nameEndingsProven(__f, [{ state: 'likely', how: 'x' }])`), false);
+  assert.equal(R(`nameEndingsProven(__f, [null])`), false);
+  // Text on the unproven side too (amazon.de shown, amazon.com reached).
+  assert.match(linkSays(R, 'amazon.de', 'https://www.amazon.com/x'), /amazon\.de carries Amazon's name/);
+  // Senders: amber, not red; a forged one (DMARC fail) is still red; never "passed PayPal's verification".
+  const s = R(`evaluateSender({ displayName: 'PayPal', address: 'service@paypal.cm', auth: { headerFrom: 'paypal.cm', dmarc: 'pass' }, bodyText: '' })`);
+  assert.equal(s.findings.length, 1); assert.equal(s.findings[0].severity, 'caution'); assert.equal(s.info.length, 0);
+  const forged = R(`evaluateSender({ displayName: 'Amazon', address: 'x@amazon.de', auth: { headerFrom: 'amazon.de', dmarc: 'fail' }, bodyText: '' })`);
+  assert.ok(forged.findings.some(f => f.severity === 'danger' && /probably forged/.test(f.message)));
+  const proven = R(`evaluateSender({ displayName: 'Amazon.de', address: 'x@amazon.de', auth: null, bodyText: '', ownership: { state: 'owned', how: 'test' } })`);
+  assert.equal(proven.findings.length, 0);
+  const row = R(`nameAddressSigns('Amazon.de', 'x@amazon.de', '', null, null)`);
+  assert.equal(row.length, 1);
+  assert.ok(row[0].weight < R('SIGNAL_FLAG_SCORE'), 'amber: never moved to Spam');
+  // Netflix has no such name list: its name under another ending stays red, as before.
+  assert.equal(R(`nameAddressSigns('Netflix', 'x@netflix.example', '', null, null)`)[0].weight, 5);
+  assert.ok(R(`refusedSimulationDomain('paypal.cm')`), 'never a training domain');
+  const Off = loadShared(['nameNeedsProof']);
+  assert.equal(linkSays(Off, 'paypal.com', 'https://paypal.cm/x'), null);
+  assert.equal(Off(`evaluateSender({ displayName: 'PayPal', address: 'service@paypal.cm', auth: null, bodyText: '' })`).findings.length, 0);
+});
+
+test('[5.90] every switch off: exactly what 5.89 answered', () => {
+  const R = loadShared(ALL_SWITCHES);
+  // 5.89's own answers for these cases (recorded from 5.89's shared.js).
+  const links = [['americanexpress.com/phishing', 'https://go.amex/p', 'link text shows americanexpress.com (a well-known brand) but the link goes to go.amex'],
+    ['google.com', 'https://blog.google/p', 'link text shows google.com (a well-known brand) but the link goes to blog.google'],
+    ['bankofamerica.com', 'https://info.bofa.com/x', 'link text shows bankofamerica.com (a well-known brand) but the link goes to info.bofa.com'],
+    ['docusign.com', 'https://na3.docusign.net/x', 'link text shows docusign.com (a well-known brand) but the link goes to na3.docusign.net'],
+    ['zoom.us', 'https://zoom.com/x', 'link text shows zoom.us (a well-known brand) but the link goes to zoom.com'],
+    ['paypal.com', 'https://paypal.cm/x', null], ['paypal.com', 'https://paypal.de/x', null], ['amazon.com', 'https://amazon.de/x', null],
+    ['amazon.de', 'https://www.amazon.com/x', null], ['google.com', 'https://google.help/x', null],
+    ['citibank.com', 'https://online.citi.com/x', 'link text shows citibank.com (a well-known brand) but the link goes to online.citi.com'],
+    ['example.org', 'https://other.example/x', 'link text shows example.org but the link goes to other.example'], ['gmail.com', 'https://google.com/x', null]];
+  for (const [t, u, was] of links) assert.equal(linkSays(R, t, u), was, `${t} → ${u}`);
+  const brands = { 'go.amex': null, 'americanexpress.com': null, 'amazon.de': 'Amazon', 'paypal.cm': 'PayPal', 'google.com': 'Google', 'bofa.com': null, 'upsemail.com': null, 'c.gle': 'Google' };
+  for (const [d, was] of Object.entries(brands)) assert.equal(R(`brandOfSender(${JSON.stringify(d)})`), was, d);
+  assert.deepEqual(JSON.parse(JSON.stringify(R(`evaluateSender({ displayName: 'PayPal', address: 'service@paypal.cm', auth: { headerFrom: 'paypal.cm', dmarc: 'pass' }, bodyText: '' })`))),
+    { findings: [], info: ["Sender passed PayPal's sender authentication (paypal.cm, DMARC pass)."] });
+  assert.deepEqual(JSON.parse(JSON.stringify(R(`evaluateSender({ displayName: 'American Express', address: 'a@welcome.americanexpress.com', auth: { headerFrom: 'welcome.americanexpress.com', dmarc: 'pass' }, bodyText: '' })`))), { findings: [], info: [] });
+  assert.equal(R(`nameAddressSigns('Amazon.de', 'x@amazon.de', '', null, null)`).length, 0);
+  assert.equal(R(`verifiedSenderLinkProblem({ textDomain: 'americanexpress.com', textHost: 'americanexpress.com', host: 'x.example' }, { dmarc: 'pass', headerFrom: 'americanexpress.com' }, false)`), null);
+});
+
+test('[5.90-4] background: a popular site that enforces DMARC and carries the name counts as the company\'s; other cases go to brandOwnership', async () => {
+  const b = loadBackground();
+  vm.runInContext(`
+    globalThis.__asked = [];
+    loadLookalikeIndex = async () => ({ kind: new Map([['amazon.de', 'popular'], ['amazon.nl', 'popular'], ['netflix.de', 'popular']]) });
+    dmarcEnforced = async (d) => d !== 'amazon.nl';
+    brandOwnership = async (d, brand) => { __asked.push(d + '|' + brand); return { state: 'unknown', how: '' }; };`, b);
+  const S = { enableDnsThreatCheck: true, enableLookalikeCheck: true };
+  const ev = (d, brand, s = S) => vm.runInContext(`companyDomainEvidence(${JSON.stringify(d)}, ${JSON.stringify(brand)}, ${JSON.stringify(s)})`, b);
+  const de = await ev('amazon.de', 'Amazon');
+  assert.equal(de.state, 'owned'); assert.match(de.how, /most visited websites/);
+  assert.equal((await ev('amazon.nl', 'Amazon')).state, 'unknown', 'popular without enforced DMARC: not enough');
+  assert.equal((await ev('paypal.cm', 'PayPal')).state, 'unknown', 'not popular');
+  assert.equal((await ev('netflix.de', 'Netflix')).state, 'unknown', 'only for companies that use their name under many endings');
+  assert.equal((await ev('amazon.de', 'Amazon', { enableDnsThreatCheck: false, enableLookalikeCheck: true })).state, 'unknown', 'no lookups: no evidence');
+  assert.deepEqual([...vm.runInContext('__asked', b)], ['amazon.nl|Amazon', 'paypal.cm|PayPal', 'netflix.de|Netflix', 'amazon.de|Amazon']);
+});

@@ -2174,6 +2174,24 @@ async function brandOwnership(domain, brandName, S, account = '') {
     return p;
 }
 
+// What public records say about whether a domain is the company's (brandOwnership), and [5.90-4] for
+// a domain that carries the company's name under another ending (amazon.de, google.co.uk; until 5.90
+// the name alone made it the company's): also whether it is one of the most visited websites in the
+// popular-site lists the look-alike check downloads (Chrome UX Report, Tranco) and enforces DMARC, as
+// a company's country sites do. A fresh domain someone registered under the name (paypal.<anything>)
+// is in neither. Only for a company that uses its name under many endings (labels in BRAND_FAMILIES),
+// whose name isn't an ordinary word another company could have.
+async function companyDomainEvidence(domain, brandName, S, account = '') {
+    const reg = registrableDomain(normalizeDomain(domain));
+    if (COMPANY_MATCHING.nameNeedsProof && S && S.enableDnsThreatCheck && companyNameOf(reg) === brandName) {
+        const idx = await loadLookalikeIndex().catch(() => null);
+        if (idx && idx.kind.get(reg) === 'popular' && await dmarcEnforced(reg).catch(() => false)) {
+            return { state: 'owned', how: `it carries ${brandName}'s name, is one of the most visited websites (Chrome UX Report, Tranco) and enforces sender verification (DMARC)` };
+        }
+    }
+    return brandOwnership(domain, brandName, S, account);
+}
+
 // Whether a sender's domain imitates a protected one: null, or { level: 'strong' | 'caution', text }.
 async function lookalikeVerdict(domain, ownDomain, S) {
     const host = normalizeDomain(domain);
@@ -3074,7 +3092,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     // Whether an address's domain is the brand's its sender name claims (public records; see brandOwnership).
     if (request.action === 'brandOwnership') {
         if (!sender || sender.id !== chrome.runtime.id || typeof request.domain !== 'string' || typeof request.brand !== 'string') { sendResponse(null); return false; }
-        getConfig().then(cfg => cfg.values.enableLookalikeCheck ? brandOwnership(request.domain.slice(0, 253), request.brand.slice(0, 40), cfg.values, accountLabel(request)) : { state: 'unknown', how: '' })
+        getConfig().then(cfg => cfg.values.enableLookalikeCheck ? companyDomainEvidence(request.domain.slice(0, 253), request.brand.slice(0, 40), cfg.values, accountLabel(request)) : { state: 'unknown', how: '' })
             .then(v => sendResponse({ state: v.state, how: v.how || '' }))
             .catch((e) => { logWarning(`Checking who owns a sender's domain failed (${errorText(e)}).`, 'Sender checks', accountLabel(request)); sendResponse(null); });
         return true;
