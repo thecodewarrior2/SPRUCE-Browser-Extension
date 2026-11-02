@@ -219,8 +219,8 @@ async function loadEffectiveSettings() {
     defaults.remoteShorteners = [];
     defaults.customTrustedSenders = [];
 
-    const local = await storageGet('local', defaults);
-    const managed = await storageGet('managed', null);
+    // Two independent storage areas: read side by side (this runs on every worker start).
+    const [local, managed] = await Promise.all([storageGet('local', defaults), storageGet('managed', null)]);
 
     const values = {};
     const locked = {};
@@ -2417,8 +2417,10 @@ function applyEmailSignals(base, signals) {
     const texts = [...new Set(list.map(x => x.text))].filter(t => !base.reasons.includes(t));
     const plain = base.reasons.filter(r => !/^Checked:|well-known email provider|^Sent from your own|wasn't checked|couldn't be checked/.test(r));
     if (base.status === 'flagged') return Object.assign({}, base, { reasons: [...base.reasons, ...texts], score });
-    if (score >= SIGNAL_FLAG_SCORE) {
-        return Object.assign({}, base, { status: 'flagged', reasons: [...texts, ...plain], move: base.status !== 'trusted' && !base.own, score });
+    // A trusted sender is never shown as flagged or cautioned (the trusted list's promise); the
+    // signals' reasons still land in the verdict below, so nothing found is hidden.
+    if (score >= SIGNAL_FLAG_SCORE && base.status !== 'trusted') {
+        return Object.assign({}, base, { status: 'flagged', reasons: [...texts, ...plain], move: !base.own, score });
     }
     if (score >= SIGNAL_CAUTION_SCORE && base.status !== 'trusted') return Object.assign({}, base, { status: 'caution', reasons: [...texts, ...plain], move: false, score });
     return Object.assign({}, base, { reasons: [...base.reasons, ...texts], score });

@@ -182,7 +182,8 @@
             [code('testUnwrap'), 'Options → worker', 'Link Inspector: the pipeline without caching or logging, with explanations.'],
             [code('testResolver / testCustomThreat / testCustomUnshortener'), 'Options → worker', 'Resolver test buttons.'],
             [code('forceSync'), 'Options → worker', 'Settings → "Update now": run the list update immediately.'],
-            [code('toggleVisuals / getCounts'), 'popup → Gmail', 'Switch highlights; read counts for the open message.']
+            [code('toggleVisuals'), 'popup → Gmail', 'Switch the visual link highlights in the open tab.'],
+            [code('getTabState'), 'popup → worker', 'Counts and link statistics for the active tab, and what the spam mover is waiting for.']
         ]));
 
         fill('archStorage', table(['Key (chrome.storage.local)', 'Contents'], [

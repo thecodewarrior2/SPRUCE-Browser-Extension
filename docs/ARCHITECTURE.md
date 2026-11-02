@@ -205,9 +205,10 @@ flowchart TD
 |---|---|---|
 | The brand's DMARC record sends its reports to the domain (facebook.com → facebookmail.com) | proof | needs the brand's DNS |
 | The domain sends reports to the brand **and** the brand publishes `<domain>._report._dmarc.<brand>` (RFC 7489); a wildcard that answers for any name doesn't count | proof | needs the brand's DNS |
-| Name servers under the brand's domain (a.ns.facebook.com), or shared with it where that means one customer (a per-customer pool such as `dns1.p07.nsone.net`, or an identical set outside shared providers like UltraDNS or Azure DNS) | proof | needs the brand's DNS operator account |
+| Name servers under the brand's domain (a.ns.facebook.com), or the identical set of the brand's own servers (outside shared operators like UltraDNS or Azure DNS, and outside provider pools) | proof | needs the brand's DNS operator account |
 | A corporate brand-protection registrar (MarkMonitor, CSC, Com Laude…) **and** a registrant naming the brand | proof | such registrars serve only vetted large companies |
 | The domain's reports go to the brand (no authorization) | hint | anyone can point reports anywhere |
+| The same provider-assigned name servers as the brand's (`dns1.p07.nsone.net`, `kate.ns.cloudflare.com`) | hint | providers assign these from a small shared pool, so unrelated customers — an imitator included — can draw the brand's pair (changed from proof in 5.87) |
 | A registrant naming the brand, alone | hint | anyone can type a company's name |
 | A corporate registrar, alone; a year or more of age | hint | — |
 

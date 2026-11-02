@@ -471,8 +471,10 @@ async function runListSync() {
     const now = Date.now();
 
     // Third-party lists are downloaded at most once a day, whatever asked for the update.
+    // Stored as Date.now(); versions before 5.87 stored a locale string, which reads as "never
+    // synced" here (one extra download after the update, then the daily rhythm).
     const { lastSyncTime } = await storageGet('local', ['lastSyncTime']);
-    if (cfg.values.enableRemoteListSync && lastSyncTime && now - lastSyncTime < THIRD_PARTY_LIST_MIN_INTERVAL_MS) {
+    if (cfg.values.enableRemoteListSync && typeof lastSyncTime === 'number' && now - lastSyncTime < THIRD_PARTY_LIST_MIN_INTERVAL_MS) {
         return { skipped: true, fresh: true, nextAt: lastSyncTime + THIRD_PARTY_LIST_MIN_INTERVAL_MS };
     }
 
@@ -526,7 +528,7 @@ async function runListSync() {
     if (anySuccess) listState.syncDisabledSince = null;
     const remoteShorteners = combineListState(listState);
     const updates = { listState, remoteShorteners };
-    if (anySuccess) updates.lastSyncTime = new Date().toLocaleString();
+    if (anySuccess) updates.lastSyncTime = Date.now();
     await chrome.storage.local.set(updates);
     summaries.forEach(([level, message]) => writeLog(level, 'List sync', message));
 
@@ -2084,15 +2086,19 @@ async function dmarcReportAuthorized(domain, home) {
     if (!await has(`${domain}._report._dmarc.${home}`)) return false;
     return !await has(`probe-${Math.random().toString(36).slice(2, 10)}._report._dmarc.${home}`);
 }
-// A name server the two lists share in a way that means one operator, or ''.
+// How the two name-server lists relate: { kind: 'exact' | 'pool', host } or null.
+// 'exact' (identical sets of their own name servers, shared operators excluded) means one operator
+// and counts as proof. 'pool' (the same assigned names at a DNS provider such as Cloudflare or NS1)
+// is only a hint: providers hand those names out from a small shared pool, so unrelated customers
+// — including someone imitating the brand — can end up with the same ones.
 function sameOperatorNs(a, b) {
-    if (!a.length || !b.length) return '';
+    if (!a.length || !b.length) return null;
     const pool = (h) => { for (let i = 0; i < NS_CUSTOMER_POOL.length; i++) { const m = NS_CUSTOMER_POOL[i].exec(h); if (m) return `${i}:${m[1]}`; } return ''; };
+    const A = a.filter(h => !NS_SHARED.test(h) && !pool(h)), B = b.filter(h => !NS_SHARED.test(h) && !pool(h));
+    if (A.length && A.length === B.length && A.every((h, i) => h === B[i])) return { kind: 'exact', host: A[0] };
     const poolsB = new Set(b.map(pool).filter(Boolean));
     const shared = a.find(h => pool(h) && poolsB.has(pool(h)));
-    if (shared) return shared;
-    const A = a.filter(h => !NS_SHARED.test(h) && !pool(h)), B = b.filter(h => !NS_SHARED.test(h) && !pool(h));
-    return A.length && A.length === B.length && A.every((h, i) => h === B[i]) ? A[0] : '';
+    return shared ? { kind: 'pool', host: shared } : null;
 }
 // Whether a registrant's name names the brand (its name or an unambiguous token of it).
 function registrantNamesBrand(registrant, brand) {
@@ -2134,12 +2140,16 @@ async function brandOwnership(domain, brandName, S, account = '') {
         // 2. Name servers.
         if (!proof.length) {
             const ns = (await settle(() => nameServers(reg))) || [];
+            let poolHint = '';
             for (const home of homes) {
                 const under = ns.find(h => h === home || h.endsWith('.' + home));
                 if (under) { proof.push(`its name servers are ${brand.name}'s (${under})`); break; }
-                const same = ns.length ? sameOperatorNs(ns, (await settle(() => nameServers(home))) || []) : '';
-                if (same) { proof.push(`it uses the same name servers as ${home} (${same})`); break; }
+                const same = ns.length ? sameOperatorNs(ns, (await settle(() => nameServers(home))) || []) : null;
+                if (same && same.kind === 'exact') { proof.push(`it uses the same name servers as ${home} (${same.host})`); break; }
+                // A pool match is only a hint: the provider assigns those names to unrelated customers too.
+                if (same && !poolHint) poolHint = `its DNS provider assigned it the same name servers as ${home} (${same.host})`;
             }
+            if (!proof.length && poolHint) hints.push(poolHint);
         }
         // 3. The registry and the registrar.
         const info = (await settle(() => domainRegistration(reg, true))) || {};
@@ -2293,17 +2303,20 @@ async function checkSender(s, ownDomain, cfg) {
         S.enableSenderAddressCheck ? phishingSenderHit(address, cfg) : null,
         domainChecks && S.enablePhishingFeeds && !shared && validDomain ? feedHit(`https://${domain}/`) : null
     ]);
-    // The DNS services are asked only when their answer can still change the verdict.
-    const dns = domainChecks && online && validDomain && !shared && !allowlisted && !trustedHit && !listHit && !domainFeed
-        ? await senderDomainDns(domain, S).catch(() => null) : null;
+    // The DNS services are asked only when their answer can still change the verdict. The look-alike
+    // check (trusted lists, big providers and your own domain aside) is independent of that answer,
+    // so the two network round-trips run side by side.
+    const [dns, lookalike] = await Promise.all([
+        domainChecks && online && validDomain && !shared && !allowlisted && !trustedHit && !listHit && !domainFeed
+            ? senderDomainDns(domain, S).catch(() => null) : null,
+        S.enableLookalikeCheck && validDomain && !trustedHit && !allowlisted && !shared && !listHit
+            ? lookalikeVerdict(domain, own, S).catch(() => null) : null
+    ]);
     let verdict = combineSenderVerdict({
         address, ownDomain: own, allowlisted, trustedHit, listHit, addressChecked: !!S.enableSenderAddressCheck, domainFeed, dns,
         dnsChecked: domainChecks && online
     });
     verdict = applyEmailSignals(verdict, parsed.malformed);
-    // A look-alike of a protected domain (the trusted lists, big providers and your own domain aside).
-    const lookalike = S.enableLookalikeCheck && validDomain && !trustedHit && !allowlisted && !shared && !listHit
-        ? await lookalikeVerdict(domain, own, S).catch(() => null) : null;
     if (lookalike) verdict = applyEmailSignals(verdict, [{ weight: lookalike.level === 'strong' ? SIGNAL_FLAG_SCORE : SIGNAL_CAUTION_SCORE, text: lookalike.text }]);
     // Country: the domain's ending when it names one, else where its website is hosted. (The country
     // of the server that sent a particular email is looked up separately: senderCountry.)
@@ -2553,12 +2566,14 @@ const SCANNER_IDLE_MS = 60 * 1000;
 const SCANNER_PARALLEL = 2;
 const QR_RESULT_CACHE_MAX = 300;
 let scannerReady = null, scannerIdleTimer = null, scansRunning = 0;
+let scannerClosing = null;   // set while the idle teardown below is under way
 const scanWaiters = [];
 const qrResults = new Map();      // image URL → result (session memory, bounded)
 
 function ensureScanner() {
     if (!scannerReady) {
         scannerReady = (async () => {
+            if (scannerClosing) await scannerClosing;   // never talk to a document mid-teardown
             const existing = chrome.runtime.getContexts ? await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] }) : [];
             if (!existing.length) {
                 await chrome.offscreen.createDocument({
@@ -2573,10 +2588,13 @@ function ensureScanner() {
 
 function scheduleScannerClose() {
     clearTimeout(scannerIdleTimer);
-    scannerIdleTimer = setTimeout(async () => {
+    scannerIdleTimer = setTimeout(() => {
         if (scansRunning) return scheduleScannerClose();
-        try { await chrome.offscreen.closeDocument(); } catch (e) { /* already closed */ }
+        // scannerReady is cleared BEFORE the close starts, so a scan arriving during the teardown
+        // recreates the document (ensureScanner waits for scannerClosing) instead of messaging it.
         scannerReady = null;
+        scannerClosing = (async () => { try { await chrome.offscreen.closeDocument(); } catch (e) { /* already closed */ } })()
+            .finally(() => { scannerClosing = null; });
     }, SCANNER_IDLE_MS);
 }
 

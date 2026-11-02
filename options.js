@@ -457,13 +457,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 {   // keys are already restricted to cached links above
                     const shortUrl = key;
                     const cacheData = items[key];
-                    const finalUrl = typeof cacheData === 'object' ? cacheData.finalUrl : cacheData;
-                    const resolver = typeof cacheData === 'object' && cacheData.resolver ? cacheData.resolver : 'unshorten.me / Local';
-                    const isSafe = typeof cacheData === 'object' && cacheData.isSafe === true;
-                    const isUnsafe = typeof cacheData === 'object' && cacheData.isSafe === false;
-                    const reason = typeof cacheData === 'object' ? cacheData.reason : 'Clean';
-                    const cachedDate = typeof cacheData === 'object' ? cacheData.cachedDate : 'N/A';
-                    const cachedTimestamp = typeof cacheData === 'object' ? cacheData.cachedTimestamp : null;
+                    // A malformed entry (null, or fields missing) must not break the whole table.
+                    const isObj = cacheData !== null && typeof cacheData === 'object';
+                    const finalUrl = String((isObj ? cacheData.finalUrl : cacheData) || '');
+                    const resolver = isObj && cacheData.resolver ? cacheData.resolver : 'unshorten.me / Local';
+                    const isSafe = isObj && cacheData.isSafe === true;
+                    const isUnsafe = isObj && cacheData.isSafe === false;
+                    const reason = (isObj ? cacheData.reason : 'Clean') || '';
+                    const cachedDate = (isObj ? cacheData.cachedDate : 'N/A') || 'N/A';
+                    const cachedTimestamp = isObj ? cacheData.cachedTimestamp : null;
 
                     const entryIsoDate = formatIsoLocalDate(cachedTimestamp, cachedDate);
                     const dateMatches = !filterDate || (entryIsoDate === filterDate);
@@ -663,6 +665,15 @@ document.addEventListener('DOMContentLoaded', () => {
             const codeDomain = document.createElement('code');
             codeDomain.textContent = domain;
             tdDomain.appendChild(codeDomain);
+            // The checks compare normalized domains; an entry that can't become one never matches.
+            if (!SENDER_DOMAIN_RE.test(normalizeDomain(domain))) {
+                const note = document.createElement('span');
+                note.className = 'badge badge-neutral';
+                note.style.marginLeft = '8px';
+                note.title = 'This entry is not a domain name, so it never matches a site. Remove it and add the site\'s domain (like example.com).';
+                note.textContent = 'not a domain — no effect';
+                tdDomain.appendChild(note);
+            }
 
             const tdAction = document.createElement('td');
             
@@ -732,22 +743,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function addDomainToPolicy(inputId, storageKey) {
         const input = document.getElementById(inputId);
-        const domain = input.value.trim().toLowerCase();
-
-        if (domain) {
-            chrome.storage.local.get({ [storageKey]: [] }, (result) => {
-                const list = result[storageKey];
-                if (!list.includes(domain)) {
-                    list.push(domain);
-                    chrome.storage.local.set({ [storageKey]: list }, () => {
-                        input.value = '';
-                        renderPolicies();
-                    });
-                } else {
-                    alert("Domain is already in the list.");
-                }
-            });
+        const raw = input.value.trim();
+        if (!raw) return;
+        // A pasted address or full URL is reduced to its domain, written the way the checks compare
+        // it (lowercase, punycode). Anything that could never match a site is refused instead of
+        // sitting in the list without effect.
+        let domain = normalizeDomain(raw);
+        try { domain = new URL('http://' + domain).hostname; } catch (e) { domain = ''; }
+        if (!SENDER_DOMAIN_RE.test(domain)) {
+            alert(`"${raw}" doesn't look like a site domain (like example.com), so it wasn't added.`);
+            return;
         }
+        chrome.storage.local.get({ [storageKey]: [] }, (result) => {
+            const list = result[storageKey];
+            if (list.some(e => normalizeDomain(e) === domain)) {
+                alert("Domain is already in the list.");
+            } else {
+                list.push(domain);
+                chrome.storage.local.set({ [storageKey]: list }, () => {
+                    input.value = '';
+                    renderPolicies();
+                });
+            }
+        });
     }
 
     // ---------------- Statistics (each covers everything stored, not just the filtered rows)
@@ -930,8 +948,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!tbody.children.length) emptyRow(tbody, 5, log.length ? 'Nothing matches your search.' : 'No emails have been moved to Spam.');
         });
     }
-    document.getElementById('senderSearch').addEventListener('input', renderSenderLog);
-    document.getElementById('spamLogSearch').addEventListener('input', renderSpamLog);
+    // Typing in a search box re-renders a large table (some renders re-read all of storage): one
+    // render shortly after the typing pauses instead of one per keystroke.
+    const debounced = (fn, ms = 150) => { let t = null; return () => { clearTimeout(t); t = setTimeout(fn, ms); }; };
+    document.getElementById('senderSearch').addEventListener('input', debounced(renderSenderLog));
+    document.getElementById('spamLogSearch').addEventListener('input', debounced(renderSpamLog));
     document.getElementById('clearSenderCacheBtn').addEventListener('click', () => {
         if (!confirm('Forget the remembered sender checks, icons and countries? They are looked up again as you open Gmail.')) return;
         iconStore.clear().catch(() => {}).then(() => chrome.storage.local.remove(['senderResultCache', 'faviconCache', 'geoCache', 'senderDomainCache', 'senderMessageCache'], () => {
@@ -1099,7 +1120,7 @@ document.addEventListener('DOMContentLoaded', () => {
         trackersModal.classList.remove('active');
     });
 
-    document.getElementById('trackersSearch').addEventListener('input', renderRemoteTrackers);
+    document.getElementById('trackersSearch').addEventListener('input', debounced(renderRemoteTrackers));
 
     document.getElementById('clearCacheBtn').addEventListener('click', () => {
         chrome.storage.local.get(null, (items) => {
@@ -1272,20 +1293,20 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    document.getElementById('cacheSearch').addEventListener('input', renderCache);
+    document.getElementById('cacheSearch').addEventListener('input', debounced(renderCache));
     document.getElementById('cacheDatePicker').addEventListener('change', renderCache);
     document.getElementById('clearCacheDateBtn').addEventListener('click', () => {
         document.getElementById('cacheDatePicker').value = '';
         renderCache();
     });
 
-    document.getElementById('historySearch').addEventListener('input', renderHistory);
+    document.getElementById('historySearch').addEventListener('input', debounced(renderHistory));
     document.getElementById('historyDatePicker').addEventListener('change', renderHistory);
     document.getElementById('clearHistoryDateBtn').addEventListener('click', () => {
         document.getElementById('historyDatePicker').value = '';
         renderHistory();
     });
-    document.getElementById('errorsSearch').addEventListener('input', renderErrors);
+    document.getElementById('errorsSearch').addEventListener('input', debounced(renderErrors));
     document.getElementById('errorsLevelFilter').addEventListener('change', renderErrors);
     // Keep the Logging sections current while the page is open.
     let logRenderTimer = null;

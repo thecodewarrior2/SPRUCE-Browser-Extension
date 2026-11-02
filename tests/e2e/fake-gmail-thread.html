@@ -27,8 +27,21 @@ setTimeout(() => {
     <h3 class="iw"><span class="qu"><span class="gD" email="${P.get('with')}" name="Colleague">Colleague</span> <span class="go">&lt;${P.get('with')}&gt;</span></span></h3>
     <div class="a3s aiL"><div class="ii gt"><div>My reply.</div></div></div></div>` : ''}</div>`;
 }, 300);
+// ?listafter=1: leaving the thread shows a Gmail-like inbox list. After a real move the row is gone
+// (as in Gmail); window.__back() is "the user pressed Back on their own" and keeps the row. A row
+// has no sender spans, so the sender scanners leave it alone; only its thread key matters.
+const listAfter = (withRow) => {
+  document.getElementById('main').innerHTML = withRow
+    ? `<table id="list"><tbody><tr class="zA yO"><td class="oZ-x3"><div role="checkbox" aria-checked="false" tabindex="-1">☐</div></td>
+       <td class="xY a4W"><div class="xS"><div class="xT"><div class="y6"><span class="bog"><span data-thread-id="#thread-f:${tid}" data-legacy-thread-id="${Number(tid).toString(16)}">Still here</span></span></div></div></div></td></tr></tbody></table>`
+    : '<table id="list"><tbody></tbody></table>';
+  location.hash = '#inbox';
+};
+window.__back = () => listAfter(true);
 document.getElementById('spamBtn').addEventListener('click', () => {
   window.__spammed.push('thread-f:' + tid);
+  if (P.get('keepspam') === '1') return;              // Gmail ignored the action: nothing moves
+  if (P.get('listafter') === '1') { listAfter(false); return; }
   document.getElementById('main').innerHTML = '';
   location.hash = '#inbox';
 });
