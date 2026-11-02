@@ -145,7 +145,7 @@ const settings = (page) => openExt(page, 'options.html', () => document.querySel
       const o2 = await settings(b2);
       const pol = await until(() => o2.evaluate(async () => { const cfg = await loadEffectiveSettings(); const t = document.querySelector('[data-setting="enableAutoSpam"]');
         return { locked: Object.keys(cfg.locked), autoSpam: cfg.values.enableAutoSpam, days: cfg.values.retentionDays, trusted: cfg.trustedSenders, rules: (cfg.policy.phishSimRules || []).length, toggle: t && t.disabled && !t.checked }; }),
-        (v) => v && v.locked.includes('enableAutoSpam'), 8000);
+        (v) => v && v.locked.includes('enableAutoSpam') && v.toggle, 8000);   // the page's own render (bindSettings) applies the lock a moment after the policy can be read
       check('policy: settings locked (shown disabled), values applied, trusted senders and simulation rules read',
         pol && pol.autoSpam === false && pol.days === 30 && pol.toggle && (pol.trusted || []).includes('partner.org') && pol.rules === 1, pol);
       await b2.close();

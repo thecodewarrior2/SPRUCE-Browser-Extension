@@ -12,7 +12,7 @@ const ROOT = path.resolve(__dirname, '..', '..');
 if (!process.env.FXEXT) execFileSync(process.execPath, [path.join(ROOT, 'tools', 'build.js'), 'firefox', '--working-tree'], { stdio: 'ignore' });
 const EXT = process.env.FXEXT || path.join(ROOT, 'build', 'firefox');
 const E2E = path.join(__dirname, '..', 'e2e');
-const FXBIN = process.env.FXBIN || path.join(__dirname, '..', '.firefox', 'esr', 'firefox', 'firefox');
+const FXBIN = path.resolve(process.env.FXBIN || path.join(__dirname, '..', '.firefox', 'esr', 'firefox', 'firefox'));   // absolute, so the policy check recognizes the suite's own Firefox
 const ADDON = 'spruce@spruce-browser-extension';
 const UUID = '11111111-2222-4333-8444-555555555555';   // fixed, so the add-on's pages have a known address
 const BASE = `moz-extension://${UUID}`;
