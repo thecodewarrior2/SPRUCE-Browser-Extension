@@ -125,13 +125,31 @@ function decodeProofpoint(url) {
 }
 
 // Amazon SES click tracking: the path STARTS with /L0/ or /CL0/ followed by the encoded destination.
-function decodeAmazonSes(url) {
-    const u = parseUrl(url);
-    if (!u) return null;
+// The path alone is only a CLAIM about the destination (any server can carry it and redirect
+// elsewhere), so which hosts are believed is split in two:
+//   - decodeAmazonSes (strict, also one-time links): only Amazon's own tracking domain awstrack.me,
+//     whose redirect Amazon itself operates.
+//   - decodeAmazonSesCustomDomain (generic): a customer's own click domain (click.example.com…),
+//     only when the host is shaped like or listed as a redirector, like every other generic decoder;
+//     the safety check still verifies the wrapper host itself (assessSafety).
+function decodeSesPath(url, u) {
     const rest = url.slice(u.origin.length);
     const m = rest.match(/^\/C?L0\/(https?(?::|%3A)(?:\/\/|%2F%2F))(.+?)(\/\d+\/|$)/i);
     if (!m) return null;
     return decodeIfEncoded(m[1] + m[2]);
+}
+
+function decodeAmazonSes(url) {
+    const u = parseUrl(url);
+    if (!u || !hostMatches(u.hostname.toLowerCase(), 'awstrack.me')) return null;
+    return decodeSesPath(url, u);
+}
+
+function decodeAmazonSesCustomDomain(url, ctx) {
+    const u = parseUrl(url);
+    if (!u || hostMatches(u.hostname.toLowerCase(), 'awstrack.me')) return null;   // strict decoder's case
+    if (!isRedirectorUrl(u, ctx)) return null;
+    return decodeSesPath(url, u);
 }
 
 // Barracuda Email Protection: linkprotect.cudasvc.com/url?a=<encoded URL>&c=...
@@ -549,6 +567,7 @@ const STRICT_DECODERS = [
     ['Forcepoint Remote Browser Isolation', decodeForcepointRbi]
 ];
 const GENERIC_DECODERS = [
+    ['Amazon SES Fast-Path', decodeAmazonSesCustomDomain],
     ['Known Redirect', decodeRedirectRules],
     ['Google Translate proxy', decodeTranslateProxy],
     ['Offline Short-Link Expansion', expandKnownShortLink],

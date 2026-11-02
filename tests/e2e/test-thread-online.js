@@ -72,6 +72,28 @@ global.RAW_MESSAGES = {
   check('checked sender: the address looks unchanged (no mark, no color); the explanation shows on pointing', r.mark === '' && r.bg === 'rgba(0, 0, 0, 0)' && /Checked/.test(r.title || ''), r);
   await page.close();
 
+  // 5.87 regression: leaving the conversation isn't proof of a move. Gmail ignores the press here
+  // (?keepspam=1) and the user goes back to an inbox that still shows the row: the move must be
+  // logged as failed, never as moved.
+  page = await ctx.newPage();
+  await page.goto('https://mail.google.com/mail/u/0/?t=2077&keepspam=1&listafter=1#inbox/kp');
+  await until(() => page.evaluate(() => window.__spammed.length), n => n >= 1, 20000);
+  await page.evaluate(() => window.__back());                     // the user leaves on their own
+  const kp = await until(() => sw.evaluate(() => new Promise(res => chrome.storage.local.get({ spamMoveLog: [] }, r => res(r.spamMoveLog.filter(e => e.thread === 'thread-f:2077').map(e => [e.action, e.how || '']))))), l => l && l.length > 0, 30000);
+  check('ignored Report spam + user navigation: logged as failed (row still in the inbox), never as moved',
+    kp && kp.length > 0 && kp.every(([a]) => a === 'failed') && /row was still in the inbox/.test(kp[0][1]), kp);
+  r = await page.evaluate(() => ({ rows: document.querySelectorAll('tr.zA').length, notice: !!document.querySelector('.unshortener-spam-notice') }));
+  check('ignored press: the row stays and no "moved to Spam" notice appears', r.rows === 1 && !r.notice, r);
+  await page.close();
+
+  // The true positive with the same list visible: the row is gone, so the move counts.
+  page = await ctx.newPage();
+  await page.goto('https://mail.google.com/mail/u/0/?t=2078&listafter=1#inbox/la');
+  await until(() => page.evaluate(() => window.__spammed.length), n => n >= 1, 20000);
+  const la = await until(() => sw.evaluate(() => new Promise(res => chrome.storage.local.get({ spamMoveLog: [] }, r => res(r.spamMoveLog.filter(e => e.thread === 'thread-f:2078').map(e => e.action))))), l => l && l.includes('moved'), 30000);
+  check('move confirmed by the row being gone from the list', la && la.includes('moved') && !la.includes('failed'), la);
+  await page.close();
+
   const logs = await sw.evaluate(() => new Promise(res => chrome.storage.local.get(['errorLogs', 'geoCache', 'senderDomainCache'], res)));
   console.log((logs.errorLogs || []).map(e => `${e.level} ${e.source}: ${e.message}`).join('\n'));
   console.log('geoCache', logs.geoCache, 'domains', Object.keys(logs.senderDomainCache || {}));
