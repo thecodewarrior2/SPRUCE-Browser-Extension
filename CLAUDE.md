@@ -4,6 +4,12 @@
   builds the packages. All work happens on `testing`: develop there, run the full suite before every push
   (`cd tests && node run-all.js`, and the Firefox suite `node firefox/run.js` in the current ESR and 140 ESR;
   all green), and push only `testing`.
+- **Documentation only needs no local test run:** a push in which every changed file is a Markdown file
+  (`*.md` anywhere: README, CHANGELOG, PRIVACY, CLAUDE.md, `docs/`, `store/WHATS-NEW.md`…) or an image in
+  `docs/`, `store/` or `branding/`. Anything else is not documentation only, even when it is text: the
+  Help tab (`options.html`, `help.js`), the policy examples (`docs/*.json`, read by a unit test),
+  `icons/`, the store image script, workflows, rulesets, tests and tools. GitHub still runs every check
+  on every push, and `main` accepts a commit only once they have passed.
 - **Nothing goes from `testing` to `main` until the maintainer (the repository owner) has tested it on
   their own computer and then approved it.** Never push `main` automatically: not when the tests or the
   GitHub checks pass, not to finish a task, not on your own judgment that a change is ready.
@@ -25,4 +31,7 @@
   for the feature; text in the extension's pages that differs by browser is marked `data-only="…"`.
 - Every behavior change ships with a version bump in `manifest.json`, a `CHANGELOG.md` entry, and
   matching Help-tab and `docs/` updates. Commit style: `X.YZ: short summary` plus a body.
+- `CHANGELOG.md` is the technical history. What store users read is `store/WHATS-NEW.md`: one short,
+  plain-language entry per store release, covering everything since the previous store version (keep the
+  pending entry up to date as changes land on `testing`); no file names, settings keys or internal terms.
 - The full workflow, build and release steps: `docs/DEVELOPMENT.md`.

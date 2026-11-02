@@ -44,8 +44,15 @@ Works fully in Gmail. Other popular webmail services are supported in a basic, r
 A HELPER, NOT A GUARANTEE
 S.P.R.U.C.E+ makes a best effort to point out warning signs, but it can miss dangerous emails and can flag genuine ones. It is one small layer of protection: keep your webmail's spam filtering, your organization's email security and your own judgment.
 
+What's new in each version: https://github.com/thecodewarrior2/SPRUCE-Browser-Extension/blob/main/store/WHATS-NEW.md
 Privacy policy: https://github.com/thecodewarrior2/SPRUCE-Browser-Extension/blob/main/PRIVACY.md
 ```
+
+**What's new, at each update:** the plain-language notes are in [`WHATS-NEW.md`](WHATS-NEW.md), one entry
+per store release (everything since the previous store version). The Chrome Web Store and Edge Add-ons
+have no field for them, so the description above links to that page; addons.mozilla.org (the version's
+**Release notes**) and Apple's App Store (**What's New in This Version**, at most 4,000 characters)
+take the entry itself. `CHANGELOG.md` is the technical history; don't link it from the stores.
 
 > **Review note (first submission):** the Chrome Web Store rejected the first submission for
 > keyword spam because the description listed every supported webmail service by name ("Supported

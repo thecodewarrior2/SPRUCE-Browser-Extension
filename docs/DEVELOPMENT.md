@@ -13,7 +13,10 @@ Edge, Firefox and Safari. Everyone else needs only the [README](../README.md); a
 | `firefox`, `safari` | Kept for their history only: until 5.88 each browser had its own branch, maintained by hand. Nothing is added to them any more. |
 
 1. Work on `testing` (start from the latest `main`: `git checkout testing && git merge main`).
-2. Run the tests (below) and try the change in the browser. Commit and push `testing`.
+2. Run the tests (below) and try the change in the browser. Commit and push `testing`. A push that
+   changes documentation only (Markdown files anywhere, or images in `docs/`, `store/` or `branding/`)
+   needs no local test run; anything else does, including the Help tab (`options.html`, `help.js`) and
+   the policy examples (`docs/*.json`). GitHub runs every check on every push either way.
 3. **Stop here.** The change stays on `testing` — however green the tests and the GitHub checks are —
    until the maintainer has loaded the `testing` build on their own computer, tried the change, and
    **approved releasing it**. Green tests are not approval, and nothing (no person, script or AI
@@ -126,7 +129,9 @@ The listing text, a reason for each permission and the data-usage answers are in
 [store/STORE-LISTING.md](../store/STORE-LISTING.md); the screenshots and promo image are in [`store`](../store); the
 privacy policy is [PRIVACY.md](../PRIVACY.md).
 
-Run `node tools/build.js chrome` and upload `build/spruce-<version>-webstore.zip`. It is the last commit
+Run `node tools/build.js chrome` and upload `build/spruce-<version>-webstore.zip`. Its "What's new" is
+the store entry in [store/WHATS-NEW.md](../store/WHATS-NEW.md), which the description links to (the
+store has no field for it). It is the last commit
 without the `key` field, which the stores refuse on a new item's first upload. The store gives the
 extension its own ID, so administrators use that ID in policies (the policy names don't change). In
 the developer dashboard, the store also asks for a privacy policy link, a reason for each permission,
@@ -135,7 +140,8 @@ promotional image.
 
 ## Publishing to addons.mozilla.org (Firefox)
 
-Run `node tools/build.js firefox` and upload `build/spruce-<version>-firefox.zip` in the AMO developer hub
+Run `node tools/build.js firefox` and upload `build/spruce-<version>-firefox.zip` in the AMO developer hub,
+with the version's store entry from [store/WHATS-NEW.md](../store/WHATS-NEW.md) as its **Release notes**
 (listed, or "On your own" for a signed `.xpi` without a public listing). Its ID is
 `spruce@spruce-browser-extension` (set by the build), and it declares the data it handles
 (`data_collection_permissions`: website content and personal communications, read on the device). Firefox
@@ -148,7 +154,10 @@ who install the extension themselves. Store installs update on their own; manual
 
 1. Before the release (on `testing`), refresh the bundled copies of the downloaded lists, which a fresh
    install uses until its first download: `node tools/refresh-snapshot.js` (the shortener list and
-   ICANN's single-company endings; nothing in them is written by hand). Commit the result.
+   ICANN's single-company endings; nothing in them is written by hand). Commit the result. For a version
+   going to the stores, write its entry in [store/WHATS-NEW.md](../store/WHATS-NEW.md): what users notice
+   since the previous store version, in plain words (no file names, settings keys or internal terms; the
+   technical detail stays in `CHANGELOG.md`).
 2. On `main`, with the version in `manifest.json` and a `CHANGELOG.md` entry for it, run
    `node tools/build.js`. Among the files it builds is `build/spruce-<version>-chrome-manual-install.zip`:
    one folder, `S.P.R.U.C.E+-<version>`, with the extension and `INSTALL.md`. Unlike the store zip it
@@ -185,7 +194,7 @@ who install the extension themselves. Store installs update on their own; manual
 | `icons/` | Toolbar and store icons |
 | `tools/` | `build.js` (every browser's package), `build-safari.sh` (the Safari app, on a Mac), `refresh-snapshot.js` (the bundled shortener list and company endings; run before a release) |
 | `docs/` | Features, admin guide, architecture, this guide, install steps, policy example, release notes drafts (`docs/releases/`) |
-| `store/` | Chrome Web Store listing text and images, and the script that makes the images |
+| `store/` | Chrome Web Store listing text and images, the script that makes the images, and `WHATS-NEW.md` (the plain-language notes for each store release) |
 | `branding/` | Logos, icons and the donation QR code (PNG and SVG) |
 | `tests/` | Unit and end-to-end tests (Chromium), the Firefox suite (real Firefox), sanitized sample emails |
 | `CHANGELOG.md` · `PRIVACY.md` · `LICENSE` | Release history · privacy policy · Apache 2.0 license |

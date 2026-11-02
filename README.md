@@ -55,6 +55,7 @@ Every browser's version is built from the same files in this repository (`node t
 | [Development](docs/DEVELOPMENT.md) | Building, testing and publishing; repository layout |
 | [Manual install](docs/INSTALL-FOR-TESTERS.md) | Installing a release download or test version yourself |
 | [Store listing](store/STORE-LISTING.md) | Chrome Web Store listing text, permission reasons and images |
+| [What's new](store/WHATS-NEW.md) | Plain-language notes on each version in the browser stores |
 | [Changelog](CHANGELOG.md) | Every version, what changed and why |
 
 The extension's own **Help** tab (Settings → Help) explains every warning, the privacy details and
