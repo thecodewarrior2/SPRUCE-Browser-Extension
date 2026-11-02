@@ -275,14 +275,16 @@ test('brand ownership: proofs need the brand\'s DNS or a corporate registrar; a 
     'facebook.com': ['a.ns.facebook.com', 'b.ns.facebook.com'], 'facebookmail.com': ['a.ns.facebook.com', 'b.ns.facebook.com'],
     'spotify.com': ['dns1.p07.nsone.net', 'ns-cloud-a1.googledomains.com'], 'spotifymail.com': ['dns1.p07.nsone.net', 'dns2.p07.nsone.net', 'ns-cloud-a1.googledomains.com'],
     'paypal.com': ['pdns100.ultradns.com', 'pdns100.ultradns.net'], 'paypal-notices.com': ['pdns100.ultradns.com', 'pdns100.ultradns.net'],
-    'paypal-wild.com': ['pdns100.ultradns.com', 'pdns100.ultradns.net'], 'amaz0n-billing.com': ['ns1.cheap-host.example']
+    'paypal-wild.com': ['pdns100.ultradns.com', 'pdns100.ultradns.net'], 'amaz0n-billing.com': ['ns1.cheap-host.example'],
+    'spotify-billing.com': ['dns1.p07.nsone.net', 'dns2.p07.nsone.net']   // the brand's exact NS1 pool, bought by an imitator
   };
   const registry = {
     'amazonmusic.com': { created: now - 10000 * day, registrar: 'MarkMonitor Inc.', link: 'https://rdap.markmonitor.example/rdap/domain/AMAZONMUSIC.COM' },
     'amaz0n-billing.com': { created: now - 700 * day, registrar: 'Cheap Registrar LLC', link: 'https://rdap.cheap.example/domain/AMAZ0N-BILLING.COM' },
     'paypal-wild.com': { created: now - 3000 * day, registrar: 'MarkMonitor Inc.', link: 'https://rdap.markmonitor.example/rdap/domain/PAYPAL-WILD.COM' },
     'facebookmail.com': { created: now - 7000 * day, registrar: 'RegistrarSafe, LLC' }, 'spotifymail.com': { created: now - 6000 * day, registrar: 'Abion AB' },
-    'paypal-notices.com': { created: now - 3 * day, registrar: 'Cheap Registrar LLC' }
+    'paypal-notices.com': { created: now - 3 * day, registrar: 'Cheap Registrar LLC' },
+    'spotify-billing.com': { created: now - 700 * day, registrar: 'Cheap Registrar LLC' }
   };
   const registrant = { 'AMAZONMUSIC.COM': 'Amazon Technologies, Inc.', 'AMAZ0N-BILLING.COM': 'Amazon Technologies Inc', 'PAYPAL-WILD.COM': 'Statutory Masking Enabled' };
   const vcard = (role, org) => ({ roles: [role], vcardArray: ['vcard', [['fn', {}, 'text', org], ['org', {}, 'text', org]]] });
@@ -313,7 +315,11 @@ test('brand ownership: proofs need the brand\'s DNS or a corporate registrar; a 
   r = await own('facebookmail.com', 'Meta');
   assert.equal(r.state, 'owned'); assert.match(r.how, /facebook\.com sends its own DMARC reports to it/, 'the brand\'s DNS points at the domain');
   r = await own('spotifymail.com', 'Spotify');
-  assert.equal(r.state, 'owned'); assert.match(r.how, /same name servers as spotify\.com \(dns1\.p07\.nsone\.net\)/, 'a per-customer name-server pool');
+  assert.equal(r.state, 'likely', 'a provider name-server pool is shared by unrelated customers: a hint, never proof');
+  assert.match(r.how, /DNS provider assigned it the same name servers as spotify\.com \(dns1\.p07\.nsone\.net\)/);
+  assert.match(r.how, /corporate registrar/);
+  r = await own('spotify-billing.com', 'Spotify');
+  assert.equal(r.state, 'unknown', 'an imitator on the same provider pool with a cheap registrar gets nothing from the pool match');
   r = await own('paypal-notices.com', 'PayPal');
   assert.equal(r.state, 'owned'); assert.match(r.how, /publishes the authorization/, 'reports to the brand, with the brand\'s authorization record; shared UltraDNS servers count for nothing');
   r = await own('paypal-wild.com', 'PayPal');
@@ -435,7 +441,9 @@ test('malformed addresses are parsed and flagged on their own', () => {
   assert.equal(p('no-at-sign'), null);
   const base = { status: 'clean', reasons: ['Checked: no security service or list flags this sender.'], move: false, own: false };
   assert.equal(S('applyEmailSignals')(base, enc.malformed).status, 'flagged');
-  assert.equal(S('applyEmailSignals')(Object.assign({}, base, { status: 'trusted' }), enc.malformed).move, false);
+  const t = S('applyEmailSignals')(Object.assign({}, base, { status: 'trusted' }), enc.malformed);
+  assert.deepEqual([t.status, t.move], ['trusted', false], 'a trusted sender is never shown as flagged');
+  assert.ok(t.reasons.length > base.reasons.length, 'what was found still appears with the verdict');
   assert.equal(S('applyEmailSignals')(base, [{ weight: 3, text: 'x' }]).status, 'caution');
   assert.equal(S('applyEmailSignals')(base, [{ weight: 2, text: 'x' }]).status, 'clean');
 });
@@ -1077,4 +1085,41 @@ test('list storage: compressed, each entry once; old plain copies still read; a 
   trancoUp = false;
   const r2 = await vm.runInContext('syncPopularDomains(true)', b3);
   assert.equal(r2.count, 7100, 'Tranco failed: its previous domains are kept');
+});
+
+// ---------------------------------------------------------------------------
+// 5.87 regressions: the code-review fixes stay fixed.
+// ---------------------------------------------------------------------------
+
+test('Amazon SES decode: believed on awstrack.me and redirector-shaped hosts, never on an arbitrary host', async () => {
+  const un = (u, strict) => vm.runInContext(`unwrapNestedUrl(${JSON.stringify(u)}, ${strict})`, bg);
+  const ses = (host) => `https://${host}/L0/https:%2F%2Fexample.com%2Foffer/1/01000192abc/x`;
+  assert.equal((await un(ses('r2.us-west-2.awstrack.me'), true)).unwrappedUrl, 'https://example.com/offer', "Amazon's own tracking domain: decoded even for one-time links");
+  assert.equal((await un(ses('evil.example'), true)).unwrappedUrl, ses('evil.example'), 'an arbitrary host carrying the /L0/ path is NOT believed (it could redirect anywhere)');
+  assert.equal((await un(ses('evil.example'), false)).unwrappedUrl, ses('evil.example'), 'not in generic mode either');
+  assert.equal((await un(ses('click.customer.example'), false)).unwrappedUrl, 'https://example.com/offer', "a customer's redirector-shaped click domain: decoded in generic mode");
+  assert.equal((await un(ses('click.customer.example'), true)).unwrappedUrl, ses('click.customer.example'), 'but never for one-time links');
+});
+
+test('phishing-simulation rules with ips match only via the named receiver\'s own Received header', () => {
+  const raw = 'Received: from vendor.example (vendor.example [147.160.167.10]) by mx.google.com with SMTPS id x\r\nX-PHISHTEST: tok123\r\nFrom: a@b.c\r\n\r\n';
+  const rules = S(`normalizePhishSimRules(${JSON.stringify([{ name: 'KnowBe4', header: 'X-PHISHTEST', ips: ['147.160.167.0/26'] }])})`);
+  const m = (receiver) => vm.runInContext(`matchPhishSimulation(${JSON.stringify(raw)}, ${JSON.stringify(rules)}, ${JSON.stringify(receiver)})`, bg);
+  assert.equal((m('mx.google.com') || {}).name, 'KnowBe4', 'delivered from a listed address: matched');
+  assert.equal(m(undefined), null, 'no receiver, no delivering address: an ips rule never matches (5.87: the callers now pass it)');
+  assert.equal(m('mx.other.example'), null, 'another receiver\'s header counts for nothing');
+  const headerOnly = S(`normalizePhishSimRules(${JSON.stringify([{ header: 'X-PHISHTEST' }])})`);
+  assert.ok(vm.runInContext(`matchPhishSimulation(${JSON.stringify(raw)}, ${JSON.stringify(headerOnly)})`, bg), 'a header-only rule still needs no receiver');
+});
+
+test('list sync throttle: a numeric lastSyncTime within a day skips; the pre-5.87 locale string reads as never synced', async () => {
+  const b1 = loadBackground({ lastSyncTime: Date.now() - 60000 });
+  const r1 = await vm.runInContext('runListSync()', b1);
+  assert.deepEqual([r1.skipped, r1.fresh], [true, true]);
+  assert.ok(typeof r1.nextAt === 'number' && r1.nextAt > Date.now(), 'nextAt is a time, not string concatenation');
+  const b2 = loadBackground({ lastSyncTime: new Date().toLocaleString() });
+  const r2 = await vm.runInContext('runListSync()', b2).catch(() => ({ skipped: false }));
+  assert.notEqual(r2.fresh, true, 'the old stored string never skips the download');
+  // The failed sync (offline here) changes nothing; only a successful one writes the new number.
+  assert.equal(typeof b2.__store.lastSyncTime, 'string', 'untouched by a failed download');
 });

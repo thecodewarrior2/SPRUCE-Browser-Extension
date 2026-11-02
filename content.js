@@ -61,6 +61,9 @@ const SITE = (() => {
 // ---------------------------------------------------------------------------
 const MAIL = SITE.mail;
 const MAIL_CAN = mailCapabilities(SITE);
+// The receiving mail system's authserv-id (e.g. "mx.google.com"): identifies this site's own
+// Received/Authentication-Results headers wherever headers are judged.
+const RECEIVER_HOST = (MAIL && MAIL.headers && MAIL.headers.receiver && MAIL.headers.receiver.host) || '';
 // The first element matching the comma-separated selectors, trying them in the order listed.
 function firstMatch(root, selectors) {
     if (!root || !selectors) return null;
@@ -185,7 +188,7 @@ async function identifySimulation(body, rules, domains) {
     }
     if (rules.length) {
         const h = await getMessageHeaders(body);
-        const rule = h ? matchPhishSimulation(h.raw, rules) : null;
+        const rule = h ? matchPhishSimulation(h.raw, rules, RECEIVER_HOST) : null;
         if (rule) return rule.name;
     }
     return null;
@@ -717,8 +720,21 @@ function attachClickConfirmation(el, linkData) {
     el.addEventListener('auxclick', confirmClick);
 }
 
-function processTrackingPixels(allTargetDomains, allowlist, shouldRemovePixels) {
-    pixelContext = { allowSet: new Set(allowlist), trackerSet: new Set(allTargetDomains), shouldRemovePixels };
+// The pixel-check sets, built once and reused by every scan (the scan runs on every mutation
+// burst); the lists they come from only change through storage, which clears the memo below.
+// Built-in tracker domains plus the blocklist; the synced community lists are deliberately NOT
+// used: an untrusted list entry must never be able to remove images or silence a warning.
+let pixelSetsMemo = null;
+chrome.storage.onChanged.addListener(() => { pixelSetsMemo = null; });
+function pixelSets(cfg) {
+    if (!pixelSetsMemo) {
+        pixelSetsMemo = { allowSet: new Set(cfg.allowlist), trackerSet: new Set([...publicShorteners, ...espTrackers, ...cfg.blocklist]) };
+    }
+    return pixelSetsMemo;
+}
+function processTrackingPixels(cfg, shouldRemovePixels) {
+    const { allowSet, trackerSet } = pixelSets(cfg);
+    pixelContext = { allowSet, trackerSet, shouldRemovePixels };
     inBodies('img').forEach(img => guarded('Checking an image for tracking pixels', () => checkPixel(img)));
 }
 
@@ -742,10 +758,13 @@ function checkPixel(img) {
 
     let isTracker = !!openPixelRule(originalUrl);
     if (!isTracker) {
-        const attrW = parseInt(img.getAttribute('width') || '-1', 10);
-        const attrH = parseInt(img.getAttribute('height') || '-1', 10);
-        const styleW = parseInt(img.style.width || '-1', 10);
-        const styleH = parseInt(img.style.height || '-1', 10);
+        // Only plain pixel sizes count ("1", "1px"). A percentage or font-relative value says
+        // nothing about the drawn size ("1%" of a wide table is not 1 px), so it reads as unknown.
+        const px = (v) => /^\s*\d+(?:\.\d+)?\s*(?:px)?\s*$/i.test(v || '') ? parseInt(v, 10) : -1;
+        const attrW = px(img.getAttribute('width'));
+        const attrH = px(img.getAttribute('height'));
+        const styleW = px(img.style.width);
+        const styleH = px(img.style.height);
         // naturalWidth/Height are only meaningful once loaded; earlier they read 0×0.
         const loaded = img.complete && img.naturalWidth > 0;
         const w = attrW >= 0 ? attrW : (styleW >= 0 ? styleW : (loaded ? img.naturalWidth : -1));
@@ -824,16 +843,12 @@ function unshortenLinks() {
 
         if (S.enableHiddenLinkProtection) neutraliseGhostAnchors();
 
-        // Pixel detection: built-in tracker domains plus the blocklist. The synced community lists
-        // are deliberately NOT used here or below: an untrusted list entry must never be able to
-        // remove images or silence a warning.
-        const pixelTrackerDomains = [...new Set([...publicShorteners, ...espTrackers, ...cfg.blocklist])];
         // Mismatch check: only skipped when the destination is still an unresolved BUILT-IN
         // shortener/tracker. The blocklist no longer silences warnings; it flags links instead.
         const unresolvedTrackerSet = BUILTIN_TRACKER_SET;
 
         if (S.enableTrackingPixelBlocking) {
-            processTrackingPixels(pixelTrackerDomains, cfg.allowlist, S.removeTrackingPixels);
+            processTrackingPixels(cfg, S.removeTrackingPixels);
         }
 
         if (!S.enableLinkUnmasking) return;
@@ -2742,7 +2757,13 @@ function setChipResult(chip, r, address, extra) {
 
 // The webmail's own address element used as the sender's label (opened emails): our class, colors and
 // explanation added, and taken off again exactly (the element itself is the webmail's).
+const ADDRESS_KEPT_ATTRS = ['title', 'aria-label', 'role'];
 function markAddress(el, dark, address) {
+    // The webmail's own values of the attributes written below, saved once (null = it had none),
+    // so unmarkAddress can put back exactly what was there.
+    if (!('unshortenerSaved' in el.dataset)) {
+        el.dataset.unshortenerSaved = JSON.stringify(ADDRESS_KEPT_ATTRS.map(a => el.getAttribute(a)));
+    }
     el.classList.add('unshortener-sender-address');
     el.classList.toggle('unshortener-dark', dark);
     el.setAttribute('role', 'note');
@@ -2751,7 +2772,13 @@ function markAddress(el, dark, address) {
 }
 function unmarkAddress(el) {
     el.classList.remove('unshortener-sender-address', 'unshortener-dark');
-    for (const a of ['data-status', 'data-mark', 'title', 'aria-label', 'role']) el.removeAttribute(a);
+    for (const a of ['data-status', 'data-mark']) el.removeAttribute(a);
+    let saved = [];
+    try { saved = JSON.parse(el.dataset.unshortenerSaved || '[]'); } catch (e) { /* saved as below */ }
+    delete el.dataset.unshortenerSaved;
+    ADDRESS_KEPT_ATTRS.forEach((a, i) => {
+        if (typeof saved[i] === 'string') el.setAttribute(a, saved[i]); else el.removeAttribute(a);
+    });
 }
 function removeSenderDecorations(root = document) {
     root.querySelectorAll('.unshortener-sender-address').forEach(unmarkAddress);
@@ -3482,9 +3509,14 @@ async function reportSpamOpenThread(item) {
     const before = new Set(shownAll('[role="alertdialog"], [role="dialog"]'));
     press(btn);
     if (!await confirmSpamDialog(before)) { await sleep(200); cancelNewDialogs(before); return { moved: [], ignored: [], failed: [item] }; }
-    if (await waitFor(() => currentThreadKey() !== item.thread, SPAM_CONFIRM_MS)) return { moved: [item], ignored: [], failed: [] };
-    cancelNewDialogs(before);
-    return none;
+    if (!await waitFor(() => currentThreadKey() !== item.thread, SPAM_CONFIRM_MS)) { cancelNewDialogs(before); return none; }
+    // The webmail leaves the conversation when the move succeeds — but the user pressing Back looks
+    // the same, so navigation alone doesn't count. Back at the list, the conversation's own row must
+    // be gone too (it gets a moment: removal can be animated). A row still shown means nothing moved.
+    // While another conversation is on screen the list is hidden and can't say otherwise.
+    const rowStillShown = () => listRows().some(r => isShown(r) && rowThreadKey(r) === item.thread);
+    if (await waitFor(() => !rowStillShown(), SPAM_CONFIRM_MS)) return { moved: [item], ignored: [], failed: [] };
+    return { moved: [], ignored: [], failed: [Object.assign({}, item, { failHow: `${SITE.name} left the conversation after Report spam, but its row was still in the inbox list, so nothing moved` })] };
 }
 
 // A training email from your phishing simulation must never be moved. Returns false (not one), 'yes',
@@ -3500,7 +3532,7 @@ async function phishSimulationState(item) {
     if (!item.msgId || item.unread) return 'unverifiable';
     const h = await getMessageHeadersById(item.msgId);
     if (!h) return 'unverifiable';
-    return matchPhishSimulation(h.raw, rules) ? 'yes' : false;
+    return matchPhishSimulation(h.raw, rules, RECEIVER_HOST) ? 'yes' : false;
 }
 
 // Every other message open in the conversation is flagged too (a flagged reply in a genuine
@@ -3666,7 +3698,7 @@ async function runSpamMoves() {
         }
         if (retry.length) { await forgetSpamThreads(retry); retry.forEach(it => spamQueue.delete(it.thread)); }
         for (const it of giveUp) { spamQueue.delete(it.thread); spamAttempted.add(it.thread); }
-        const notMoved = [...failed.map(it => Object.assign({}, it, { how: `${SITE.name} asked something unclear before reporting it, so that was cancelled` })),
+        const notMoved = [...failed.map(it => Object.assign({}, it, { how: it.failHow || `${SITE.name} asked something unclear before reporting it, so that was cancelled` })),
                           ...giveUp.map(it => Object.assign({}, it, { how: `${SITE.name} didn't move it after ${SPAM_MAX_TRIES} tries (its Report spam button didn't respond as expected)` }))];
         if (notMoved.length) rememberSpamThreads(notMoved, 'failed');
         if (!moved.length) {

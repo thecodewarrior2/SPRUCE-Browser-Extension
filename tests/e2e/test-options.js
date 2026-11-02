@@ -29,6 +29,37 @@ const { launch, until, optionsReady, check, done } = require('./harness');
   await page.click('#trustedSenderTable .del-btn');
   const after = await until(trusted, v => (v.customTrustedSenders || []).length === 0, 8000);
   check('remove works', after.customTrustedSenders.length === 0, after);
+  // 5.87: the allow/block lists accept a pasted URL (reduced to its domain) and refuse junk; an old
+  // junk entry is marked as having no effect; a malformed cache entry doesn't break the cache table.
+  await page.evaluate(() => document.querySelectorAll('details').forEach(d => { d.open = true; }));
+  await page.fill('#domainBlockInput', 'https://Bad-Site.example/login?x=1');
+  await page.click('#addBlockBtn');
+  const block = () => sw.evaluate(() => new Promise(r => chrome.storage.local.get('customBlocklist', r)));
+  let bl = await until(block, v => (v.customBlocklist || []).length === 1, 8000);
+  check('block list: a pasted URL is stored as its domain', JSON.stringify(bl.customBlocklist) === '["bad-site.example"]', bl);
+  await page.fill('#domainBlockInput', 'not a domain!!');
+  await page.click('#addBlockBtn');
+  await until(() => errors.slice(), e => e.some(x => /doesn't look like a site domain/.test(x)), 8000);
+  bl = await block();
+  check('block list: junk refused with a message', (bl.customBlocklist || []).length === 1, bl);
+  await sw.evaluate(() => chrome.storage.local.set({
+    customBlocklist: ['bad-site.example', 'not a domain'],
+    'https://junk.example/x': null,
+    'https://junk2.example/x': { isSafe: true },
+    'https://ok.example/x': { finalUrl: 'https://real.example/', resolver: 'Test', isSafe: true, cachedDate: '1/1/2026', cachedTimestamp: Date.now() }
+  }));
+  // The policy tables re-render on the page's own actions, not on outside writes: reload to see them.
+  await page.reload();
+  await optionsReady(page);
+  await page.evaluate(() => document.querySelectorAll('details').forEach(d => { d.open = true; }));
+  const inert = await until(() => page.$$eval('#blockTable tbody tr', t => t.map(r => r.textContent)), rs => rs.some(r => /not a domain/.test(r)), 8000);
+  check('a stored non-domain entry is marked as having no effect', inert.some(r => /not a domain/.test(r) && /no effect/.test(r)), inert);
+  await page.evaluate(() => document.querySelector('.tab-btn[data-tab="logging"]').click());
+  await page.evaluate(() => document.querySelector('#logNav button[data-log="cache"]').click());
+  const cacheRows = await until(() => page.$$eval('#cacheTable tbody tr', t => t.map(r => r.textContent)), rs => rs.some(r => /real\.example/.test(r)), 8000);
+  check('URL cache table renders even with malformed entries', cacheRows.some(r => /real\.example/.test(r)) && cacheRows.some(r => /junk2\.example/.test(r)) && cacheRows.some(r => /junk\.example/.test(r)), cacheRows.length);
+  await sw.evaluate(() => chrome.storage.local.remove(['https://junk.example/x', 'https://junk2.example/x', 'https://ok.example/x']).then(() => chrome.storage.local.set({ customBlocklist: [] })));
+  await page.evaluate(() => document.querySelector('.tab-btn[data-tab="settings"]').click());
   // Toggle a switch: stored.
   await page.click('[data-setting="enableAutoSpam"] + .slider');
   const t = await until(() => sw.evaluate(() => new Promise(r => chrome.storage.local.get('enableAutoSpam', r))), v => v.enableAutoSpam === false, 8000);
