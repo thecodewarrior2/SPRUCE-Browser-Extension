@@ -66,15 +66,18 @@ async function openExt(browser, file, ready) {
 // Serves the simulated webmail at its real address. Gmail's "Show original" (view=om) answers from raw.
 async function serve(page, host, file, raw = {}) {
   await page.setRequestInterception(true);
+  // A request still being answered when its browser closes (the end of a part) rejects: ignored, as
+  // for abort (unhandled, it ended the whole suite after every check had passed).
+  const answer = (req, reply) => req.respond(reply).catch(() => {});
   page.on('request', (req) => {
     const u = new URL(req.url());
     if (u.hostname !== host) return req.abort('failed').catch(() => {});
     if (u.searchParams.get('view') === 'om') {
       const r = raw[u.searchParams.get('permmsgid')];
-      return r ? req.respond({ status: 200, contentType: 'text/html', body: `<html><body><pre id="raw_message_text">${r.replace(/</g, '&lt;')}</pre></body></html>` })
-               : req.respond({ status: 404, contentType: 'text/plain', body: 'nf' });
+      return r ? answer(req, { status: 200, contentType: 'text/html', body: `<html><body><pre id="raw_message_text">${r.replace(/</g, '&lt;')}</pre></body></html>` })
+               : answer(req, { status: 404, contentType: 'text/plain', body: 'nf' });
     }
-    return req.respond({ status: 200, contentType: 'text/html', body: fs.readFileSync(path.join(E2E, file), 'utf8') });
+    return answer(req, { status: 200, contentType: 'text/html', body: fs.readFileSync(path.join(E2E, file), 'utf8') });
   });
 }
 
