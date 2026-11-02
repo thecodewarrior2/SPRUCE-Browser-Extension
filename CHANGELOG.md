@@ -35,6 +35,11 @@ by its name alone. Four changes, each on its own switch (`COMPANY_MATCHING` in `
   the domain's DMARC record and, when needed, the brand-ownership records, at most once a month per
   domain (see the privacy policy).
 
+**Also fixed:** while an opened email had no warning about its sender, its banner was redrawn every
+150 ms for as long as the email stayed open (nothing visible changed; it only cost processor time). It
+is now redrawn only when something changes; a banner still to be drawn counts as work in progress, so a
+test of any opened email would catch such a loop.
+
 **Rolling one back:** in `shared.js`, set its switch in `COMPANY_MATCHING` to `false` (`oneTable`,
 `ownEndings`, `verifiedSender`, `nameNeedsProof`) and rebuild; that change then works as in 5.89 and the
 others keep working. Every line a change touches carries its tag (`[5.90-1]` … `[5.90-4]`), and a test

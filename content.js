@@ -1527,7 +1527,7 @@ function reviewLinkProblem(el, d, facts) {
     const body = containerOf(el) || el;
     const proofP = wantsProof ? Promise.all(facts.unproven.map(dom => brandOwnershipFor(dom, facts.company, lastSettings))) : Promise.resolve(null);
     const authP = wantsSender ? getMessageAuth(body).catch(() => null) : Promise.resolve(null);
-    Promise.all([proofP, authP]).then(([evidence, auth]) => guarded('Looking again at a link that shows another site', () => {
+    trackWork(Promise.all([proofP, authP]).then(([evidence, auth]) => guarded('Looking again at a link that shows another site', () => {
         if (!el.isConnected || processedLinksMap.get(el) !== d || d.isSafe) return;
         if (wantsProof && nameEndingsProven(facts, evidence)) {
             settleLinkProblem(el, d, null);
@@ -1539,7 +1539,7 @@ function reviewLinkProblem(el, d, facts) {
             settleLinkProblem(el, d, amber);
             reportEvent('info', `A link's text shows ${facts.textHost}, the site of this email's verified sender (DMARC pass), but it goes to ${facts.host}: marked for caution instead of danger, since the sender chose where its own link goes.`);
         }
-    }));
+    })));   // counted as work in progress until it has looked again
 }
 // Gives a checked link a new finding (or none) and redraws what depends on it.
 function settleLinkProblem(el, d, problem) {
@@ -1654,10 +1654,19 @@ function bannerState(body) {
     if (!st) { st = { el: null, sender: new Map(), open: { details: false, help: false } }; emailBanners.set(body, st); }
     return st;
 }
+// A banner still to be drawn is work in progress: the page isn't done (<html data-unshortener-busy>)
+// until it is.
+const bannerWork = new Map();
 function scheduleBannerRefresh(body) {
     if (!body) return;
     clearTimeout(bannerTimers.get(body));
-    bannerTimers.set(body, setTimeout(() => guarded('Updating the email banner', () => refreshEmailBanner(body)), 150));
+    if (!bannerWork.has(body)) bannerWork.set(body, workStarted());
+    bannerTimers.set(body, setTimeout(() => {
+        const done = bannerWork.get(body);
+        bannerWork.delete(body);
+        guarded('Updating the email banner', () => refreshEmailBanner(body));
+        if (done) done();
+    }, 150));
 }
 
 function linkCategory(reason) {
@@ -3068,7 +3077,9 @@ function updateOpenedVerdict(body) {
     const line = final.status === 'flagged' ? { severity: 'danger', message: `This email is flagged. ${final.reasons.join(' ')} Don't open its links or attachments or reply with personal details.` }
         : final.status === 'caution' ? { severity: 'caution', message: `Be careful with this email. ${final.reasons.join(' ')}` } : null;
     const old = banner.sender.get('sender-identity');
-    if ((old && old.message) !== (line && line.message)) {
+    // Compared as text or null: "no line" was undefined on one side and null on the other, which read as
+    // a change on every refresh, so a clean email's banner was redrawn every 150 ms while it was open.
+    if ((old ? old.message : null) !== (line ? line.message : null)) {
         if (line) banner.sender.set('sender-identity', line); else banner.sender.delete('sender-identity');
         scheduleBannerRefresh(body);
     }
