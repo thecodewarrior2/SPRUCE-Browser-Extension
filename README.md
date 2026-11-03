@@ -35,6 +35,12 @@ Every feature in detail, and which webmail supports what: [docs/FEATURES.md](doc
 
 From your browser's store, where it updates itself:
 
+<p>
+<a href="https://chromewebstore.google.com/detail/spruce+/ennpekfncgndmiffefhbkpdnjnnnhcpc"><img src="branding/badges/chrome-web-store.png" alt="Available in the Chrome Web Store" height="60"></a>&emsp;&emsp;
+<a href="https://microsoftedge.microsoft.com/addons/detail/spruce/ailfmflfcombomabeallgefjkkejjijh"><img src="branding/badges/microsoft-edge-add-ons.png" alt="Get it from Microsoft Edge" height="60"></a>&emsp;&emsp;
+<a href="https://addons.mozilla.org/en-US/firefox/addon/s-p-r-u-c-e/"><img src="branding/badges/firefox-add-ons.png" alt="Get the add-on for Firefox" height="60"></a>
+</p>
+
 - **Google Chrome:** [Chrome Web Store](https://chromewebstore.google.com/detail/spruce+/ennpekfncgndmiffefhbkpdnjnnnhcpc)
 - **Microsoft Edge:** [Microsoft Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/spruce/ailfmflfcombomabeallgefjkkejjijh)
 - **Firefox (desktop):** [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/s-p-r-u-c-e/) (addons.mozilla.org)
