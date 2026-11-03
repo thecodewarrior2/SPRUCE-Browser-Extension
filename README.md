@@ -33,14 +33,19 @@ Every feature in detail, and which webmail supports what: [docs/FEATURES.md](doc
 
 ## Install
 
-- **Chrome:** from the [Chrome Web Store](https://chromewebstore.google.com/detail/spruce+/ennpekfncgndmiffefhbkpdnjnnnhcpc). **Edge:** from
-  [Microsoft Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/spruce/ailfmflfcombomabeallgefjkkejjijh). To install it yourself, download `spruce-<version>-chrome-manual-install.zip` from the
-  [releases page](https://github.com/thecodewarrior2/SPRUCE-Browser-Extension/releases) and follow
-  [docs/INSTALL-FOR-TESTERS.md](docs/INSTALL-FOR-TESTERS.md).
-- **Firefox (desktop):** from [addons.mozilla.org](https://addons.mozilla.org/en-US/firefox/addon/s-p-r-u-c-e/); the releases page also has the
-  Mozilla-signed `.xpi`. To try a test version, see the same install guide.
+From your browser's store, where it updates itself:
+
+- **Google Chrome:** [Chrome Web Store](https://chromewebstore.google.com/detail/spruce+/ennpekfncgndmiffefhbkpdnjnnnhcpc)
+- **Microsoft Edge:** [Microsoft Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/spruce/ailfmflfcombomabeallgefjkkejjijh)
+- **Firefox (desktop):** [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/s-p-r-u-c-e/) (addons.mozilla.org)
 - **Safari:** not available as a download yet. It is built from this repository on a Mac
   (`tools/build-safari.sh`, or the **Safari build** workflow on GitHub); see the install guide.
+
+To install it yourself instead (a test version, or a download from the
+[releases page](https://github.com/thecodewarrior2/SPRUCE-Browser-Extension/releases): for Chrome and Edge
+`spruce-<version>-chrome-manual-install.zip`, for Firefox the Mozilla-signed `.xpi`), follow
+[docs/INSTALL-FOR-TESTERS.md](docs/INSTALL-FOR-TESTERS.md). A copy installed that way doesn't update
+itself.
 
 Every browser's version is built from the same files in this repository (`node tools/build.js`).
 
@@ -54,7 +59,7 @@ Every browser's version is built from the same files in this repository (`node t
 | [Architecture](docs/ARCHITECTURE.md) | How it works inside, with diagrams |
 | [Development](docs/DEVELOPMENT.md) | Building, testing and publishing; repository layout |
 | [Manual install](docs/INSTALL-FOR-TESTERS.md) | Installing a release download or test version yourself |
-| [Store listing](store/STORE-LISTING.md) | Chrome Web Store listing text, permission reasons and images |
+| [Store listing](store/STORE-LISTING.md) | The Chrome Web Store and Microsoft Edge Add-ons listing text, permission reasons and images |
 | [What's new](store/WHATS-NEW.md) | Plain-language notes on each version in the browser stores |
 | [Changelog](CHANGELOG.md) | Every version, what changed and why |
 
