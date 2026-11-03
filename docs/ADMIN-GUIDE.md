@@ -13,7 +13,7 @@ The same keys work in Chrome, Edge and Firefox. Chrome and Edge wrap each value,
 
 ## Contents
 
-- [Set the policy](#set-the-policy): [Chrome and Edge](#chrome-and-edge) · [Firefox](#firefox) · [Safari](#safari)
+- [Set the policy](#set-the-policy): [Chrome and Edge](#chrome-and-edge) · [Microsoft Edge](#microsoft-edge) · [Firefox](#firefox) · [Safari](#safari)
 - [Keys](#keys)
 - [Notes](#notes)
 - [Feature compatibility by webmail](#feature-compatibility-by-webmail)
@@ -29,8 +29,11 @@ The same keys work in Chrome, Edge and Firefox. Chrome and Edge wrap each value,
 
 ### Chrome and Edge
 
+With Google Workspace (Chrome browsers and ChromeOS); for Microsoft Edge, see [Microsoft Edge](#microsoft-edge) below.
+
 1. Google Admin console → **Devices → Chrome → Apps & extensions → Users & browsers**.
-2. Choose the organizational unit, then add or select this extension.
+2. Choose the organizational unit, then add this extension by its Chrome Web Store ID,
+   `ennpekfncgndmiffefhbkpdnjnnnhcpc` ([its listing](https://chromewebstore.google.com/detail/spruce+/ennpekfncgndmiffefhbkpdnjnnnhcpc)), and set it to **Force install**.
 3. Open **Policy for extensions** and paste JSON in the form below. Delete every line you do not want to lock.
 
 ```json
@@ -44,6 +47,120 @@ The same keys work in Chrome, Edge and Firefox. Chrome and Edge wrap each value,
 
 `docs/policy-example.json` lists every key with its default value. Users can also generate a starting point from
 **Options → Settings → Backup & Google Workspace → "Copy as policy JSON"**.
+
+### Microsoft Edge
+
+Edge reads the same settings as Chrome: the extension's own policy (Edge calls it a *third-party*
+policy), set with Microsoft Intune, Group Policy or the registry on Windows, and with a configuration
+profile on macOS. There are two separate parts: **installing** the extension (Edge's own extension
+policies) and **setting and locking its options** (the extension's policy).
+
+#### Which extension ID
+
+Every policy names the extension by its ID, and each copy has its own:
+
+| Copy | Its ID | Update address (for installing) |
+|---|---|---|
+| **Microsoft Edge Add-ons** (recommended for Edge) | the end of its listing's address: `https://microsoftedge.microsoft.com/addons/detail/…/<ID>` | `https://edge.microsoft.com/extensionwebstorebase/v1/crx` |
+| The [Chrome Web Store](https://chromewebstore.google.com/detail/spruce+/ennpekfncgndmiffefhbkpdnjnnnhcpc) version, installed in Edge | `ennpekfncgndmiffefhbkpdnjnnnhcpc` | `https://clients2.google.com/service/update2/crx` |
+
+Until the Edge Add-ons listing is published, install the Chrome Web Store version (entry
+`ennpekfncgndmiffefhbkpdnjnnnhcpc;https://clients2.google.com/service/update2/crx`; Edge allows it when it's installed by
+policy). Use the ID of the copy you install, in both parts. On a computer that has it, `edge://extensions` (with
+**Developer mode** on) shows the ID under the extension. The listing can be hidden from search in Edge
+Add-ons; installing by policy still works.
+
+#### 1. Install it for everyone
+
+Use one of these for the extension, not two (**ExtensionSettings** replaces what the others set for it):
+
+- **Intune** (Windows): **Devices → Configuration → Create → New policy**, platform **Windows 10 and
+  later**, profile type **Settings catalog** → **Add settings** → **Microsoft Edge → Extensions** →
+  **Control which extensions are installed silently** (`ExtensionInstallForcelist`), with this entry:
+
+  ```
+  <ID>;https://edge.microsoft.com/extensionwebstorebase/v1/crx
+  ```
+
+- **Group Policy** (Windows): import Microsoft's Edge policy templates (ADMX, from the Microsoft Edge for
+  Business download page), then **Computer Configuration → Policies → Administrative Templates →
+  Microsoft Edge → Extensions → Control which extensions are installed silently**, with the same entry.
+
+- **One JSON policy that can also pin it to the toolbar** (Intune or Group Policy: **Microsoft Edge →
+  Extensions → Configure extension management settings**, `ExtensionSettings`; Group Policy takes it on
+  a single line):
+
+  ```json
+  {"<ID>": {"installation_mode": "force_installed", "update_url": "https://edge.microsoft.com/extensionwebstorebase/v1/crx", "toolbar_state": "force_shown"}}
+  ```
+
+  `force_installed`: users can't turn it off or remove it; `normal_installed`: installed for everyone,
+  but users can turn it off. `toolbar_state` (Edge 103 or later): `force_shown` keeps its button on the
+  toolbar for good, `default_shown` shows it there at first.
+
+- **Microsoft Edge management service** (Microsoft 365 admin center → **Settings → Microsoft Edge →
+  Configuration policies** → a policy → **Extensions → Managed extensions → Add extension**): installs it
+  for users signed in to Edge with their work account. It doesn't set the extension's own options: do
+  that with part 2.
+
+- **macOS**: a configuration profile (Intune: a **Preference file** profile; Jamf and others: a custom
+  profile) for the preference domain `com.microsoft.Edge`, with `ExtensionInstallForcelist` (an array
+  holding the entry above) or `ExtensionSettings`.
+
+#### 2. Set and lock its options
+
+**Windows.** Edge reads the extension's policy from the registry:
+
+```
+HKLM\SOFTWARE\Policies\Microsoft\Edge\3rdparty\extensions\<ID>\policy
+```
+
+Every key in [Keys](#keys) is a value there, named as in the table: on/off and numbers as `REG_DWORD`
+(1 on, 0 off), text as `REG_SZ`, and a list (`managedAllowlist`, `managedBlocklist`,
+`managedTrustedSenders`) as a subkey of that name whose values `1`, `2`, `3`… each hold one entry. Only
+what you set is locked. For example, to turn off third-party short-link lookups, keep history 14 days
+and trust one internal site:
+
+```
+Windows Registry Editor Version 5.00
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge\3rdparty\extensions\<ID>\policy]
+"managedEnableThirdPartyResolution"=dword:00000000
+"managedRetentionDays"=dword:0000000e
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge\3rdparty\extensions\<ID>\policy\managedAllowlist]
+"1"="internal.example.com"
+```
+
+The easiest way to write these values is the extension itself: set it up the way you want on one
+computer, then choose **Settings → Backup & Google Workspace → Copy registry script**. It gives a
+PowerShell script with those settings for Edge and Chrome; replace the ID at its top with the ID you
+deploy. The Intune Settings catalog has no setting for an extension's own policy, so deploy the script:
+
+- **Intune:** **Devices → Scripts and remediations → Platform scripts → Add → Windows 10 and later**,
+  with **Run this script using the logged on credentials: No** (it runs as system) and **Run script in
+  64 bit PowerShell host: Yes**.
+- **Group Policy:** as a computer startup script, or write the same values with **Computer
+  Configuration → Preferences → Windows Settings → Registry**.
+
+**macOS.** Microsoft doesn't document how to give an extension its own policy in Edge on macOS. Chrome
+reads it from a profile for the preference domain `com.google.Chrome.extensions.<ID>`, and guides from
+other vendors use `com.microsoft.Edge.extensions.<ID>` for Edge in the same way, with the keys as plain
+values (`managedRetentionDays` an integer, `managedAllowlist` an array of strings). Earlier Edge versions
+were reported not to read it, so check `edge://policy` on a test Mac before you rely on it.
+
+#### 3. Check it
+
+- `edge://policy` → **Reload policies**: the install policy is under **Microsoft Edge policies**, and the
+  extension's own section (S.P.R.U.C.E+) lists every option you set, each with the status **OK**.
+- `edge://extensions`: the extension shows that your organization manages it; a force-installed one
+  can't be turned off or removed.
+- The extension's **Settings**: each option you set shows 🔒 and can't be changed.
+
+Changes need no reinstall: they apply after **Reload policies** in `edge://policy`, or when Edge next
+reloads its policies, and open webmail tabs use them from the next message opened. Policies from the
+Edge management service apply when Edge restarts, and a policy set on the device (Intune or Group
+Policy) wins over the same one from the Edge management service.
 
 ### Firefox
 
@@ -326,16 +443,17 @@ All of this is on by default and every part has its own key above. In short:
 
 The extension's **Help → Deploying in organizations** section has step-by-step instructions for:
 
-- **Google Workspace (Chrome / ChromeOS):** Admin console → Devices → Chrome → Apps & extensions → Users & browsers. Add the extension by Chrome Web Store ID, set it to **Force install**, and paste the JSON from **Settings → Backup & Google Workspace → Copy as policy JSON** into **Policy for extensions**.
+- **Google Workspace (Chrome / ChromeOS):** Admin console → Devices → Chrome → Apps & extensions → Users & browsers. Add the extension by its Chrome Web Store ID (`ennpekfncgndmiffefhbkpdnjnnnhcpc`), set it to **Force install**, and paste the JSON from **Settings → Backup & Google Workspace → Copy as policy JSON** into **Policy for extensions**.
 - **Microsoft Edge with Intune:**
   - **Install:** Settings catalog → Microsoft Edge → Extensions → **Control which extensions are installed silently**, with an entry of the form `ID;https://edge.microsoft.com/extensionwebstorebase/v1/crx` (Edge Add-ons) or `ID;https://clients2.google.com/service/update2/crx` (Chrome Web Store).
   - **Settings:** **Copy registry script** generates a PowerShell script that writes `HKLM\SOFTWARE\Policies\Microsoft\Edge\3rdparty\extensions\<ID>\policy` and the Chrome equivalent. Deploy it as an Intune platform script, running as system in 64-bit PowerShell.
+  - Group Policy, the single JSON policy (`ExtensionSettings`, which can also pin it to the toolbar), the Edge management service and macOS: see [Microsoft Edge](#microsoft-edge).
 - **Chrome on Windows with Intune:** Settings catalog → Google Chrome → Extensions → force-install list (import Google's ADMX templates if needed). The same registry script covers its settings.
 
 Verify at `chrome://policy` / `edge://policy`. Menu names in admin consoles change over time, so expect small wording differences.
 
-**Firefox:** Publish the add-on on addons.mozilla.org (listed or unlisted; Firefox installs only signed add-ons),
-then deploy `policies.json` as above with `installation_mode` set to `force_installed` (users can't
+**Firefox:** the add-on is on [addons.mozilla.org](https://addons.mozilla.org/en-US/firefox/addon/s-p-r-u-c-e/) (Firefox installs only signed add-ons); its ID is
+`spruce@spruce-browser-extension`. Deploy `policies.json` as above with `installation_mode` set to `force_installed` (users can't
 remove it) or `normal_installed`. Verify at `about:policies` and `about:addons`.
 
 **Safari:** see [Safari](#safari).
@@ -451,7 +569,7 @@ them by hand.
 - **Settings stay reachable** for IT staff and anyone who knows the address: type
   `chrome-extension://<extension ID>/options.html` in the address bar. The ID is shown on
   `chrome://extensions` (Edge: `edge://extensions`) and in the store page's address; the store gives the
-  published extension its own ID, different from the test version's. In Firefox: `about:addons` → the
+  published extension its own ID (Chrome Web Store: `ennpekfncgndmiffefhbkpdnjnnnhcpc`), different from the test version's. In Firefox: `about:addons` → the
   add-on → **Options**. Hiding the button is a convenience, not a lock: to stop users
   changing a setting, set that setting by policy.
 

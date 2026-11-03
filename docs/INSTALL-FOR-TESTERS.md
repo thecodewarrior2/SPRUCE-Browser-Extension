@@ -1,14 +1,15 @@
 # Installing it yourself
 
-Most people should install S.P.R.U.C.E+ from their browser's store, where it updates itself. These
+Most people should install S.P.R.U.C.E+ from their browser's store, where it updates itself: the
+[Chrome Web Store](https://chromewebstore.google.com/detail/spruce+/ennpekfncgndmiffefhbkpdnjnnnhcpc) (Chrome, and Edge) or [addons.mozilla.org](https://addons.mozilla.org/en-US/firefox/addon/s-p-r-u-c-e/) (Firefox). These
 steps are for a test version or a download from the
 [releases page](https://github.com/thecodewarrior2/SPRUCE-Browser-Extension/releases):
 [Chrome or Edge](#chrome-or-edge) · [Firefox](#firefox) · [Safari](#safari).
 
 ## Chrome or Edge
 
-Most people should install S.P.R.U.C.E+ from the Chrome Web Store (Edge: Edge Add-ons): it updates
-itself. To install it yourself instead (a test version, or a download from the
+Most people should install S.P.R.U.C.E+ from the [Chrome Web Store](https://chromewebstore.google.com/detail/spruce+/ennpekfncgndmiffefhbkpdnjnnnhcpc) (Edge can install it from
+there too, once you allow extensions from other stores, which Edge offers there): it updates itself. To install it yourself instead (a test version, or a download from the
 [releases page](https://github.com/thecodewarrior2/SPRUCE-Browser-Extension/releases), the file
 named `spruce-<version>-chrome-manual-install.zip`), follow these steps. It takes about a minute.
 A manual install doesn't update itself: check the releases page for new versions.
@@ -39,7 +40,7 @@ Zoho Mail, iCloud Mail, Fastmail and GMX. The extension ID shown on its card sho
 ## Firefox
 
 These steps load an unsigned test version, which Firefox removes when it restarts. To install
-the add-on for good, use addons.mozilla.org or the signed `.xpi` from the
+the add-on for good, use [addons.mozilla.org](https://addons.mozilla.org/en-US/firefox/addon/s-p-r-u-c-e/) or the signed `.xpi` from the
 [releases page](https://github.com/thecodewarrior2/SPRUCE-Browser-Extension/releases). A test version is
 `spruce-<version>-firefox.zip` (or the `build/firefox` folder that `node tools/build.js firefox` makes). It takes about a minute
 and needs **Firefox 140 or later**.

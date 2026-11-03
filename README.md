@@ -33,11 +33,11 @@ Every feature in detail, and which webmail supports what: [docs/FEATURES.md](doc
 
 ## Install
 
-- **Chrome and Edge:** once it is published, from the Chrome Web Store (Edge: Edge Add-ons). To install
-  it yourself, download `spruce-<version>-chrome-manual-install.zip` from the
+- **Chrome and Edge:** from the [Chrome Web Store](https://chromewebstore.google.com/detail/spruce+/ennpekfncgndmiffefhbkpdnjnnnhcpc). Edge can install it from there too (Edge first asks
+  to allow extensions from other stores); it will also be on Edge Add-ons. To install it yourself, download `spruce-<version>-chrome-manual-install.zip` from the
   [releases page](https://github.com/thecodewarrior2/SPRUCE-Browser-Extension/releases) and follow
   [docs/INSTALL-FOR-TESTERS.md](docs/INSTALL-FOR-TESTERS.md).
-- **Firefox (desktop):** once it is published, from addons.mozilla.org; the releases page also has the
+- **Firefox (desktop):** from [addons.mozilla.org](https://addons.mozilla.org/en-US/firefox/addon/s-p-r-u-c-e/); the releases page also has the
   Mozilla-signed `.xpi`. To try a test version, see the same install guide.
 - **Safari:** not available as a download yet. It is built from this repository on a Mac
   (`tools/build-safari.sh`, or the **Safari build** workflow on GitHub); see the install guide.
