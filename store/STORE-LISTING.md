@@ -70,6 +70,7 @@ take the entry itself. `CHANGELOG.md` is the technical history; don't link it fr
 | Field | File |
 |---|---|
 | Store icon (128×128) | `../icons/icon128.png` |
+| Edge Add-ons extension logo (300×300; Edge accepts 128×128 too) | `logo-300x300.png`, the extension's icon (`../branding/icon.svg`) drawn at 300×300 |
 | Screenshots (1280×800) | `screenshot-1-inbox.png`, `screenshot-2-email.png`, `screenshot-3-moved.png`, `screenshot-4-settings.png` |
 | Small promo tile (440×280) | `promo-440x280.png` |
 | Marquee promo tile (1400×560) | `marquee-1400x560.png` |
