@@ -1,5 +1,21 @@
 # Changelog
 
+## 5.91 — Help for organizations: deploying the published extension
+
+S.P.R.U.C.E+ is now in the Chrome Web Store, Microsoft Edge Add-ons and Firefox Add-ons, and Settings →
+Help → **Deploying in organizations** explains how to deploy that published extension, instead of how
+to publish or host a copy of your own:
+
+- **Chrome and Edge:** step 1 is a table of the two stores, with each listing, its extension ID
+  (`ennpekfncgndmiffefhbkpdnjnnnhcpc` in the Chrome Web Store, `ailfmflfcombomabeallgefjkkejjijh` in
+  Microsoft Edge Add-ons) and the update address for install policies. The Google Workspace and Intune
+  steps use those IDs, and say which ID the registry script must carry for Edge and for Chrome. The
+  self-hosting option is gone.
+- **Firefox:** step 1 links the Firefox Add-ons listing, with the add-on's ID and the address of its
+  latest version, instead of publishing it on addons.mozilla.org or hosting a signed `.xpi`.
+- **Safari:** it isn't in Apple's App Store yet, and the section says so before explaining how to
+  build it yourself.
+
 ## 5.90 — A company's own links are no longer called dangerous
 
 A genuine American Express email was marked dangerous: its link text showed americanexpress.com, and the

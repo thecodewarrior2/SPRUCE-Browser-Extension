@@ -1028,24 +1028,21 @@
 <p class="lead">Install the extension for everyone automatically and set (or lock) its settings centrally: with Google Workspace for Chrome, and with Microsoft Intune for Microsoft Edge (or Chrome on Windows).</p>
 <div class="callout-warn"><b>Before you start.</b> Admin consoles change their menus from time to time; the paths below describe the 2026 consoles and may be worded slightly differently in yours. Always test with a small pilot group first and check the result at <code>chrome://policy</code> or <code>edge://policy</code>.</div>
 
-<h3 id="deploy-prepare">1. Choose how the extension is distributed</h3>
-<ul class="simple-list">
-  <li><b>Chrome Web Store</b> (recommended for Chrome): <a href="https://chromewebstore.google.com/detail/spruce+/ennpekfncgndmiffefhbkpdnjnnnhcpc" target="_blank" rel="noopener noreferrer">its listing</a>, extension ID <code>ennpekfncgndmiffefhbkpdnjnnnhcpc</code>.</li>
-  <li><b>Microsoft Edge Add-ons</b> (recommended for Edge): <a href="https://microsoftedge.microsoft.com/addons/detail/spruce/ailfmflfcombomabeallgefjkkejjijh" target="_blank" rel="noopener noreferrer">its listing</a>, extension ID <code>ailfmflfcombomabeallgefjkkejjijh</code>.</li>
-  <li><b>Chrome Web Store version in Edge:</b> Edge can also force-install the Chrome Web Store version by its Chrome ID and the Chrome update address below.</li>
-  <li>Each copy has its own ID; every policy below names the copy you install by its ID. A test version or a self-hosted copy has another one, shown on <code>chrome://extensions</code> (<code>edge://extensions</code>) with <b>Developer mode</b> on.</li>
-  <li><b>Self-hosting</b> (packed .crx plus an update manifest on your own web server) works only on managed devices; the stores are simpler and update automatically.</li>
-</ul>
-<p>Update addresses used in install policies:</p>
-<div class="deploy-code">Chrome Web Store:  https://clients2.google.com/service/update2/crx
-Edge Add-ons:      https://edge.microsoft.com/extensionwebstorebase/v1/crx</div>
+<h3 id="deploy-prepare">1. The published extension</h3>
+<p>S.P.R.U.C.E+ is published in the Chrome Web Store and in Microsoft Edge Add-ons. Install it from the store of each browser: there is nothing to publish or host, and every copy updates itself from its store. Each store gives the extension its own ID, and every policy below names it by that ID:</p>
+<table class="help-table">
+<tr><th>Browser</th><th>Store</th><th>Extension ID</th><th>Update address (in install policies)</th></tr>
+<tr><td>Google Chrome, ChromeOS</td><td><a href="https://chromewebstore.google.com/detail/spruce+/ennpekfncgndmiffefhbkpdnjnnnhcpc" target="_blank" rel="noopener noreferrer">Chrome Web Store</a></td><td><code>ennpekfncgndmiffefhbkpdnjnnnhcpc</code></td><td><code>https://clients2.google.com/service/update2/crx</code></td></tr>
+<tr><td>Microsoft Edge</td><td><a href="https://microsoftedge.microsoft.com/addons/detail/spruce/ailfmflfcombomabeallgefjkkejjijh" target="_blank" rel="noopener noreferrer">Microsoft Edge Add-ons</a></td><td><code>ailfmflfcombomabeallgefjkkejjijh</code></td><td><code>https://edge.microsoft.com/extensionwebstorebase/v1/crx</code></td></tr>
+</table>
+<p>Edge can also install the Chrome Web Store copy (by its ID and the Chrome Web Store update address), but use the Edge Add-ons copy in Edge, and its ID in Edge's policies.</p>
 <p>The extension's settings are delivered as <b>extension policy</b>: every setting has a policy key (listed in the <a href="#" data-help-link="architecture" data-help-anchor="arch-settings">settings reference</a> and in <code>schema.json</code>). A policy value always wins and appears with 🔒 to the user; anything you don't set stays under the user's control.</p>
 
 <h3 id="deploy-workspace">2. Google Workspace (Chrome browser and ChromeOS)</h3>
 <ol class="simple-list">
   <li>In the Google Admin console, go to <b>Devices → Chrome → Apps &amp; extensions → Users &amp; browsers</b>. (To manage Chrome on computers where users don't sign in, enroll the browsers with Chrome Enterprise Core and use the <b>Managed browsers</b> tab instead.)</li>
   <li>Select the <b>organizational unit</b> (or group) to deploy to; start with a pilot group.</li>
-  <li>Click <b>+ (Add)</b> → <b>Add from Chrome Web Store</b> and search for the extension, or <b>Add Chrome app or extension by ID</b> and enter its ID (for a self-hosted package also enter its update address).</li>
+  <li>Click <b>+ (Add)</b> → <b>Add from Chrome Web Store</b> and search for <b>S.P.R.U.C.E+</b>, or <b>Add Chrome app or extension by ID</b> and enter <code>ennpekfncgndmiffefhbkpdnjnnnhcpc</code> (From the Chrome Web Store).</li>
   <li>Set the <b>Installation policy</b> to <b>Force install</b> (or <b>Force install + pin to browser toolbar</b>) so users can't remove it.</li>
   <li>In the extension's settings panel, paste your settings into <b>Policy for extensions</b> as JSON. Generate it from <b>Settings → Backup &amp; Google Workspace → Copy as policy JSON</b> and delete the lines you don't want to lock. The format is:
     <div class="deploy-code">{
@@ -1065,13 +1062,13 @@ Edge Add-ons:      https://edge.microsoft.com/extensionwebstorebase/v1/crx</div>
   <li>Enable <b>Control which extensions are installed silently</b> (the <code>ExtensionInstallForcelist</code> policy) and add one entry in the form <code>extension-ID;update-address</code>, for example:
     <div class="deploy-code">ailfmflfcombomabeallgefjkkejjijh;https://edge.microsoft.com/extensionwebstorebase/v1/crx
 ennpekfncgndmiffefhbkpdnjnnnhcpc;https://clients2.google.com/service/update2/crx</div>
-    (Use one of the two. Choose the device-level, not user-level, setting so it applies to everyone on the device.)</li>
+    (The first line is the Edge Add-ons copy, the one to use in Edge; the second, the Chrome Web Store copy. Use one of the two. Choose the device-level, not user-level, setting so it applies to everyone on the device.)</li>
   <li>Alternatively, configure <b>Extension management settings</b> (<code>ExtensionSettings</code>) with JSON such as <code>{"ailfmflfcombomabeallgefjkkejjijh": {"installation_mode": "force_installed", "update_url": "https://edge.microsoft.com/extensionwebstorebase/v1/crx", "toolbar_state": "force_shown"}}</code> (<code>toolbar_state</code> keeps its button on the toolbar).</li>
   <li><b>Assign</b> the profile to a pilot device or user group, then to everyone.</li>
 </ol>
 <p><b>B. Deliver the extension's settings.</b> Edge reads extension policy from the registry under <code>HKLM\SOFTWARE\Policies\Microsoft\Edge\3rdparty\extensions\&lt;ID&gt;\policy</code>. The Settings catalog doesn't cover third-party extension policy, so use a script:</p>
 <ol class="simple-list">
-  <li>In this extension, choose <b>Settings → Backup &amp; Google Workspace → Copy registry script</b>. It produces a PowerShell script with your current settings for both Edge and Chrome; replace the extension ID at the top with the ID you deploy.</li>
+  <li>In this extension, choose <b>Settings → Backup &amp; Google Workspace → Copy registry script</b>. It produces a PowerShell script with your current settings for both Edge and Chrome. The ID at its top is this installation's: for Edge it must be <code>ailfmflfcombomabeallgefjkkejjijh</code> (the Edge Add-ons copy), for Chrome <code>ennpekfncgndmiffefhbkpdnjnnnhcpc</code>; if you made the script in the other browser, change it.</li>
   <li>In Intune, go to <b>Devices → Scripts and remediations → Platform scripts → Add → Windows 10 and later</b>, upload the .ps1 file, and set <b>Run this script using the logged on credentials: No</b> (runs as system) and <b>Run script in 64 bit PowerShell host: Yes</b>.</li>
   <li><b>Assign</b> it to the same groups. To change settings later, upload a new version of the script (or use a <b>Remediation</b> that re-applies it on a schedule).</li>
   <li><b>Check</b>: <code>edge://policy</code> lists the extension's policies; <code>edge://extensions</code> shows the extension as managed; Settings shows 🔒 on locked options.</li>
@@ -1142,11 +1139,11 @@ Flag field:      (leave empty: Google's replies are recognized automatically)</d
 <p class="lead">Install the add-on for everyone automatically and set (or lock) its settings centrally with Firefox enterprise policies: a <code>policies.json</code> file (any platform), the Windows registry (Microsoft Intune, Group Policy) or a macOS configuration profile.</p>
 <div class="callout-warn"><b>Before you start.</b> Always test with a small pilot group first and check the result at <code>about:policies</code>, which lists the active policies and marks errors.</div>
 
-<h3 id="deploy-prepare">1. Where the add-on comes from</h3>
+<h3 id="deploy-prepare">1. The published add-on</h3>
+<p>S.P.R.U.C.E+ is published on <a href="https://addons.mozilla.org/en-US/firefox/addon/s-p-r-u-c-e/" target="_blank" rel="noopener noreferrer">Firefox Add-ons</a> (addons.mozilla.org), signed by Mozilla as Firefox requires. Install it from there: there is nothing to publish or host, and it updates itself.</p>
 <ul class="simple-list">
-  <li><b>addons.mozilla.org (AMO)</b>: <a href="https://addons.mozilla.org/en-US/firefox/addon/s-p-r-u-c-e/" target="_blank" rel="noopener noreferrer">its listing</a>. Firefox only installs add-ons signed by Mozilla; this one is, and it updates itself. It installs from <code>https://addons.mozilla.org/firefox/downloads/latest/spruce@spruce-browser-extension/latest.xpi</code>: addons.mozilla.org finds an add-on by its ID as well as by its address there.</li>
-  <li>An unlisted (self-distributed) add-on is a signed <code>.xpi</code> you host yourself; use its address as <code>install_url</code>.</li>
-  <li>The add-on ID is <code>spruce@spruce-browser-extension</code> (in <code>manifest.json</code>); policies refer to the add-on by this ID.</li>
+  <li>Its ID is <code>spruce@spruce-browser-extension</code>; every policy below names the add-on by this ID.</li>
+  <li>Its install address, always its latest version: <code>https://addons.mozilla.org/firefox/downloads/latest/spruce@spruce-browser-extension/latest.xpi</code>.</li>
 </ul>
 <p>The extension's settings are delivered as <b>extension policy</b>: every setting has a policy key (listed in the <a href="#" data-help-link="architecture" data-help-anchor="arch-settings">settings reference</a>). A policy value always wins and appears with 🔒 to the user; anything you don't set stays under the user's control.</p>
 
@@ -1256,7 +1253,7 @@ Flag field:      (leave empty: Google's replies are recognized automatically)</d
 </div>
 <div data-only="safari">
 <h2>Deploying in organizations</h2>
-<p class="lead">In Safari an extension comes inside a small Mac (or iPhone/iPad) app. You build the app once from this extension, sign it, and install it on your devices; device management can then keep the extension turned on and allowed on your webmail. Safari has no extension policies, so settings can't be set or locked centrally (see <a href="#" data-help-link="deploy" data-help-anchor="deploy-settings">What can be managed</a>).</p>
+<p class="lead">S.P.R.U.C.E+ isn't in Apple's App Store yet (it is in the Chrome Web Store, Microsoft Edge Add-ons and Firefox Add-ons), so for Safari you build it yourself for now. In Safari an extension comes inside a small Mac (or iPhone/iPad) app. You build the app once from this extension, sign it, and install it on your devices; device management can then keep the extension turned on and allowed on your webmail. Safari has no extension policies, so settings can't be set or locked centrally (see <a href="#" data-help-link="deploy" data-help-anchor="deploy-settings">What can be managed</a>).</p>
 <div class="callout-warn"><b>Before you start.</b> You need a Mac with Xcode (free from the App Store) to build the app, and an Apple Developer account to sign it for other computers. Test with a small pilot group first.</div>
 
 <h3 id="deploy-prepare">1. Build the app</h3>

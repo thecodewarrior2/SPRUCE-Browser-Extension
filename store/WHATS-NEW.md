@@ -11,6 +11,15 @@
 Short notes on each version in the browser stores. Every detail is in the
 [full changelog](../CHANGELOG.md).
 
+## 5.91
+
+Changes since 5.90.
+
+**For organizations**
+- Settings → Help → Deploying in organizations explains how to install S.P.R.U.C.E+ for everyone from
+  the Chrome Web Store, Microsoft Edge Add-ons or Firefox Add-ons, with each store's extension ID, instead
+  of how to publish a copy of your own.
+
 ## 5.90
 
 Changes since 5.75, the previous version in the stores.
