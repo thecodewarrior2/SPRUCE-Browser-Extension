@@ -149,37 +149,32 @@ promotional image.
 
 Run `node tools/build.js firefox` and upload `build/spruce-<version>-firefox.zip` in the AMO developer hub,
 with the version's store entry from [store/WHATS-NEW.md](../store/WHATS-NEW.md) as its **Release notes**
-(listed, or "On your own" for a signed `.xpi` without a public listing). Its ID is
+(its public listing). Its ID is
 `spruce@spruce-browser-extension` (set by the build), and it declares the data it handles
 (`data_collection_permissions`: website content and personal communications, read on the device). Firefox
 installs only add-ons signed by Mozilla, so never publish the zip itself.
 
-## Publishing a GitHub release
+## Releasing a version
 
-The [releases page](https://github.com/thecodewarrior2/SPRUCE-Browser-Extension/releases) is for people
-who install the extension themselves. Store installs update on their own; manual installs don't.
+Every release goes to the stores only: the Chrome Web Store, Microsoft Edge Add-ons and
+addons.mozilla.org (Safari isn't published yet). There are no GitHub releases.
 
 1. Before the release (on `testing`), refresh the bundled copies of the downloaded lists, which a fresh
    install uses until its first download: `node tools/refresh-snapshot.js` (the shortener list and
-   ICANN's single-company endings; nothing in them is written by hand). Commit the result. For a version
-   going to the stores, write its entry in [store/WHATS-NEW.md](../store/WHATS-NEW.md): what users notice
-   since the previous store version, in plain words (no file names, settings keys or internal terms; the
-   technical detail stays in `CHANGELOG.md`).
-2. On `main`, with the version in `manifest.json` and a `CHANGELOG.md` entry for it, run
-   `node tools/build.js`. Among the files it builds is `build/spruce-<version>-chrome-manual-install.zip`:
-   one folder, `S.P.R.U.C.E+-<version>`, with the extension and `INSTALL.md`. Unlike the store zip it
-   **keeps the `key`**, so every manual install has the same extension ID as the test version and
-   managed policies reach it.
-3. Firefox: release Firefox only installs add-ons signed by Mozilla, so never attach an unsigned zip.
-   Once the version is approved on addons.mozilla.org, download its signed `.xpi` from the developer
-   hub and name it `spruce-<version>-firefox.xpi`. (Without a public listing, submit it as
-   "On your own" to get a signed `.xpi`.)
-4. Safari: don't attach anything until there is a signed and notarized app (it needs an Apple
-   Developer account). An unsigned build only runs with Safari's "Allow unsigned extensions",
-   which resets every time Safari restarts.
-5. Write the release notes from the draft in [`docs/releases/`](releases) (one file per version), fill
-   in the store links and the checksums (`sha256sum` of each file), create the release with the tag
-   `v<version>` on `main`, and attach the files.
+   ICANN's single-company endings; nothing in them is written by hand). Commit the result. Write the
+   version's entry in [store/WHATS-NEW.md](../store/WHATS-NEW.md): what users notice since the previous
+   store version, in plain words (no file names, settings keys or internal terms; the technical detail
+   stays in `CHANGELOG.md`).
+2. Once the maintainer has approved it and it is on `main` (see [Branches and workflow](#branches-and-workflow)),
+   with the version in `manifest.json` and a `CHANGELOG.md` entry for it, run `node tools/build.js` on `main`.
+3. Upload `build/spruce-<version>-webstore.zip` to the Chrome Web Store and to Microsoft Edge Add-ons, and
+   `build/spruce-<version>-firefox.zip` to addons.mozilla.org with its **Release notes** (above). Each store
+   reviews the version before its users get it.
+
+The build also makes `build/spruce-<version>-chrome-manual-install.zip`, which is for testing only: one
+folder, `S.P.R.U.C.E+-<version>`, with the extension and `INSTALL.md` (the
+[install guide](INSTALL-FOR-TESTERS.md)). Unlike the store zip it **keeps the `key`**, so every test copy
+has the same extension ID and managed policies reach it.
 
 ## Repository layout
 
@@ -200,7 +195,7 @@ who install the extension themselves. Store installs update on their own; manual
 | `lib/` | Bundled pdf.js (Apache-2.0), used only for PDF attachments |
 | `icons/` | Toolbar and store icons |
 | `tools/` | `build.js` (every browser's package), `build-safari.sh` (the Safari app, on a Mac), `refresh-snapshot.js` (the bundled shortener list and company endings; run before a release) |
-| `docs/` | Features, admin guide, architecture, this guide, install steps, policy example, release notes drafts (`docs/releases/`) |
+| `docs/` | Features, admin guide, architecture, this guide, install steps for test versions, policy examples |
 | `store/` | Chrome Web Store listing text and images, the script that makes the images, and `WHATS-NEW.md` (the plain-language notes for each store release) |
 | `branding/` | Logos, icons and the donation QR code (PNG and SVG) |
 | `tests/` | Unit and end-to-end tests (Chromium), the Firefox suite (real Firefox), sanitized sample emails |

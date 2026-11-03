@@ -1,18 +1,17 @@
 # Installing it yourself
 
 Most people should install S.P.R.U.C.E+ from their browser's store, where it updates itself: the
-[Chrome Web Store](https://chromewebstore.google.com/detail/spruce+/ennpekfncgndmiffefhbkpdnjnnnhcpc) (Chrome), [Microsoft Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/spruce/ailfmflfcombomabeallgefjkkejjijh) (Edge) or [addons.mozilla.org](https://addons.mozilla.org/en-US/firefox/addon/s-p-r-u-c-e/) (Firefox). These
-steps are for a test version or a download from the
-[releases page](https://github.com/thecodewarrior2/SPRUCE-Browser-Extension/releases):
+[Chrome Web Store](https://chromewebstore.google.com/detail/spruce+/ennpekfncgndmiffefhbkpdnjnnnhcpc) (Chrome), [Microsoft Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/spruce/ailfmflfcombomabeallgefjkkejjijh) (Edge) or [addons.mozilla.org](https://addons.mozilla.org/en-US/firefox/addon/s-p-r-u-c-e/) (Firefox).
+New versions are released only through these stores. These steps are for a **test version**, to try a
+change before it is released:
 [Chrome or Edge](#chrome-or-edge) · [Firefox](#firefox) · [Safari](#safari).
 
 ## Chrome or Edge
 
 Most people should install S.P.R.U.C.E+ from the [Chrome Web Store](https://chromewebstore.google.com/detail/spruce+/ennpekfncgndmiffefhbkpdnjnnnhcpc) (Edge:
-[Microsoft Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/spruce/ailfmflfcombomabeallgefjkkejjijh)): it updates itself. To install it yourself instead (a test version, or a download from the
-[releases page](https://github.com/thecodewarrior2/SPRUCE-Browser-Extension/releases), the file
-named `spruce-<version>-chrome-manual-install.zip`), follow these steps. It takes about a minute.
-A manual install doesn't update itself: check the releases page for new versions.
+[Microsoft Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/spruce/ailfmflfcombomabeallgefjkkejjijh)): it updates itself. To try a test version (the file named
+`spruce-<version>-chrome-manual-install.zip`), follow these steps. It takes about a minute. A test version
+doesn't update itself: once the change is released, remove it and install the store version.
 
 ### Install
 
@@ -40,8 +39,7 @@ Zoho Mail, iCloud Mail, Fastmail and GMX. The extension ID shown on its card sho
 ## Firefox
 
 These steps load an unsigned test version, which Firefox removes when it restarts. To install
-the add-on for good, use [addons.mozilla.org](https://addons.mozilla.org/en-US/firefox/addon/s-p-r-u-c-e/) or the signed `.xpi` from the
-[releases page](https://github.com/thecodewarrior2/SPRUCE-Browser-Extension/releases). A test version is
+the add-on for good, install it from [addons.mozilla.org](https://addons.mozilla.org/en-US/firefox/addon/s-p-r-u-c-e/). A test version is
 `spruce-<version>-firefox.zip` (or the `build/firefox` folder that `node tools/build.js firefox` makes). It takes about a minute
 and needs **Firefox 140 or later**.
 

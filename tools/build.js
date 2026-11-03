@@ -8,9 +8,9 @@
 //
 // Output in build/:
 //     chrome/                                  the Chrome and Edge extension (Load unpacked)
-//     spruce-<version>-chrome-manual-install.zip  for the releases page: one folder, S.P.R.U.C.E+-<version>,
-//                                              with INSTALL.md; keeps "key", so every manual install has the
-//                                              same extension ID as the test version and policies reach it
+//     spruce-<version>-chrome-manual-install.zip  for testing before a release: one folder, S.P.R.U.C.E+-<version>,
+//                                              with INSTALL.md; keeps "key", so every test copy has the
+//                                              same extension ID and policies reach it
 //     spruce-<version>-webstore.zip            to upload to the Chrome Web Store and Edge Add-ons: without
 //                                              "key", which the stores refuse on a new item's first upload
 //     firefox/                                 the Firefox add-on (about:debugging → Load Temporary Add-on)
