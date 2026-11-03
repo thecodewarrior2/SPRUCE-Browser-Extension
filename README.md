@@ -33,8 +33,8 @@ Every feature in detail, and which webmail supports what: [docs/FEATURES.md](doc
 
 ## Install
 
-- **Chrome and Edge:** from the [Chrome Web Store](https://chromewebstore.google.com/detail/spruce+/ennpekfncgndmiffefhbkpdnjnnnhcpc). Edge can install it from there too (Edge first asks
-  to allow extensions from other stores); it will also be on Edge Add-ons. To install it yourself, download `spruce-<version>-chrome-manual-install.zip` from the
+- **Chrome:** from the [Chrome Web Store](https://chromewebstore.google.com/detail/spruce+/ennpekfncgndmiffefhbkpdnjnnnhcpc). **Edge:** from
+  [Microsoft Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/spruce/ailfmflfcombomabeallgefjkkejjijh). To install it yourself, download `spruce-<version>-chrome-manual-install.zip` from the
   [releases page](https://github.com/thecodewarrior2/SPRUCE-Browser-Extension/releases) and follow
   [docs/INSTALL-FOR-TESTERS.md](docs/INSTALL-FOR-TESTERS.md).
 - **Firefox (desktop):** from [addons.mozilla.org](https://addons.mozilla.org/en-US/firefox/addon/s-p-r-u-c-e/); the releases page also has the

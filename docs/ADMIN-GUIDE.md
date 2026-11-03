@@ -61,12 +61,12 @@ Every policy names the extension by its ID, and each copy has its own:
 
 | Copy | Its ID | Update address (for installing) |
 |---|---|---|
-| **Microsoft Edge Add-ons** (recommended for Edge) | the end of its listing's address: `https://microsoftedge.microsoft.com/addons/detail/…/<ID>` | `https://edge.microsoft.com/extensionwebstorebase/v1/crx` |
+| [Microsoft Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/spruce/ailfmflfcombomabeallgefjkkejjijh) (recommended for Edge) | `ailfmflfcombomabeallgefjkkejjijh` | `https://edge.microsoft.com/extensionwebstorebase/v1/crx` |
 | The [Chrome Web Store](https://chromewebstore.google.com/detail/spruce+/ennpekfncgndmiffefhbkpdnjnnnhcpc) version, installed in Edge | `ennpekfncgndmiffefhbkpdnjnnnhcpc` | `https://clients2.google.com/service/update2/crx` |
 
-Until the Edge Add-ons listing is published, install the Chrome Web Store version (entry
-`ennpekfncgndmiffefhbkpdnjnnnhcpc;https://clients2.google.com/service/update2/crx`; Edge allows it when it's installed by
-policy). Use the ID of the copy you install, in both parts. On a computer that has it, `edge://extensions` (with
+The examples below use the Edge Add-ons copy. To install the Chrome Web Store copy in Edge instead (Edge
+allows it when it's installed by policy), use its ID and update address. Use the ID of the copy you
+install, in both parts; a test version or a self-hosted copy has its own. On a computer that has it, `edge://extensions` (with
 **Developer mode** on) shows the ID under the extension. The listing can be hidden from search in Edge
 Add-ons; installing by policy still works.
 
@@ -79,7 +79,7 @@ Use one of these for the extension, not two (**ExtensionSettings** replaces what
   **Control which extensions are installed silently** (`ExtensionInstallForcelist`), with this entry:
 
   ```
-  <ID>;https://edge.microsoft.com/extensionwebstorebase/v1/crx
+  ailfmflfcombomabeallgefjkkejjijh;https://edge.microsoft.com/extensionwebstorebase/v1/crx
   ```
 
 - **Group Policy** (Windows): import Microsoft's Edge policy templates (ADMX, from the Microsoft Edge for
@@ -91,7 +91,7 @@ Use one of these for the extension, not two (**ExtensionSettings** replaces what
   a single line):
 
   ```json
-  {"<ID>": {"installation_mode": "force_installed", "update_url": "https://edge.microsoft.com/extensionwebstorebase/v1/crx", "toolbar_state": "force_shown"}}
+  {"ailfmflfcombomabeallgefjkkejjijh": {"installation_mode": "force_installed", "update_url": "https://edge.microsoft.com/extensionwebstorebase/v1/crx", "toolbar_state": "force_shown"}}
   ```
 
   `force_installed`: users can't turn it off or remove it; `normal_installed`: installed for everyone,
@@ -112,7 +112,7 @@ Use one of these for the extension, not two (**ExtensionSettings** replaces what
 **Windows.** Edge reads the extension's policy from the registry:
 
 ```
-HKLM\SOFTWARE\Policies\Microsoft\Edge\3rdparty\extensions\<ID>\policy
+HKLM\SOFTWARE\Policies\Microsoft\Edge\3rdparty\extensions\ailfmflfcombomabeallgefjkkejjijh\policy
 ```
 
 Every key in [Keys](#keys) is a value there, named as in the table: on/off and numbers as `REG_DWORD`
@@ -124,11 +124,11 @@ and trust one internal site:
 ```
 Windows Registry Editor Version 5.00
 
-[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge\3rdparty\extensions\<ID>\policy]
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge\3rdparty\extensions\ailfmflfcombomabeallgefjkkejjijh\policy]
 "managedEnableThirdPartyResolution"=dword:00000000
 "managedRetentionDays"=dword:0000000e
 
-[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge\3rdparty\extensions\<ID>\policy\managedAllowlist]
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge\3rdparty\extensions\ailfmflfcombomabeallgefjkkejjijh\policy\managedAllowlist]
 "1"="internal.example.com"
 ```
 
@@ -145,7 +145,7 @@ deploy. The Intune Settings catalog has no setting for an extension's own policy
 
 **macOS.** Microsoft doesn't document how to give an extension its own policy in Edge on macOS. Chrome
 reads it from a profile for the preference domain `com.google.Chrome.extensions.<ID>`, and guides from
-other vendors use `com.microsoft.Edge.extensions.<ID>` for Edge in the same way, with the keys as plain
+other vendors use `com.microsoft.Edge.extensions.ailfmflfcombomabeallgefjkkejjijh` for Edge in the same way, with the keys as plain
 values (`managedRetentionDays` an integer, `managedAllowlist` an array of strings). Earlier Edge versions
 were reported not to read it, so check `edge://policy` on a test Mac before you rely on it.
 
@@ -445,7 +445,7 @@ The extension's **Help → Deploying in organizations** section has step-by-step
 
 - **Google Workspace (Chrome / ChromeOS):** Admin console → Devices → Chrome → Apps & extensions → Users & browsers. Add the extension by its Chrome Web Store ID (`ennpekfncgndmiffefhbkpdnjnnnhcpc`), set it to **Force install**, and paste the JSON from **Settings → Backup & Google Workspace → Copy as policy JSON** into **Policy for extensions**.
 - **Microsoft Edge with Intune:**
-  - **Install:** Settings catalog → Microsoft Edge → Extensions → **Control which extensions are installed silently**, with an entry of the form `ID;https://edge.microsoft.com/extensionwebstorebase/v1/crx` (Edge Add-ons) or `ID;https://clients2.google.com/service/update2/crx` (Chrome Web Store).
+  - **Install:** Settings catalog → Microsoft Edge → Extensions → **Control which extensions are installed silently**, with the entry `ailfmflfcombomabeallgefjkkejjijh;https://edge.microsoft.com/extensionwebstorebase/v1/crx` (Edge Add-ons) or `ennpekfncgndmiffefhbkpdnjnnnhcpc;https://clients2.google.com/service/update2/crx` (the Chrome Web Store copy).
   - **Settings:** **Copy registry script** generates a PowerShell script that writes `HKLM\SOFTWARE\Policies\Microsoft\Edge\3rdparty\extensions\<ID>\policy` and the Chrome equivalent. Deploy it as an Intune platform script, running as system in 64-bit PowerShell.
   - Group Policy, the single JSON policy (`ExtensionSettings`, which can also pin it to the toolbar), the Edge management service and macOS: see [Microsoft Edge](#microsoft-edge).
 - **Chrome on Windows with Intune:** Settings catalog → Google Chrome → Extensions → force-install list (import Google's ADMX templates if needed). The same registry script covers its settings.

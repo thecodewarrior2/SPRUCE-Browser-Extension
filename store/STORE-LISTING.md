@@ -4,6 +4,10 @@ Text for each field of the Chrome Web Store developer dashboard, ready to copy. 
 for Microsoft Edge Add-ons. Upload `build/spruce-<version>-webstore.zip`, made by `node tools/build.js chrome`
 (from the top folder).
 
+**Published listings:** [Chrome Web Store](https://chromewebstore.google.com/detail/spruce+/ennpekfncgndmiffefhbkpdnjnnnhcpc) (ID `ennpekfncgndmiffefhbkpdnjnnnhcpc`) ·
+[Microsoft Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/spruce/ailfmflfcombomabeallgefjkkejjijh) (ID `ailfmflfcombomabeallgefjkkejjijh`) · [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/s-p-r-u-c-e/) (ID
+`spruce@spruce-browser-extension`).
+
 ## Store listing tab
 
 **Name** (from the package): `S.P.R.U.C.E+`

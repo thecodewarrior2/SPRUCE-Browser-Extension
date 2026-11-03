@@ -1030,9 +1030,10 @@
 
 <h3 id="deploy-prepare">1. Choose how the extension is distributed</h3>
 <ul class="simple-list">
-  <li><b>Chrome Web Store</b> (recommended for Chrome): publish it as <i>Public</i>, <i>Unlisted</i>, or <i>Private</i> (visible only to your Google Workspace domain). Its <b>extension ID</b> is the 32-letter code in the store address.</li>
-  <li><b>Microsoft Edge Add-ons</b> (recommended for Edge): publish it there (it can be hidden from search). It gets a different extension ID from the Chrome Web Store version.</li>
+  <li><b>Chrome Web Store</b> (recommended for Chrome): <a href="https://chromewebstore.google.com/detail/spruce+/ennpekfncgndmiffefhbkpdnjnnnhcpc" target="_blank" rel="noopener noreferrer">its listing</a>, extension ID <code>ennpekfncgndmiffefhbkpdnjnnnhcpc</code>.</li>
+  <li><b>Microsoft Edge Add-ons</b> (recommended for Edge): <a href="https://microsoftedge.microsoft.com/addons/detail/spruce/ailfmflfcombomabeallgefjkkejjijh" target="_blank" rel="noopener noreferrer">its listing</a>, extension ID <code>ailfmflfcombomabeallgefjkkejjijh</code>.</li>
   <li><b>Chrome Web Store version in Edge:</b> Edge can also force-install the Chrome Web Store version by its Chrome ID and the Chrome update address below.</li>
+  <li>Each copy has its own ID; every policy below names the copy you install by its ID. A test version or a self-hosted copy has another one, shown on <code>chrome://extensions</code> (<code>edge://extensions</code>) with <b>Developer mode</b> on.</li>
   <li><b>Self-hosting</b> (packed .crx plus an update manifest on your own web server) works only on managed devices; the stores are simpler and update automatically.</li>
 </ul>
 <p>Update addresses used in install policies:</p>
@@ -1062,10 +1063,10 @@ Edge Add-ons:      https://edge.microsoft.com/extensionwebstorebase/v1/crx</div>
   <li>In the Microsoft Intune admin center, go to <b>Devices → Configuration → Create → New policy</b>; platform <b>Windows 10 and later</b>, profile type <b>Settings catalog</b>.</li>
   <li>Click <b>Add settings</b>, search for <b>Microsoft Edge</b> and open the <b>Extensions</b> category.</li>
   <li>Enable <b>Control which extensions are installed silently</b> (the <code>ExtensionInstallForcelist</code> policy) and add one entry in the form <code>extension-ID;update-address</code>, for example:
-    <div class="deploy-code">&lt;Edge Add-ons ID&gt;;https://edge.microsoft.com/extensionwebstorebase/v1/crx
-&lt;Chrome Web Store ID&gt;;https://clients2.google.com/service/update2/crx</div>
+    <div class="deploy-code">ailfmflfcombomabeallgefjkkejjijh;https://edge.microsoft.com/extensionwebstorebase/v1/crx
+ennpekfncgndmiffefhbkpdnjnnnhcpc;https://clients2.google.com/service/update2/crx</div>
     (Use one of the two. Choose the device-level, not user-level, setting so it applies to everyone on the device.)</li>
-  <li>Alternatively, configure <b>Extension management settings</b> (<code>ExtensionSettings</code>) with JSON such as <code>{"&lt;ID&gt;": {"installation_mode": "force_installed", "update_url": "&lt;update address&gt;"}}</code>.</li>
+  <li>Alternatively, configure <b>Extension management settings</b> (<code>ExtensionSettings</code>) with JSON such as <code>{"ailfmflfcombomabeallgefjkkejjijh": {"installation_mode": "force_installed", "update_url": "https://edge.microsoft.com/extensionwebstorebase/v1/crx", "toolbar_state": "force_shown"}}</code> (<code>toolbar_state</code> keeps its button on the toolbar).</li>
   <li><b>Assign</b> the profile to a pilot device or user group, then to everyone.</li>
 </ol>
 <p><b>B. Deliver the extension's settings.</b> Edge reads extension policy from the registry under <code>HKLM\SOFTWARE\Policies\Microsoft\Edge\3rdparty\extensions\&lt;ID&gt;\policy</code>. The Settings catalog doesn't cover third-party extension policy, so use a script:</p>
@@ -1078,7 +1079,7 @@ Edge Add-ons:      https://edge.microsoft.com/extensionwebstorebase/v1/crx</div>
 <p>How values are written (the script does this for you): on/off settings as <code>REG_DWORD</code> 1/0, numbers as <code>REG_DWORD</code>, text as <code>REG_SZ</code>, and the allowed/blocked site lists as a subkey (for example <code>...\policy\managedBlocklist</code>) with values named <code>1</code>, <code>2</code>, <code>3</code>… each holding one site.</p>
 
 <h3 id="deploy-chrome-windows">4. Chrome on Windows with Intune (optional)</h3>
-<p>The same approach works for Google Chrome: in the Settings catalog choose <b>Google Chrome → Extensions → Configure the list of force-installed apps and extensions</b> (<code>ExtensionInstallForcelist</code>, entry <code>&lt;Chrome Web Store ID&gt;;https://clients2.google.com/service/update2/crx</code>). If the Google Chrome settings aren't listed, import Google's Chrome ADMX templates first. The registry script above already writes the settings for Chrome too (<code>HKLM\SOFTWARE\Policies\Google\Chrome\3rdparty\extensions\&lt;ID&gt;\policy</code>).</p>
+<p>The same approach works for Google Chrome: in the Settings catalog choose <b>Google Chrome → Extensions → Configure the list of force-installed apps and extensions</b> (<code>ExtensionInstallForcelist</code>, entry <code>ennpekfncgndmiffefhbkpdnjnnnhcpc;https://clients2.google.com/service/update2/crx</code>). If the Google Chrome settings aren't listed, import Google's Chrome ADMX templates first. The registry script above already writes the settings for Chrome too (<code>HKLM\SOFTWARE\Policies\Google\Chrome\3rdparty\extensions\&lt;ID&gt;\policy</code>).</p>
 
 <h3 id="deploy-webrisk">5. Threat checks with Google Web Risk (Google Workspace)</h3>
 <p>Google's Web Risk API checks full addresses against Google's lists of phishing and malware pages (the data behind Google Safe Browsing). It needs a Google Cloud project with billing enabled; check Google's current Web Risk pricing first. <b>Note:</b> unlike the built-in checks, which only send site names, Web Risk receives the full link (one-time links are never sent).</p>
@@ -1141,9 +1142,9 @@ Flag field:      (leave empty: Google's replies are recognized automatically)</d
 <p class="lead">Install the add-on for everyone automatically and set (or lock) its settings centrally with Firefox enterprise policies: a <code>policies.json</code> file (any platform), the Windows registry (Microsoft Intune, Group Policy) or a macOS configuration profile.</p>
 <div class="callout-warn"><b>Before you start.</b> Always test with a small pilot group first and check the result at <code>about:policies</code>, which lists the active policies and marks errors.</div>
 
-<h3 id="deploy-prepare">1. Publish the add-on</h3>
+<h3 id="deploy-prepare">1. Where the add-on comes from</h3>
 <ul class="simple-list">
-  <li><b>addons.mozilla.org (AMO)</b>, listed or unlisted: Firefox only installs add-ons signed by Mozilla, and both kinds are signed and updated automatically. It installs from <code>https://addons.mozilla.org/firefox/downloads/latest/spruce@spruce-browser-extension/latest.xpi</code>: addons.mozilla.org finds an add-on by its ID as well as by its address there.</li>
+  <li><b>addons.mozilla.org (AMO)</b>: <a href="https://addons.mozilla.org/en-US/firefox/addon/s-p-r-u-c-e/" target="_blank" rel="noopener noreferrer">its listing</a>. Firefox only installs add-ons signed by Mozilla; this one is, and it updates itself. It installs from <code>https://addons.mozilla.org/firefox/downloads/latest/spruce@spruce-browser-extension/latest.xpi</code>: addons.mozilla.org finds an add-on by its ID as well as by its address there.</li>
   <li>An unlisted (self-distributed) add-on is a signed <code>.xpi</code> you host yourself; use its address as <code>install_url</code>.</li>
   <li>The add-on ID is <code>spruce@spruce-browser-extension</code> (in <code>manifest.json</code>); policies refer to the add-on by this ID.</li>
 </ul>
