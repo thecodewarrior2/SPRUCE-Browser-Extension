@@ -21,7 +21,8 @@ Edge, Firefox and Safari. Everyone else needs only the [README](../README.md); a
    until the maintainer has loaded the `testing` build on their own computer, tried the change, and
    **approved releasing it**. Green tests are not approval, and nothing (no person, script or AI
    assistant) moves `testing` to `main` automatically. Further work keeps landing on `testing` meanwhile.
-4. The maintainer approves on GitHub: in the **Tests** run of that `testing` commit (Actions), **Review
+4. The maintainer approves on GitHub: open the **Tests** run of that `testing` commit (Actions). Once its
+   checks have passed, a yellow **Waiting for review** box is shown at the top of the run: **Review
    deployments** → tick `release` → **Approve and deploy**. When an AI assistant does the release, the
    maintainer also tells it so in the conversation.
 5. Only then: bring `testing` into `main` (`git checkout main && git merge --ff-only testing`, or
@@ -39,17 +40,23 @@ up once, on GitHub:
 
 1. **Settings → Environments → New environment**, named `release` (a push to `testing` may already have made
    it, with no protection: open it then).
-2. Tick **Required reviewers** and add yourself. Leave **Prevent self-review** off: the run is started by
-   your own pushes, and you couldn't approve it otherwise.
-3. **Deployment branches and tags → Selected branches and tags** → add `testing`. Save.
+2. Under **Deployment protection rules**, tick **Required reviewers**, type your GitHub username in the box
+   below it and pick yourself. Leave **Prevent self-review** off: the run is started by your own pushes,
+   and you couldn't approve it otherwise. Click **Save protection rules**, just below: without it the
+   reviewer isn't kept.
+3. **Deployment branches and tags → Selected branches and tags** → **Add deployment branch or tag rule** →
+   `testing`.
 4. **Settings → Rules → Rulesets → New ruleset → Import a ruleset** →
    [`main-approval.json`](../.github/rulesets/main-approval.json).
 5. Try it once: before approving a new `testing` commit, `git push origin testing:main` must be refused;
    after approving it, the same push goes through.
 
 Until the environment has a required reviewer, the step fails on every `testing` push (and so `main` stays
-closed): without a reviewer GitHub would run it without asking anyone. After setting it up, open the run
-and **Re-run failed jobs**, then approve. A newer push to `testing` cancels the older run's waiting
+closed): without a reviewer GitHub would run it without asking anyone, and its log says *The release
+environment has no required reviewer*. After setting it up, open the run and choose **Re-run jobs → Re-run
+failed jobs** (the dialog that follows only offers debug logging: click **Re-run jobs**); the step then
+waits, with the **Waiting for review** box, and you approve it there. If it fails again at once instead
+of waiting, the reviewer wasn't saved. A newer push to `testing` cancels the older run's waiting
 approval: approve the build you tried, which is normally the latest.
 
 ### Checks and branch rules on GitHub
