@@ -578,8 +578,12 @@ function describeOpaqueLink(url) {
     if (hostIsAny(host, ['fortimail.com', 'fortinet.com']) && /urlsafe|clicktime/i.test(url)) {
         return 'Fortinet URL protection link: the destination cannot be decoded offline.';
     }
-    if (isSendgridClick(u) && /^u\d{3}\./i.test(u.searchParams.get('upn') || '')) {
-        return 'SendGrid click-tracking link (encrypted format): SendGrid encrypts the destination, so no tool can read it offline. Only following the link reveals it, and that registers a click as the person the email was sent to. To see where it goes without clicking, use "Look up on VirusTotal" (if set up) or a second-opinion service below; they follow the link from their own servers.';
+    const pixel = openPixelRule(url);
+    if (pixel) {
+        return `Open-tracking pixel (${pixel}), not a link: an invisible image that tells the sender when and where the email was opened. It leads nowhere, so there is no destination to reveal; its code identifies the person the email was sent to. The extension blocks these in your webmail. Loading it, here or anywhere, would report the email as opened.`;
+    }
+    if (isSendgridClick(u) && !decodeSendgrid(url)) {      // u001. links, and unlabelled ones that don't decode
+        return 'SendGrid click-tracking link (encrypted format): SendGrid encrypts the destination, so no tool can read it offline. Only following the link reveals it, and that registers a click as the person the email was sent to. Use "Follow it to reveal the destination" below, or "Look up on VirusTotal" (if set up), which follows it from VirusTotal\'s servers.';
     }
     const provider = emailTrackerProvider(url) ||
         (hostIsAny(host, ['sendgrid.net', 'list-manage.com', 'rs6.net', 'hubspotlinks.com', 'mailgun.net']) ? 'an email provider' : null);

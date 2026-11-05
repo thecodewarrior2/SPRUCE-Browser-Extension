@@ -3057,7 +3057,39 @@ async function inspectLink(inputUrl) {
     result.secondOpinion = secondOpinionLinks(result.unwrappedUrl);
     result.oneTime = !!oneTime;
     result.virusTotalReady = !!S.virusTotalApiKey;
+    result.isPixel = !!openPixelRule(inputUrl);
+    // A tracker or short link whose destination is still unknown can be followed on request (followLink).
+    result.revealable = !result.isPixel && result.unwrappedUrl === cleanTrackingParams(inputUrl) && /^https:/i.test(inputUrl) &&
+        !!(emailTrackerProvider(inputUrl) || hostInSet(hostname, BUILTIN_TRACKER_SET) || looksLikeShortLink(inputUrl) || describeOpaqueLink(inputUrl));
     return result;
+}
+
+// Link Inspector, only when the person clicks "Follow it": one request that follows the link's
+// redirects the way a click would, without cookies, without loading the page (HEAD) and without a
+// referrer, and reports only where it ended. It registers a click with the sender's tracker, which the
+// button says. Needs the optional access to all websites (asked for by the click itself).
+async function followLink(url) {
+    if (!/^https:\/\//i.test(String(url || ''))) return { error: 'Only https:// links can be followed.' };
+    if (openPixelRule(url)) return { error: 'This is an open-tracking pixel, not a link: it leads nowhere.' };
+    const init = { method: 'HEAD', redirect: 'follow', credentials: 'omit', cache: 'no-store', referrerPolicy: 'no-referrer' };
+    let res;
+    try {
+        res = await fetchWithTimeout(url, init, 10000);
+    } catch (e) {
+        const why = e && e.name === 'AbortError' ? 'it took too long to answer' : 'the request was refused (the site may block it, or access to websites was not granted)';
+        return { error: `The link could not be followed: ${why}.` };
+    }
+    // A server that refuses HEAD (405/501) without redirecting: one ordinary GET; its page is never read.
+    if ((!res.url || res.url === url) && (res.status === 405 || res.status === 501)) {
+        try {
+            res = await fetchWithTimeout(url, Object.assign({}, init, { method: 'GET' }), 10000);
+            try { if (res.body && res.body.cancel) res.body.cancel(); } catch (e) { /* nothing to cancel */ }
+        } catch (e) { return { error: 'The link could not be followed: the site refused the request.' }; }
+    }
+    const finalUrl = res.url || '';
+    logInfo(`Followed ${logUrl(url)} at the person's request; it ended at ${logUrl(finalUrl)}.`, 'Link Inspector');
+    if (!finalUrl || finalUrl === url) return { error: `The link answered (HTTP ${res.status}) without redirecting anywhere, or only by a script in its page, which isn't run here.` };
+    return { finalUrl, status: res.status };
 }
 
 // Each threat service's own answer for every host the click reaches (the destination and, when it
@@ -3506,6 +3538,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         // Only what the Gmail tab uses (the synced shortener list can hold thousands of domains and is
         // needed only here in the background).
         getConfig().then(cfg => sendResponse({ values: cfg.values, locked: cfg.locked, allowlist: cfg.allowlist, blocklist: cfg.blocklist, policy: cfg.policy })).catch((e) => { logError(`Settings could not be loaded: ${errorText(e)}`, 'Background'); sendResponse(null); });
+        return true;
+    }
+
+    if (request.action === 'followLink') {
+        const base = chrome.runtime.getURL('');
+        const ownPage = sender && (!sender.tab || (!!base && String(sender.url || '').startsWith(base)));
+        if (!ownPage) { sendResponse({ error: 'Not allowed here.' }); return false; }
+        followLink(request.url).then(sendResponse)
+            .catch((e) => { logError(`Following a link failed: ${errorText(e)}`, 'Link Inspector'); sendResponse({ error: 'It failed; see Logging → Application log.' }); });
         return true;
     }
 

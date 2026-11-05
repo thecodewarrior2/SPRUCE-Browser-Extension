@@ -13,8 +13,10 @@ const { launch, until, optionsReady, check, done } = require('./harness');
     const json = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { 'content-type': 'application/json' } });
     self.fetch = async (input, init) => {
       const url = String(input && input.url || input);
-      self.__sent.push({ url, headers: init && init.headers });
+      self.__sent.push({ url, headers: init && init.headers, method: init && init.method, credentials: init && init.credentials, referrerPolicy: init && init.referrerPolicy });
       const u = new URL(url);
+      // A SendGrid click link, followed on request, ends at its destination (fetch reports the final address).
+      if (u.hostname.endsWith('ct.sendgrid.net')) return { url: 'https://landing.example/offer', status: 200, ok: true };
       const name = u.searchParams.get('name') || '';
       if (u.hostname === 'www.virustotal.com') {
         if (u.pathname.startsWith('/api/v3/urls/')) return json({ data: { attributes: {
@@ -87,6 +89,19 @@ const { launch, until, optionsReady, check, done } = require('./harness');
   check('VirusTotal result: counts, the flagging vendor and its verdict, single detection explained', /1 malicious, 0 suspicious, out of 70 vendors/.test(vt) && /FooAV: phishing/.test(vt) && /Only one vendor/.test(vt) && !/BarAV/.test(vt), vt);
   const sentKey = await sw.evaluate(() => self.__sent.filter(s => s.headers && s.headers['x-apikey']).map(s => new URL(s.url).hostname));
   check('the API key goes to www.virustotal.com only', sentKey.length >= 1 && sentKey.every(h => h === 'www.virustotal.com'), sentKey);
+  // 6. SendGrid: an open pixel is explained (nothing to reveal); an encrypted click link can be followed on request.
+  r = await inspect('https://u36668736.ct.sendgrid.net/wf/open?upn=u001.L-2BeAUwyUZHYs25ZhPKgVBAw1P6uRDOQexvZhkGbHobA7bxWWsBfb8BvdgaYTDe3699drMG86kIOXq-2Fw4wQ-3D');
+  const pixelNotes = await page.$eval('#finalDestinationContainer', e => e.textContent);
+  check('a SendGrid open pixel is explained as a pixel, with nothing to follow', /Open-tracking pixel \(SendGrid\), not a link/.test(pixelNotes) && !(await page.$('#followLinkBtn')), pixelNotes.slice(0, 300));
+  const sentBefore = await sw.evaluate(() => self.__sent.filter(s => /^https:\/\/[^\/?]*\.sendgrid\.net\//.test(s.url)).length);
+  r = await inspect('https://u36668736.ct.sendgrid.net/ls/click?upn=u001.KJgh0IxlUiM1aV8LiJpBJsbPyAbUwctC-2F1fgvjQM2JJDZWfsKJzPD0R0-2Fcbrr-3D-3Dchfa_Z9M7');
+  check('an encrypted SendGrid click link: explained, a Follow button offered, nothing sent to SendGrid by inspecting',
+    !!(await page.$('#followLinkBtn')) && /encrypts the destination/.test(await page.$eval('#finalDestinationContainer', e => e.textContent)) &&
+    (await sw.evaluate(() => self.__sent.filter(s => /^https:\/\/[^\/?]*\.sendgrid\.net\//.test(s.url)).length)) === sentBefore);
+  const followed = await sw.evaluate(() => followLink('https://u36668736.ct.sendgrid.net/ls/click?upn=u001.abc'));
+  const req = await sw.evaluate(() => self.__sent.filter(s => /^https:\/\/[^\/?]*\.sendgrid\.net\//.test(s.url)).pop());
+  check('following it: one HEAD request without cookies or referrer, reporting where it ended', followed.finalUrl === 'https://landing.example/offer' &&
+    req && req.method === 'HEAD' && req.credentials === 'omit' && req.referrerPolicy === 'no-referrer', { followed, req });
   check('no page errors', errors.length === 0, errors);
   await ctx.close();
   done();

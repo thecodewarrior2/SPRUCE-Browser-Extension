@@ -1537,3 +1537,29 @@ test('5.93: a settlement administrator naming a brand is amber, never flagged or
     assert.deepEqual(S(`nameAddressSigns(${JSON.stringify(n)}, 'x@claims.example', null, null, null)`).map(x => x.weight), [3], n);
   }
 });
+
+test('5.94: SendGrid open pixels are explained; following a link is only for the extension\'s pages, https and not pixels', async () => {
+  const px = 'https://u36668736.ct.sendgrid.net/wf/open?upn=u001.L-2BeAUwyUZHYs25ZhPKgVBAw1P6uRDOQexvZhkGbHobA7bxWWsBfb8BvdgaYTDe3699-3D';
+  assert.match(S(`describeOpaqueLink(${JSON.stringify(px)})`), /Open-tracking pixel \(SendGrid\), not a link/);
+  // Encrypted without the "u001." label: random bytes, so explained as encrypted, never guessed at.
+  const unlabelled = 'https://u30649841.ct.sendgrid.net/ls/click?upn=LVjBnHTiuzawT-2BBeLtTZDGs0ysP1ts7gRWJUUFvxCqbfBuS2qzVywCY-2BXXoj9v5eqy_m_kOeuobbr-2FNbdLqj4G50wen1tpSVvQo3iAo9Uwgsg-3D';
+  assert.equal((await vm.runInContext(`unwrapNestedUrl(${JSON.stringify(unlabelled)}, false)`, bg)).steps.length, 0);
+  assert.match(S(`describeOpaqueLink(${JSON.stringify(unlabelled)})`), /encrypts the destination/);
+  const sent = [];
+  const b = loadBackground({}, { fetch: async (u, init) => { sent.push({ u: String(u), init }); return { url: 'https://landing.example/', status: 200, ok: true }; },
+    patchChrome: (c) => { c.runtime.getURL = (p) => 'chrome-extension://abc/' + p; } });
+  const ask = (request, sender) => new Promise(res => b.chrome.runtime.onMessage.fire(request, sender, res));
+  const click = 'https://u1.ct.sendgrid.net/ls/click?upn=u001.abc';
+  assert.match((await ask({ action: 'followLink', url: click }, { tab: { id: 1 }, url: 'https://mail.google.com/' })).error, /Not allowed/);
+  assert.match((await ask({ action: 'followLink', url: px }, {})).error, /pixel/);
+  assert.match((await ask({ action: 'followLink', url: 'http://x.example/' }, {})).error, /https/);
+  assert.equal(sent.length, 0, 'nothing requested for any of those');
+  const ok = await ask({ action: 'followLink', url: click }, { tab: { id: 2 }, url: 'chrome-extension://abc/options.html' });
+  assert.equal(ok.finalUrl, 'https://landing.example/');
+  assert.deepEqual([sent[0].init.method, sent[0].init.credentials, sent[0].init.redirect, sent[0].init.referrerPolicy], ['HEAD', 'omit', 'follow', 'no-referrer']);
+  // A server refusing HEAD gets one GET (same privacy options).
+  const tries = [];
+  const b2 = loadBackground({}, { fetch: async (u, init) => { tries.push(init.method); return init.method === 'HEAD' ? { url: String(u), status: 405 } : { url: 'https://dest.example/', status: 200 }; } });
+  assert.equal((await vm.runInContext(`followLink(${JSON.stringify(click)})`, b2)).finalUrl, 'https://dest.example/');
+  assert.deepEqual(tries, ['HEAD', 'GET']);
+});

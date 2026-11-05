@@ -1606,7 +1606,10 @@ document.addEventListener('DOMContentLoaded', () => {
             wrap.appendChild(sv);
         }
 
-        // 4. Second opinions: pages the person opens themselves (only the site name is in the link).
+        // 4. A tracking or short link with an unknown destination: follow it, only on request.
+        if (r.revealable) wrap.appendChild(revealPanel(r));
+
+        // 5. Second opinions: pages the person opens themselves (only the site name is in the link).
         const so = section('🔎 Get a second opinion', 'These free services open in a new tab with the site name filled in (never the full link). Useful when the services above disagree.');
         so.id = 'inspectorSecondOpinion';
         const ul = node('ul', { className: 'simple-list', style: 'font-size: 12px; margin: 0;' });
@@ -1619,6 +1622,33 @@ document.addEventListener('DOMContentLoaded', () => {
         so.appendChild(vtPanel(r));
         wrap.appendChild(so);
         return wrap;
+    }
+
+    function revealPanel(r) {
+        const box = section('↪️ Reveal where it goes', 'The destination is hidden by the sender\'s tracking service (encrypted, or kept on its server), so it can\'t be decoded. Following the link reveals it: one request from this browser, without your cookies and without opening the page. It counts as a click, as if you had clicked it in the email: the sender sees that you did. If it could be an unsubscribe, sign-in or confirmation link, following it may act on it, so don\'t.');
+        box.id = 'inspectorReveal';
+        const out = node('div', { className: 'reveal-result', style: 'margin-top: 8px; font-size: 12px;' });
+        const btn = node('button', { className: 'btn-action' }, 'Follow it to reveal the destination (counts as a click)');
+        btn.id = 'followLinkBtn';
+        btn.addEventListener('click', () => {
+            // Asked inside the click itself (Firefox accepts permission requests only there).
+            const asked = (() => { try { return chrome.permissions.request({ origins: ['https://*/*'] }); } catch (e) { return Promise.resolve(false); } })();
+            btn.disabled = true;
+            out.textContent = 'Following the link…';
+            Promise.resolve(asked).catch(() => false).then((granted) => {
+                if (!granted) reportToLog('info', 'Link Inspector', 'Access to websites was not granted, so the link may not be followable.');
+                chrome.runtime.sendMessage({ action: 'followLink', url: r.unwrappedUrl }, (res) => {
+                    btn.disabled = false;
+                    out.textContent = '';
+                    if (!res || res.error) { out.appendChild(node('span', { style: 'color: var(--danger-text);' }, (res && res.error) || 'No answer.')); return; }
+                    const inspect = node('button', { className: 'btn-action', style: 'margin-left: 8px;' }, 'Inspect the destination');
+                    inspect.addEventListener('click', () => { inspectInput.value = res.finalUrl; inspectBtn.click(); });
+                    out.append(node('div', { style: 'font-weight: bold;' }, 'It goes to:'), node('div', { className: 'url-box', style: 'margin: 4px 0;' }, res.finalUrl), inspect);
+                });
+            });
+        });
+        box.append(btn, out);
+        return box;
     }
 
     // VirusTotal: only with the person's own key, only on click.

@@ -187,6 +187,14 @@ it explains **why a link may be malicious**:
   it, and (for a link VirusTotal has never seen) offers a fresh scan. One-time links are never submitted:
   only their site is looked up.
 
+- **Reveal where it goes:** for a tracking or short link whose destination can't be decoded (SendGrid's
+  encrypted links, links too long for unshorten.me), **Follow it to reveal the destination** sends one
+  request that follows the redirects as a click would, without cookies, without loading the page and
+  without a referrer, and shows where it ended, with a button to inspect that address. It counts as a
+  click with the sender's tracker, which the button says. It asks once for access to websites.
+- **Open-tracking pixels** (SendGrid's `/wf/open`, Mailchimp's, HubSpot's…) are explained as invisible
+  images that report the email as opened: they lead nowhere, so there's nothing to reveal or follow.
+
 Decoded without any lookup, among many others: iContact (`icptrack.com`) click tracking, and SendGrid
 click tracking in its older readable format. SendGrid's current links (`upn=u001.…`) are encrypted, so
 the Inspector explains that no tool can read them offline.

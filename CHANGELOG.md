@@ -1,5 +1,26 @@
 # Changelog
 
+## 5.94 — Link Inspector: follow a SendGrid link to reveal it; open pixels explained
+
+SendGrid's current click links can't be decoded (two samples checked: the `upn` value, with or without
+the `u001.` label, is encrypted, random bytes and no address). unshorten.me refuses them too, because they
+are longer than its 100-character limit.
+
+- **Follow it to reveal the destination** (Link Inspector, message `followLink`, accepted only from the
+  extension's pages): for a tracking or short link whose destination is still unknown (`revealable`),
+  one request that follows the redirects like a click: `HEAD`, `credentials: 'omit'`, no referrer, no
+  cache, 10 s. It reports `res.url` and offers to inspect it. A server that refuses `HEAD` (405/501)
+  without redirecting gets one `GET`, whose body is cancelled. The click asks for the optional access to
+  websites (`https://*/*`, already declared optional, so no new warning on update) inside the click
+  itself, as Firefox requires. The panel says it counts as a click with the sender's tracker and warns
+  against following unsubscribe, sign-in or confirmation links. Only https links; never pixels. Only the
+  sites are logged.
+- **Open-tracking pixels** (`openPixelRule`: SendGrid `/wf/open` and the others) are explained by
+  `describeOpaqueLink` as invisible images that report an open and lead nowhere, and no Follow button is
+  offered.
+- A SendGrid click link that doesn't decode is described as encrypted whether or not its `upn` carries
+  the `u001.` label.
+
 ## 5.93 — A settlement administrator naming a brand is amber, not red
 
 A genuine class-action notice ("Amazon Return Policy Litigation Settlement Administrator"

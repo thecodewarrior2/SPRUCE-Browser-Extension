@@ -11,7 +11,7 @@
 Short notes on each version in the browser stores. Every detail is in the
 [full changelog](../CHANGELOG.md).
 
-## 5.93
+## 5.94
 
 Changes since 5.91.
 
@@ -30,7 +30,10 @@ Changes since 5.91.
 
 **More links decoded**
 - iContact email-marketing links now show where they really go, and so do older SendGrid links.
-  Newer SendGrid links can't be read by anyone but SendGrid, and the Inspector says so.
+- Newer SendGrid links can't be read by anyone but SendGrid. The Link Inspector can now follow such a
+  link for you (without your cookies, and without opening the page) to show where it goes; it tells you
+  first that the sender will count it as a click.
+- Invisible "email opened" trackers pasted into the Inspector are explained: they lead nowhere.
 
 ## 5.91
 

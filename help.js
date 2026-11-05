@@ -93,6 +93,8 @@
              onOff(S.enableSenderIdentity && S.enableDnsThreatCheck) + lock('enableSenderIdentity')],
             ['Stand-in sender icons (Gmail)', 'The site name of a sender whose site has no icon of its own (and not its parent domain either).', 'DuckDuckGo\'s icon service (icons.duckduckgo.com)',
              onOff(S.enableSenderIdentity && S.enableDnsThreatCheck && S.enableSenderIconFallback) + lock('enableSenderIconFallback')],
+            ['Following a link (Link Inspector)', 'Only when you click "Follow it to reveal the destination" on a tracking or short link whose destination is hidden: one request to the link, following its redirects as a click would, without your cookies and without loading the page. The sender\'s tracking service counts it as your click.',
+             'The link\'s tracking service and the sites it redirects to (they see your IP address)', 'On request'],
             ['VirusTotal lookup (Link Inspector)', 'Only when you click "Look up on VirusTotal": the link you inspected (for a one-time link, only its site name); when you choose "Scan this link", the link is also shared with VirusTotal\'s community and security partners.',
              'VirusTotal (Google), with your own API key', onOff(!!S.virusTotalApiKey) + lock('virusTotalApiKey')],
             ['Sender country (Gmail)', 'The internet address of the server that delivered an email (from Gmail\'s own record, read emails only), or of the sender\'s website. Once a month at most per address.', 'country.is (open-source service; sees your IP address)',
