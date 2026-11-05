@@ -11,9 +11,14 @@
 Short notes on each version in the browser stores. Every detail is in the
 [full changelog](../CHANGELOG.md).
 
-## 5.92
+## 5.93
 
 Changes since 5.91.
+
+**Fewer false alarms**
+- A legal notice about a company, such as a class-action settlement administrator writing about an
+  Amazon settlement, is no longer marked dangerous or moved to Spam because its sender's name mentions
+  the company. It gets a caution instead, since fake settlement notices exist too.
 
 **The Link Inspector explains why a link may be dangerous**
 - It shows what each security service says about a site and how many of them agree. When only one

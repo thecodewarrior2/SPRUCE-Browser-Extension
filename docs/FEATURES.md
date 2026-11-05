@@ -53,6 +53,11 @@ settings can't be locked). What leaves your device, and to whom, is in the [priv
   ⚠ caution (yellow), and ✓ trusted (green, for senders you or your organization chose). Every other
   label is plain, so Gmail.com-style providers don't look suspect and nothing looks safe that wasn't
   proven safe. Point at the label for the reasons and Gmail's own verification (DMARC/SPF/DKIM).
+- **A legal third party writing about a brand is amber, not red.** A class-action settlement
+  administrator's name ("Amazon Return Policy Litigation Settlement Administrator") names the company
+  the case is about. Names with legal-proceeding words (settlement, litigation, class action, lawsuit,
+  legal notice, claims administrator, "in re", "v.") get a caution that explains this, and the email is
+  never moved to Spam for it. Other names with a brand ("Amazon Support") stay red.
 - **A brand's name on an unknown address is double-checked before it counts (Gmail).** Companies send
   from more domains than their main one (Amazon Music from amazonmusic.com, Facebook from
   facebookmail.com). When a sender's name claims a well-known brand on a domain not known as the

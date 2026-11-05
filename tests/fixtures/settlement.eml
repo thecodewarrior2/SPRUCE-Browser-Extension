@@ -1,0 +1,33 @@
+Delivered-To: reader@example.org
+Received: by 2002:a05:6500:a0c:b0:345:212:701e with SMTP id e12csp1305531lqc; Tue, 3 Nov 2026 12:27:44 -0800 (PST)
+X-Received: by 2002:a05:6214:6194:20b0:91c:ca28:11f7 with SMTP id 6a1803df08f44-91cca281591mr68637006d6.24.1793737664576; Tue, 03 Nov 2026 12:27:44 -0800 (PST)
+ARC-Authentication-Results: i=1; mx.google.com; dkim=pass header.i=@returnsettlement.com header.s=s1 header.b=AAAA; dkim=pass header.i=@amazonses.com header.s=s2 header.b=BBBB; spf=pass (google.com: domain of 0100-test@donotreply.returnsettlement.com designates 23.251.231.124 as permitted sender) smtp.mailfrom=0100-test@donotreply.returnsettlement.com; dmarc=pass (p=QUARANTINE sp=QUARANTINE dis=NONE) header.from=returnsettlement.com
+Return-Path: <0100-test@donotreply.returnsettlement.com>
+Received: from e231-124.smtp-out.amazonses.com (e231-124.smtp-out.amazonses.com. [23.251.231.124]) by mx.google.com with ESMTPS id 6a1803df08f44-91e7c21586dsi4324496d6.351.2026.11.03.12.27.44 for <reader@example.org> (version=TLS1_3 cipher=TLS_AES_128_GCM_SHA256 bits=128/128); Tue, 03 Nov 2026 12:27:44 -0800 (PST)
+Received-SPF: pass (google.com: domain of 0100-test@donotreply.returnsettlement.com designates 23.251.231.124 as permitted sender) client-ip=23.251.231.124;
+Authentication-Results: mx.google.com; dkim=pass header.i=@returnsettlement.com header.s=s1 header.b=AAAA; dkim=pass header.i=@amazonses.com header.s=s2 header.b=BBBB; spf=pass (google.com: domain of 0100-test@donotreply.returnsettlement.com designates 23.251.231.124 as permitted sender) smtp.mailfrom=0100-test@donotreply.returnsettlement.com; dmarc=pass (p=QUARANTINE sp=QUARANTINE dis=NONE) header.from=returnsettlement.com
+DKIM-Signature: v=1; a=rsa-sha256; q=dns/txt; c=relaxed/simple; s=s1; d=returnsettlement.com; t=1793737664; h=Date:From:To:Subject:MIME-Version:Content-Type:Message-ID; bh=x; b=x
+DKIM-Signature: v=1; a=rsa-sha256; q=dns/txt; c=relaxed/simple; s=s2; d=amazonses.com; t=1793737664; h=Date:From:To:Subject:MIME-Version:Content-Type:Message-ID:Feedback-ID; bh=x; b=x
+Date: Tue, 3 Nov 2026 20:27:44 +0000
+From: Amazon Return Policy Litigation Settlement Administrator <donotreply@returnsettlement.com>
+To: reader@example.org
+Subject: =?UTF-8?Q?LEGAL_NOTICE_OF_CLASS_ACTION_SETTLEMENT_?= =?UTF-8?Q?=E2=80=93_IN_RE:_AMAZON_RETURN_POLICY_LITIGATION?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Message-ID: <0100-test-000000@email.amazonses.com>
+Feedback-ID: ::1.us-east-1.test=:AmazonSES
+X-SES-Outgoing: 2026.11.03-23.251.231.124
+
+Reader
+Notice ID: TEST000000
+Confirmation Code: TEST000000
+IMPORTANT NOTICE OF PROPOSED CLASS ACTION SETTLEMENT
+You Have Been Identified as a Potential Settlement Class Member and May be Eligible to Receive a Payment from a Class Action Settlement Involving Amazon.com.
+The Deadline to Submit a Claim Form is Fast-Approaching. Submit Your Claim Today!
+A court authorized this notice. You are not being sued. This is not a solicitation from a lawyer.
+HOW DO I GET A PAYMENT? Settlement Subclass B Members must fill out and submit an eligible Claim Form to qualify for a payment.
+For more information, you can visit www.ReturnSettlement.com, contact the Settlement Administrator, or scan the QR code.
+Amazon Return Policy Litigation, c/o Settlement Administrator, PO Box 10, East Brunswick, NJ 08816-9998
+Call Toll-Free: 1-888-553-4246
+For more information regarding the status of your Amazon returns and refunds, you can visit "Your Transactions" on Amazon.com.
+PLEASE DO NOT CONTACT THE COURT OR THE COURT CLERK'S OFFICE REGARDING THIS NOTICE.

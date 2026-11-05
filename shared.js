@@ -1812,6 +1812,19 @@ function displayNameBrand(displayName) {
 }
 
 // A brand by its name, and the domains whose DNS speaks for it (home, else its known domains).
+// [5.92] A sender's name that describes a legal third party writing ABOUT a brand, not as it: a
+// class-action settlement administrator ("Amazon Return Policy Litigation Settlement Administrator"),
+// a court notice. Such senders are real, but so are fake settlement notices, so the name gets amber
+// ("make sure"), never red, and the email is never moved to Spam for it. Ordinary roles ("Amazon
+// Support", "Microsoft Administrator") don't count: only legal-proceeding words do.
+const THIRD_PARTY_LEGAL_NAME_RE = /\b(settlement|settlements|litigation|class action|class-action|lawsuit|legal notice|claims? administrator|court[- ]appointed|in re)\b|\s(v|vs)\.?\s/;
+function thirdPartyNameText(shown, address, brand) {
+    return `The sender's name says “${shown}”: someone writing about ${brand} (such as a settlement administrator), not ${brand} itself, from ${address}. Real notices like this exist, but so do fake ones: check the settlement or case on the court's or an official website you find yourself before entering personal or payment details.`;
+}
+function nameSpeaksAboutBrand(displayName) {
+    return THIRD_PARTY_LEGAL_NAME_RE.test(' ' + foldName(displayName).replace(/\s+/g, ' ') + ' ');
+}
+
 function senderBrandByName(name) { return SENDER_NAME_BRANDS.find(b => b.name === name) || null; }
 function brandHomeDomains(brand) { return brand ? (brand.home || brand.domains || []).slice(0, 3) : []; }
 // The brand a protected domain belongs to (paypal.com → PayPal), for the look-alike check.
@@ -1879,6 +1892,7 @@ function nameAddressSigns(name, address, own, colleagues, ownership) {
         if (ownership && ownership.state === 'owned') out.push({ weight: 0, text: `The sender's name says “${shown}”; ${ownershipNote(ownership, reg, claimed.name)}.` });
         else if (ownership && ownership.state === 'likely') out.push({ weight: SIGNAL_CAUTION_SCORE, text: `The sender's name says “${shown}”, and ${address} isn't a known ${claimed.name} address, though ${ownershipNote(ownership, reg, claimed.name)}. Make sure it's really who you expect.` });
         else if (nameOnOtherEnding(claimed, reg)) out.push({ weight: SIGNAL_CAUTION_SCORE, text: `The sender's name says “${shown}”, and ${reg} carries ${claimed.name}'s name under another ending, but it isn't known to be ${claimed.name}'s. Make sure it's really who you expect.` });   // [5.90-4] amber, never moved
+        else if (nameSpeaksAboutBrand(name)) out.push({ weight: SIGNAL_CAUTION_SCORE, text: thirdPartyNameText(shown, address, claimed.name) });   // [5.92] amber, never moved
         else out.push({ weight: 5, text: `The sender's name says “${shown}”, but ${address} isn't ${claimed.name}'s address.` });
     }
     const h = colleagues && colleagues.size ? colleagueNameHash(name) : '';
@@ -1998,6 +2012,7 @@ function evaluateSender({ displayName, address, auth, bodyText, ownership }) {
         const reg = registrableDomain(domain) || domain;
         if (ownership && ownership.state === 'owned') info.push(`The sender's name says “${String(displayName).trim()}”; ${ownershipNote(ownership, reg, claimed.name)}.`);
         else if (ownership && ownership.state === 'likely') findings.push({ severity: 'caution', message: `The sender's name says “${String(displayName).trim()}”, and ${address} isn't a known ${claimed.name} address, though ${ownershipNote(ownership, reg, claimed.name)}. Make sure it's really who you expect.` });
+        else if (nameSpeaksAboutBrand(displayName)) findings.push({ severity: 'caution', message: thirdPartyNameText(String(displayName).trim(), address, claimed.name) });   // [5.92]
         else if (nameOnOtherEnding(claimed, reg)) findings.push({ severity: 'caution', message: `The sender's name says “${String(displayName).trim()}”, and ${reg} carries ${claimed.name}'s name under another ending, but it isn't known to be ${claimed.name}'s. Make sure it's really who you expect.` });   // [5.90-4]
         else findings.push({ severity: 'danger', message: `The sender's name says “${String(displayName).trim()}”, but the address ${address} isn't ${claimed.name}'s. Don't trust links, attachments or phone numbers in this email.` });
     }

@@ -1515,3 +1515,25 @@ test('VirusTotal: only the extension\'s own pages may use the key; one-time link
   assert.equal(oneTime.kind, 'domain', 'a one-time link is never submitted: the site is looked up instead');
   assert.deepEqual(sent.map(s => s.url), ['https://www.virustotal.com/api/v3/domains/acct.example']);
 });
+
+test('5.93: a settlement administrator naming a brand is amber, never flagged or moved (settlement.eml)', () => {
+  const RX = S('WEBMAIL_SITES').find(w => w.id === 'gmail').mail.headers.receiver;
+  const raw = fs.readFileSync(FX + 'settlement.eml', 'utf8');
+  const body = raw.split(/\r?\n\r?\n/).slice(1).join('\n');
+  const name = 'Amazon Return Policy Litigation Settlement Administrator', addr = 'donotreply@returnsettlement.com';
+  const signs = S(`nameAddressSigns(${JSON.stringify(name)}, ${JSON.stringify(addr)}, null, null, null)`);
+  assert.deepEqual(signs.map(x => x.weight), [3], 'amber (caution), below the flag score');
+  assert.match(signs[0].text, /writing about Amazon .*not Amazon itself.*fake ones/);
+  const total = [...signs, ...S('headerAnomalies')(raw, '', RX), ...S('subjectScamSigns')('LEGAL NOTICE OF CLASS ACTION SETTLEMENT – IN RE: AMAZON RETURN POLICY LITIGATION'),
+    ...S('bodyScamSigns')(body)].reduce((a, x) => a + x.weight, 0);
+  assert.ok(total < S('SIGNAL_FLAG_SCORE'), `whole email scores ${total}: not flagged, never moved to Spam`);
+  const ev = S(`evaluateSender({ displayName: ${JSON.stringify(name)}, address: ${JSON.stringify(addr)}, auth: parseAuthResults(${JSON.stringify(raw)}, 'mx.google.com'), bodyText: ${JSON.stringify(body)} })`);
+  assert.deepEqual(ev.findings.map(f => f.severity), ['caution']);
+  // Impersonation stays red: ordinary roles, the brand's own name, and legal words are needed for amber.
+  for (const n of ['Amazon Support', 'Amazon.com', 'Microsoft Administrator', 'Amazon Refunds Team', 'PayPal Billing']) {
+    assert.deepEqual(S(`nameAddressSigns(${JSON.stringify(n)}, 'x@scam.example', null, null, null)`).map(x => x.weight), [5], n);
+  }
+  for (const n of ['Smith v. Amazon Claims', 'In re PayPal Litigation', 'PayPal Class Action Lawsuit']) {
+    assert.deepEqual(S(`nameAddressSigns(${JSON.stringify(n)}, 'x@claims.example', null, null, null)`).map(x => x.weight), [3], n);
+  }
+});

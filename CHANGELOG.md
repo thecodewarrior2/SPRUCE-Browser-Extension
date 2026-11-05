@@ -1,5 +1,23 @@
 # Changelog
 
+## 5.93 — A settlement administrator naming a brand is amber, not red
+
+A genuine class-action notice ("Amazon Return Policy Litigation Settlement Administrator"
+<donotreply@returnsettlement.com>, DMARC pass, sent through Amazon SES) was red and could be moved to
+Spam: the sender's name contains "Amazon", and returnsettlement.com isn't Amazon's. The name check
+(`nameAddressSigns`, weight 5, and `evaluateSender`, danger) couldn't tell a company impersonated from a
+company *written about*.
+
+- New `nameSpeaksAboutBrand` (`shared.js`): a name with legal-proceeding words (settlement, litigation,
+  class action, lawsuit, legal notice, claims administrator, court-appointed, "in re", "v."/"vs.") is a
+  third party writing about the brand. It gets caution (weight 3 / severity caution, never moved to
+  Spam) with its own explanation, which also warns that fake settlement notices exist. Every other
+  brand-name check is unchanged: "Amazon Support", "Microsoft Administrator" or "Amazon.com" on another
+  domain stay red.
+- Test fixture `tests/fixtures/settlement.eml`, modelled on the reported email with the recipient,
+  names, notice and confirmation codes replaced by test values. The whole email (name, headers, subject,
+  body) scores below the flag level.
+
 ## 5.92 — Link Inspector: why a link may be malicious; iContact and SendGrid decoders
 
 The Link Inspector used to stop at "Flagged: Malware or Phishing (…)", naming only the first service
