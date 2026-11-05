@@ -314,6 +314,8 @@ const REDIRECT_RULES = [
           return u.searchParams.get('url');
       } },
     { name: 'Impact affiliate link',      hosts: IMPACT_HOSTS,                path: /./,                    params: ['u'] },
+    // iContact email marketing: click-<account>.icptrack.com/icp/relay.php?...&destination=<url>
+    { name: 'iContact click tracker',     hosts: ['icptrack.com'],            path: /^\/icp\/relay\.php$/i, params: ['destination'] },
     { name: 'Partnerize affiliate link',  hosts: ['prf.hn'],                  path: /\/destination:/,
       extract: (u, url) => {
           const m = url.match(/\/destination:([^/?#]+)/);
@@ -371,7 +373,8 @@ function decodeTranslateProxy(url) {
 const SHARE_PATH_RE = /\/(sharer|share|sharing|shareArticle|intent|pin\/create|submit|bookmark|plusone)(?=[\/._?-]|$)/i;
 
 // First host label typical of click-tracking / redirect hosts (click.brand.com, links.news.com, r.mail.x.com).
-const REDIRECTOR_HOST_RE = /^(click|clicks|clk|trk|ctrk|track|tracking|link|links|lnk|go|redirect|redir|r|l|url|mkt|email|e|em|ct|cl|t|out|away|exit)\d*\./i;
+// A number may follow, with or without a hyphen (click3., click-175967.).
+const REDIRECTOR_HOST_RE = /^(click|clicks|clk|trk|ctrk|track|tracking|link|links|lnk|go|redirect|redir|r|l|url|mkt|email|e|em|ct|cl|t|out|away|exit)(?:-?\d+)?\./i;
 
 // Built-in email trackers and shorteners always count, whatever context the caller passes.
 const BUILTIN_REDIRECTORS = BUILTIN_TRACKER_SET;
@@ -477,6 +480,39 @@ function decodePathEmbeddedUrl(url, ctx) {
     return v;
 }
 
+// SendGrid click tracking: <host>/ls/click?upn=… or /wf/click?upn=… (on ct.sendgrid.net or a
+// customer's branded link domain). SendGrid writes the value with its own escaping ("-2F" for "/",
+// "-3D" for "=") followed by "_<signature>". Older links carry the destination as base64 and can be
+// read here; current links start "u001." and are ENCRYPTED: only SendGrid can read them, so they
+// are not decoded (describeOpaqueLink explains it). Anything that does not decode to a clean web
+// address is left alone.
+function sendgridUnescape(value) {
+    return String(value || '').replace(/-([0-9A-F]{2})/g, (m, h) => String.fromCharCode(parseInt(h, 16)));
+}
+
+function isSendgridClick(u) {
+    return /^\/(ls|wf)\/click$/i.test(u.pathname) && u.searchParams.has('upn') &&
+           (hostMatches(u.hostname, 'sendgrid.net') || emailTrackerProvider(u.href) === 'SendGrid');
+}
+
+function decodeSendgrid(url) {
+    const u = parseUrl(url);
+    if (!u || !isSendgridClick(u)) return null;
+    const upn = u.searchParams.get('upn') || '';
+    if (/^u\d{3}\./i.test(upn)) return null;                         // encrypted (current format)
+    const payload = sendgridUnescape(upn).split('_')[0];
+    const b64 = (payload.match(/^[A-Za-z0-9+/]+={0,2}/) || [''])[0];
+    if (b64.length < 12) return null;
+    const decoded = base64UrlDecode(b64.replace(/\+/g, '-').replace(/\//g, '_'));
+    if (!decoded) return null;
+    const text = binaryToUtf8(decoded);
+    const m = text.match(/^https?:\/\/[A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=%]+/);
+    // Readable text after the address means structured data, not a lone destination: not decoded.
+    if (!m || /[\x20-\x7e]/.test(text.charAt(m[0].length))) return null;
+    const v = normalizeEmbeddedUrl(m[0]);
+    return v ? { url: v, name: 'SendGrid click tracking' } : null;
+}
+
 // ===========================================================================
 // 4. OFFLINE SHORTENER EXPANSION (destination is fully determined by the short link itself)
 // ===========================================================================
@@ -542,6 +578,9 @@ function describeOpaqueLink(url) {
     if (hostIsAny(host, ['fortimail.com', 'fortinet.com']) && /urlsafe|clicktime/i.test(url)) {
         return 'Fortinet URL protection link: the destination cannot be decoded offline.';
     }
+    if (isSendgridClick(u) && /^u\d{3}\./i.test(u.searchParams.get('upn') || '')) {
+        return 'SendGrid click-tracking link (encrypted format): SendGrid encrypts the destination, so no tool can read it offline. Only following the link reveals it, and that registers a click as the person the email was sent to. To see where it goes without clicking, use "Look up on VirusTotal" (if set up) or a second-opinion service below; they follow the link from their own servers.';
+    }
     const provider = emailTrackerProvider(url) ||
         (hostIsAny(host, ['sendgrid.net', 'list-manage.com', 'rs6.net', 'hubspotlinks.com', 'mailgun.net']) ? 'an email provider' : null);
     if (provider) {
@@ -568,6 +607,7 @@ const STRICT_DECODERS = [
 ];
 const GENERIC_DECODERS = [
     ['Amazon SES Fast-Path', decodeAmazonSesCustomDomain],
+    ['SendGrid click tracking', decodeSendgrid],
     ['Known Redirect', decodeRedirectRules],
     ['Google Translate proxy', decodeTranslateProxy],
     ['Offline Short-Link Expansion', expandKnownShortLink],

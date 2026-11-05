@@ -1,5 +1,56 @@
 # Changelog
 
+## 5.92 — Link Inspector: why a link may be malicious; iContact and SendGrid decoders
+
+The Link Inspector used to stop at "Flagged: Malware or Phishing (…)", naming only the first service
+that flagged the site. That left people unable to judge a false positive, such as a long-established
+site flagged by one service while every other service found nothing. It now explains the verdict:
+
+- **What the security services say** (`threatConsensus`, `shared.js`): how many independent services
+  flag the site. Two or more flags mean danger. A single flag among several clean answers is described as a
+  possible false positive or very new detection, naming the service to report it to. A flag from
+  Cloudflare Family alone is a content filter, not a security finding. The blocklist decides on its own
+  and is not counted as a service. Each service is counted once (worst answer) when both the link's own
+  host and the destination were checked.
+- **Who checked it:** `runDomainSafety` now records every service's own answer (`services`: flagged,
+  clean or no answer) next to the verdict it already returned. The verdict itself is unchanged. The
+  Inspector asks afresh (`opts.fresh` skips the 6-hour cache) and lists the blocklist, each phishing list
+  and each DNS service for the destination and, when different, the link's own host, with what a flag from
+  that service means (`THREAT_SERVICE_INFO`). A blocklisted host is not sent to the DNS services, as in
+  Gmail.
+- **Red flags in the link** (`linkRedFlags`, `shared.js`, offline and pure): danger, caution or info,
+  each with a plain explanation. Danger: hidden "user@" prefix, bare IP address, look-alike brand,
+  a brand's name in front of another domain (paypal.com.example.test), code-running schemes, programs
+  and scripts, real sign-in pages used as springboards, pre-targeted cloud-storage pages. Caution:
+  punycode, free page/form/tunnel services, public cloud storage, a domain ending mid-address, very long
+  names, typo endings, unusual ports, archives, macro documents, sign-in/verify/billing words off a known
+  brand's domain, an email address (plain or base64) in the link, bounces through a trusted site's
+  redirect, three or more wrapping layers. Info: endings often used for abuse, plain http. They reuse the
+  existing `lookalikeOf`, `signInRedirectProblem`, `cloudStoragePage` and `riskyScheme`.
+- **Get a second opinion:** links to VirusTotal, urlscan.io, Google Safe Browsing and Sucuri SiteCheck
+  with the site name only (never the full link, which may carry personal tokens). They open only when
+  clicked.
+- **VirusTotal (optional):** new setting `virusTotalApiKey` (secret, never in backups; policy
+  `managedVirusTotalApiKey`), in Settings → Your own services. Saving it asks the browser for access to
+  www.virustotal.com only (optional host permission, so no new permission warning on update). The
+  **Look up on VirusTotal** button (message `virusTotal`, accepted only from the extension's own pages so
+  a webmail page can't spend the key) shows the existing report for the link: vendor counts, the vendors
+  that flag it with their verdicts, categories, reputation and the address VirusTotal followed it to. If
+  VirusTotal has never seen the link, it shows the site's report and offers **Scan this link** (after a
+  confirmation that the link is shared with VirusTotal's community). It then polls 3 times, 20 s apart,
+  within the free key's 4 requests a minute. A one-time link is never sent: only its site is looked up.
+- **Decoders** (`decoders.js`): iContact click tracking (`click-<account>.icptrack.com/icp/relay.php`,
+  its `destination` parameter). SendGrid click tracking (`/ls/click` and `/wf/click?upn=` on
+  `sendgrid.net` or a SendGrid-branded domain): the older format, base64 in SendGrid's own `-2F`/`-3D`
+  escaping, is decoded when it yields one clean web address. The current `u001.` format is encrypted
+  and is never guessed at; `describeOpaqueLink` explains this and points to VirusTotal. Redirector-shaped
+  hosts now also match with a hyphenated number (`click-175967.`).
+- **Fixes:** a flagged destination's badge read "Not verified: inconclusive" instead of "Flagged: …".
+  The button read "Inspect & Decode" after the first run instead of "Inspect link".
+- Tests: `tests/e2e/test-inspector.js` (stubbed services: one service flags, the rest clean; red flags;
+  second-opinion links carry the site only; VirusTotal only on click, key sent only to VirusTotal) and unit
+  tests for the decoders, red flags, consensus and the VirusTotal message rules.
+
 ## 5.91 — Help for organizations: deploying the published extension
 
 S.P.R.U.C.E+ is now in the Chrome Web Store, Microsoft Edge Add-ons and Firefox Add-ons, and Settings →

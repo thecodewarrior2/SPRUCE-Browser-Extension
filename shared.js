@@ -144,7 +144,10 @@ const SETTING_DEFS = [
     { key: 'customUnshortenerHeaders',    managedKey: 'managedUnshortenerHeaders',          def: '',   type: 'string', secret: true },
     { key: 'customUnshortenerField',      managedKey: 'managedUnshortenerField',            def: '',   type: 'string' },
     // When a custom unshortener is set: still fall back to unshorten.me if it gives no answer?
-    { key: 'useUnshortenMeFallback',      managedKey: 'managedUseUnshortenMeFallback',      def: true, type: 'boolean' }
+    { key: 'useUnshortenMeFallback',      managedKey: 'managedUseUnshortenMeFallback',      def: true, type: 'boolean' },
+    // VirusTotal (Settings → Your own services): a free personal API key enables "Look up on
+    // VirusTotal" in the Link Inspector. Used only when the person clicks it; empty = off.
+    { key: 'virusTotalApiKey',            managedKey: 'managedVirusTotalApiKey',            def: '',   type: 'string', secret: true }
 ];
 // secret: true => may hold API keys; never written to exported backups.
 
@@ -2629,4 +2632,182 @@ function applyEmailSignals(base, signals) {
     }
     if (score >= SIGNAL_CAUTION_SCORE && base.status !== 'trusted') return Object.assign({}, base, { status: 'caution', reasons: [...texts, ...plain], move: false, score });
     return Object.assign({}, base, { reasons: [...base.reasons, ...texts], score });
+}
+
+// ---------------------------------------------------------------------------
+// LINK RED FLAGS (Link Inspector). Offline signs that a link may be malicious, each with what it
+// means, so a person can judge a link the threat services disagree on. Pure: no network, so it is
+// the same in every browser and easy to test. None is proof on its own; they add context to the
+// threat services' verdict.
+//   linkRedFlags(inputUrl, finalUrl, steps) => [{ level: 'danger'|'caution'|'info', title, detail }]
+// ---------------------------------------------------------------------------
+// Endings that security reports (Spamhaus, Interisle) list among the most abused, cheap or free to register.
+const ABUSED_TLDS = new Set(['zip', 'mov', 'top', 'xyz', 'click', 'link', 'country', 'gq', 'tk', 'ml', 'cf', 'ga', 'work',
+    'rest', 'icu', 'cfd', 'sbs', 'bond', 'cyou', 'lat', 'quest', 'buzz', 'cam', 'monster', 'beauty', 'hair', 'skin', 'makeup',
+    'support', 'fit', 'loan', 'win', 'bid', 'review', 'date', 'party', 'racing', 'stream', 'download', 'cricket', 'science', 'accountant']);
+// Places where anyone can publish a page or form for free in minutes: real sites use them too, but
+// so do phishing pages, because the address looks trustworthy and costs nothing.
+const FREE_PAGE_HOSTS = [
+    ['sites.google.com', 'Google Sites'], ['forms.gle', 'Google Forms'], ['docs.google.com/forms', 'Google Forms'],
+    ['forms.office.com', 'Microsoft Forms'], ['forms.microsoft.com', 'Microsoft Forms'], ['sway.office.com', 'Microsoft Sway'],
+    ['sway.cloud.microsoft', 'Microsoft Sway'], ['wixsite.com', 'Wix'], ['weebly.com', 'Weebly'], ['godaddysites.com', 'GoDaddy Sites'],
+    ['webflow.io', 'Webflow'], ['framer.app', 'Framer'], ['framer.website', 'Framer'], ['netlify.app', 'Netlify'], ['vercel.app', 'Vercel'],
+    ['github.io', 'GitHub Pages'], ['gitlab.io', 'GitLab Pages'], ['glitch.me', 'Glitch'], ['herokuapp.com', 'Heroku'],
+    ['onrender.com', 'Render'], ['replit.app', 'Replit'], ['repl.co', 'Replit'], ['workers.dev', 'Cloudflare Workers'],
+    ['trycloudflare.com', 'Cloudflare quick tunnel'], ['ngrok.io', 'ngrok tunnel'], ['ngrok-free.app', 'ngrok tunnel'],
+    ['ngrok.app', 'ngrok tunnel'], ['loca.lt', 'localtunnel'], ['000webhostapp.com', '000webhost'], ['blogspot.com', 'Blogger'],
+    ['notion.site', 'Notion'], ['canva.site', 'Canva'], ['my.canva.site', 'Canva'], ['square.site', 'Square Online'],
+    ['jotform.com', 'Jotform'], ['typeform.com', 'Typeform'], ['wufoo.com', 'Wufoo'], ['formstack.com', 'Formstack'],
+    ['linktr.ee', 'Linktree'], ['surge.sh', 'Surge'], ['pages.dev', 'Cloudflare Pages'],
+    ['web.app', 'Firebase Hosting'], ['firebaseapp.com', 'Firebase Hosting'], ['azurewebsites.net', 'Azure App Service'],
+    ['ipfs.io', 'IPFS gateway'], ['dweb.link', 'IPFS gateway']
+];
+const RUNNABLE_FILE_RE = /\.(exe|scr|msi|msix|appx|bat|cmd|com|pif|cpl|vbs|vbe|js|jse|wsf|wsh|hta|ps1|lnk|jar|apk|dmg|pkg|app|iso|img|vhd|vhdx|reg|chm|xll|one)$/i;
+const ARCHIVE_FILE_RE = /\.(zip|rar|7z|tar|gz|tgz|cab|ace|arj|lzh|xz|bz2)$/i;
+const MACRO_FILE_RE = /\.(docm|xlsm|pptm|dotm|xltm|xlam|xls|doc)$/i;
+const SIGN_IN_PATH_RE = /(^|[\/_.-])(login|log-in|signin|sign-in|logon|verify|verification|validate|password|passwd|credential|wallet|unlock|recover|recovery|reactivate|suspend(ed)?|billing|payment|invoice|secure|webmail|sso|mfa|2fa|authenticate|account-?update)([\/_.?-]|$)/i;
+const EMAIL_IN_TEXT_STRICT_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/;
+// Decoders that are a well-known site's own redirect: abused because the link shows a trusted name.
+const TRUSTED_REDIRECT_RE = /^(Google redirect|Google AMP page|Google Meet redirect|Google Ads click|YouTube redirect|YouTube attribution link|Facebook link|Messenger link|Instagram link|LinkedIn redirect|Bing click link|DuckDuckGo redirect|Google Translate proxy|DoubleClick|Google Marketing Platform)/;
+
+function freePageHost(u) {
+    const host = u.hostname.toLowerCase();
+    for (const [key, name] of FREE_PAGE_HOSTS) {
+        const [h, p] = key.split(/\/(.*)/);
+        if (hostMatches(host, h) && (!p || u.pathname.replace(/^\//, '').startsWith(p))) return name;
+    }
+    return null;
+}
+
+function emailInUrl(u) {
+    const parts = [...u.searchParams.values(), u.hash.replace(/^#/, ''), ...u.pathname.split('/')];
+    for (const raw of parts) {
+        let v = raw;
+        try { v = decodeURIComponent(raw); } catch (e) { /* keep */ }
+        if (EMAIL_IN_TEXT_STRICT_RE.test(v)) return 'plain';
+        if (/^[A-Za-z0-9+/_-]{12,}={0,2}$/.test(v)) {
+            try {
+                const bin = atob(v.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(v.length / 4) * 4, '='));
+                if (/^[\x20-\x7e]+$/.test(bin) && EMAIL_IN_TEXT_STRICT_RE.test(bin)) return 'encoded';
+            } catch (e) { /* not base64 */ }
+        }
+    }
+    return null;
+}
+
+function linkRedFlags(inputUrl, finalUrl, steps) {
+    const flags = [];
+    const add = (level, title, detail) => flags.push({ level, title, detail });
+    let u;
+    try { u = new URL(finalUrl || inputUrl); } catch (e) { return [{ level: 'danger', title: 'Not a valid web address', detail: 'The link could not be read as a web address.' }]; }
+    const scheme = riskyScheme(finalUrl || inputUrl);
+    if (scheme) add('danger', `Runs code instead of opening a page (${scheme}:)`, 'A link of this kind can run a script or open hidden content inside the browser. Real emails never need one.');
+    if (!/^https?:$/.test(u.protocol)) return flags;
+    const host = u.hostname.toLowerCase().replace(/\.$/, '');
+    const reg = registrableDomain(host) || host;
+    const isIp = /^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.startsWith('[');
+
+    if (u.username || u.password) {
+        add('danger', 'Hides its real address behind a "user@" prefix',
+            `Everything before the "@" is ignored by the browser: the link really goes to ${host}. This trick makes a link start with a trusted name.`);
+    }
+    if (isIp) add('danger', 'Goes to a bare IP address', 'Legitimate companies link to their domain name. A numeric address is typical of hacked computers and throw-away servers.');
+    const la = !isIp && lookalikeOf(host);
+    if (la) add('danger', 'Look-alike of a well-known brand', `${host} ${la}. Imitation domains like this are made to steal sign-ins and payments.`);
+    if (!isIp && host.split('.').some(l => l.startsWith('xn--'))) {
+        const shown = host.split('.').map(unicodeLabel).join('.');
+        add('caution', 'International (punycode) domain', `The address is really "${host}" and displays as "${shown}". Characters from other alphabets can imitate familiar letters.`);
+    }
+    const sr = signInRedirectProblem(finalUrl);
+    if (sr) add('danger', 'Real sign-in page used as a springboard', `This is a ${sr}.`);
+    const cloud = cloudStoragePage(finalUrl);
+    if (cloud) add(cloud.fragment ? 'danger' : 'caution', 'Page hosted in public cloud storage', cloud.reason + '. Anyone can upload a page there, and the storage company\'s good name hides who made it.');
+    else {
+        const free = freePageHost(u);
+        if (free) add('caution', `Free page or form service (${free})`, `Anyone can publish on ${free} in minutes, so the address says nothing about who made the page. Never enter a password or payment details on a page like this unless you know who made it.`);
+    }
+    if (!isIp && !la) {
+        // A brand's name in the subdomain of somebody else's domain: paypal.com.account-check.example
+        const sub = host.slice(0, Math.max(0, host.length - reg.length - 1));
+        const brandHit = sub && PROTECTED_BRANDS.find(b => { const bl = b.split('.')[0]; return bl.length >= 5 && sub.split(/[.-]/).includes(bl); });
+        const sameCompany = brandHit && (hostMatches(reg, brandHit) || (brandOfDomain(reg) && brandOfDomain(reg) === brandOfDomain(brandHit)));
+        if (brandHit && !sameCompany) {
+            add('danger', 'A brand\'s name in front of someone else\'s domain', `The address starts with "${brandHit.split('.')[0]}", but the site is really ${reg}. Only the last part before the first "/" decides who owns a site.`);
+        } else if (/(^|\.)(com|net|org|gov|edu)[.-]/.test(sub)) {
+            add('caution', 'A domain ending in the middle of the address', `"${sub}" looks like a complete address, but the site is really ${reg}.`);
+        }
+        if (host.split('.').length >= 6 || host.length > 60) add('caution', 'Unusually long address', `The site name has ${host.split('.').length} parts. Very long names push the real domain (${reg}) out of view on a phone.`);
+        const tld = host.split('.').pop();
+        if (ABUSED_TLDS.has(tld)) add('info', `Ending often used for abuse (.${tld})`, `Security reports list .${tld} among the endings most used for scams, because names are cheap or free. Many sites using it are honest; it is a reason for extra care, not proof.`);
+        if (TLD_TYPOS[tld]) add('caution', `Ending looks like a typo (.${tld})`, `".${tld}" is not a real ending; did the sender mean ".${TLD_TYPOS[tld]}"?`);
+    }
+    if (u.port && !['80', '443'].includes(u.port)) add('caution', `Unusual port (:${u.port})`, 'Ordinary websites don\'t put a port number in their links. It is often a home computer or a temporary server.');
+    if (u.protocol === 'http:') add('info', 'Not encrypted (http://)', 'What you type on this page could be read on the way. Never sign in or pay on an http:// page.');
+
+    let path = u.pathname;
+    try { path = decodeURIComponent(path); } catch (e) { /* keep */ }
+    if (RUNNABLE_FILE_RE.test(path)) add('danger', 'Downloads a program or script', `The link ends in "${path.split('/').pop()}", a file that runs on your computer. Malware is spread this way; don't open it unless you asked for it.`);
+    else if (MACRO_FILE_RE.test(path)) add('caution', 'Downloads an Office file that can contain macros', `"${path.split('/').pop()}" can hold macros (small programs). Don't click "Enable content" in a file you didn't expect.`);
+    else if (ARCHIVE_FILE_RE.test(path)) add('caution', 'Downloads a compressed archive', `"${path.split('/').pop()}" can hide a program inside. Archives are a common way to slip malware past email filters.`);
+    else if (/\.(s?html?|svg)$/i.test(path) && cloud) { /* already explained */ }
+
+    if (!la && !isIp && SIGN_IN_PATH_RE.test(path) && !brandOfDomain(reg)) {
+        add('caution', 'Asks you to sign in, verify or pay', `The address contains words like "login", "verify" or "billing" on ${reg}. Phishing pages copy real sign-in pages; sign in only by typing the company's address yourself.`);
+    }
+    const mail = emailInUrl(u);
+    if (mail) add('caution', mail === 'encoded' ? 'Carries an email address in disguise' : 'Carries an email address',
+        `The link contains ${mail === 'encoded' ? 'an encoded' : 'an'} email address. Phishing kits do this to pre-fill the victim's address on a fake sign-in page (and to confirm the address is real). Mailing lists do it too, for unsubscribe links.`);
+
+    const list = Array.isArray(steps) ? steps : [];
+    const realLayers = list.filter(s => !/Sanitizer/.test(s.decoder || ''));
+    const trusted = realLayers.find(s => TRUSTED_REDIRECT_RE.test(s.decoder || ''));
+    if (trusted && registrableDomain(hostOf(trusted.outputUrl) || '') !== registrableDomain(hostOf(trusted.inputUrl) || '')) {
+        add('caution', `Bounces through a trusted site (${trusted.decoder})`, `The link starts on ${hostOf(trusted.inputUrl)} but sends you on to ${hostOf(trusted.outputUrl)}. Scammers use well-known sites' redirects so the link looks safe and passes filters.`);
+    }
+    if (realLayers.length >= 3) add('caution', `Wrapped ${realLayers.length} times`, 'The destination was hidden inside several redirects. Mail security services add one, marketing services one more; more than that is often done to hide where a link goes.');
+    let inHost = '';
+    try { inHost = new URL(inputUrl).hostname.toLowerCase(); } catch (e) { /* keep */ }
+    if (inHost && lookalikeOf(inHost) && inHost !== host) add('danger', 'The link itself uses a look-alike domain', `${inHost} ${lookalikeOf(inHost)}.`);
+    const order = { danger: 0, caution: 1, info: 2 };
+    return flags.sort((a, b) => order[a.level] - order[b.level]);
+}
+
+// What a threat service's verdict means, in plain words, for the Link Inspector's "Who checked it".
+const THREAT_SERVICE_INFO = {
+    'Quad9':               { what: 'A non-profit resolver that combines threat lists from about 20 security companies (malware, phishing, botnets). A block means at least one of those companies lists the domain.', home: 'https://quad9.net' },
+    'Cloudflare Security': { what: 'Cloudflare\'s malware and phishing filter, from Cloudflare\'s own threat intelligence. A block means Cloudflare classifies the domain as malware or phishing.', home: 'https://radar.cloudflare.com/domains' },
+    'Cloudflare Family':   { what: 'An adult-content filter, not a security check: a block means the site is classified as adult content (it also blocks malware).', home: 'https://radar.cloudflare.com/domains' },
+    'Control D (malware)': { what: 'Control D\'s free malware filter. A block means the domain is on its malware or phishing list.', home: 'https://controld.com/free-dns' },
+    'DNS4EU Protective':   { what: 'The EU-backed DNS4EU resolver\'s protective filter (malware and phishing).', home: 'https://www.joindns4.eu' },
+    'AdGuard (backup)':    { what: 'Used only when no other service answers. It also blocks advertising and tracking domains, so a block alone may just mean tracking.', home: 'https://adguard-dns.io' },
+    'Custom Resolver':     { what: 'Your organization\'s own threat service (Settings → Your own services).' },
+    'OpenPhish community feed': { what: 'A list of web addresses seen in active phishing campaigns in the last days, matched on this device.', home: 'https://openphish.com' },
+    'Phishing Army (extended)': { what: 'A community list of domains reported for phishing, matched on this device.', home: 'https://phishing.army' },
+    'Blocklist':           { what: 'Your own or your organization\'s blocklist.' }
+};
+
+// Summary of the services' answers: { level, text } for the Inspector.
+// services: [{ name, status: 'flagged'|'clean'|'no answer', security: bool }]
+function threatConsensus(services) {
+    // One entry per service, its worst answer (the link's own host and the destination are both asked).
+    const rank = { flagged: 3, clean: 2, 'no answer': 1, off: 0 };
+    const byName = new Map();
+    for (const s of services || []) {
+        const prev = byName.get(s.name);
+        if (!prev || (rank[s.status] || 0) > (rank[prev.status] || 0)) byName.set(s.name, s);
+    }
+    const all = [...byName.values()];
+    const own = all.find(s => s.name === 'Blocklist' && s.status === 'flagged');
+    if (own) return { level: 'danger', text: `${own.reason || 'On the blocklist'}. Your organization or you decided to block this site, whatever other services say.` };
+    const sec = all.filter(s => s.security && s.name !== 'Blocklist');
+    const answered = sec.filter(s => s.status === 'flagged' || s.status === 'clean');
+    const flagged = answered.filter(s => s.status === 'flagged');
+    const content = all.filter(s => !s.security && s.status === 'flagged');
+    if (flagged.length >= 2) return { level: 'danger', text: `${flagged.length} of ${answered.length} independent security services flag this site. When several agree, treat the link as dangerous.` };
+    if (flagged.length === 1) {
+        return { level: 'caution', text: `Only 1 of ${answered.length} security services (${flagged[0].name}) flags this site; the others found nothing. That can be a false positive or a detection the others haven't made yet. Look at the red flags below and get a second opinion before trusting it. If the site is genuine, report the false positive to ${flagged[0].name}.` };
+    }
+    if (content.length) return { level: 'caution', text: `No security service flags this site; it was blocked only by ${content.map(s => s.name).join(', ')}, which is a content filter, not a sign of malware or phishing.` };
+    if (!answered.length) return { level: 'info', text: 'No security service could be asked, so nothing is known about this site.' };
+    return { level: 'safe', text: `None of the ${answered.length} security services that answered flags this site. That means no one has reported it yet, not that it is safe: new phishing sites are often days old.` };
 }

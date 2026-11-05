@@ -396,6 +396,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function loadDohSettings() {
         const cfg = await loadEffectiveSettings();
+        {   // VirusTotal key: shown masked; locked when the administrator sets it.
+            const input = document.getElementById('virusTotalKeyInput');
+            const locked = !!cfg.locked.virusTotalApiKey;
+            input.value = locked ? '' : (cfg.values.virusTotalApiKey || '');
+            input.placeholder = locked ? (cfg.values.virusTotalApiKey ? '•••••• (set by your administrator)' : 'Turned off by your administrator') : 'Your VirusTotal API key';
+            input.disabled = locked;
+            document.getElementById('saveVirusTotalBtn').disabled = locked;
+            document.getElementById('managedVirusTotalNotice').style.display = locked ? 'block' : 'none';
+        }
         ENDPOINT_FIELDS.forEach(f => {
             const input = document.getElementById(f.input);
             const locked = !!cfg.locked[f.key];
@@ -433,6 +442,31 @@ document.addEventListener('DOMContentLoaded', () => {
                 reportToLog('info', 'Settings', val ? `${f.label} set to ${new URL(val.replace(/\{(hostname|url|url_noscheme)\}/g, 'x')).origin}.` : `${f.label} removed.`);
                 alert(val ? `${f.label} saved.` : `${f.label} removed.`);
             });
+        });
+    });
+
+    document.getElementById('saveVirusTotalBtn').addEventListener('click', async () => {
+        const val = document.getElementById('virusTotalKeyInput').value.trim();
+        if (val && !/^[A-Za-z0-9]{32,128}$/.test(val)) {
+            alert('That doesn\'t look like a VirusTotal API key (a long string of letters and numbers). Copy it from your VirusTotal profile → API key.');
+            return;
+        }
+        if (val) {
+            let granted = false;
+            try { granted = await chrome.permissions.request({ origins: ['https://www.virustotal.com/*'] }); } catch (e) {}
+            if (!granted) {
+                reportToLog('warning', 'Settings', 'VirusTotal: the browser did not grant access to www.virustotal.com, so lookups will fail.');
+                alert('Access to www.virustotal.com was not granted, so the Link Inspector cannot look links up there.');
+            }
+        }
+        chrome.storage.local.set({ virusTotalApiKey: val }, () => {
+            if (chrome.runtime.lastError) {
+                reportToLog('error', 'Settings', `VirusTotal key could not be saved: ${chrome.runtime.lastError.message}`);
+                alert('The VirusTotal key could not be saved.');
+                return;
+            }
+            reportToLog('info', 'Settings', val ? 'VirusTotal key saved.' : 'VirusTotal key removed.');
+            alert(val ? 'VirusTotal key saved. The Link Inspector now shows "Look up on VirusTotal".' : 'VirusTotal key removed.');
         });
     });
 
@@ -1418,7 +1452,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         chrome.runtime.sendMessage({ action: 'testUnwrap', url: urlToInspect }, (response) => {
             inspectBtn.disabled = false;
-            inspectBtn.textContent = "Inspect & Decode";
+            inspectBtn.textContent = "Inspect link";
 
             if (!response) {
                 // A crash is logged by the background; an unparseable input is logged here.
@@ -1459,7 +1493,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Render Final Destination & Threat Intelligence Card
             const isSafe = response.isSafe;
-            const unverified = response.verdict !== 'safe';
+            const unverified = isSafe && response.verdict !== 'safe';   // a flagged link is a finding, not "not verified"
             const destCard = document.createElement('div');
             destCard.className = `final-dest-card ${!isSafe ? 'unsafe' : unverified ? 'unverified' : ''}`;
 
@@ -1502,8 +1536,167 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             finalContainer.appendChild(destCard);
+            finalContainer.appendChild(renderAnalysis(response));
         });
     });
+
+    // --- WHY A LINK MAY BE MALICIOUS: the services' verdicts, offline red flags, second opinions ---
+    const LEVEL_STYLE = {
+        danger:  { icon: '⛔', color: 'var(--danger-text)', badge: 'badge-unsafe', label: 'Danger' },
+        caution: { icon: '⚠️', color: 'var(--warn-text)',   badge: 'badge-warning', label: 'Caution' },
+        info:    { icon: 'ℹ️', color: 'var(--text-2)',      badge: 'badge-info', label: 'Note' },
+        safe:    { icon: '✓',  color: 'var(--success-text)', badge: 'badge-safe', label: 'OK' }
+    };
+    const STATUS_TEXT = { flagged: ['Flagged', 'badge-unsafe'], clean: ['Nothing found', 'badge-safe'], 'no answer': ['No answer', 'badge-neutral'], off: ['Off', 'badge-neutral'] };
+
+    function section(title, intro) {
+        const box = node('div', { className: 'card', style: 'margin-top: 15px;' }, node('h4', null, title));
+        if (intro) box.appendChild(node('p', { className: 'card-intro' }, intro));
+        return box;
+    }
+
+    function renderAnalysis(r) {
+        const wrap = node('div', { className: 'inspector-analysis' });
+
+        // 1. Verdict summary: how many independent services agree.
+        if (r.consensus) {
+            const st = LEVEL_STYLE[r.consensus.level] || LEVEL_STYLE.info;
+            wrap.appendChild(node('div', { className: 'callout-warn', style: `margin-top: 15px; border-left-color: ${st.color};` },
+                node('strong', { style: `color: ${st.color};` }, `${st.icon} What the security services say: `), r.consensus.text));
+        }
+
+        // 2. Red flags found in the link itself.
+        const flags = Array.isArray(r.redFlags) ? r.redFlags : [];
+        const rf = section(`🚩 Red flags in the link (${flags.length})`, flags.length
+            ? 'Signs found in the address itself, on this device. Each is a reason for care, not proof; several together are a strong warning.'
+            : 'No warning signs were found in the address itself. Phishing links can still look ordinary, so this is not proof of safety.');
+        rf.id = 'inspectorRedFlags';
+        flags.forEach(f => {
+            const st = LEVEL_STYLE[f.level] || LEVEL_STYLE.info;
+            rf.appendChild(node('div', { className: 'step-card red-flag', style: `border-left-color: ${st.color}; padding: 10px 12px; margin-bottom: 8px;` },
+                node('div', { className: 'step-header', style: `color: ${st.color}; margin-bottom: 4px;` },
+                    node('span', null, `${st.icon} ${f.title}`), node('span', { className: `badge ${st.badge}` }, st.label)),
+                node('div', { style: 'font-size: 12px; color: var(--text-2); line-height: 1.5;' }, f.detail)));
+        });
+        wrap.appendChild(rf);
+
+        // 3. Each service's own answer, with what a flag from it means.
+        const groups = Array.isArray(r.services) ? r.services : [];
+        if (groups.length) {
+            const sv = section('🛡️ Who checked it', 'Each service\'s own answer. A flag from one service only, while the others find nothing, is the usual sign of a false positive or a very new detection.');
+            sv.id = 'inspectorServices';
+            const info = r.serviceInfo || {};
+            groups.forEach(g => {
+                sv.appendChild(node('div', { style: 'font-size: 12px; font-weight: bold; margin: 10px 0 4px 0; color: var(--text-2);' },
+                    g.role === 'destination' ? `Destination: ${g.host}` : `The link's own host: ${g.host}`));
+                const table = node('table', { style: 'font-size: 12px;' });
+                const body = node('tbody');
+                g.services.forEach(s => {
+                    const [label, badge] = STATUS_TEXT[s.status] || [s.status, 'badge-neutral'];
+                    const about = info[s.name] ? info[s.name].what : '';
+                    const what = node('td', { style: 'color: var(--text-muted);' }, s.status === 'flagged' && s.reason ? `${s.reason}. ` : (s.reason && s.status !== 'clean' ? `${s.reason}. ` : ''), about);
+                    body.appendChild(node('tr', null,
+                        node('td', { style: 'white-space: nowrap; font-weight: 600;' }, s.name + (s.security ? '' : ' (content filter)')),
+                        node('td', { style: 'white-space: nowrap;' }, node('span', { className: `badge ${badge}` }, label)),
+                        what));
+                });
+                table.appendChild(body);
+                sv.appendChild(table);
+            });
+            wrap.appendChild(sv);
+        }
+
+        // 4. Second opinions: pages the person opens themselves (only the site name is in the link).
+        const so = section('🔎 Get a second opinion', 'These free services open in a new tab with the site name filled in (never the full link). Useful when the services above disagree.');
+        so.id = 'inspectorSecondOpinion';
+        const ul = node('ul', { className: 'simple-list', style: 'font-size: 12px; margin: 0;' });
+        (r.secondOpinion || []).forEach(l => {
+            const a = node('a', null, l.name);
+            a.href = l.url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+            ul.appendChild(node('li', null, a, ` — ${l.what}`));
+        });
+        so.appendChild(ul);
+        so.appendChild(vtPanel(r));
+        wrap.appendChild(so);
+        return wrap;
+    }
+
+    // VirusTotal: only with the person's own key, only on click.
+    function vtPanel(r) {
+        const box = node('div', { className: 'vt-panel', style: 'margin-top: 12px;' });
+        if (!r.virusTotalReady) {
+            box.appendChild(node('p', { className: 'card-intro', style: 'margin: 0;' },
+                'Want the results right here? Add a free VirusTotal API key in Settings → Privacy level → Your own services.'));
+            return box;
+        }
+        const out = node('div', { className: 'vt-result', style: 'margin-top: 8px; font-size: 12px;' });
+        const btn = node('button', { className: 'btn-action' }, r.oneTime ? 'Look up the site on VirusTotal' : 'Look up on VirusTotal');
+        btn.id = 'virusTotalBtn';
+        btn.addEventListener('click', () => runVt({ mode: 'lookup', url: r.unwrappedUrl }, out, r));
+        box.append(btn, out);
+        if (r.oneTime) box.appendChild(node('p', { className: 'card-intro', style: 'margin: 6px 0 0 0;' }, 'This looks like a one-time link, so only its site name is sent to VirusTotal.'));
+        return box;
+    }
+
+    function runVt(req, out, r) {
+        out.textContent = req.mode === 'submit' ? 'Submitting to VirusTotal…' : 'Asking VirusTotal…';
+        chrome.runtime.sendMessage(Object.assign({ action: 'virusTotal' }, req), (res) => {
+            out.textContent = '';
+            if (!res || res.error) { out.appendChild(node('span', { style: 'color: var(--danger-text);' }, (res && res.error) || 'No answer.')); return; }
+            if (res.submitted) { pollVt(res.id, out, r, 0); return; }
+            showVt(res, out, r);
+        });
+    }
+
+    // A submitted scan takes about a minute; the free key allows 4 requests a minute, so it is asked 3 times, 20 s apart.
+    function pollVt(id, out, r, tries) {
+        out.textContent = `Scanning on VirusTotal… (check ${tries + 1} of 3, about 20 seconds apart)`;
+        setTimeout(() => {
+            chrome.runtime.sendMessage({ action: 'virusTotal', mode: 'analysis', id, url: r.unwrappedUrl }, (res) => {
+                if (res && !res.error && res.status === 'completed') { out.textContent = ''; showVt(res, out, r); return; }
+                if (tries < 2 && !(res && res.error)) { pollVt(id, out, r, tries + 1); return; }
+                out.textContent = (res && res.error) || 'The scan is still running. Click "Look up on VirusTotal" again in a minute.';
+            });
+        }, 20000);
+    }
+
+    function showVt(v, out, r) {
+        const s = v.stats || {};
+        const total = (s.malicious || 0) + (s.suspicious || 0) + (s.harmless || 0) + (s.undetected || 0);
+        const bad = (s.malicious || 0) + (s.suspicious || 0);
+        const level = s.malicious >= 3 ? 'danger' : bad ? 'caution' : 'safe';
+        const st = LEVEL_STYLE[level];
+        const what = v.kind === 'domain' ? `the site ${v.target}` : 'this exact link';
+        if (v.urlNotFound) out.appendChild(node('p', { style: 'margin: 0 0 6px 0; color: var(--text-muted);' }, 'VirusTotal has never scanned this exact link, so its report for the whole site is shown.'));
+        if (v.note) out.appendChild(node('p', { style: 'margin: 0 0 6px 0; color: var(--text-muted);' }, v.note));
+        out.appendChild(node('div', { style: `font-weight: bold; color: ${st.color};` },
+            `${st.icon} VirusTotal: ${s.malicious || 0} malicious, ${s.suspicious || 0} suspicious, out of ${total} vendors, for ${what}` + (v.analyzed ? ` (scanned ${new Date(v.analyzed).toLocaleDateString()})` : '') + '.'));
+        const explain = level === 'danger' ? 'Several security vendors agree this is dangerous.'
+            : bad === 1 ? 'Only one vendor flags it. A single detection among dozens is often a false positive, but check the red flags above.'
+            : bad ? 'A few vendors have doubts. Treat it with care.'
+            : 'No vendor flags it. That means no one has reported it yet, not that it is safe.';
+        out.appendChild(node('p', { style: 'margin: 4px 0;' }, explain));
+        if (v.engines && v.engines.length) {
+            const ul = node('ul', { className: 'simple-list', style: 'margin: 4px 0; font-size: 12px;' });
+            v.engines.forEach(e => ul.appendChild(node('li', null, node('strong', null, e.engine), `: ${e.result} (${e.category})`)));
+            out.append(node('div', { style: 'font-weight: 600; margin-top: 6px;' }, 'Vendors that flag it, and what they call it:'), ul);
+        }
+        const extra = [];
+        if (v.categories && v.categories.length) extra.push(`Categories: ${v.categories.join(', ')}`);
+        if (typeof v.reputation === 'number') extra.push(`Community reputation: ${v.reputation}`);
+        if (v.created) extra.push(`Domain registered: ${new Date(v.created * 1000).toLocaleDateString()}`);
+        if (v.finalUrl && v.finalUrl !== r.unwrappedUrl) extra.push(`VirusTotal followed it to: ${v.finalUrl}`);
+        if (v.title) extra.push(`Page title: ${v.title}`);
+        extra.forEach(t => out.appendChild(node('div', { style: 'color: var(--text-muted);' }, t)));
+        if (v.urlNotFound && !r.oneTime) {
+            const sub = node('button', { className: 'btn-action', style: 'margin-top: 8px;' }, 'Scan this link on VirusTotal');
+            sub.addEventListener('click', () => {
+                if (!confirm('VirusTotal will visit the link and share it with its community and security partners. Don\'t submit links that contain personal information. Continue?')) return;
+                runVt({ mode: 'submit', url: r.unwrappedUrl }, out, r);
+            });
+            out.appendChild(sub);
+        }
+    }
 
     // Builds an element; text children become text nodes, so nothing is ever parsed as HTML.
     function node(tag, props, ...children) {

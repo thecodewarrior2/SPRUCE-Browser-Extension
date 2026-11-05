@@ -489,6 +489,16 @@
             </div>
 
 
+            <div class="card" id="virusTotalCard">
+                <h3>VirusTotal (Link Inspector)</h3>
+                <p class="card-intro">Optional. With your own free VirusTotal API key, the Link Inspector gets a <b>Look up on VirusTotal</b> button that shows what 70+ security vendors say about a link, which of them flag it and why. Nothing is sent until you click that button. Looking a link up sends it to VirusTotal; submitting a link for a new scan also shares it with VirusTotal's community and security partners, so the Inspector never submits one-time links (sign-in, password-reset or unsubscribe links) and looks up only their site name. The free key allows 4 lookups a minute and 500 a day, for non-commercial use. Get one by creating a free account at <a href="https://www.virustotal.com/gui/join-us" target="_blank" rel="noopener noreferrer">virustotal.com</a>, then open your profile → API key. Saving asks your browser for permission to contact www.virustotal.com.</p>
+                <div class="managed-box" id="managedVirusTotalNotice" style="display: none;"><strong>🛡️ Managed Policy Active:</strong> The VirusTotal key is set by your administrator.</div>
+                <div class="input-group" style="margin-bottom: 8px;">
+                    <input type="password" id="virusTotalKeyInput" aria-label="VirusTotal API key" placeholder="Your VirusTotal API key" autocomplete="off" spellcheck="false">
+                    <button id="saveVirusTotalBtn">Save key</button>
+                </div>
+            </div>
+
             <div class="managed-box" id="managedUnshortenerNotice" style="display: none;">
                 <strong>🛡️ Managed Policy Active:</strong> Your custom unshortener is set by your administrator.
             </div>
@@ -618,7 +628,7 @@
                     <h3>Link Inspector</h3>
                 </div>
                 <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 15px;">
-                    Paste any complex, multi-wrapped, shortened, or enterprise-rewritten URL below to watch the engine deconstruct each hop, unwrap enterprise gateways (SafeLinks, Proofpoint, SES), and inspect threat status in real time.
+                    Paste any link to see where it really goes and whether it may be malicious. Each layer of wrapping (SafeLinks, Proofpoint, SES, email-marketing trackers such as SendGrid and iContact, short links) is decoded step by step; then you see what each security service says, the red flags in the address itself with what they mean, and free services for a second opinion (VirusTotal, urlscan.io, Google Safe Browsing, Sucuri).
                 </p>
                 <div class="input-group" style="margin-bottom: 15px;">
                     <input type="text" id="inspectorInput" aria-label="Link to inspect" placeholder="Paste wrapped link (e.g., Proofpoint, SafeLinks, Amazon SES, or tracking redirect)...">
@@ -980,6 +990,7 @@
 <tr><td>A link in History says “can't work”</td><td>Its domain doesn't exist, or exists without any website address (for example test.com), so nobody can reach it. It isn't dangerous, but it won't open.</td></tr>
 <tr><td>Send is held up by “Check the links before sending”, but the link is fine</td><td>The website may have been briefly unreachable, or be reachable only inside your company network. Choose <b>Send anyway</b>. To stop checking, turn off <b>Check links before sending</b> in Settings.</td></tr>
 <tr><td>A short link is amber: "its destination couldn't be looked up"</td><td>The lookup failed and the reason is in the tooltip. Common reasons: the link is longer than unshorten.me accepts (100 characters; Google's c.gle links usually are), the service is blocked or busy, or it simply can't expand that link. A failed link is tried again after 30 minutes (temporary problems) or a day. Your organization's own lookup service (Settings → Your own services) has no length limit. At the Private and Offline levels short links aren't looked up at all.</td></tr>
+<tr><td>A site you trust is flagged as dangerous</td><td>Paste the link into the <b>Link Inspector</b>. Under <b>Who checked it</b> you see which service flagged it; if only one of several does and the address has no red flags, it is probably a false positive (or a detection the others haven't made yet). Get a second opinion from the links shown, report the false positive to the service that flagged it, and if you're sure, add the site to your Allowlist.</td></tr>
 <tr><td>A link wasn't changed</td><td>It may be allowlisted, already direct, a one-time link, or a wrapper that can't be decoded. Paste it into the <b>Link Inspector</b> to see exactly why.</td></tr>
 <tr><td>Toolbar button shows ERR</td><td>Something needs attention, usually a list that couldn't be downloaded. The extension keeps using its current list and retries the next day. Details are in the application log.</td></tr>
 <tr><td>The toolbar icon is grey</td><td>No email is open in this tab, or protection is switched off. It lights up when you open an email.</td></tr>
@@ -1374,7 +1385,7 @@ Flag field:      (leave empty: Google's replies are recognized automatically)</d
 <ul class="simple-list">
   <li>Toolbar icon in color with a count while an email is being checked, grey otherwise; the popup shows the open email's links (scanned, safe, unsafe, not verified, unscanned) and pixels.</li>
   <li>Light and dark appearance (follows the system by default).</li>
-  <li>Link Inspector: paste any link to see every decoding step and the check result.</li>
+  <li>Link Inspector: paste any link to see every decoding step, what each threat service says about it and how many agree, the red flags in the address with what each one means, and free services for a second opinion (optionally VirusTotal's results right there, with your own free API key).</li>
   <li>Help that explains every warning, and this deep dive with tables generated from the running code.</li>
 </ul>
 <h4>Accessibility</h4>

@@ -775,9 +775,9 @@ async function checkDomainSafety(urlString, customConf, settings, opts = {}) {
     const fullUrlKey = customConf && customConf.endpoint && customThreatUsesFullUrl(customConf) && !opts.oneTime;
     const key = (fullUrlKey ? urlString : hostname) + (opts.oneTime ? '\u0000one-time' : '') + (opts.sender ? '\u0000sender' : '');
 
-    const cached = domainSafetyCache.get(key);
+    const cached = !opts.fresh && domainSafetyCache.get(key);   // the Link Inspector asks afresh
     if (cached && Date.now() - cached.ts < SAFE_CACHE_MS) return cached.result;
-    if (domainSafetyInFlight.has(key)) return domainSafetyInFlight.get(key);
+    if (!opts.fresh && domainSafetyInFlight.has(key)) return domainSafetyInFlight.get(key);
 
     const pending = runDomainSafety(urlString, customConf, settings, opts)
         .then((result) => {
@@ -865,11 +865,15 @@ async function runDomainSafety(urlString, customConf, settings, opts = {}) {
     const realIp = ref.ip;
     let securityAnswered = 0;
     const flags = []; // in priority order
+    // Each service's own answer, for the Link Inspector's "Who checked it" (never used for the verdict).
+    const services = [];
+    const said = (name, status, security, reason) => services.push({ name, status, security, reason: reason || null });
 
     if (custom && custom.ok) {
         securityAnswered++;
         if (custom.blocked) flags.push({ reason: custom.reason, scanner: 'Custom Resolver' });
-    }
+        said('Custom Resolver', custom.blocked ? 'flagged' : 'clean', true, custom.blocked ? custom.reason : null);
+    } else if (custom) said('Custom Resolver', 'no answer', true);
 
     let nonexistent = false;
     if (quad9 && quad9.ok) {
@@ -878,35 +882,43 @@ async function runDomainSafety(urlString, customConf, settings, opts = {}) {
         // Any other DNS error (SERVFAIL, REFUSED…) is not an answer at all.
         if (quad9.rcode === 0) {
             securityAnswered++;
+            said('Quad9', 'clean', true);
         } else if (quad9.rcode === 3 && ref.ok && ref.status === 0) {
             securityAnswered++;
             flags.push({ reason: 'Malware or Phishing (Quad9)', scanner: 'Quad9' });
+            said('Quad9', 'flagged', true, 'Malware or Phishing (Quad9)');
         } else if (quad9.rcode === 3 && ref.ok && ref.status === 3) {
             securityAnswered++;
             nonexistent = true;
-        } else if (quad9.rcode !== 3) {
-            logWarning(`Quad9 answered with DNS error code ${quad9.rcode}, so its answer was not counted.`, 'DNS checks');
+            said('Quad9', 'clean', true, 'the domain doesn\'t exist');
+        } else {
+            if (quad9.rcode !== 3) logWarning(`Quad9 answered with DNS error code ${quad9.rcode}, so its answer was not counted.`, 'DNS checks');
+            said('Quad9', 'no answer', true);
         }
-    }
+    } else if (quad9) said('Quad9', 'no answer', true);
 
     // Control D / DNS4EU: a sinkhole address, or NXDOMAIN for a name that really exists, is a block.
     wireProviders.forEach((p, i) => {
         const r = wireResults[i];
-        if (!r || !r.ok) return;
+        if (!r || !r.ok) { said(p.name, 'no answer', true); return; }
+        let blocked = null;
         if (r.rcode === 0) {
             securityAnswered++;
-            if (r.addrs.some(a => SINKHOLE_RE.test(a))) flags.push({ reason: p.reason, scanner: p.name });
+            blocked = r.addrs.some(a => SINKHOLE_RE.test(a));
         } else if (r.rcode === 3 && ref.ok) {
             securityAnswered++;
-            if (ref.status === 0) flags.push({ reason: p.reason, scanner: p.name });
+            blocked = ref.status === 0;
         }
+        if (blocked) flags.push({ reason: p.reason, scanner: p.name });
+        said(p.name, blocked === null ? 'no answer' : blocked ? 'flagged' : 'clean', true, blocked ? p.reason : null);
     });
 
     firstRound.forEach((p, i) => {
         const r = jsonResults[i];
-        if (!r || !r.ok) return;
+        if (!r || !r.ok) { said(p.name, 'no answer', p.role === 'primary'); return; }
         if (p.role === 'primary') securityAnswered++;
         if (r.blocked) flags.push({ reason: p.reason, scanner: p.name });
+        said(p.name, r.blocked ? 'flagged' : 'clean', p.role === 'primary', r.blocked ? p.reason : null);
         // Cloudflare's filters block with 0.0.0.0, so their NXDOMAIN means the name really doesn't
         // exist; it stands in for the reference lookup when that one couldn't be made.
         if (p.role === 'primary' && r.status === 3 && !ref.ok) nonexistent = true;
@@ -922,35 +934,38 @@ async function runDomainSafety(urlString, customConf, settings, opts = {}) {
             const isKnownTracker = hostInSet(hostname, BUILTIN_TRACKER_SET);
             if (r.blocked && isKnownTracker) {
                 backupNote = 'Only the backup resolver (AdGuard) answered, and it blocks email-tracking and shortener domains like this one by design';
+                said(backup.name, 'no answer', false, 'blocks email trackers by design');
             } else {
                 securityAnswered++;
                 scanner = backup.name;
                 if (r.blocked) flags.push({ reason: backup.reason, scanner: backup.name });
+                said(backup.name, r.blocked ? 'flagged' : 'clean', true, r.blocked ? backup.reason : null);
             }
-        }
+        } else said(backup.name, 'no answer', true);
     }
 
+    const withServices = (r) => Object.assign(r, { services });
     if (flags.length > 0) {
-        return verdictResult('unsafe', { reason: flags[0].reason, scanner: flags[0].scanner, resolvedIp: realIp });
+        return withServices(verdictResult('unsafe', { reason: flags[0].reason, scanner: flags[0].scanner, resolvedIp: realIp }));
     }
     // A link that can't work is not "Safe": the domain doesn't exist, or exists without any address
     // (IPv4 or IPv6), so nobody can reach it.
     if (nonexistent || (ref.ok && ref.status === 3)) {
-        return verdictResult('unknown', { note: 'The domain doesn\'t exist, so this link can\'t work', resolvedIp: realIp });
+        return withServices(verdictResult('unknown', { note: 'The domain doesn\'t exist, so this link can\'t work', resolvedIp: realIp }));
     }
     // A sender's domain only needs to exist: many send mail without having a website.
     if (!opts.sender && ref.ok && ref.status === 0 && realIp === 'N/A') {
         let hasIpv6 = true;
         try { hasIpv6 = (await dnsHasAddress(hostname)) === 'ok'; } catch (e) { /* unknown: leave as is */ }
-        if (!hasIpv6) return verdictResult('unknown', { note: 'The domain has no website address, so this link can\'t work', resolvedIp: realIp });
+        if (!hasIpv6) return withServices(verdictResult('unknown', { note: 'The domain has no website address, so this link can\'t work', resolvedIp: realIp }));
     }
     if (securityAnswered === 0) {
         if (!backupNote) logWarning('No threat-check resolver could be reached, so links are being shown as "not verified". Check the network or firewall, or Settings → Your own services.', 'DNS checks');
-        return verdictResult('unknown', { note: backupNote || 'No threat-intelligence resolver could be reached', resolvedIp: realIp });
+        return withServices(verdictResult('unknown', { note: backupNote || 'No threat-intelligence resolver could be reached', resolvedIp: realIp }));
     }
 
     // Caching is done by checkDomainSafety (results from the backup alone are not cached).
-    return verdictResult('safe', { resolvedIp: realIp, scanner });
+    return withServices(verdictResult('safe', { resolvedIp: realIp, scanner }));
 }
 
 // Blocklist: a link whose own host OR destination is on the user's or the organization's blocklist
@@ -2966,7 +2981,9 @@ async function inspectLink(inputUrl) {
         }
         if (destAllowed) {
             return { unwrappedUrl: inputUrl, steps: [], strategyPath: '', isSafe: true, verdict: 'safe', reason: 'Allowlisted', resolvedIp: 'N/A', scanner: 'Allowlist',
-                     notes: ['This domain is on the allowlist, so scanning is skipped (as it is in Gmail).'] };
+                     notes: ['This domain is on the allowlist, so scanning is skipped (as it is in Gmail).'],
+                     redFlags: linkRedFlags(inputUrl, inputUrl, []), services: [], consensus: null, serviceInfo: THREAT_SERVICE_INFO,
+                     secondOpinion: secondOpinionLinks(inputUrl), oneTime: !!oneTime, virusTotalReady: !!S.virusTotalApiKey };
         }
         notes.push('The host is allowlisted, but it redirects to a destination that is not, so the destination is scanned.');
     }
@@ -3012,7 +3029,7 @@ async function inspectLink(inputUrl) {
         if (problem) notes.push('⚠️ Warning: ' + problem + '.');
     }
 
-    let safety = await assessSafety(inputUrl, result.unwrappedUrl, cfg);
+    let safety = await assessSafety(inputUrl, result.unwrappedUrl, cfg, { fresh: true, oneTime });
     const trackerProvider = result.unwrappedUrl === inputUrl ? emailTrackerProvider(inputUrl) : null;
     if (trackerProvider && safety.verdict !== 'unsafe') {
         safety = Object.assign({}, safety, { verdict: 'unknown', isSafe: true,
@@ -3032,7 +3049,154 @@ async function inspectLink(inputUrl) {
     result.resolvedIp = safety.resolvedIp;
     result.scanner = safety.scanner;
     result.notes = notes;
+    // Why it may be malicious: offline red flags, each service's own answer, and where to get a second opinion.
+    result.redFlags = linkRedFlags(inputUrl, result.unwrappedUrl, result.steps);
+    result.services = await inspectorServices(inputUrl, result.unwrappedUrl, cfg, oneTime);
+    result.consensus = threatConsensus(result.services.flatMap(g => g.services));
+    result.serviceInfo = THREAT_SERVICE_INFO;
+    result.secondOpinion = secondOpinionLinks(result.unwrappedUrl);
+    result.oneTime = !!oneTime;
+    result.virusTotalReady = !!S.virusTotalApiKey;
     return result;
+}
+
+// Each threat service's own answer for every host the click reaches (the destination and, when it
+// differs, the link's own host), plus the phishing lists and blocklist. Answers come from the DNS
+// checks assessSafety just made (asked afresh, never from the cache), so nothing is asked twice.
+async function inspectorServices(inputUrl, finalUrl, cfg, oneTime) {
+    const S = cfg.values;
+    const hosts = [...new Set([hostOf(finalUrl), hostOf(inputUrl)].filter(Boolean))];
+    const groups = [];
+    for (const host of hosts) {
+        const url = host === hostOf(finalUrl) ? finalUrl : inputUrl;
+        const services = [];
+        const blocked = blocklistHit([url], cfg);
+        services.push({ name: 'Blocklist', status: blocked ? 'flagged' : 'clean', security: true, reason: blocked });
+        if (S.enablePhishingFeeds) {
+            let listed = null, loaded = false;
+            try { const sets = await loadFeedSets(); loaded = !!(sets.url.size || sets.domain.size); listed = await feedHit(url); } catch (e) { /* not loaded */ }
+            for (const f of PHISH_FEEDS.filter(f => f.kind !== 'address')) {
+                services.push({ name: f.name, status: !loaded ? 'no answer' : listed === f.name ? 'flagged' : 'clean', security: true,
+                                reason: listed === f.name ? `Listed as phishing by ${f.name}` : (!loaded ? 'list not downloaded yet' : null) });
+            }
+        }
+        let dns = null;
+        // A blocklisted host is never sent to the DNS services (as in Gmail): the blocklist decides.
+        if (!blocked) { try { dns = await checkDomainSafety(url, customThreatConf(S), S, { oneTime }); } catch (e) { dns = null; } }
+        if (dns && Array.isArray(dns.services)) services.push(...dns.services);
+        else if (blocked) { /* not asked */ }
+        else if (!S.enableDnsThreatCheck) services.push({ name: 'DNS threat services', status: 'off', security: false, reason: 'turned off in Settings → Privacy level' });
+        groups.push({ host, role: url === finalUrl ? 'destination' : 'link', services });
+    }
+    return groups;
+}
+
+// Public pages where a person can look the site up themselves. Only the site name is put in these
+// links (never the full address, which may carry personal tokens); nothing is sent until clicked.
+function secondOpinionLinks(urlString) {
+    const host = hostOf(urlString);
+    if (!host) return [];
+    const reg = registrableDomain(host) || host;
+    const e = encodeURIComponent;
+    return [
+        { name: 'VirusTotal', what: '70+ antivirus and URL scanners, plus community votes', url: `https://www.virustotal.com/gui/domain/${e(reg)}` },
+        { name: 'urlscan.io', what: 'a sandbox browser\'s past visits: screenshots, redirects and verdicts', url: `https://urlscan.io/domain/${e(host)}` },
+        { name: 'Google Safe Browsing', what: 'Google\'s own verdict (what Chrome and Gmail use)', url: `https://transparencyreport.google.com/safe-browsing/search?url=${e(host)}` },
+        { name: 'Sucuri SiteCheck', what: 'scans the site for malware, injected spam and blocklisting', url: `https://sitecheck.sucuri.net/results/${e(host)}` }
+    ];
+}
+
+// ---------------------------------------------------------------------------
+// VIRUSTOTAL (Link Inspector, optional). Needs the person's own free API key (Settings → Your own
+// services) and runs only when they click. Looking up a link sends it to VirusTotal; submitting one
+// for a new scan shares it with VirusTotal's community and partners, so the Inspector never offers
+// to submit a one-time link, and offers the site name instead.
+// ---------------------------------------------------------------------------
+const VT_API = 'https://www.virustotal.com/api/v3';
+
+function vtUrlId(url) {
+    return btoa(unescape(encodeURIComponent(url))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+async function vtRequest(key, path, init = {}) {
+    let res;
+    try {
+        res = await fetchWithTimeout(VT_API + path, Object.assign({}, init, { headers: Object.assign({ 'x-apikey': key, 'accept': 'application/json' }, init.headers || {}) }), 15000);
+    } catch (e) {
+        return { error: `VirusTotal could not be reached (${errorText(e)}). If the key was just saved, open Settings → Your own services and save it again to grant access.` };
+    }
+    if (res.status === 404) return { notFound: true };
+    if (res.status === 401 || res.status === 403) return { error: 'VirusTotal refused the API key. Check it in Settings → Your own services.' };
+    if (res.status === 429) return { error: 'VirusTotal\'s free limit was reached (4 lookups a minute, 500 a day). Try again in a minute.' };
+    if (!res.ok) return { error: `VirusTotal answered HTTP ${res.status}.` };
+    try { return { data: await res.json() }; } catch (e) { return { error: 'VirusTotal\'s reply could not be read.' }; }
+}
+
+// Reduces a VirusTotal object (URL, domain or analysis) to what the Inspector shows.
+function vtSummary(attrs, kind, target) {
+    const stats = attrs.last_analysis_stats || attrs.stats || {};
+    const results = attrs.last_analysis_results || attrs.results || {};
+    const engines = Object.entries(results)
+        .filter(([, r]) => r && (r.category === 'malicious' || r.category === 'suspicious'))
+        .map(([name, r]) => ({ engine: r.engine_name || name, category: r.category, result: r.result || r.category }))
+        .slice(0, 40);
+    const when = attrs.last_analysis_date || attrs.date;
+    return {
+        kind, target,
+        stats: { malicious: stats.malicious || 0, suspicious: stats.suspicious || 0, harmless: stats.harmless || 0, undetected: stats.undetected || 0 },
+        engines,
+        categories: [...new Set(Object.values(attrs.categories || {}))].slice(0, 6),
+        reputation: typeof attrs.reputation === 'number' ? attrs.reputation : null,
+        votes: attrs.total_votes || null,
+        finalUrl: attrs.last_final_url || null,
+        title: attrs.title || null,
+        created: attrs.creation_date || null,
+        analyzed: when ? new Date(when * 1000).toISOString() : null,
+        status: attrs.status || 'completed'
+    };
+}
+
+// mode: 'lookup' (the link's existing report, else the site's), 'domain' (the site only), 'submit'
+// (a fresh scan of the link; never for one-time links), 'analysis' (a submitted scan's progress).
+async function virusTotalCheck(request) {
+    const cfg = await getConfig();
+    const key = String(cfg.values.virusTotalApiKey || '').trim();
+    if (!key) return { error: 'No VirusTotal API key is set (Settings → Your own services).' };
+    const url = String(request.url || '');
+    const host = hostOf(url);
+    if (!host && request.mode !== 'analysis') return { error: 'Not a valid web address.' };
+    const oneTime = cfg.values.enableOneTimeLinkProtection && isSingleUseToken(url);
+    const domain = registrableDomain(host || '') || host;
+    const domainReport = async () => {
+        const r = await vtRequest(key, `/domains/${encodeURIComponent(domain)}`);
+        if (r.error) return r;
+        if (r.notFound) return { error: `VirusTotal has no report for ${domain}.` };
+        return vtSummary(r.data.data.attributes || {}, 'domain', domain);
+    };
+    if (request.mode === 'analysis') {
+        const r = await vtRequest(key, `/analyses/${encodeURIComponent(String(request.id || ''))}`);
+        if (r.error || r.notFound) return r.error ? r : { error: 'The scan was not found.' };
+        return vtSummary(r.data.data.attributes || {}, 'analysis', url);
+    }
+    if (request.mode === 'domain' || oneTime) {
+        const out = await domainReport();
+        if (oneTime && !out.error) out.note = 'This looks like a one-time link, so only the site name was sent to VirusTotal, never the link itself.';
+        return out;
+    }
+    if (request.mode === 'submit') {
+        const r = await vtRequest(key, '/urls', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: 'url=' + encodeURIComponent(url) });
+        if (r.error) return r;
+        const id = r.data && r.data.data && r.data.data.id;
+        logInfo(`Submitted ${logUrl(url)} to VirusTotal for a scan.`, 'Link Inspector');
+        return id ? { submitted: true, id } : { error: 'VirusTotal did not accept the link.' };
+    }
+    const r = await vtRequest(key, `/urls/${vtUrlId(url)}`);
+    if (r.error) return r;
+    if (r.notFound) {
+        const d = await domainReport();
+        return Object.assign(d, { urlNotFound: true });
+    }
+    return vtSummary(r.data.data.attributes || {}, 'url', url);
 }
 
 // ---------------------------------------------------------------------------
@@ -3342,6 +3506,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         // Only what the Gmail tab uses (the synced shortener list can hold thousands of domains and is
         // needed only here in the background).
         getConfig().then(cfg => sendResponse({ values: cfg.values, locked: cfg.locked, allowlist: cfg.allowlist, blocklist: cfg.blocklist, policy: cfg.policy })).catch((e) => { logError(`Settings could not be loaded: ${errorText(e)}`, 'Background'); sendResponse(null); });
+        return true;
+    }
+
+    if (request.action === 'virusTotal') {
+        // Only the extension's own pages (the Link Inspector), never a webmail tab: it uses the person's key.
+        const base = chrome.runtime.getURL('');
+        const ownPage = sender && (!sender.tab || (!!base && String(sender.url || '').startsWith(base)));
+        if (!ownPage) { sendResponse({ error: 'Not allowed here.' }); return false; }
+        virusTotalCheck(request).then(sendResponse)
+            .catch((e) => { logError(`VirusTotal check failed: ${errorText(e)}`, 'Link Inspector'); sendResponse({ error: 'The check failed; see Logging → Application log.' }); });
         return true;
     }
 

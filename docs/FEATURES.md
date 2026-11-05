@@ -161,7 +161,30 @@ Settings your organization set by policy show a 🔒 and can't be changed; the r
 ## Link Inspector
 
 Paste any link, however many times it was wrapped, shortened or rewritten by a security gateway, and
-watch each step: every layer unwrapped, where it really goes, and what the threat checks found.
+watch each step: every layer unwrapped, where it really goes, and what the threat checks found. Then
+it explains **why a link may be malicious**:
+
+- **What the security services say:** how many independent services flag the site. When only one of
+  several does, it says that this can be a false positive (or a very new detection) and names the
+  service to report it to; a flag from the adult-content filter alone is called a content filter, not a
+  security finding.
+- **Who checked it:** each service's own answer (blocklist, phishing lists, Quad9, Cloudflare, Control D,
+  DNS4EU, your own resolver), asked afresh, with what a flag from that service means. When the link's
+  own host differs from its destination, both are listed.
+- **Red flags in the link:** signs found in the address itself, on the device, each with its meaning:
+  look-alike brands, a brand's name in front of someone else's domain, a hidden "user@" prefix, bare IP
+  addresses, punycode, free page and form services, public cloud storage, endings often used for abuse,
+  programs, archives and macro documents, sign-in or payment words, an email address carried in the link,
+  bounces through a trusted site's redirect, links wrapped many times, unusual ports, plain http.
+- **Get a second opinion:** VirusTotal, urlscan.io, Google Safe Browsing and Sucuri SiteCheck, opened in
+  a new tab with the site name only. With your own free VirusTotal API key (Settings → Your own services)
+  the **Look up on VirusTotal** button shows the vendors' counts, which vendors flag it and what they call
+  it, and (for a link VirusTotal has never seen) offers a fresh scan. One-time links are never submitted:
+  only their site is looked up.
+
+Decoded without any lookup, among many others: iContact (`icptrack.com`) click tracking, and SendGrid
+click tracking in its older readable format. SendGrid's current links (`upn=u001.…`) are encrypted, so
+the Inspector explains that no tool can read them offline.
 
 ## Logging
 

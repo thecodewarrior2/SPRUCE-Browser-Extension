@@ -200,6 +200,9 @@
   "managedUseUnshortenMeFallback": {
     "Value": true
   },
+  "managedVirusTotalApiKey": {
+    "Value": ""
+  },
   "managedAllowlist": {
     "Value": [
       "internal.example.com"

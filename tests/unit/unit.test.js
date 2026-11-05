@@ -1433,3 +1433,85 @@ test('[5.90-5] Offline only: stored ownership answers and DMARC policies count, 
   vm.runInContext(`__stored.set('own:amazonmusic.com|Amazon', { ts: Date.now(), bytes: ${enc({ state: 'owned', how: 'x' })} });`, Off);
   assert.equal((await vm.runInContext(`brandOwnership('amazonmusic.com', 'Amazon', ${JSON.stringify(offline)})`, Off)).state, 'unknown', 'switched off: Offline only ignores stored answers, as before');
 });
+
+// ---------------------------------------------------------------------------
+// 5.92: the Link Inspector explains why a link may be malicious; iContact and SendGrid decoders.
+// ---------------------------------------------------------------------------
+test('iContact and SendGrid click-tracking links', async () => {
+  const un = (u) => vm.runInContext(`unwrapNestedUrl(${JSON.stringify(u)}, false)`, bg);
+  const ic = 'https://click-175967.icptrack.com/icp/relay.php?r=22660662&msgid=323472&act=20D0&c=175967&pid=3140608&destination=https%3A%2F%2Ftoptransportationteams.com%2F&cf=1088&v=0646';
+  const r1 = await un(ic);
+  assert.equal(r1.unwrappedUrl, 'https://toptransportationteams.com/');
+  assert.equal(r1.steps[0].decoder, 'iContact click tracker');
+  assert.equal((await un('https://evil.example/icp/relay.php?destination=https%3A%2F%2Fx.example%2F')).steps.length, 0, 'the relay path on another host is not believed');
+  assert.equal((await un('https://click-42.brand.example/r?url=https%3A%2F%2Fdest.example%2F')).unwrappedUrl, 'https://dest.example/', 'click-<number>. hosts are redirectors too');
+  // SendGrid's own escaping: "-2B" for "+", "-2F" for "/", "-3D" for "=", then "_<signature>".
+  const sg = (s) => Buffer.from(s).toString('base64').replace(/[+/=]/g, c => '-' + c.charCodeAt(0).toString(16).toUpperCase());
+  const legacy = `https://u123.ct.sendgrid.net/wf/click?upn=${sg('https://example.com/a?b=1&c=2')}_sigABC`;
+  const r2 = await un(legacy);
+  assert.equal(r2.unwrappedUrl, 'https://example.com/a?b=1&c=2');
+  assert.equal(r2.steps[0].decoder, 'SendGrid click tracking');
+  const enc = 'https://u52931768.ct.sendgrid.net/ls/click?upn=u001.KJgh0IxlUiM1aV8LiJpBJsbPyAbUwctC-2F1fgvjQM2JJDZWfsKJzPD0R0-2Fcbrr-3D-3Dchfa_Z9M7';
+  assert.equal((await un(enc)).steps.length, 0, 'the encrypted u001 format is never guessed at');
+  assert.match(S(`describeOpaqueLink(${JSON.stringify(enc)})`), /encrypts the destination/);
+  const json = `https://u1.ct.sendgrid.net/wf/click?upn=${sg('https://a.example/","x":"y')}_s`;
+  assert.equal((await un(json)).steps.length, 0, 'readable text after the address: structured data, not decoded');
+});
+
+test('link red flags: explained, and none of the danger kind for an ordinary site', () => {
+  const flags = (u, f = u, steps = []) => S(`linkRedFlags(${JSON.stringify(u)}, ${JSON.stringify(f)}, ${JSON.stringify(steps)})`);
+  const ordinary = flags('https://nxtgennetwork.com/privacy-policy/');
+  assert.ok(!ordinary.some(f => f.level === 'danger' || f.level === 'caution'), JSON.stringify(ordinary));
+  const titles = (u) => flags(u).map(f => `${f.level}:${f.title}`).join(' | ');
+  assert.match(titles('https://user@203.0.113.9/x'), /danger:Hides its real address.*danger:Goes to a bare IP/);
+  assert.match(titles('https://paypa1.com/'), /danger:Look-alike/);
+  assert.match(titles('https://microsoft.support-case.example/'), /danger:A brand's name in front/);
+  assert.doesNotMatch(titles('https://microsoft.sharepoint.com/'), /brand's name in front/, 'the company\'s own other domain');
+  assert.match(titles('https://example.zip/a'), /info:Ending often used for abuse/);
+  assert.match(titles('https://files.example.com/Invoice.pdf.exe'), /danger:Downloads a program/);
+  assert.match(titles('https://files.example.com/report.zip'), /caution:Downloads a compressed archive/);
+  assert.match(titles('https://acme-portal.example/wp/login.php'), /caution:Asks you to sign in/);
+  assert.match(titles('https://acme.example/x#' + Buffer.from('victim@school.org').toString('base64')), /caution:Carries an email address in disguise/);
+  assert.match(titles('https://evil.ngrok-free.app/'), /caution:Free page or form service \(ngrok tunnel\)/);
+  const bounced = flags('https://www.google.com/url?q=https://evil.example/', 'https://evil.example/',
+    [{ decoder: 'Google redirect', inputUrl: 'https://www.google.com/url?q=https://evil.example/', outputUrl: 'https://evil.example/' }]);
+  assert.ok(bounced.some(f => /Bounces through a trusted site/.test(f.title)), JSON.stringify(bounced));
+  assert.ok(flags('javascript:alert(1)').some(f => f.level === 'danger' && /Runs code/.test(f.title)));
+  const all = flags('http://paypal.com.x.example:8080/login/a.exe');
+  assert.deepEqual(all.map(f => f.level), [...all.map(f => f.level)].sort((a, b) => ['danger', 'caution', 'info'].indexOf(a) - ['danger', 'caution', 'info'].indexOf(b)), 'most serious first');
+  assert.ok(all.every(f => f.detail && f.detail.length > 20), 'each flag says what it means');
+});
+
+test('threat consensus: agreement, a lone flag (possible false positive), content filters, the blocklist', () => {
+  const c = (list) => S(`threatConsensus(${JSON.stringify(list)})`);
+  const svc = (name, status, security = true) => ({ name, status, security });
+  const clean = ['Quad9', 'Control D (malware)', 'Cloudflare Security'].map(n => svc(n, 'clean'));
+  assert.equal(c([...clean.slice(1), svc('Quad9', 'flagged'), svc('Cloudflare Security', 'flagged')]).level, 'danger');
+  const one = c([svc('Quad9', 'clean'), svc('Control D (malware)', 'clean'), svc('Cloudflare Security', 'flagged')]);
+  assert.equal(one.level, 'caution'); assert.match(one.text, /Only 1 of 3 .*Cloudflare Security.*false positive/);
+  // The same service asked for two hosts counts once, with its worst answer.
+  assert.match(c([svc('Quad9', 'clean'), svc('Quad9', 'flagged'), svc('Control D (malware)', 'clean')]).text, /Only 1 of 2/);
+  assert.match(c([...clean, svc('Cloudflare Family', 'flagged', false)]).text, /content filter/);
+  assert.equal(c([...clean, { name: 'Blocklist', status: 'flagged', security: true, reason: 'On your blocklist (x.example)' }]).level, 'danger');
+  const none = c([...clean, { name: 'Blocklist', status: 'clean', security: true }]);
+  assert.equal(none.level, 'safe'); assert.match(none.text, /None of the 3 .*not that it is safe/, 'the blocklist is not counted as a service');
+});
+
+test('VirusTotal: only the extension\'s own pages may use the key; one-time links send only the site name', async () => {
+  const sent = [];
+  const b = loadBackground({ virusTotalApiKey: 'k'.repeat(64) }, { fetch: async (u, init) => {
+    sent.push({ url: String(u), key: init && init.headers && init.headers['x-apikey'] });
+    return new Response(JSON.stringify({ data: { attributes: { last_analysis_stats: { malicious: 0, harmless: 5 }, last_analysis_results: {} } } }), { status: 200 });
+  }, patchChrome: (c) => { c.runtime.getURL = (p) => 'chrome-extension://abc/' + p; } });
+  const ask = (request, sender) => new Promise(res => b.chrome.runtime.onMessage.fire(request, sender, res));
+  const fromGmail = await ask({ action: 'virusTotal', mode: 'lookup', url: 'https://x.example/' }, { tab: { id: 3 }, url: 'https://mail.google.com/mail/u/0/' });
+  assert.match(fromGmail.error, /Not allowed/);
+  assert.equal(sent.length, 0, 'nothing sent for a webmail page');
+  const own = await ask({ action: 'virusTotal', mode: 'lookup', url: 'https://x.example/page' }, { tab: { id: 4 }, url: 'chrome-extension://abc/options.html#tester' });
+  assert.equal(own.kind, 'url');
+  assert.ok(sent[0].url.startsWith('https://www.virustotal.com/api/v3/urls/') && sent[0].key === 'k'.repeat(64));
+  sent.length = 0;
+  const oneTime = await ask({ action: 'virusTotal', mode: 'submit', url: 'https://acct.example/reset-password?token=abc123' }, {});
+  assert.equal(oneTime.kind, 'domain', 'a one-time link is never submitted: the site is looked up instead');
+  assert.deepEqual(sent.map(s => s.url), ['https://www.virustotal.com/api/v3/domains/acct.example']);
+});

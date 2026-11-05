@@ -303,6 +303,7 @@ Safari has no extension policies; see [Safari](#safari) below.
 | managedRetentionDays | integer 1–365 | 30 | Automatic deletion age |
 | managedDohEndpoint | string (https) | empty | Custom threat resolver; may contain `{hostname}` or `{url}` |
 | managedDohMethod / managedDohBody / managedDohHeaders / managedDohFlagField | string | GET / empty | Request method, body template, headers (e.g. API key) and optional threat field for the custom threat resolver |
+| managedVirusTotalApiKey | string | empty | Optional VirusTotal API key for the Link Inspector's "Look up on VirusTotal" button (used only when a person clicks it). The free key allows 4 lookups a minute and 500 a day, shared by everyone, and is for non-commercial use. Hidden from users, never in backups |
 | managedUnshortenerEndpoint | string (https) | empty | Custom unshortener, tried before unshorten.me; may contain `{url}`, `{url_noscheme}`, `{hostname}` |
 | managedUnshortenerMethod / managedUnshortenerBody / managedUnshortenerHeaders / managedUnshortenerField | string | GET / empty | Request method, body template, headers and optional destination field for the custom unshortener |
 | managedUseUnshortenMeFallback | boolean | true | Try unshorten.me when the custom unshortener gives no answer |

@@ -11,6 +11,22 @@
 Short notes on each version in the browser stores. Every detail is in the
 [full changelog](../CHANGELOG.md).
 
+## 5.92
+
+Changes since 5.91.
+
+**The Link Inspector explains why a link may be dangerous**
+- It shows what each security service says about a site and how many of them agree. When only one
+  flags it, it says this may be a false alarm and which service to tell.
+- It lists the warning signs in the link itself, such as a fake brand name, a hidden address, a file
+  that runs programs or a free page-building service, with what each one means.
+- It offers free second opinions (VirusTotal, urlscan.io, Google Safe Browsing, Sucuri) in one click,
+  and with your own free VirusTotal key, VirusTotal's results right in the Inspector.
+
+**More links decoded**
+- iContact email-marketing links now show where they really go, and so do older SendGrid links.
+  Newer SendGrid links can't be read by anyone but SendGrid, and the Inspector says so.
+
 ## 5.91
 
 Changes since 5.90.

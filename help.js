@@ -93,6 +93,8 @@
              onOff(S.enableSenderIdentity && S.enableDnsThreatCheck) + lock('enableSenderIdentity')],
             ['Stand-in sender icons (Gmail)', 'The site name of a sender whose site has no icon of its own (and not its parent domain either).', 'DuckDuckGo\'s icon service (icons.duckduckgo.com)',
              onOff(S.enableSenderIdentity && S.enableDnsThreatCheck && S.enableSenderIconFallback) + lock('enableSenderIconFallback')],
+            ['VirusTotal lookup (Link Inspector)', 'Only when you click "Look up on VirusTotal": the link you inspected (for a one-time link, only its site name); when you choose "Scan this link", the link is also shared with VirusTotal\'s community and security partners.',
+             'VirusTotal (Google), with your own API key', onOff(!!S.virusTotalApiKey) + lock('virusTotalApiKey')],
             ['Sender country (Gmail)', 'The internet address of the server that delivered an email (from Gmail\'s own record, read emails only), or of the sender\'s website. Once a month at most per address.', 'country.is (open-source service; sees your IP address)',
              onOff(S.enableSenderIdentity && S.enableSenderCountry && S.enableDnsThreatCheck) + lock('enableSenderCountry')]
         ]));
@@ -192,7 +194,8 @@
             [code('senderIcon'), `Gmail → ${to}`, 'A sender site\'s icon as a data: URL, or none; fetched once and remembered.'],
             [code('updateBadge'), `Gmail → ${to}`, 'Per-tab count on the toolbar button.'],
             [code('logEvent'), `Gmail, pages → ${to}`, 'Write an application log entry (accepted only from this extension).'],
-            [code('testUnwrap'), `Options → ${to}`, 'Link Inspector: the pipeline without caching or logging, with explanations.'],
+            [code('testUnwrap'), `Options → ${to}`, 'Link Inspector: the pipeline without caching or logging, with explanations: red flags, each threat service\'s own answer (asked afresh), second-opinion links.'],
+            [code('virusTotal'), `Options → ${to}`, 'Link Inspector: look a link (or a one-time link\'s site) up on VirusTotal with the person\'s own key; accepted only from this extension\'s pages.'],
             [code('testResolver / testCustomThreat / testCustomUnshortener'), `Options → ${to}`, 'Resolver test buttons.'],
             [code('forceSync'), `Options → ${to}`, 'Settings → "Update now": run the list update immediately.'],
             [code('toggleVisuals'), 'popup → Gmail', 'Switch the visual link highlights in the open tab.'],
