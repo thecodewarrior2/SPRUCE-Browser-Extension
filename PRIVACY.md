@@ -51,6 +51,11 @@ service contacted sees your computer's IP address, as with any web request.
 | QR codes in email images (Gmail) | Nothing new: the image is fetched again from Gmail's own image proxy, which already showed it | Google |
 | List updates | Nothing about you: plain downloads of public lists (short-link services, phishing sites, scam senders, popular sites, and ICANN's list of internet endings, for those only one company may use), at most once a day or once a month | GitHub (raw.githubusercontent.com), openphish.com, phishing.army, tranco-list.eu, www.icann.org |
 
+**New and outside senders (experimental):** to tell a first email from an address, the extension
+remembers, on your computer only, a scrambled code (a hash) of each sender address it sees and when
+it first saw it, never the address itself. Logging → Senders → Clear sender data forgets them. Nothing
+is sent anywhere.
+
 **AI analysis (experimental, off by default):** the extension's own small AI model runs inside the
 extension on your computer. It reads an opened email only when you click **Ask the AI**, after email
 addresses and phone and long numbers are hidden from it. Nothing is sent anywhere, and its answers

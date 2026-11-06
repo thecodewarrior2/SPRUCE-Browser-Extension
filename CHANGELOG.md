@@ -1,5 +1,29 @@
 # Changelog
 
+## 5.94.2 — EXPERIMENT (branch `llm_testing`): weights for outside and first-time senders
+
+Not for release.
+
+- Two small weights in each email's verdict (inbox rows and opened emails), defined together in
+  `SENDER_CONTEXT_WEIGHTS` (`shared.js`), so they are easy to tune: **outside the organization** (1),
+  when the account has its own domain (not gmail.com and the like) and the sender's domain isn't it or a
+  subdomain; **first email from the address** (1.5), not for senders in the own organization. Together
+  2.5, below caution (3): they never make an email amber on their own, but tip other signs over (a
+  safety claim, 3, from a new outside sender is flagged; an antivirus footer, 2, becomes caution). Their
+  texts appear in the sender's label. Trusted senders get neither.
+- First-time: the background remembers when each sender address was first seen, as a 64-bit hash
+  (`senderHistoryKey`; `seenSenders`, at most 20,000, a year each), asked through the `senderHistory`
+  message with hashes only. An address is first-time for `FIRST_SEEN_WINDOW_MS` (a day) after it is
+  first seen, and nobody is first-time during the first 14 days (`SENDER_HISTORY_LEARNING_MS`, from
+  `seenSendersSince`), when every sender would look new. Clear sender data forgets the history and
+  starts learning again.
+- Setting `weighSenderHistory` (policy `managedWeighSenderHistory`), on by default, in Settings →
+  Senders. Not given to the AI model yet (its input would change, so it would need retraining with
+  invented rates for how often phishing comes from new senders).
+- The history's storage keys are data, not settings (`NON_CONFIG_KEYS`): otherwise each write would
+  count as a settings change and clear the remembered sender checks.
+- Tests: `tests/e2e/test-newsenders.js` and unit tests.
+
 ## 5.94.1 — EXPERIMENT (branch `llm_testing`): the extension's own AI model; self-vouching text counts toward phishing
 
 Not for release: an experiment on its own branch.

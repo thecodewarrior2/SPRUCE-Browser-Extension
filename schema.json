@@ -381,6 +381,11 @@
       "description": "Optional. A VirusTotal API key for the Link Inspector's \"Look up on VirusTotal\" button, used only when a person clicks it. The free public key allows 4 lookups a minute and 500 a day, shared by everyone using it, and VirusTotal's terms limit it to non-commercial use. Hidden from users and never included in backups.",
       "type": "string"
     },
+    "managedWeighSenderHistory": {
+      "title": "Weigh First-Time and Outside Senders (experimental)",
+      "description": "Adds small weights, which only count together with other warning signs, for an email from outside the user's own organization and for the first email from an address. Addresses are remembered on the device only as hashes. Default on.",
+      "type": "boolean"
+    },
     "managedEnableAiAnalysis": {
       "title": "AI Email Analysis (experimental)",
       "description": "Shows an \"Ask the AI\" button in opened emails: the extension's own small language model, running on the computer, gives its opinion on whether the email is phishing and which sentences made it think so. Advisory only: it never clears a warning or moves email. Off by default.",

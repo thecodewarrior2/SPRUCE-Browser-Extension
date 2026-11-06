@@ -1636,3 +1636,48 @@ test('AI analysis message: off by default, on request it answers from the bundle
   const st = await new Promise(res => aiBg.chrome.runtime.onMessage.fire({ action: 'aiStatus' }, {}, res));
   assert.ok(st.ready && st.metrics.hand_written.n >= 30, st.text);
 });
+
+test('llm_testing: outside-the-organization and first-time senders are small weights that only tip the balance', () => {
+  const k = AI(`senderHistoryKey(' Pat@School.Example ')`);
+  assert.match(k, /^[0-9a-f]{16}$/);
+  assert.equal(k, AI(`senderHistoryKey('pat@school.example')`), 'case and spaces don\'t matter');
+  assert.notEqual(k, AI(`senderHistoryKey('pat@school.example.net')`));
+  const signs = (addr, own, first) => AI(`senderContextSigns(${JSON.stringify(addr)}, ${JSON.stringify(own)}, ${first})`);
+  assert.deepEqual(signs('a@evil.example', 'school.org', false).map(x => [x.kind, x.weight]), [['outside-org', 1]]);
+  assert.deepEqual(signs('a@evil.example', 'school.org', true).map(x => [x.kind, x.weight]), [['outside-org', 1], ['first-time', 1.5]]);
+  assert.deepEqual(signs('new.teacher@school.org', 'school.org', true), [], 'a new colleague in the own organization counts for nothing');
+  assert.deepEqual(signs('x@mail.school.org', 'school.org', false), [], 'subdomains are inside');
+  assert.deepEqual(signs('a@shop.example', '', true).map(x => x.kind), ['first-time'], 'a personal account has no "outside", but first emails still count');
+  assert.match(signs('A@Evil.Example', 'school.org', true)[1].text, /first email you've received from a@evil\.example/);
+  // Combined with the email's other signs.
+  const base = { status: 'clean', reasons: [], move: false };
+  const verdict = (extra) => AI(`applyEmailSignals(${JSON.stringify(base)}, ${JSON.stringify([...signs('a@evil.example', 'school.org', true), ...extra])})`).status;
+  assert.equal(verdict([]), 'clean', 'both together are never amber on their own');
+  assert.equal(verdict([{ weight: 2, text: 'antivirus footer' }]), 'caution');
+  assert.equal(verdict([{ weight: 3, text: 'claims to be safe' }]), 'flagged');
+  assert.equal(AI(`applyEmailSignals(${JSON.stringify(base)}, ${JSON.stringify([{ weight: 3, text: 'claims to be safe' }])})`).status, 'caution', 'the same claim from a known inside sender stays amber');
+});
+
+test('llm_testing: the sender history learns for 14 days, then a new address counts as first-time for a day', async () => {
+  const day = 24 * 60 * 60 * 1000;
+  const b = loadBackground({});
+  const ask = (keys) => new Promise(res => b.chrome.runtime.onMessage.fire({ action: 'senderHistory', keys }, {}, res));
+  const k1 = vm.runInContext(`senderHistoryKey('first@evil.example')`, b), k2 = vm.runInContext(`senderHistoryKey('second@evil.example')`, b);
+  let r = await ask([k1]);
+  assert.equal(r.learning, true); assert.equal(r.firstTime[k1], false, 'while learning, nobody is first-time');
+  assert.ok(b.__store.seenSendersSince > 0);
+  b.__store.seenSendersSince = Date.now() - 15 * day;            // learning is over
+  r = await ask([k2, 'not-a-key']);
+  assert.equal(r.learning, false); assert.equal(r.firstTime[k2], true, 'a new address after learning: first-time');
+  assert.ok(!('not-a-key' in r.firstTime), 'only hashes are accepted');
+  assert.equal((await ask([k2])).firstTime[k2], true, 'still first-time later the same day');
+  // A day later the same address is known.
+  const old = Object.assign({}, b.__store.seenSenders || {});
+  vm.runInContext(`seenSenders.forget()`, b);
+  b.__store.seenSenders = Object.assign(old, { [k2]: { ts: Date.now() - 2 * day } });
+  assert.equal((await ask([k2])).firstTime[k2], false, 'known after its first day');
+});
+
+test('llm_testing: the sender history is data, not settings (writing it never clears the sender caches)', () => {
+  for (const k of ['seenSenders', 'seenSendersSince']) assert.ok(S(`NON_CONFIG_KEYS.has(${JSON.stringify(k)})`), k);
+});

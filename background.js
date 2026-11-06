@@ -22,7 +22,8 @@ function getConfig() {
 // Keys that never affect settings; changes to them don't invalidate the cache.
 const NON_CONFIG_KEYS = new Set(['errorLogs', 'recentActivity', 'resolutionHistory', 'lastSyncTime', 'listState', 'cacheSchema', 'welcomeDismissed', 'uiTheme',
     'detectedConflicts', 'ignoredConflicts', 'keptConflictFeatures', 'popularDomains', 'verifiedDomains', 'colleagueNameHashes', 'rdapBootstrap',
-    'senderDomainCache', 'geoCache', 'spamMovedThreads', 'spamRescuedThreads', 'senderMessageCache', 'senderResultCache', 'faviconCache', 'spamMoveLog', 'spamUnreadHeadersOff']);
+    'senderDomainCache', 'geoCache', 'spamMovedThreads', 'spamRescuedThreads', 'senderMessageCache', 'senderResultCache', 'faviconCache', 'spamMoveLog', 'spamUnreadHeadersOff',
+    'seenSenders', 'seenSendersSince']);   // llm_testing: the first-time-sender history is data, not settings
 function invalidateConfig() {
     configPromise = null;
     domainSafetyCache.clear();      // e.g. a resolver was switched off: don't reuse its verdicts
@@ -1328,6 +1329,31 @@ function persistentMap(key, max, ttl) {
 const senderResultCache = persistentMap('senderResultCache', 3000, SAFE_CACHE_MS);
 const senderDomainCache = persistentMap('senderDomainCache', 2000, SAFE_CACHE_MS);
 const geoCache = persistentMap('geoCache', 3000, GEO_CACHE_MS);
+// EXPERIMENT (llm_testing): when each sender address (as a hash) was first seen; a year without it
+// and it counts as new again.
+const seenSenders = persistentMap('seenSenders', 20000, 365 * 24 * 60 * 60 * 1000);
+
+// { firstTime: { key: bool }, learning } for hashed addresses (senderHistoryKey). A key not seen before
+// is remembered now. While the history is younger than SENDER_HISTORY_LEARNING_MS nothing counts as
+// first-time; clearing sender data (seenSendersSince removed) starts the learning period again.
+async function senderHistory(keys) {
+    const r = await storageGet('local', { seenSendersSince: 0 });
+    let since = Number(r.seenSendersSince) || 0;
+    if (!since) {
+        since = Date.now();
+        seenSenders.clear();
+        await chrome.storage.local.set({ seenSendersSince: since });
+    }
+    const now = Date.now(), learning = now - since < SENDER_HISTORY_LEARNING_MS;
+    const firstTime = {};
+    for (const k of (Array.isArray(keys) ? keys : []).slice(0, 100)) {
+        if (!/^[0-9a-f]{16}$/.test(String(k))) continue;
+        let v = await seenSenders.get(k);
+        if (!v) { await seenSenders.set(k, {}); v = { ts: now }; }
+        firstTime[k] = !learning && now - v.ts < FIRST_SEEN_WINDOW_MS;
+    }
+    return { firstTime, learning, learningEnds: since + SENDER_HISTORY_LEARNING_MS };
+}
 // Icons saved by versions before 5.47 (data: URLs in storage.local "faviconCache") move to the icon
 // store once, then the old copy is removed.
 let legacyIconsMoved = null;
@@ -3573,6 +3599,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         // Only what the Gmail tab uses (the synced shortener list can hold thousands of domains and is
         // needed only here in the background).
         getConfig().then(cfg => sendResponse({ values: cfg.values, locked: cfg.locked, allowlist: cfg.allowlist, blocklist: cfg.blocklist, policy: cfg.policy })).catch((e) => { logError(`Settings could not be loaded: ${errorText(e)}`, 'Background'); sendResponse(null); });
+        return true;
+    }
+
+    // EXPERIMENT (llm_testing): has this sender (hashed) been seen before?
+    if (request.action === 'senderHistory') {
+        senderHistory(request.keys).then(sendResponse).catch((e) => { logWarning(`Sender history unavailable: ${errorText(e)}`, 'Sender checks'); sendResponse(null); });
         return true;
     }
 

@@ -200,6 +200,9 @@
   "managedUseUnshortenMeFallback": {
     "Value": true
   },
+  "managedWeighSenderHistory": {
+    "Value": true
+  },
   "managedVirusTotalApiKey": {
     "Value": ""
   },

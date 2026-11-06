@@ -1126,7 +1126,8 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('spamLogSearch').addEventListener('input', debounced(renderSpamLog));
     document.getElementById('clearSenderCacheBtn').addEventListener('click', () => {
         if (!confirm('Forget the remembered sender checks, icons and countries? They are looked up again as you open Gmail.')) return;
-        iconStore.clear().catch(() => {}).then(() => chrome.storage.local.remove(['senderResultCache', 'faviconCache', 'geoCache', 'senderDomainCache', 'senderMessageCache'], () => {
+        // seenSendersSince too: the first-time-sender history then learns again for 14 days (llm_testing).
+        iconStore.clear().catch(() => {}).then(() => chrome.storage.local.remove(['senderResultCache', 'faviconCache', 'geoCache', 'senderDomainCache', 'senderMessageCache', 'seenSenders', 'seenSendersSince'], () => {
             reportToLog('info', 'Options page', 'Sender data (checks, icons, countries) cleared by the user.');
             renderSenderLog();
         }));
