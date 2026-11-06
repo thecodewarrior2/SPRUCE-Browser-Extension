@@ -149,6 +149,24 @@ async function readCachedResult(url) {
     return entry;
 }
 
+// The settings a saved link verdict depends on. Each saved result carries a fingerprint of them
+// (verdictFingerprint); a result saved under other settings is ignored and the link checked again, so
+// a resolver switched off, another privacy level or a new custom threat service takes effect at once.
+const LINK_VERDICT_SETTINGS = ['enablePhishingFeeds', 'enableThirdPartyResolution', 'enableDnsThreatCheck', 'enableRemoteListSync',
+    'dnsQuad9', 'dnsCloudflareSecurity', 'dnsCloudflareFamily', 'dnsControlD', 'dnsAdGuard',
+    'customDohEndpoint', 'customDohMethod', 'customDohBody', 'customDohHeaders', 'customDohFlagField',
+    'customUnshortenerEndpoint', 'customUnshortenerMethod', 'customUnshortenerBody', 'customUnshortenerHeaders', 'customUnshortenerField', 'useUnshortenMeFallback',
+    'enableOneTimeLinkProtection', 'enableMismatchWarnings', 'enableHiddenLinkProtection', 'enableTrackerReveal'];
+let verdictFpMemo = { values: null, fp: '' };
+function verdictFingerprint(S) {
+    if (verdictFpMemo.values === S) return verdictFpMemo.fp;
+    const text = JSON.stringify([CACHE_SCHEMA, LINK_VERDICT_SETTINGS.map(k => (S && S[k] !== undefined ? S[k] : null))]);
+    let a = 0x811c9dc5, b = 0x01000193 ^ 0x5bd1e995;
+    for (let i = 0; i < text.length; i++) { const c = text.charCodeAt(i); a = Math.imul(a ^ c, 0x01000193) >>> 0; b = Math.imul(b ^ c, 0x01000193) >>> 0; }
+    verdictFpMemo = { values: S, fp: a.toString(16).padStart(8, '0') + b.toString(16).padStart(8, '0') };
+    return verdictFpMemo.fp;
+}
+
 // Queues a link result for the cache; written with the next batch.
 function cacheResult(url, entry) {
     cacheBuffer[url] = entry;
@@ -636,10 +654,91 @@ function cleanTrackingParams(urlString) {
     }
 }
 
-function fetchWithTimeout(url, options = {}, ms = 6000) {
+// Every request to an outside service goes through here. Per service (the address's host):
+//   - at most SERVICE_PARALLEL requests at once (the default, or less for services with strict free
+//     limits); the others wait their turn, within their own time limit. Opening a large inbox can't
+//     burst hundreds of lookups at one service.
+//   - after "too many requests" (429), or 3 server errors (5xx) in a row, the service is left alone:
+//     its Retry-After when it gives one (at most 15 minutes), otherwise 2 s doubling up to 5 minutes,
+//     with random jitter so tabs don't all come back at once. Meanwhile requests to it fail at once
+//     (ServiceBusyError), so the caller moves on: another resolver, or "couldn't be checked", which is
+//     never taken for safe. One answer that isn't an error ends the back-off.
+// The state lives in memory: when the background sleeps it starts afresh, which is fine.
+const SERVICE_PARALLEL_DEFAULT = 6;
+const SERVICE_PARALLEL = { 'unshorten.me': 2, 'www.virustotal.com': 1, 'api.country.is': 2 };
+const SERVICE_BACKOFF = { firstMs: 2000, maxMs: 5 * 60 * 1000, retryAfterMaxMs: 15 * 60 * 1000 };
+const serviceStates = new Map();       // host → { running, waiting: [], failures, until }
+class ServiceBusyError extends Error {
+    constructor(host, until) { super(`${host} asked to be left alone for a while (until ${new Date(until).toLocaleTimeString()})`); this.name = 'ServiceBusyError'; this.until = until; }
+}
+function serviceState(host) {
+    let st = serviceStates.get(host);
+    if (!st) {
+        if (serviceStates.size >= 500) serviceStates.delete(serviceStates.keys().next().value);
+        st = { running: 0, waiting: [], failures: 0, until: 0 };
+        serviceStates.set(host, st);
+    }
+    return st;
+}
+function serviceParallel(host) {
+    if (SERVICE_PARALLEL[host]) return SERVICE_PARALLEL[host];
+    return /(^|\.)rdap\.|\brdap\b/.test(host) ? 2 : SERVICE_PARALLEL_DEFAULT;    // registries answer slowly and limit hard
+}
+// How long to leave a service alone after an error answer (ms), from its Retry-After or the back-off.
+function serviceBackoffMs(st, res) {
+    let after = NaN;
+    const h = res && res.headers && typeof res.headers.get === 'function' ? res.headers.get('retry-after') : null;
+    if (h) after = /^\s*\d+\s*$/.test(h) ? Number(h) * 1000 : Date.parse(h) - Date.now();
+    if (Number.isFinite(after) && after > 0) return Math.min(after, SERVICE_BACKOFF.retryAfterMaxMs);
+    const base = Math.min(SERVICE_BACKOFF.maxMs, SERVICE_BACKOFF.firstMs * 2 ** Math.min(20, Math.max(0, st.failures - 1)));
+    return Math.round(base * (0.75 + Math.random() * 0.5));
+}
+async function fetchWithTimeout(url, options = {}, ms = 6000) {
+    let host = '';
+    try { const u = new URL(url); if (u.protocol === 'https:' || u.protocol === 'http:') host = u.host.toLowerCase(); } catch (e) { /* passed on as it is */ }
+    if (!host) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), ms);
+        return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(timer));
+    }
+    const st = serviceState(host);
+    if (st.until > Date.now()) throw new ServiceBusyError(host, st.until);
+    const t0 = Date.now();
+    if (st.running >= serviceParallel(host)) {
+        // Wait for a free slot, within this request's own time limit.
+        await new Promise((resolve, reject) => {
+            const waiter = { resolve, timer: setTimeout(() => { st.waiting = st.waiting.filter(w => w !== waiter); const e = new Error(`timed out waiting for ${host}`); e.name = 'AbortError'; reject(e); }, ms) };
+            st.waiting.push(waiter);
+        });
+        if (st.until > Date.now()) { serviceRelease(st); throw new ServiceBusyError(host, st.until); }
+    } else st.running++;
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), ms);
-    return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(timer));
+    const timer = setTimeout(() => controller.abort(), Math.max(1, ms - (Date.now() - t0)));
+    try {
+        const res = await fetch(url, { ...options, signal: controller.signal });
+        const status = res && typeof res.status === 'number' ? res.status : 200;
+        if (status === 429 || (status >= 500 && status <= 599)) {
+            // "Too many requests" at once; server errors only after 3 in a row (one can be about a
+            // single request, such as an icon service failing for one site).
+            st.failures++;
+            if (status === 429 || st.failures >= 3) st.until = Date.now() + serviceBackoffMs(st, res);
+            else return res;
+            if ((status === 429 && st.failures === 1) || st.failures === 3 || st.failures % 10 === 0) logWarning(`${host} answered HTTP ${status}; it is left alone until ${new Date(st.until).toLocaleTimeString()} (try ${st.failures}).`, 'Network');
+        } else if (status < 400 || status === 404) {
+            st.failures = 0;
+            st.until = 0;
+        }
+        return res;
+    } finally {
+        clearTimeout(timer);
+        serviceRelease(st);
+    }
+}
+// Hands the slot to the next request waiting for this service, or frees it.
+function serviceRelease(st) {
+    const next = st.waiting.shift();
+    if (next) { clearTimeout(next.timer); next.resolve(); }
+    else st.running = Math.max(0, st.running - 1);
 }
 
 // ---------------------------------------------------------------------------
@@ -1113,6 +1212,8 @@ async function queryUnshortenMe(shortUrl) {
         logInfo(`unshorten.me could not expand a link on ${logUrl(shortUrl)}${data.error ? ` (${String(data.error).slice(0, 120)})` : ''}.`, 'unshorten.me');
         return { failed: true, permanent: true, why: 'unshorten.me could not expand it' };
     } catch (e) {
+        // Backing off after "too many requests": not logged per link (the back-off itself is logged once).
+        if (e && e.name === 'ServiceBusyError') return { failed: true, permanent: false, until: e.until, why: 'unshorten.me asked to slow down, so it will be tried again shortly' };
         logWarning(`unshorten.me could not be reached (${errorText(e)}).`, 'unshorten.me');
         return { failed: true, permanent: false, why: 'unshorten.me could not be reached' };
     }
@@ -1125,9 +1226,10 @@ const FAILED_LOOKUP_TTL = { temporary: 30 * 60 * 1000, permanent: 24 * 60 * 60 *
 const FAILED_LOOKUP_MAX = 500;
 const failedLookups = new Map();     // short URL → { until, why }
 
-function rememberFailedLookup(shortUrl, why, permanent) {
+// until: a service's own back-off end, when that is the reason (tried again as soon as it's over).
+function rememberFailedLookup(shortUrl, why, permanent, until = 0) {
     if (failedLookups.size >= FAILED_LOOKUP_MAX) failedLookups.delete(failedLookups.keys().next().value);
-    failedLookups.set(shortUrl, { until: Date.now() + (permanent ? FAILED_LOOKUP_TTL.permanent : FAILED_LOOKUP_TTL.temporary), why });
+    failedLookups.set(shortUrl, { until: until || Date.now() + (permanent ? FAILED_LOOKUP_TTL.permanent : FAILED_LOOKUP_TTL.temporary), why });
 }
 
 // Tries each service in lookupChain() until one returns a destination.
@@ -1135,7 +1237,7 @@ function rememberFailedLookup(shortUrl, why, permanent) {
 async function lookupShortLink(shortUrl, cfg) {
     const known = failedLookups.get(shortUrl);
     if (known && known.until > Date.now()) return { url: null, why: known.why };     // already tried; not logged again
-    let why = 'no lookup service could tell', permanent = true;
+    let why = 'no lookup service could tell', permanent = true, busyUntil = 0;
     for (const step of lookupChain(cfg.values)) {
         if (step.id === 'custom') {
             const conf = customUnshortenerConf(cfg.values);
@@ -1148,10 +1250,11 @@ async function lookupShortLink(shortUrl, cfg) {
         } else {
             const r = await queryUnshortenMe(shortUrl);
             if (typeof r === 'string') return { url: r, via: step.label };
-            why = r.why; permanent = permanent && r.permanent;
+            why = r.why; permanent = permanent && r.permanent; busyUntil = r.until || 0;
         }
     }
-    rememberFailedLookup(shortUrl, why, permanent);
+    rememberFailedLookup(shortUrl, why, permanent, busyUntil);
+    if (busyUntil) return { url: null, why };
     logWarning(`Could not find where a short link on ${logUrl(shortUrl)} goes (${why}); it is marked "Caution: destination unknown". Tip: your organization's own lookup service has no such limits (Help → Limitations).`, 'Link analysis');
     return { url: null, why };
 }
@@ -2089,6 +2192,28 @@ async function domainAgeDays(reg) {
     return v && v.created ? Math.floor((Date.now() - v.created) / 86400000) : null;
 }
 
+// The ages of an opened email's link domains (linkAgeSignals in content.js): at most 3, never popular,
+// built-in or learned (DMARC-verified) domains, nor personal mail services, and only with network
+// checks on. Each registry is asked once a month per domain (domainRegistration); an answer slower
+// than LINK_AGE_WAIT_MS is left out (unknown), so a slow registry never holds anything up for long.
+const LINK_AGE_WAIT_MS = 4000;
+async function linkDomainAges(domains) {
+    const cfg = await getConfig();
+    if (!cfg.values.enableDnsThreatCheck) return {};
+    const idx = await loadLookalikeIndex().catch(() => null);
+    const list = [...new Set((domains || []).filter(d => typeof d === 'string').map(d => registrableDomain(normalizeDomain(d))))]
+        .filter(d => SENDER_DOMAIN_RE.test(d) && !isPersonalMailDomain(d) && !(idx && idx.kind.has(d))).slice(0, 3);
+    const out = {};
+    await Promise.all(list.map(async (d) => {
+        let timer = null;
+        const late = new Promise(r => { timer = setTimeout(() => r(null), LINK_AGE_WAIT_MS); });
+        const days = await Promise.race([domainAgeDays(d).catch(() => null), late]);
+        clearTimeout(timer);
+        if (typeof days === 'number') out[d] = days;
+    }));
+    return out;
+}
+
 // ---------------------------------------------------------------------------
 // Does a domain belong to the brand a sender's name claims (brandOwnership)? Asked only once a name
 // claims a brand its domain isn't known to be (nameAddressSigns), or a domain's pattern imitates a
@@ -2696,6 +2821,7 @@ chrome.tabs.onRemoved.addListener((tabId) => tabFrames.delete(tabId));
 const SCANNER_OFFSCREEN = !!(chrome.offscreen && chrome.offscreen.createDocument);
 const SCANNER_IDLE_MS = 60 * 1000;
 const SCANNER_PARALLEL = 2;
+const SCAN_JOB_LIMIT_MS = 30 * 1000;     // see scanForQr; the scanner's own limit is 20 s
 const QR_RESULT_CACHE_MAX = 300;
 let scannerReady = null, scannerIdleTimer = null, scansRunning = 0;
 let scannerClosing = null;   // set while the idle teardown below is under way
@@ -2742,11 +2868,24 @@ async function scanForQr(req) {
     try {
         const job = { url: req.url, b64: req.b64, mime: req.mime || '' };
         let res;
-        if (SCANNER_OFFSCREEN) {
-            await ensureScanner();
-            res = await chrome.runtime.sendMessage(Object.assign({ target: 'scanner' }, job));
-        } else res = await (await localScanner)(job);
+        // The scanner stops a slow PDF itself (20 s); this is the backstop when the scanner page doesn't
+        // answer at all: in Chrome its offscreen page is closed (and made afresh for the next scan).
+        let limit = null;
+        const tooLong = new Promise((resolve, reject) => { limit = setTimeout(() => reject(new Error('the scan took too long')), SCAN_JOB_LIMIT_MS); });
+        try {
+            if (SCANNER_OFFSCREEN) {
+                await ensureScanner();
+                res = await Promise.race([chrome.runtime.sendMessage(Object.assign({ target: 'scanner' }, job)), tooLong]);
+            } else res = await Promise.race([(async () => (await localScanner)(job))(), tooLong]);
+        } catch (e) {
+            if (SCANNER_OFFSCREEN && /took too long/.test(errorText(e))) {
+                scannerReady = null;
+                scannerClosing = (async () => { try { await chrome.offscreen.closeDocument(); } catch (x) { /* already closed */ } })().finally(() => { scannerClosing = null; });
+            }
+            throw e;
+        } finally { clearTimeout(limit); }
         if (!res || !res.ok) throw new Error(res && res.error ? res.error : 'no answer from the scanner');
+        if (res.timedOut) logWarning(`A PDF took too long to scan; ${res.pagesScanned} of its ${res.pagesTotal} page(s) were checked.`, 'QR scanning');
         if (key) {
             if (qrResults.size >= QR_RESULT_CACHE_MAX) qrResults.delete(qrResults.keys().next().value);
             qrResults.set(key, res);
@@ -2853,14 +2992,18 @@ async function resolveLink(shortUrl, linkText, opts = {}) {
         preUnwrapped = un;
     }
 
-    // --- CACHE (ordinary links only; never for a reveal; the blocklist is re-applied) ---
+    // --- CACHE (ordinary links only; never for a reveal) ---
+    // Only a result saved under the current settings (fp) counts. The blocklist and the phishing lists
+    // are checked again on every use: a site listed after the result was saved is caught.
     if (!reveal && !oneTime && S.enableResultCache) {
         const c = await readCachedResult(shortUrl);
-        if (c && typeof c.finalUrl === 'string' && /^https?:\/\//i.test(c.finalUrl)) {
+        if (c && typeof c.finalUrl === 'string' && /^https?:\/\//i.test(c.finalUrl) && c.fp === verdictFingerprint(S)) {
             const blocked = blocklistHit([c.finalUrl], cfg);
             if (blocked) {
                 return { finalUrl: c.finalUrl, isSafe: false, verdict: 'unsafe', reason: blocked, resolvedIp: c.resolvedIp || 'N/A', isAllowlisted: false, isBlocklisted: true };
             }
+            const listed = c.isSafe && S.enablePhishingFeeds ? ((await feedHit(c.finalUrl)) || (c.finalUrl !== shortUrl ? await feedHit(shortUrl) : null)) : null;
+            if (listed) return { finalUrl: c.finalUrl, isSafe: false, verdict: 'unsafe', reason: `Listed as phishing by ${listed}`, resolvedIp: c.resolvedIp || 'N/A', isAllowlisted: false };
             return { finalUrl: c.finalUrl, isSafe: !!c.isSafe, verdict: c.isSafe ? 'safe' : 'unsafe', reason: c.reason, resolvedIp: c.resolvedIp || 'N/A', isAllowlisted: false };
         }
     }
@@ -2964,7 +3107,8 @@ async function resolveLink(shortUrl, linkText, opts = {}) {
             reason: safety.reason || 'Clean',
             resolvedIp: safety.resolvedIp,
             cachedDate: new Date().toLocaleString(),
-            cachedTimestamp: Date.now()
+            cachedTimestamp: Date.now(),
+            fp: verdictFingerprint(S)          // the settings it was worked out under
         });
     }
 
@@ -3094,9 +3238,42 @@ async function inspectLink(inputUrl) {
 // redirects the way a click would, without cookies, without loading the page (HEAD) and without a
 // referrer, and reports only where it ended. It registers a click with the sender's tracker, which the
 // button says. Needs the optional access to all websites (asked for by the click itself).
+// A host in the person's own network: a private, loopback or link-local address, a one-word name
+// ("intranet") or an internal ending (.local, .internal, .lan…). Following a link there would make the
+// extension knock on a device inside the network (a router, a printer, a school server).
+const INTERNAL_SUFFIX_RE = /(^|\.)(localhost|local|localdomain|internal|intranet|lan|home|corp|private|home\.arpa)$/;
+function internalHost(host) {
+    const h = String(host || '').toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
+    if (!h) return true;
+    if (/^\d{1,3}(\.\d{1,3}){3}$/.test(h) || h.includes(':')) return !isPublicIp(h);
+    return !h.includes('.') || INTERNAL_SUFFIX_RE.test(h);
+}
+// Before following: the name must be on the public internet and lead to public addresses (asked of
+// public DNS when network checks are on). A name public DNS doesn't know can still reach a school or
+// company server through the network's own DNS, so it isn't followed either. If public DNS can't be
+// asked, only the name itself is judged. Returns why not, or ''.
+async function internalDestination(url) {
+    const u = parseUrl(url);
+    if (!u) return 'it is not a valid address';
+    if (internalHost(u.hostname)) return 'it points into a private network (such as a router, printer or school server), which is never contacted';
+    if (/^\d{1,3}(\.\d{1,3}){3}$/.test(u.hostname) || u.hostname.includes(':')) return '';
+    const cfg = await getConfig();
+    if (!cfg.values.enableDnsThreatCheck) return '';
+    let answers = null;
+    try {
+        const [a, aaaa] = await Promise.all([dnsQuery(u.hostname, 'A'), dnsQuery(u.hostname, 'AAAA')]);
+        answers = [...a, ...aaaa].filter(r => r.type === 1 || r.type === 28).map(r => String(r.data || ''));
+    } catch (e) { return ''; }
+    if (!answers.length) return 'its site isn\'t on the public internet (it may be an internal server), so it is never contacted';
+    if (answers.some(ip => !isPublicIp(ip))) return 'its site leads into a private network, which is never contacted';
+    return '';
+}
+
 async function followLink(url) {
     if (!/^https:\/\//i.test(String(url || ''))) return { error: 'Only https:// links can be followed.' };
     if (openPixelRule(url)) return { error: 'This is an open-tracking pixel, not a link: it leads nowhere.' };
+    const inside = await internalDestination(url);
+    if (inside) return { error: `This link isn't followed: ${inside}.` };
     const init = { method: 'HEAD', redirect: 'follow', credentials: 'omit', cache: 'no-store', referrerPolicy: 'no-referrer' };
     let res;
     try {
@@ -3113,6 +3290,13 @@ async function followLink(url) {
         } catch (e) { return { error: 'The link could not be followed: the site refused the request.' }; }
     }
     const finalUrl = res.url || '';
+    // A redirect into the network itself can only be seen once it has happened (browsers hide redirect
+    // steps from extensions); it is reported, and the address isn't shown as a destination to open.
+    const endHost = (parseUrl(finalUrl) || {}).hostname;
+    if (finalUrl && endHost && internalHost(endHost)) {
+        logWarning(`Following ${logUrl(url)} ended at an address inside a private network (${endHost}).`, 'Link Inspector');
+        return { error: 'This link redirected into a private network (such as a router or school server). Treat it as dangerous: genuine links don\'t do that.' };
+    }
     logInfo(`Followed ${logUrl(url)} at the person's request; it ended at ${logUrl(finalUrl)}.`, 'Link Inspector');
     if (!finalUrl || finalUrl === url) return { error: `The link answered (HTTP ${res.status}) without redirecting anywhere, or only by a script in its page, which isn't run here.` };
     return { finalUrl, status: res.status };
@@ -3385,23 +3569,106 @@ async function checkOutgoingLinks(links) {
 // ---------------------------------------------------------------------------
 // MESSAGE HANDLERS
 // ---------------------------------------------------------------------------
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+// ---------------------------------------------------------------------------
+// MESSAGES. Every message the background answers is listed twice: in MESSAGE_RULES (who may send it and
+// how big its fields may be) and in MESSAGE_HANDLERS (what it does). The listener answers only actions
+// in both (a test checks the two lists match), so a new action can't be added without saying who may
+// send it.
+//   from 'page': only the extension's own pages (Settings, Link Inspector, popup): actions that use the
+//                person's own keys, contact services they configured, or change lists. A webmail tab's
+//                content script is refused, so a page that somehow steered it couldn't use them.
+//   from 'any':  also the webmail tabs' content script.
+// Only this extension can send messages at all (no externally_connectable, no onMessageExternal); the
+// sender id is still checked. Size caps refuse absurd payloads before any work; the handlers still trim
+// and check what they use. Actions not listed here are left alone: other listeners (the QR scanner's
+// offscreen page) answer their own messages.
+// ---------------------------------------------------------------------------
+const MSG_STR = (max) => (v) => v === undefined || v === null || (typeof v === 'string' && v.length <= max);
+const MSG_ARR = (max) => (v) => v === undefined || v === null || (Array.isArray(v) && v.length <= max);
+const MSG_NUM = (v) => v === undefined || v === null || (typeof v === 'number' && Number.isFinite(v));
+const MSG_OBJ = (maxJson) => (v) => {
+    if (v === undefined || v === null) return true;
+    if (typeof v !== 'object' || Array.isArray(v)) return false;
+    try { return JSON.stringify(v).length <= maxJson; } catch (e) { return false; }
+};
+// Caps are far above anything real (the handlers trim what they use); they only stop absurd payloads.
+const MSG_URL = MSG_STR(65536);
+const NOT_ALLOWED = 'Not allowed here.';
+const MESSAGE_RULES = Object.freeze({
+    decodeQrMatrix:        { from: 'any',  refuse: null,  fields: { grid: (v) => MSG_ARR(400)(v) && (!v || v.every(r => (typeof r === 'string' || Array.isArray(r)) && r.length <= 400)) } },
+    checkOutgoingLinks:    { from: 'any',  refuse: [],    fields: { links: MSG_ARR(20000) } },
+    unwrapLinksOffline:    { from: 'any',  refuse: null,  fields: { urls: MSG_ARR(20000) } },
+    getCompanyEndings:     { from: 'any',  refuse: null },
+    brandOwnership:        { from: 'any',  refuse: null,  fields: { domain: MSG_STR(1000), brand: MSG_STR(1000) } },
+    checkSenders:          { from: 'any',  refuse: [],    fields: { senders: MSG_ARR(20000), ownDomain: MSG_STR(1000) } },
+    senderCountry:         { from: 'any',  refuse: null,  fields: { ip: MSG_STR(64) } },
+    senderIcon:            { from: 'any',  refuse: '',    fields: { site: MSG_STR(253), address: MSG_STR(1000), domain: MSG_STR(1000) } },
+    senderAvatar:          { from: 'any',  refuse: 'refused', fields: { address: MSG_STR(1000), url: MSG_STR(70000), domain: MSG_STR(1000), kind: MSG_STR(20) } },
+    senderVerified:        { from: 'any',  refuse: false, fields: { domain: MSG_STR(1000) } },
+    learnColleagueNames:   { from: 'any',  refuse: 0,     fields: { hashes: MSG_ARR(20000) } },
+    getColleagueNames:     { from: 'any',  refuse: [] },
+    reportConflicts:       { from: 'any',  refuse: [],    fields: { conflicts: MSG_ARR(50), site: MSG_STR(200) } },
+    ignoreConflict:        { from: 'any',  refuse: false, fields: { key: MSG_STR(200) } },
+    openConflicts:         { from: 'any',  refuse: false },
+    forgetSpamMoves:       { from: 'any',  refuse: false, fields: { threads: MSG_ARR(20000) } },
+    recordSpamMoves:       { from: 'any',  refuse: false, fields: { moves: MSG_ARR(20000), log: (v) => v === false || MSG_STR(20)(v) } },   // log: false = not logged
+    scanQr:                { from: 'any',  refuse: { ok: false, error: 'refused' }, fields: { url: MSG_URL, b64: MSG_STR(14 * 1024 * 1024), mime: MSG_STR(200), name: MSG_STR(1000) } },
+    logEvent:              { from: 'any',  refuse: { status: 'ignored' }, fields: { level: MSG_STR(100), source: MSG_STR(1000), message: MSG_STR(1000000) } },
+    getSettings:           { from: 'any',  refuse: null },
+    senderHistory:         { from: 'any',  refuse: null,  fields: { keys: MSG_ARR(20000) } },
+    aiAnalyze:             { from: 'any',  refuse: { error: NOT_ALLOWED }, fields: { facts: MSG_OBJ(4000000) } },
+    logPixel:              { from: 'any',  refuse: { status: 'ignored' }, fields: { url: MSG_URL } },
+    resolveUrl:            { from: 'any',  refuse: null,  fields: { url: MSG_URL, linkText: MSG_STR(1000000) } },
+    updateBadge:           { from: 'any',  refuse: { status: 'ignored' }, fields: { links: MSG_OBJ(10000), moveWait: MSG_OBJ(10000), linkCount: MSG_NUM, pixelCount: MSG_NUM } },
+    // The extension's own pages only.
+    aiStatus:              { from: 'page', refuse: null },
+    followLink:            { from: 'page', refuse: { error: NOT_ALLOWED }, fields: { url: MSG_URL } },
+    virusTotal:            { from: 'page', refuse: { error: NOT_ALLOWED }, fields: { url: MSG_URL, mode: MSG_STR(20) } },
+    testUnwrap:            { from: 'page', refuse: null,  fields: { url: MSG_URL } },
+    forceSync:             { from: 'page', refuse: { status: NOT_ALLOWED } },
+    syncPhishFeeds:        { from: 'page', refuse: { failures: 1 } },
+    testCustomThreat:      { from: 'page', refuse: { success: false, message: NOT_ALLOWED }, fields: { conf: MSG_OBJ(50000) } },
+    testCustomUnshortener: { from: 'page', refuse: { success: false, message: NOT_ALLOWED }, fields: { conf: MSG_OBJ(50000), testUrl: MSG_URL } },
+    testResolver:          { from: 'page', refuse: { success: false, message: NOT_ALLOWED }, fields: { url: MSG_STR(2048) } },
+    getTabState:           { from: 'page', refuse: null,  fields: { tabId: MSG_NUM } },
+    // Webmail again (kept apart: added in 5.94.6).
+    linkDomainAges:        { from: 'any',  refuse: {},    fields: { domains: MSG_ARR(10) } }
+});
+// Every message carries the mailbox it came from (accountLabel); its own size is capped too.
+const MESSAGE_COMMON_FIELDS = { mailbox: MSG_OBJ(2000) };
+
+// The extension's own page (no tab, as the popup and the offscreen page; or a tab showing one of its
+// pages), as opposed to a content script in a webmail tab.
+function fromOwnPage(sender) {
+    const base = chrome.runtime.getURL('');
+    return !!sender && (!sender.tab || (!!base && String(sender.url || '').startsWith(base)));
+}
+
+// null when the message may be handled; otherwise why not (for the log and the tests).
+function messageRefusal(request, sender) {
+    const rule = MESSAGE_RULES[request.action];
+    if (!rule) return 'unknown action';
+    if (!sender || (sender.id !== undefined && sender.id !== chrome.runtime.id)) return 'not from this extension';
+    if (rule.from === 'page' && !fromOwnPage(sender)) return 'only the extension\'s own pages may send it';
+    for (const [k, ok] of Object.entries(Object.assign({}, MESSAGE_COMMON_FIELDS, rule.fields || {}))) if (!ok(request[k])) return `field "${k}" is not allowed (wrong type or too big)`;
+    return null;
+}
+
+const MESSAGE_HANDLERS = {
     // A QR code drawn with an HTML table or text characters: the Gmail tab sends the module grid.
-    if (request.action === 'decodeQrMatrix') {
-        if (!sender || sender.id !== chrome.runtime.id || !Array.isArray(request.grid)) { sendResponse(null); return false; }
+    decodeQrMatrix(request, sender, sendResponse) {
+        if (!Array.isArray(request.grid)) { sendResponse(null); return false; }
         sendResponse(decodeDrawnQr(request.grid));
         return false;
-    }
-
-    if (request.action === 'checkOutgoingLinks') {
-        if (!sender || sender.id !== chrome.runtime.id || !Array.isArray(request.links)) { sendResponse([]); return false; }
+    },
+    checkOutgoingLinks(request, sender, sendResponse) {
+        if (!Array.isArray(request.links)) { sendResponse([]); return false; }
         checkOutgoingLinks(request.links.filter(l => l && typeof l.url === 'string')).then(sendResponse).catch(() => sendResponse(null));
         return true;
-    }
-
+    },
     // Phishing-simulation check by link domains: the email's links, unwrapped offline (no network).
-    if (request.action === 'unwrapLinksOffline') {
-        if (!sender || sender.id !== chrome.runtime.id || !Array.isArray(request.urls)) { sendResponse(null); return false; }
+    unwrapLinksOffline(request, sender, sendResponse) {
+        if (!Array.isArray(request.urls)) { sendResponse(null); return false; }
         getConfig().then(async (cfg) => {
             const ctx = decoderContext(cfg);
             const out = [];
@@ -3412,41 +3679,37 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             sendResponse(out);
         }).catch(() => sendResponse(null));
         return true;
-    }
-
+    },
     // [5.90-2] The single-company endings, for the link checks in the webmail page.
-    if (request.action === 'getCompanyEndings') {
-        if (!sender || sender.id !== chrome.runtime.id) { sendResponse(null); return false; }
+    getCompanyEndings(request, sender, sendResponse) {
         ensureCompanyEndings().then(d => sendResponse(d ? { operators: d.operators, endings: d.endings } : null)).catch(() => sendResponse(null));
         return true;
-    }
-
+    },
     // Sender checks for the inbox list and opened emails (Gmail).
     // Whether an address's domain is the brand's its sender name claims (public records; see brandOwnership).
-    if (request.action === 'brandOwnership') {
-        if (!sender || sender.id !== chrome.runtime.id || typeof request.domain !== 'string' || typeof request.brand !== 'string') { sendResponse(null); return false; }
+    brandOwnership(request, sender, sendResponse) {
+        if (typeof request.domain !== 'string' || typeof request.brand !== 'string') { sendResponse(null); return false; }
         getConfig().then(cfg => cfg.values.enableLookalikeCheck ? companyDomainEvidence(request.domain.slice(0, 253), request.brand.slice(0, 40), cfg.values, accountLabel(request)) : { state: 'unknown', how: '' })
             .then(v => sendResponse({ state: v.state, how: v.how || '' }))
             .catch((e) => { logWarning(`Checking who owns a sender's domain failed (${errorText(e)}).`, 'Sender checks', accountLabel(request)); sendResponse(null); });
         return true;
-    }
-
-    if (request.action === 'checkSenders') {
-        if (!sender || sender.id !== chrome.runtime.id || !Array.isArray(request.senders)) { sendResponse([]); return false; }
+    },
+    checkSenders(request, sender, sendResponse) {
+        if (!Array.isArray(request.senders)) { sendResponse([]); return false; }
         checkSenders(request.senders.filter(x => x && typeof x.address === 'string'), typeof request.ownDomain === 'string' ? request.ownDomain : '', accountLabel(request))
             .then(sendResponse).catch((e) => { logError(`Sender checks failed: ${errorText(e)}`, 'Sender checks', accountLabel(request)); sendResponse([]); });
         return true;
-    }
+    },
     // Country of the server that handed an email to Gmail (from the email's own headers).
-    if (request.action === 'senderCountry') {
-        if (!sender || sender.id !== chrome.runtime.id || typeof request.ip !== 'string') { sendResponse(null); return false; }
+    senderCountry(request, sender, sendResponse) {
+        if (typeof request.ip !== 'string') { sendResponse(null); return false; }
         getConfig().then(cfg => (cfg.values.enableSenderIdentity && cfg.values.enableSenderCountry && cfg.values.enableDnsThreatCheck ? countryOfIp(request.ip.trim()) : null))
             .then(c => sendResponse(c || null), () => sendResponse(null));
         return true;
-    }
+    },
     // A sender's site icon (data: URL, or '' for none), fetched once and remembered.
-    if (request.action === 'senderIcon') {
-        if (!sender || sender.id !== chrome.runtime.id || typeof request.site !== 'string') { sendResponse(''); return false; }
+    senderIcon(request, sender, sendResponse) {
+        if (typeof request.site !== 'string') { sendResponse(''); return false; }
         // The site's icon (d) and, apart from it, a remembered colleague's photo or company logo (a; no
         // network: they are only ever learned from opened emails), drawn over the row's checkbox.
         const address = typeof request.address === 'string' ? request.address.toLowerCase().slice(0, 320) : '';
@@ -3471,9 +3734,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             return { d: await icon, a: '', k: '' };
         }).then(r => sendResponse(r), () => sendResponse({ d: '' }));
         return true;
-    }
-    if (request.action === 'senderAvatar') {
-        if (!sender || sender.id !== chrome.runtime.id || typeof request.address !== 'string' || typeof request.url !== 'string') { sendResponse('refused'); return false; }
+    },
+    senderAvatar(request, sender, sendResponse) {
+        if (typeof request.address !== 'string' || typeof request.url !== 'string') { sendResponse('refused'); return false; }
         const address = request.address.toLowerCase().slice(0, 320);
         // kind 'personal': a colleague's photo, kept for the address; kind 'logo': a company's logo, kept
         // for its site (never a personal email service's).
@@ -3495,29 +3758,28 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             ? rememberAvatar(target, request.url.slice(0, 2000)) : 'off')
             .then(r => sendResponse(r), () => sendResponse('failed'));
         return true;
-    }
+    },
     // Look-alike check: a domain whose mail passed DMARC here (from headers already read); colleagues'
     // names, as hashes only (colleagueNameHash), learned from your own organization's senders.
-    if (request.action === 'senderVerified') {
-        if (!sender || sender.id !== chrome.runtime.id || typeof request.domain !== 'string') { sendResponse(false); return false; }
+    senderVerified(request, sender, sendResponse) {
+        if (typeof request.domain !== 'string') { sendResponse(false); return false; }
         rememberVerifiedDomain(request.domain.slice(0, 253)).then(sendResponse, () => sendResponse(false));
         return true;
-    }
-    if (request.action === 'learnColleagueNames') {
-        if (!sender || sender.id !== chrome.runtime.id || !Array.isArray(request.hashes)) { sendResponse(0); return false; }
+    },
+    learnColleagueNames(request, sender, sendResponse) {
+        if (!Array.isArray(request.hashes)) { sendResponse(0); return false; }
         rememberColleagueNames(request.hashes.slice(0, 200)).then(sendResponse, () => sendResponse(0));
         return true;
-    }
-    if (request.action === 'getColleagueNames') {
-        if (!sender || sender.id !== chrome.runtime.id) { sendResponse([]); return false; }
+    },
+    getColleagueNames(request, sender, sendResponse) {
         storageGet('local', { colleagueNameHashes: [] }).then(r => sendResponse(Array.isArray(r.colleagueNameHashes) ? r.colleagueNameHashes : []), () => sendResponse([]));
         return true;
-    }
+    },
     // Other extensions that do the same job (content.js detectConflicts): remembered for Settings →
     // Other extensions (newest 50, with where and when they were seen); answers the ones the user
     // chose to ignore.
-    if (request.action === 'reportConflicts') {
-        if (!sender || sender.id !== chrome.runtime.id || !Array.isArray(request.conflicts)) { sendResponse([]); return false; }
+    reportConflicts(request, sender, sendResponse) {
+        if (!Array.isArray(request.conflicts)) { sendResponse([]); return false; }
         storageGet('local', { detectedConflicts: {}, ignoredConflicts: [], keptConflictFeatures: {} }).then(async (r) => {
             const map = r.detectedConflicts && typeof r.detectedConflicts === 'object' ? r.detectedConflicts : {};
             for (const c of request.conflicts.slice(0, 10)) {
@@ -3538,43 +3800,39 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             sendResponse(skip);
         }).catch(() => sendResponse([]));
         return true;
-    }
-    if (request.action === 'ignoreConflict') {
-        if (!sender || sender.id !== chrome.runtime.id || typeof request.key !== 'string') { sendResponse(false); return false; }
+    },
+    ignoreConflict(request, sender, sendResponse) {
+        if (typeof request.key !== 'string') { sendResponse(false); return false; }
         storageGet('local', { ignoredConflicts: [] }).then(r => {
             const list = (Array.isArray(r.ignoredConflicts) ? r.ignoredConflicts : []).filter(k => k !== request.key).concat(request.key).slice(-100);
             return chrome.storage.local.set({ ignoredConflicts: list });
         }).then(() => sendResponse(true), () => sendResponse(false));
         return true;
-    }
-    if (request.action === 'openConflicts') {
-        if (!sender || sender.id !== chrome.runtime.id) { sendResponse(false); return false; }
+    },
+    openConflicts(request, sender, sendResponse) {
         chrome.tabs.create({ url: chrome.runtime.getURL('options.html#conflicts') }, () => sendResponse(!chrome.runtime.lastError));
         return true;
-    }
-    if (request.action === 'forgetSpamMoves') {
-        if (!sender || sender.id !== chrome.runtime.id || !Array.isArray(request.threads)) { sendResponse(false); return false; }
+    },
+    forgetSpamMoves(request, sender, sendResponse) {
+        if (!Array.isArray(request.threads)) { sendResponse(false); return false; }
         const threads = request.threads.filter(t => typeof t === 'string' && /^thread-f:\d{1,25}$/.test(t)).slice(0, 100);
         forgetSpamMoves(threads).then(sendResponse, () => sendResponse(false));
         return true;
-    }
-    if (request.action === 'recordSpamMoves') {
-        if (!sender || sender.id !== chrome.runtime.id || !Array.isArray(request.moves)) { sendResponse(false); return false; }
+    },
+    recordSpamMoves(request, sender, sendResponse) {
+        if (!Array.isArray(request.moves)) { sendResponse(false); return false; }
         const moves = request.moves.filter(m => m && typeof m.thread === 'string' && /^thread-f:\d{1,25}$/.test(m.thread)).slice(0, 100)
             .map(m => ({ thread: m.thread, address: String(m.address || '').slice(0, 200), reason: String(m.reason || '').slice(0, 1000), how: String(m.how || '').slice(0, 200) }));
         if (!moves.length) { sendResponse(false); return false; }
         recordSpamMoves(moves, ['moved', 'failed', 'rescued', 'kept'].includes(request.log) ? request.log : false, accountLabel(request)).then(sendResponse, () => sendResponse(false));
         return true;
-    }
-
-    if (request.action === 'syncPhishFeeds') {
+    },
+    syncPhishFeeds(request, sender, sendResponse) {
         syncPhishFeeds().then(r => sendResponse(r)).catch(() => sendResponse({ failures: 1 }));
         return true;
-    }
-
+    },
     // QR codes in an email image (Google proxy URL) or an attachment (bytes from the Gmail tab).
-    if (request.action === 'scanQr') {
-        if (!sender || sender.id !== chrome.runtime.id) { sendResponse({ ok: false }); return false; }
+    scanQr(request, sender, sendResponse) {
         (async () => {
             const cfg = await getConfig();
             if (!cfg.values.enableQrScanning) return { ok: false, error: 'QR scanning is off' };
@@ -3587,80 +3845,62 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             sendResponse({ ok: false, error: errorText(e) });
         });
         return true;
-    }
-
+    },
     // Errors and events reported by the Gmail content script, the popup and the Options page.
-    if (request.action === 'logEvent') {
-        if (!sender || sender.id !== chrome.runtime.id) { sendResponse({ status: 'ignored' }); return false; }
+    logEvent(request, sender, sendResponse) {
         writeLog(LOG_LEVELS.includes(request.level) ? request.level : 'error', request.source || 'Extension', request.message, accountLabel(request));
         sendResponse({ status: 'logged' });
         return false;
-    }
-
-    if (request.action === 'getSettings') {
+    },
+    getSettings(request, sender, sendResponse) {
         // Only what the Gmail tab uses (the synced shortener list can hold thousands of domains and is
         // needed only here in the background).
         getConfig().then(cfg => sendResponse({ values: cfg.values, locked: cfg.locked, allowlist: cfg.allowlist, blocklist: cfg.blocklist, policy: cfg.policy })).catch((e) => { logError(`Settings could not be loaded: ${errorText(e)}`, 'Background'); sendResponse(null); });
         return true;
-    }
-
+    },
     // EXPERIMENT (llm_testing): has this sender (hashed) been seen before?
-    if (request.action === 'senderHistory') {
+    senderHistory(request, sender, sendResponse) {
         senderHistory(request.keys).then(sendResponse).catch((e) => { logWarning(`Sender history unavailable: ${errorText(e)}`, 'Sender checks'); sendResponse(null); });
         return true;
-    }
-
+    },
     // EXPERIMENT (llm_testing): AI opinion of an email (opened email in the webmail, or pasted in Settings).
-    if (request.action === 'aiAnalyze') {
+    aiAnalyze(request, sender, sendResponse) {
         aiAnalyzeEmail(request.facts, !!request.auto).then(sendResponse)
             .catch((e) => { logError(`AI analysis failed: ${errorText(e)}`, 'AI analysis'); sendResponse({ error: 'It failed; see Logging → Application log.' }); });
         return true;
-    }
-    if (request.action === 'aiStatus') {
+    },
+    aiStatus(request, sender, sendResponse) {
         aiModelStatus().then(sendResponse);
         return true;
-    }
-
-    if (request.action === 'followLink') {
-        const base = chrome.runtime.getURL('');
-        const ownPage = sender && (!sender.tab || (!!base && String(sender.url || '').startsWith(base)));
-        if (!ownPage) { sendResponse({ error: 'Not allowed here.' }); return false; }
+    },
+    followLink(request, sender, sendResponse) {
         followLink(request.url).then(sendResponse)
             .catch((e) => { logError(`Following a link failed: ${errorText(e)}`, 'Link Inspector'); sendResponse({ error: 'It failed; see Logging → Application log.' }); });
         return true;
-    }
-
-    if (request.action === 'virusTotal') {
-        // Only the extension's own pages (the Link Inspector), never a webmail tab: it uses the person's key.
-        const base = chrome.runtime.getURL('');
-        const ownPage = sender && (!sender.tab || (!!base && String(sender.url || '').startsWith(base)));
-        if (!ownPage) { sendResponse({ error: 'Not allowed here.' }); return false; }
+    },
+    virusTotal(request, sender, sendResponse) {
         virusTotalCheck(request).then(sendResponse)
             .catch((e) => { logError(`VirusTotal check failed: ${errorText(e)}`, 'Link Inspector'); sendResponse({ error: 'The check failed; see Logging → Application log.' }); });
         return true;
-    }
-
-    if (request.action === 'testUnwrap') {
+    },
+    testUnwrap(request, sender, sendResponse) {
         inspectLink(request.url).then(r => sendResponse(r || null))
             .catch((e) => { logError(`Inspecting ${logUrl(request.url)} failed: ${errorText(e)}`, 'Link Inspector'); sendResponse(null); });
         return true;
-    }
-
-    if (request.action === 'forceSync') {
+    },
+    forceSync(request, sender, sendResponse) {
         updateRemoteLists().then((r) => sendResponse({ status: !r ? 'update failed; see Logging → Application log'
             : r.fresh ? `already up to date; lists are downloaded at most once a day (next after ${new Date(r.nextAt).toLocaleString()})`
             : r.skipped ? 'updates are turned off' : r.error ? 'update failed; see Logging → Application log' : 'updated' }));
         return true;
-    }
-
-    if (request.action === 'logPixel') {
+    },
+    logPixel(request, sender, sendResponse) {
         logHistoryEntry({ shortUrl: request.url, finalUrl: request.url, verdict: 'pixel', reason: `Tracking pixel ${request.removed ? 'removed' : 'neutralized'}`, resolver: 'Pixel Detector', account: accountLabel(request) });
         sendResponse({ status: "Logged" });
         return true;
-    }
-
+    },
     // Tests the custom threat resolver exactly as configured on the form (not yet saved).
-    if (request.action === 'testCustomThreat') {
+    testCustomThreat(request, sender, sendResponse) {
         (async () => {
             const conf = request.conf || {};
             const req = buildCustomRequest(conf, { hostname: 'example.com', url: 'https://example.com/', url_noscheme: 'example.com/' }, true);
@@ -3682,10 +3922,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             }
         })().then(sendResponse);
         return true;
-    }
-
+    },
     // Tests the custom unshortener as configured on the form, with a short link the user supplies.
-    if (request.action === 'testCustomUnshortener') {
+    testCustomUnshortener(request, sender, sendResponse) {
         (async () => {
             const testUrl = String(request.testUrl || '').trim();
             if (!/^https?:\/\//i.test(testUrl)) return { success: false, message: 'Enter a short link to test with (for example one from a recent email).' };
@@ -3695,9 +3934,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 (/fetch|network|Failed to fetch/i.test(r.error || '') ? ' Click Save to grant access to this host, or make sure it sends CORS headers.' : '') };
         })().then(sendResponse);
         return true;
-    }
-
-    if (request.action === 'testResolver') {
+    },
+    testResolver(request, sender, sendResponse) {
         const wire = WIRE_DNS_PROVIDERS.find(p => typeof request.url === 'string' && request.url.startsWith(p.url));
         if (wire) {
             queryWireProvider(wire, 'example.com').then(r => sendResponse(r.ok
@@ -3750,9 +3988,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         };
         testResolver().then(sendResponse);
         return true;
-    }
-
-    if (request.action === 'resolveUrl') {
+    },
+    resolveUrl(request, sender, sendResponse) {
         resolveLink(request.url, request.linkText || '', { reveal: request.reveal === true, account: accountLabel(request) })
             .then(r => sendResponse(r || null))
             .catch((e) => {
@@ -3760,20 +3997,41 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 sendResponse(null);
             });
         return true;
-    }
-
+    },
     // Each part of a mail page (the page and any message frames) reports its own state.
-    if (request.action === 'updateBadge') {
+    updateBadge(request, sender, sendResponse) {
         const tabId = sender && sender.tab ? sender.tab.id : undefined;
         if (tabId === undefined) { sendResponse({ status: 'No tab' }); return false; }
         setFrameState(tabId, sender.frameId || 0, request);
         sendResponse({ status: 'Badge updated' });
         return false;
-    }
-
+    },
     // The popup asks for the combined state of a tab.
-    if (request.action === 'getTabState') {
+    getTabState(request, sender, sendResponse) {
         getTabState(request.tabId).then(sendResponse, () => sendResponse(null));
         return true;
+    },
+    linkDomainAges(request, sender, sendResponse) {
+        if (!Array.isArray(request.domains)) { sendResponse({}); return false; }
+        linkDomainAges(request.domains).then(sendResponse, () => sendResponse({}));
+        return true;
     }
+};
+
+const refusalsLogged = new Set();
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (!request || typeof request !== 'object' || typeof request.action !== 'string') return;
+    const handler = Object.prototype.hasOwnProperty.call(MESSAGE_HANDLERS, request.action) ? MESSAGE_HANDLERS[request.action] : null;
+    if (!handler || !MESSAGE_RULES[request.action]) return;          // not ours (see above)
+    const why = messageRefusal(request, sender);
+    if (why) {
+        const key = `${request.action}|${why}`;
+        if (!refusalsLogged.has(key) && refusalsLogged.size < 100) {
+            refusalsLogged.add(key);
+            logWarning(`A "${request.action}" message was refused: ${why}.`, 'Background');
+        }
+        sendResponse(MESSAGE_RULES[request.action].refuse);
+        return false;
+    }
+    return handler(request, sender, sendResponse);
 });

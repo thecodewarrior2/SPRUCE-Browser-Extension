@@ -13,6 +13,18 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('lib/pdf.worker.m
 const MAX_SIDE = 2000;          // pixels: larger images and pages are scaled down
 const MAX_PDF_PAGES = 10;
 const MAX_BYTES = 10 * 1024 * 1024;
+// One scan's time limit. A PDF made to render slowly is stopped there (its drawing cancelled, the
+// document closed), and what was found on the pages done so far is returned with timedOut. The
+// background has its own, longer limit as well (SCAN_JOB_LIMIT_MS) in case this page itself is stuck.
+const SCAN_TIME_LIMIT_MS = 20 * 1000;
+class ScanTooLong extends Error {}
+// Resolves with p, or rejects with ScanTooLong at the deadline (calling onLate to stop the work).
+function beforeDeadline(p, deadline, onLate) {
+    return new Promise((resolve, reject) => {
+        const t = setTimeout(() => { try { if (onLate) onLate(); } catch (e) { /* already stopped */ } reject(new ScanTooLong('the scan took too long')); }, Math.max(0, deadline - Date.now()));
+        p.then((v) => { clearTimeout(t); resolve(v); }, (e) => { clearTimeout(t); reject(e); });
+    });
+}
 
 // Chrome's built-in detector (macOS, ChromeOS); everywhere else (Firefox and Safari included) the
 // bundled QRDecoder.
@@ -55,34 +67,45 @@ async function scanImage(blob) {
     return { codes: (await decodeCanvas(c)).map(text => ({ text })), links: [] };
 }
 
-async function scanPdf(bytes) {
+async function scanPdf(bytes, deadline) {
     // verbosity ERRORS: pdf.js otherwise prints routine notices as warnings, which Chrome lists under the
     // extension's Errors (other browsers in its console): "Setting up fake worker" (by design, see the
     // import above) and "Indexing all PDF objects" (a PDF with a damaged index, which pdf.js repairs).
     // Real errors still surface.
-    const pdf = await pdfjsLib.getDocument({
+    const task = pdfjsLib.getDocument({
         data: bytes, isEvalSupported: false, disableFontFace: true, useSystemFonts: false,
         verbosity: pdfjsLib.VerbosityLevel.ERRORS
-    }).promise;
+    });
+    const close = () => { task.destroy().catch(() => {}); };
+    const pdf = await beforeDeadline(task.promise, deadline, close);
     const codes = [], links = [];
     const pages = Math.min(pdf.numPages, MAX_PDF_PAGES);
-    for (let i = 1; i <= pages; i++) {
-        const page = await pdf.getPage(i);
-        const base = page.getViewport({ scale: 1 });
-        const viewport = page.getViewport({ scale: Math.min(3, 1600 / Math.max(base.width, base.height)) });
-        const c = document.createElement('canvas');
-        c.width = Math.ceil(viewport.width); c.height = Math.ceil(viewport.height);
-        // intent 'print': pdf.js then draws without requestAnimationFrame, which never fires in a hidden
-        // page (the offscreen document, or the background page) and would leave rendering waiting forever.
-        await page.render({ canvasContext: c.getContext('2d'), viewport, intent: 'print' }).promise;
-        for (const text of await decodeCanvas(c)) codes.push({ text, page: i });
-        for (const a of await page.getAnnotations()) if (a.subtype === 'Link' && a.url && !links.some(l => l.url === a.url)) links.push({ url: a.url, page: i });
-        page.cleanup();
-        c.width = c.height = 0;                       // release the page bitmap
+    let done = 0, timedOut = false;
+    try {
+        for (let i = 1; i <= pages; i++) {
+            if (Date.now() >= deadline) { timedOut = true; break; }
+            const page = await beforeDeadline(pdf.getPage(i), deadline);
+            const base = page.getViewport({ scale: 1 });
+            const viewport = page.getViewport({ scale: Math.min(3, 1600 / Math.max(base.width, base.height)) });
+            const c = document.createElement('canvas');
+            c.width = Math.ceil(viewport.width); c.height = Math.ceil(viewport.height);
+            // intent 'print': pdf.js then draws without requestAnimationFrame, which never fires in a hidden
+            // page (the offscreen document, or the background page) and would leave rendering waiting forever.
+            const drawing = page.render({ canvasContext: c.getContext('2d'), viewport, intent: 'print' });
+            await beforeDeadline(drawing.promise, deadline, () => drawing.cancel());
+            for (const text of await decodeCanvas(c)) codes.push({ text, page: i });
+            for (const a of await beforeDeadline(page.getAnnotations(), deadline)) if (a.subtype === 'Link' && a.url && !links.some(l => l.url === a.url)) links.push({ url: a.url, page: i });
+            page.cleanup();
+            c.width = c.height = 0;                       // release the page bitmap
+            done = i;
+        }
+    } catch (e) {
+        if (!(e instanceof ScanTooLong)) { close(); throw e; }
+        timedOut = true;
     }
     const total = pdf.numPages;
-    await pdf.destroy();
-    return { codes, links, pagesScanned: pages, pagesTotal: total };
+    close();
+    return { codes, links, pagesScanned: done, pagesTotal: total, timedOut };
 }
 
 async function scan(msg) {
@@ -97,8 +120,10 @@ async function scan(msg) {
     } else {
         bytes = Uint8Array.from(atob(msg.b64 || ''), c => c.charCodeAt(0));
     }
+    if (bytes.length > MAX_BYTES) throw new Error('file too large');
     const isPdf = /pdf/i.test(mime) || (bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46);
-    const result = isPdf ? await scanPdf(bytes) : await scanImage(new Blob([bytes], { type: mime || 'image/png' }));
+    const deadline = Date.now() + SCAN_TIME_LIMIT_MS;
+    const result = isPdf ? await scanPdf(bytes, deadline) : await beforeDeadline(scanImage(new Blob([bytes], { type: mime || 'image/png' })), deadline);
     return Object.assign({ ok: true, kind: isPdf ? 'pdf' : 'image' }, result);
 }
 const failed = (e) => ({ ok: false, error: String((e && e.message) || e) });

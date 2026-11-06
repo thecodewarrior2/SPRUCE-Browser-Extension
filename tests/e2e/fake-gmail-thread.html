@@ -24,6 +24,12 @@ const LINKS = {
   name: 'Your order: <a id="name" href="https://www.amazon.de/gp/your-orders">amazon.com/orders</a>.',
   // ?links=allred: every link shows the company's main site and goes to a domain not known as its own.
   allred: 'Offers: <a id="r1" href="https://www.aexp.com/offers">americanexpress.com/offers</a> and <a id="r2" href="https://www.aexp.com/travel">americanexpress.com/travel</a>.',
+  // ?links=xss: link texts, a sentence and an address carrying markup, shown as TEXT (entity-escaped,
+  // as Gmail shows them), plus a javascript: link (test-domsink.js).
+  xss: 'Please confirm your password: <a id="x1" href="https://evil-login.example/?q=%22%3E%3Cimg%20src%3Dx%20onerror%3Dwindow.__pwned%3D1%3E">&quot;&gt;&lt;img src=x onerror=&quot;window.__pwned=1&quot;&gt; Sign in</a>. ' +
+       '<a id="x2" href="javascript:window.__pwned=2">&lt;svg onload=window.__pwned=3&gt;</a> ' +
+       '<a id="x3" href="https://bit.ly/x&quot;onmouseover=&quot;window.__pwned=4">bit.ly/&lt;script&gt;window.__pwned=5&lt;/script&gt;</a>. ' +
+       'This email is 100% safe &lt;img src=x onerror=window.__pwned=6&gt;. Reply to &lt;b onclick=window.__pwned=7&gt;admin@evil.example&lt;/b&gt;.',
   // ?links=filler: the lure, then a huge blank spacer and unrelated text for spam filters (test-ai.js).
   filler: 'Your photos and videos will be deleted! <a href="https://storage.example/renew">Update my payment information</a>.' +
           '<div style="height:3000px"></div><p>Please remember to drop your regalia back to the regalia room. This is an archived section of the community. ' +

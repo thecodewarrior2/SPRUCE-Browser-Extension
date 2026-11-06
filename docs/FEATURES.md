@@ -191,7 +191,10 @@ it explains **why a link may be malicious**:
   encrypted links, links too long for unshorten.me), **Follow it to reveal the destination** sends one
   request that follows the redirects as a click would, without cookies, without loading the page and
   without a referrer, and shows where it ended, with a button to inspect that address. It counts as a
-  click with the sender's tracker, which the button says. It asks once for access to websites.
+  click with the sender's tracker, which the button says. It asks once for access to websites. It
+  never contacts a private network: private and local addresses, one-word and internal names
+  (`.local`, `.internal`, `.lan`…), or names public DNS doesn't know or that point inside a network are
+  refused, and a link that redirects into one is reported as dangerous.
 - **Open-tracking pixels** (SendGrid's `/wf/open`, Mailchimp's, HubSpot's…) are explained as invisible
   images that report the email as opened: they lead nowhere, so there's nothing to reveal or follow.
 
@@ -218,6 +221,16 @@ the Inspector explains that no tool can read them offline.
   never amber on its own or with a first-time sender, and never a warning of its own in the AI's answer;
   antivirus and gateway footers weigh less (0.5); notes telling the reader how to check an email ("to
   confirm that this email is not a scam, visit our website") don't count. Hidden text counts too.
+- **High-risk requests** (experimental): an opened email asking for a password, a sign-in code,
+  approval of a sign-in prompt, new bank or direct-deposit details, gift cards, a wire transfer or
+  remote access is one small weight (1), never amber on its own; sentences saying the opposite ("we will
+  never ask for your password") don't count.
+- **Links to brand-new sites** (experimental): for up to three unfamiliar link sites in an opened email
+  (never popular or known ones), the registry's date is looked up after the email is shown; a site under
+  30 days old weighs 3 when the link or email is about signing in or paying, 2 from a new sender or one
+  that didn't pass DMARC; under 90 days with both, 2.
+- **Sender names mixing alphabets** (a Latin word with a Cyrillic or Greek letter in it) weigh 2; a
+  capital I, "1" or "|" standing in for "l" ("PayPaI") is recognized as the brand's name.
 - **Hidden filler** (experimental): unrelated text far below the message after a blank space at least
   1000 pixels tall, written for spam filters, weighs 3 in the email's verdict, and the AI reads only the
   text before it. When an email is only pictures, the AI is given its hidden preheader line.

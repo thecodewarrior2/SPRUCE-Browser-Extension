@@ -1,5 +1,62 @@
 # Changelog
 
+## 5.94.6 — EXPERIMENT (branch `llm_testing`): hardening (messages, caches, network, scanner), new weights, fuzz tests
+
+Not for release. From a review of suggested hardening, the changes judged worth making.
+
+- **Messages** (`background.js`): the 35-action `if` chain is now `MESSAGE_HANDLERS` (the same handler
+  bodies) behind `MESSAGE_RULES`, which says for each action who may send it and caps its fields' types
+  and sizes (`messageRefusal`). `from: 'page'`: the extension's own pages only (Settings, Inspector,
+  popup): `aiStatus`, `followLink`, `virusTotal`, `testUnwrap`, `forceSync`, `syncPhishFeeds`,
+  `testCustomThreat`, `testCustomUnshortener`, `testResolver`, `getTabState`. Before, six of them
+  answered a webmail tab's content script too. `from: 'any'`: everything the webmail page uses. A refusal
+  gets the action's own answer (`refuse`) and is logged once; actions not listed are left to other
+  listeners (the scanner's offscreen page). The per-handler `sender.id` checks are gone (the listener
+  checks it once). The review's claim that `testResolver` answered twice was wrong: it returns first.
+- **Link Inspector "Follow it"** never contacts a private network (`internalHost`,
+  `internalDestination`): private, loopback and link-local addresses, one-word names, internal endings
+  (`.local`, `.internal`, `.lan`, `.corp`, `.home.arpa`…), and, with network checks on, names that public
+  DNS doesn't know (split-horizon intranet names) or that point at private addresses. A chain that ends
+  inside a private network is reported as dangerous; steps in between can't be seen before they happen
+  (browsers hide redirects from extensions).
+- **Saved link results** carry a fingerprint of the settings they were worked out under
+  (`LINK_VERDICT_SETTINGS`, `verdictFingerprint`: resolvers, custom services, phishing lists, unshortener,
+  one-time and mismatch protection) and count only under the same settings; older entries (no
+  fingerprint) are checked again once. On every use the phishing lists are checked again, as the
+  blocklist already was.
+- **Outside services** (`fetchWithTimeout`, through which every request goes): per service (host) at most
+  6 requests at once (unshorten.me 2, registries 2, country.is 2, VirusTotal 1), the others waiting within
+  their own time limit. After a 429, or three 5xx in a row, the service is left alone: its Retry-After
+  (at most 15 minutes) or 2 s doubling to 5 minutes, with jitter; meanwhile requests to it fail at once
+  (`ServiceBusyError`). A short link waiting for unshorten.me's back-off is tried again when it ends, and
+  not logged per link.
+- **QR/PDF scanner**: 20 s per scan in the scanner (`SCAN_TIME_LIMIT_MS`: the drawing is cancelled, the
+  document closed, the pages done so far returned with `timedOut`), and 30 s in the background
+  (`SCAN_JOB_LIMIT_MS`), after which Chrome's offscreen page is closed. The scanner also checks the size
+  of bytes it is handed. `tools/build.js` refuses to build unless `lib/pdf.min.mjs` and
+  `lib/pdf.worker.min.mjs` match the pinned SHA-256 of pdfjs-dist 5.6.205 (`PINNED_FILES`; the bundled
+  files were checked against the npm package).
+- **New weights** in an opened email's verdict:
+  - **High-risk requests** (`highRiskRequestSigns`, weight 1): a password, a code, approving a sign-in
+    prompt, new bank or direct-deposit details, gift cards, a wire transfer, remote-access tools. Denials
+    ("never share this code") don't count. Never amber on its own or with a first-time sender.
+  - **Links to brand-new sites** (`linkAgeSigns`, `linkDomainAges`): the registry date (RDAP) of at most
+    3 unfamiliar link domains per email (never popular, built-in or DMARC-verified ones, nor personal mail
+    services; network checks on), asked after the verdict is drawn and at most 4 s per domain, then the
+    verdict updates. Under 30 days with sign-in or payment wording (link or email): 3; under 30 days from
+    a new sender or one without DMARC pass: 2; under 90 days with both: 2. Measured from the test machine,
+    registries answered in 0.1 to 0.4 s; answers are kept 30 days.
+  - **Mixed alphabets in a sender's name** (`displayNameAnomalies`, weight 2): a word mixing Latin with
+    Cyrillic or Greek letters.
+- **Look-alikes**: a hyphenated domain whose brand part uses look-alike letters ("pаypal-secure.net") is
+  named as imitating the brand (it was only "punycode domain"); a sender name with a capital I, "1" or "|"
+  for "l" ("PayPaI", "ΑppІe") is recognized as the brand.
+- **Tests**: unit tests for each of the above; seeded fuzz tests (`FUZZ_SEED`, `FUZZ_ROUNDS` to vary them
+  locally) for the link decoders (never throw, only http(s) or nothing, under 250 ms, at most 6 layers)
+  and for messages (random, wrong-typed and oversized fields, unknown actions, other senders: refused
+  with the action's own answer or handled, never a crash); e2e `test-domsink.js`: markup in sender names,
+  subjects, link texts and addresses stays text, nothing runs, no handler attributes appear.
+
 ## 5.94.5 — EXPERIMENT (branch `llm_testing`): model 0.4.0, real-world phishing, hidden filler; safety claims are only a small weight
 
 Not for release. Three spam/phishing emails the AI missed (model 0.3.0: a credit-card offer made of

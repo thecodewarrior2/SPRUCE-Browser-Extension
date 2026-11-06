@@ -1238,12 +1238,15 @@ function lookalikeOf(host) {
     const uLabel = unicodeLabel(label);
     const skeleton = confusableSkeleton(uLabel);
     const tokens = uLabel.split('-');
+    // Each part of a hyphenated name read through its look-alike characters too ("pаypal-secure").
+    const tokenSkeletons = tokens.map(t => confusableSkeleton(t));
     for (const brand of PROTECTED_BRANDS) {
         const bl = brand.split('.')[0];
         if (host.startsWith(brand + '.')) return `starts with "${brand}" but is really ${reg}`;
         if (bl.length < 4) continue;
         if (uLabel !== bl && skeleton === bl) return `imitates ${brand} with look-alike characters`;
         if (bl.length >= 6 && label !== bl && editDistanceAtMost1(label, bl)) return `is one letter away from ${brand}`;
+        if (tokens.length > 1 && tokenSkeletons.some((k, i) => k === bl && tokens[i] !== bl)) return `imitates ${brand} with look-alike characters`;
         if (tokens.length > 1 && tokens.includes(bl) && tokens.some(t => CREDENTIAL_WORDS.has(t))) return `uses the name "${bl}" but isn't ${brand}`;
     }
     return null;
@@ -1807,8 +1810,15 @@ function foldName(s) {
     return Array.from(String(s || '').normalize('NFKC').toLowerCase(), ch => (CONFUSABLE_MAP[ch] && !/[0-9]/.test(ch) ? CONFUSABLE_MAP[ch] : ch)).join('');
 }
 
-// The brand a sender's display name claims, or null.
+// The brand a sender's display name claims, or null. A capital I (Latin, Greek or Cyrillic), "1" or "|"
+// standing in for an "l" counts too ("PayPaI", "ΑppІe"): in most fonts they can't be told apart.
 function displayNameBrand(displayName) {
+    const found = displayNameBrandIn(displayName);
+    if (found) return found;
+    const asL = String(displayName || '').replace(/[IΙІӀ1|]/g, 'l');
+    return asL !== String(displayName || '') ? displayNameBrandIn(asL) : null;
+}
+function displayNameBrandIn(displayName) {
     const name = foldName(displayName).replace(/[^a-z0-9& ]+/g, ' ').replace(/\s+/g, ' ').trim();
     if (!name) return null;
     for (const b of SENDER_NAME_BRANDS) {
@@ -2500,6 +2510,11 @@ function displayNameAnomalies(name) {
     if ((n.match(INVISIBLE_CHARS_RE) || []).length >= 3) {
         out.push({ weight: 3, text: 'The sender\'s name is padded with invisible characters, a trick to disguise it.' });
     }
+    // A word mixing Latin letters with Cyrillic or Greek ones ("Hеlp Desk" with a Cyrillic е): it looks
+    // like an ordinary word but isn't one, to imitate a name and slip past filters. Names written wholly
+    // in one alphabet (Cyrillic, Greek or Latin) don't count.
+    const mixed = n.normalize('NFC').split(/[^\p{L}]+/u).find(w => /[a-zA-Z]/.test(w) && /[\p{Script=Cyrillic}\p{Script=Greek}]/u.test(w));
+    if (mixed) out.push({ weight: 2, kind: 'mixed-alphabets', text: `The sender's name mixes letters from different alphabets (“${mixed.slice(0, 40)}”), so it only looks like an ordinary word: a trick to imitate a name.` });
     return out;
 }
 
@@ -2880,6 +2895,72 @@ function selfVouchingSigns(text) {
         ? `It claims to be safe (“${best.quote.slice(0, 80)}”). Phishing emails often say so to lower your guard; on its own it proves nothing either way.`
         : `It carries an antivirus or "scanned" notice (“${best.quote.slice(0, 80)}”). Real mail systems add these, but so do scammers; it means nothing about the email's safety.` });
     return out;
+}
+
+// HIGH-RISK REQUESTS. An email asking for something that costs money or an account if the sender
+// isn't who they claim: a password, a sign-in or verification code, approving a sign-in prompt, new
+// bank or direct-deposit details, gift cards, a wire transfer, or remote access to the computer.
+// Genuine IT, HR and payroll mail uses the same words, so it is ONE SMALL WEIGHT (1): never amber on
+// its own or with a first-time sender (1 + 1.5); it adds up with an outside sender, a failed sender
+// check or a suspicious link. Sentences that say the opposite ("we will never ask for your password",
+// "never share this code") don't count.
+const HIGH_RISK_REQUESTS = [
+    { kind: 'password', what: 'your password', re: /\b(enter|confirm|verify|provide|send|reply with|update|re-?enter|submit|validate|type in|share)\b[^.!?\n]{0,40}\b(password|passcode|login (details|credentials|information)|sign-in (details|information)|credentials|username and password)\b/gi },
+    { kind: 'code', what: 'a code', re: /\b(send|share|give|tell|read|reply with|forward|text|provide)\b[^.!?\n]{0,30}\b(the |that |this |your )?(\d-digit |six-digit |one-time |verification |security |sign-in |login |authentication |2fa |mfa )?(code|otp|passcode)\b(?! (of conduct|below|above))/gi },
+    { kind: 'approve', what: 'approving a sign-in prompt', re: /\b(approve|accept|confirm|tap yes on|press approve on)\b[^.!?\n]{0,30}\b(sign-in|login|log-in|push|duo|authenticator|mfa|2fa)\b[^.!?\n]{0,20}\b(request|notification|prompt|push)\b/gi },
+    { kind: 'bank', what: 'new bank details', re: /\b(update|change|changed|new|switch|switched|updated)\b[^.!?\n]{0,40}\b(bank (details|account|information|info)|banking (details|information|info)|account number|routing number|direct deposit|wire instructions|remittance (details|information))\b/gi },
+    { kind: 'giftcard', what: 'gift cards', re: /\b(buy|purchase|get|pick up|grab)\b[^.!?\n]{0,40}\bgift ?cards?\b|\b(scratch|send)\b[^.!?\n]{0,30}\b(card numbers|the codes|photos? of the (cards|codes))\b/gi },
+    { kind: 'wire', what: 'a wire transfer', re: /\b(process|make|send|initiate|complete|arrange)\b[^.!?\n]{0,30}\b(a |an |the )?(urgent )?(wire( transfer)?|bank transfer|bitcoin payment|crypto payment)\b/gi },
+    { kind: 'remote', what: 'remote access to your computer', re: /\b(install|download|run|open|connect (with|through|via)|use)\b[^.!?\n]{0,30}\b(anydesk|teamviewer|ultraviewer|screenconnect|connectwise|logmein|supremo|rustdesk|quick ?assist|remote (access|desktop|support) (tool|app|software|program|session))\b/gi }
+];
+const HIGH_RISK_DENIAL_RE = /\b(never|not|n't|won't|will not|don't|do not|no one|nobody|without)\b[^.!?\n]{0,50}$/i;
+function highRiskRequestKinds(text) {
+    const t = String(text || '').normalize('NFKC').slice(0, 20000);
+    const kinds = [];
+    for (const r of HIGH_RISK_REQUESTS) {
+        const re = new RegExp(r.re.source, 'gi');
+        for (let m = re.exec(t), n = 0; m && n < 20; m = re.exec(t), n++) {
+            if (HIGH_RISK_DENIAL_RE.test(t.slice(Math.max(0, m.index - 60), m.index) + m[0].split(/\s+/)[0] + ' ')) continue;
+            if (/\b(never|not|n't)\b/i.test(m[0])) continue;
+            kinds.push(r);
+            break;
+        }
+    }
+    return kinds;
+}
+function highRiskRequestSigns(text) {
+    const kinds = highRiskRequestKinds(text);
+    if (!kinds.length) return [];
+    const what = kinds.map(k => k.what);
+    const list = what.length > 1 ? `${what.slice(0, -1).join(', ')} or ${what[what.length - 1]}` : what[0];
+    return [{ weight: 1, kind: 'high-risk-request', kinds: kinds.map(k => k.kind),
+              text: `It asks for ${list}. That costs you money or your account if the sender isn't who they claim: check with them another way (a known phone number, a new email you write yourself) before doing it.` }];
+}
+
+// LINKS TO BRAND-NEW SITES. Phishing sites are usually days old; the registry's date (RDAP, asked by the
+// background for at most a few unfamiliar link domains per email, never for popular or known ones) is
+// weighed together with what the email asks for and how well its sender checked out:
+//   registered under 30 days, and the link (its text or address) or the email is about signing in,
+//     accounts, payment or the requests above                               → 3 (amber on its own)
+//   registered under 30 days, sender failed or skipped DMARC or is new      → 2
+//   registered under 90 days, about signing in or paying, and weak sender  → 2
+// ages: [{ domain, days, signIn }]; ctx: { emailAsks, weakAuth }. At most one sign, the strongest.
+const LINK_YOUNG_DAYS = 30, LINK_RECENT_DAYS = 90;
+const SIGNIN_INTENT_RE = /\b(sign[\s-]?in|log[\s-]?in|log ?on|verify|verification|validate|confirm|account|password|passcode|secure|security|update|unlock|restore|reactivate|suspend|billing|payment|invoice|pay now|wallet|refund|claim|mfa|2fa|authenticat)/i;
+function linkAgeSigns(ages, ctx = {}) {
+    let best = null;
+    for (const a of ages || []) {
+        if (!a || typeof a.days !== 'number' || a.days < 0 || a.days >= LINK_RECENT_DAYS) continue;
+        const about = a.signIn || ctx.emailAsks;
+        let weight = 0, why = '';
+        if (a.days < LINK_YOUNG_DAYS && about) { weight = 3; why = a.signIn ? ', and the link is about signing in or paying' : ', and the email asks for sign-in, payment or account details'; }
+        else if (a.days < LINK_YOUNG_DAYS && ctx.weakAuth) { weight = 2; why = ', from a sender that is new or didn\'t pass its sender check'; }
+        else if (about && ctx.weakAuth) { weight = 2; why = ', about signing in or paying, from a sender that is new or didn\'t pass its sender check'; }
+        if (weight && (!best || weight > best.weight)) {
+            best = { weight, kind: 'young-link-domain', text: `A link goes to ${a.domain}, a site registered only ${a.days} day${a.days === 1 ? '' : 's'} ago${why}. Phishing sites are usually brand-new.` };
+        }
+    }
+    return best ? [best] : [];
 }
 
 // How an email hides its real text (emailLayout in content.js finds it). Spam and phishing pad
