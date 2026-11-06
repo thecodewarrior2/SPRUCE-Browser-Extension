@@ -10,7 +10,8 @@
 // Ground rules, enforced here and in the callers:
 //   - ADVISORY ONLY. The model's opinion can add a warning, never remove one: it never makes an email or
 //     link "safe", never clears a flag and never moves anything to Spam (aiAdvice).
-//   - ONLY ON REQUEST. Nothing is analyzed until the person clicks.
+//   - ON THIS COMPUTER ONLY. Each opened email is analyzed as it opens (aiAutoAnalyze, on by default),
+//     or only when the person clicks "Ask the AI"; nothing is sent anywhere or stored.
 //   - LESS PERSONAL DATA. Addresses keep only their domain, phone numbers and long numbers are replaced
 //     (redactForAi) before the text reaches the model, as in training.
 //   - TEXT THAT VOUCHES FOR ITSELF counts toward phishing (selfVouchingSigns in shared.js; the training

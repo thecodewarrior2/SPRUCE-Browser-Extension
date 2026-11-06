@@ -388,7 +388,12 @@
     },
     "managedEnableAiAnalysis": {
       "title": "AI Email Analysis (experimental)",
-      "description": "Shows an \"Ask the AI\" button in opened emails: the extension's own small language model, running on the computer, gives its opinion on whether the email is phishing and which sentences made it think so. Advisory only: it never clears a warning or moves email. Off by default.",
+      "description": "The extension's own small language model, running on the computer, gives its opinion on whether an opened email is phishing and which sentences made it think so. Advisory only: it never clears a warning or moves email. On by default.",
+      "type": "boolean"
+    },
+    "managedAiAutoAnalyze": {
+      "title": "AI Analysis Runs Automatically (experimental)",
+      "description": "true: every opened email is analyzed as it opens (a one-line note when the model sees nothing suspicious). false: only when the person clicks \"Ask the AI\". On by default.",
       "type": "boolean"
     },
     "managedAllowlist": {

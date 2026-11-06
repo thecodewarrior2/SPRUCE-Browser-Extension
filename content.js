@@ -3124,11 +3124,13 @@ function updateOpenedVerdict(body) {
 }
 
 // ---------------------------------------------------------------------------
-// AI OPINION — EXPERIMENT (llm_testing). With Settings → AI analysis on, each opened email gets an
-// "Ask the AI" button. Only when it is clicked, the facts the extension already has (sender, the
-// webmail's authentication results, the links and their checks, its own verdict) and the email's text
-// go to the background, which asks the model on this computer (ai.js). The answer is shown in its own
-// box and is advisory only: it never changes the email's verdict, its links' marks or Spam moves.
+// AI OPINION — EXPERIMENT (llm_testing). With Settings → AI analysis on (the default), each opened email
+// is analyzed as it opens (aiAutoAnalyze, the default), or gets an "Ask the AI" button. The facts the
+// extension already has (sender, the webmail's authentication results, the links and their checks, its
+// own verdict) and the email's text go to the background, which asks the extension's own model on this
+// computer (ai.js). The automatic run waits for the email's own verdict (at most AI_AUTO_WAIT_MS), so the
+// model sees it. The answer is advisory only: it never changes the email's verdict, its links' marks or
+// Spam moves. An automatic answer with nothing suspicious is one short line, so it doesn't crowd emails.
 // ---------------------------------------------------------------------------
 function scanAiButtons() {
     if (!lastSettings.enableAiAnalysis || !MAIL_CAN.opened) return;
@@ -3143,6 +3145,13 @@ function scanAiButtons() {
         box.setAttribute('aria-label', 'S.P.R.U.C.E+ AI opinion about this email');
         styleNotice(box, body, 'info');
         box.style.margin = '0 0 12px';
+        body.parentElement.insertBefore(box, body);
+        if (lastSettings.aiAutoAnalyze) {
+            box.textContent = '🤖 The AI is reading this email…';
+            box.dataset.state = 'waiting';
+            whenVerdictReady(body).then(() => { if (box.isConnected && box.dataset.state === 'waiting') runAiAnalysis(body, box, true); });
+            continue;
+        }
         const intro = document.createElement('span');
         intro.textContent = '🤖 ';
         const btn = noticeButton('Ask the AI: could this be phishing?', () => runAiAnalysis(body, box));
@@ -3152,8 +3161,22 @@ function scanAiButtons() {
         small.style.cssText = 'font-size:11px;opacity:.8;margin-left:8px;';
         small.textContent = '(experimental; S.P.R.U.C.E+\'s own model, on this computer)';
         box.append(intro, btn, small);
-        body.parentElement.insertBefore(box, body);
     }
+}
+
+// Resolves once the opened email's own verdict is known, or after AI_AUTO_WAIT_MS (webmail without
+// sender checks, or a slow check): the model is then given whatever is known.
+const AI_AUTO_WAIT_MS = 3000;
+function whenVerdictReady(body) {
+    return new Promise(resolve => {
+        const t0 = Date.now();
+        const look = () => {
+            const st = openedStates.get(body);
+            if ((st && st.final) || Date.now() - t0 >= AI_AUTO_WAIT_MS || !body.isConnected) resolve();
+            else setTimeout(look, 200);
+        };
+        look();
+    });
 }
 
 async function aiFactsFor(body) {
@@ -3181,16 +3204,28 @@ async function aiFactsFor(body) {
     };
 }
 
-function runAiAnalysis(body, box) {
+function runAiAnalysis(body, box, auto = false) {
     styleNotice(box, body, 'info');
     box.style.margin = '0 0 12px';
     box.textContent = '🤖 The AI is reading this email…';
     box.dataset.state = 'running';
-    aiFactsFor(body).then(facts => safeSend({ action: 'aiAnalyze', facts }, (res) => guarded('Showing the AI opinion', () => showAiResult(body, box, res))));
+    box.dataset.auto = auto ? '1' : '';
+    aiFactsFor(body).then(facts => safeSend({ action: 'aiAnalyze', facts, auto }, (res) => guarded('Showing the AI opinion', () => showAiResult(body, box, res, auto))));
 }
 
-function showAiResult(body, box, res) {
+function showAiResult(body, box, res, auto = false) {
     box.textContent = '';
+    // Automatic and nothing suspicious: one short line (the full answer is one click away).
+    if (auto && res && !res.error && res.advice && res.advice.level === 'info') {
+        box.dataset.state = 'done';
+        box.dataset.level = 'info';
+        styleNotice(box, body, 'info');
+        box.style.margin = '0 0 12px';
+        box.style.padding = '4px 12px';
+        box.style.fontSize = '12px';
+        box.append(`🤖 ${res.advice.headline.replace(/^The model/, 'S.P.R.U.C.E+\'s AI')} `, noticeButton('Why?', () => showAiResult(body, box, res, false)));
+        return;
+    }
     if (!res || res.error || !res.advice) {
         box.dataset.state = 'error';
         styleNotice(box, body, 'caution');

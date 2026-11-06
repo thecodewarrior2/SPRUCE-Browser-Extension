@@ -56,8 +56,9 @@ remembers, on your computer only, a scrambled code (a hash) of each sender addre
 it first saw it, never the address itself. Logging → Senders → Clear sender data forgets them. Nothing
 is sent anywhere.
 
-**AI analysis (experimental, off by default):** the extension's own small AI model runs inside the
-extension on your computer. It reads an opened email only when you click **Ask the AI**, after email
+**AI analysis (experimental, on by default):** the extension's own small AI model runs inside the
+extension on your computer. It reads each email as you open it (or only when you click **Ask the AI**,
+if you turn automatic analysis off in Settings → AI analysis), after email
 addresses and phone and long numbers are hidden from it. Nothing is sent anywhere, and its answers
 aren't stored.
 

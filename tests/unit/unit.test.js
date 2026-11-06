@@ -1625,11 +1625,13 @@ test('AI input: addresses keep only their domain, numbers are hidden; advice nev
   assert.equal(adv(0.01, null, [{ weight: 5, text: 'talks to AI' }]).level, 'danger');
 });
 
-test('AI analysis message: off by default, on request it answers from the bundled model', async () => {
+test('AI analysis message: on by default; when turned off it refuses; it answers from the bundled model', async () => {
   const facts = { subject: 'Your password expires today', senderName: 'Microsoft Security', senderAddress: 'no-reply@ms-verify.example', auth: { dmarc: 'fail' },
     links: [{ text: 'Keep my password', host: 'ms-verify.example', destHost: '', finding: '' }], bodyText: 'Dear user, your password expires in 2 hours. Click below to keep your current password.' };
   const ask = (b) => new Promise(res => b.chrome.runtime.onMessage.fire({ action: 'aiAnalyze', facts }, {}, res));
-  const off = loadBackground({}, { fetch: fileFetch });
+  assert.equal(S('SETTING_BY_KEY').enableAiAnalysis.def, true, 'on by default');
+  assert.equal(S('SETTING_BY_KEY').aiAutoAnalyze.def, true, 'automatic by default');
+  const off = loadBackground({ enableAiAnalysis: false }, { fetch: fileFetch });
   assert.match((await ask(off)).error, /turned off/);
   const r = await ask(aiBg);
   assert.ok(r.result.probability > 0.9 && r.advice.level === 'danger', JSON.stringify(r.advice));
