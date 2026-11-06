@@ -124,6 +124,7 @@ def main():
 
     train, test, hand = read('train.jsonl'), read('test.jsonl'), read('eval.jsonl')
     real = read('realworld-heldout.jsonl') if (DATA / 'realworld-heldout.jsonl').exists() else []
+    look = read('lookalikes.jsonl') if (DATA / 'lookalikes.jsonl').exists() else []
     # BERT-tiny publishes only its uncased vocabulary, so the tokenizer is set up explicitly.
     tok = BertTokenizer.from_pretrained(args.base, do_lower_case=True, model_max_length=MAX_LEN)
     model = BertForSequenceClassification.from_pretrained(args.base, num_labels=2)   # its config names no model type
@@ -153,6 +154,10 @@ def main():
     if real:
         metrics['real_world_heldout'] = m_real
     real_wrong = sorted({r['kind'] for r, p in zip(real, p_real) if p < .5})
+    m_look, p_look = evaluate(model, tok, look) if look else ({'n': 0}, [])
+    if look:
+        metrics['genuine_lookalikes'] = m_look
+    look_wrong = [(r['kind'], round(p, 3)) for r, p in zip(look, p_look) if p >= .5]
     manifest = json.loads((OUT / 'model.json').read_text()); manifest['metrics'] = metrics
     (OUT / 'model.json').write_text(json.dumps(manifest, indent=1) + '\n')
     (ROOT / 'tests' / 'fixtures' / 'ai-vectors.json').write_text(json.dumps(vec) + '\n')
@@ -160,6 +165,7 @@ def main():
     print('8-bit model:', json.dumps(metrics))
     print('hand-written mistakes:', wrong)
     print('real-world held-out misses:', real_wrong)
+    print('genuine look-alike false alarms:', look_wrong)
     (OUT / 'MODEL_CARD.md').write_text(f"""# phish-tiny {args.version} (EXPERIMENT, branch llm_testing)
 
 A BERT-tiny classifier ({args.base}, 2 layers, 4.4 million parameters) fine-tuned to tell phishing from
@@ -168,8 +174,10 @@ links and their checks) and the email's text with addresses and numbers redacted
 by `tools/ai/train.py` with {args.epochs} epochs at learning rate {args.lr}; weights stored in 8 bits.
 
 **Training data:** {len(train)} emails from `tools/ai/make-dataset.js`: synthetic ones from its templates, and variants
-of two thirds of `tools/ai/real-world.jsonl` (phishing that universities and the FTC published as warnings,
-paraphrased, with made-up names; no real email or personal data), plus any examples in `tools/ai/data/extra/`.
+of two thirds of `tools/ai/real-world.jsonl` (phishing and email scams that universities, school groups,
+the FTC, FBI, IRS and others published as warnings, including spear phishing and business email
+compromise; paraphrased, with made-up names; no real email, personal data or bank details), plus any
+examples in `tools/ai/data/extra/`.
 
 **Scores of the exported model**
 
@@ -178,17 +186,26 @@ paraphrased, with made-up names; no real email or personal data), plus any examp
 | Synthetic test ({m_test['n']}, same templates, other seed) | {m_test['accuracy']} | {m_test['precision']} | {m_test['recall']} | {m_test['false_positives']} | {m_test['false_negatives']} |
 | Hand-written ({m_hand['n']}, not from the templates) | {m_hand['accuracy']} | {m_hand['precision']} | {m_hand['recall']} | {m_hand['false_positives']} | {m_hand['false_negatives']} |
 {f"| Real-world, held out ({m_real['n']}: 3 variants of each of {len(real) // 3} published examples never trained on; all phishing) | {m_real['accuracy']} | - | {m_real['recall']} | - | {m_real['false_negatives']} |" if real else ''}
+{f"| Genuine look-alikes ({m_look['n']}, hand-written, never trained on; all genuine) | {m_look['accuracy']} | - | - | {m_look['false_positives']} | - |" if look else ''}
 
 Hand-written emails it got wrong: {', '.join(f'{k} ({p})' for k, p in wrong) or 'none'}.
 Held-out real-world examples it missed (any variant): {', '.join(real_wrong) or 'none'}.
+Genuine look-alikes it called phishing: {', '.join(f'{k} ({p})' for k, p in look_wrong) or 'none'}.
 
 **Limits:** the synthetic score mostly measures how well it learned the templates. The hand-written
 score is the better check, but it is small, and it is OPTIMISTIC: while building this experiment the
 generator was improved after looking at which hand-written emails the model got wrong, so those emails
 have partly shaped the training.
 
-The real-world held-out set is the most honest number here, with three caveats: it is all phishing (it
-measures missed phishing, not false alarms); it is small (variants of {len(real) // 3} published examples, mostly
+The genuine look-alikes (`tools/ai/eval-lookalikes.jsonl`) are the false-alarm check: genuine mail that
+resembles spear phishing and scams (a leader asking for a call, payroll and closing notices that mention
+deposits and wires, real DocuSign, Microsoft and PayPal notices). They were written alongside the
+generator's genuine look-alike kinds, by the same hand, so the score is somewhat optimistic; they are
+never trained on, and the generator is not changed to fit them. Model 0.4.0 called 10 of these 24
+phishing.
+
+The real-world held-out set is the most honest number for missed phishing, with three caveats: it is all
+phishing (it measures missed phishing, not false alarms); it is small (variants of {len(real) // 3} published examples, mostly
 aimed at universities); and its variants get the same random sender, layout and wording changes as the
 training data. It was never trained on, and the generator was not changed to fit it, but its score was
 seen between training runs (model 0.3.0, before the real-world examples: 34 of 39).
