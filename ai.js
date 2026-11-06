@@ -23,7 +23,12 @@
 // training emails with this same function, so training and use always see the same format.
 // facts: { subject, senderName, senderAddress, auth: { dmarc } | null,
 //          links: [{ text, host, destHost, finding }], bodyText,
-//          org: 'inside' | 'outside' | undefined (the user's own organization, when the account has one) }
+//          org: 'inside' | 'outside' | undefined (the user's own organization, when the account has one),
+//          recipient: the reader's own mailbox name (the part before @), replaced by "your name" wherever
+//                     it appears, so the model sees the trick ("READER! Apply…", a sender named after
+//                     you) without ever seeing the name,
+//          layout: ['images only' | 'text after a large blank gap'] (how the email hides its text),
+//          mailChecks: kinds of headerAnomalies findings (AI_MAIL_CHECKS) }
 // ---------------------------------------------------------------------------------------------------
 const AI_MAX_LINKS = 8;
 
@@ -48,22 +53,43 @@ function stripExternalTag(subject) {
     return s.trim();
 }
 
+// What a mail system along the way already found in the headers (headerAnomalies kinds), in words.
+const AI_MAIL_CHECKS = Object.freeze({
+    'spam-flag': 'already marked as spam by a mail system', 'local-tool': 'sent with a home-made bulk-mail tool',
+    'broken-to': 'broken to address', 'placeholders': 'unfilled template placeholders', 'markup': 'web code in address lines',
+    'forged-received': 'forged delivery records', 'duplicate-headers': 'repeated headers', 'fake-signature': 'fake signature'
+});
+const AI_LAYOUTS = new Set(['images only', 'text after a large blank gap']);
+
+// The reader's own mailbox name, wherever it appears, becomes "your name" (whole words only, and only
+// names of 3 or more letters, so "al" in "also" stays).
+function maskRecipient(text, recipient) {
+    const r = String(recipient || '').trim().toLowerCase();
+    if (r.length < 3) return String(text || '');
+    const esc = r.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return String(text || '').replace(new RegExp(`(^|[^\\p{L}\\p{N}])${esc}(?=$|[^\\p{L}\\p{N}])`, 'giu'), '$1your name');
+}
+
 function modelInputParts(facts) {
     const f = facts || {};
+    const mask = (t) => maskRecipient(redactForAi(t), f.recipient);
     const addr = String(f.senderAddress || '').toLowerCase();
     const domain = addr.split('@')[1] || 'unknown';
     const head = [];
-    head.push(`subject: ${redactForAi(stripExternalTag(f.subject) || 'none').slice(0, 160)}.`);
+    head.push(`subject: ${mask(stripExternalTag(f.subject) || 'none').slice(0, 160)}.`);
     const where = f.org === 'inside' ? ' (your organization)' : f.org === 'outside' ? ' (outside your organization)' : '';
-    head.push(`from: "${redactForAi(f.senderName || '').slice(0, 80)}" at ${domain}${where}${typeof isSharedMailbox === 'function' && isSharedMailbox(addr) ? ' (shared mailbox)' : ''}.`);
-    head.push(`sender check: ${f.auth && f.auth.dmarc ? `dmarc ${f.auth.dmarc}` : 'unknown'}.`);
+    head.push(`from: "${mask(f.senderName || '').slice(0, 80)}" at ${domain}${where}${typeof isSharedMailbox === 'function' && isSharedMailbox(addr) ? ' (shared mailbox)' : ''}.`);
+    const checks = [...new Set((f.mailChecks || []).map(k => AI_MAIL_CHECKS[k]).filter(Boolean))].slice(0, 4);
+    head.push(`sender check: ${f.auth && f.auth.dmarc ? `dmarc ${f.auth.dmarc}` : 'unknown'}${checks.length ? `; ${checks.join('; ')}` : ''}.`);
     const links = (f.links || []).slice(0, AI_MAX_LINKS).map(l => {
-        const text = redactForAi(String(l.text || '').trim()).slice(0, 40) || 'image';
+        const text = mask(String(l.text || '').trim()).slice(0, 40) || 'image';
         const dest = l.destHost && l.destHost !== l.host ? `${l.host} then ${l.destHost}` : (l.host || 'unknown');
         return `"${text}" goes to ${dest}${l.finding ? ` (warning: ${redactForAi(l.finding).slice(0, 80)})` : ''}`;
     });
     head.push(links.length ? `links: ${links.join('; ')}.` : 'links: none.');
-    const body = redactForAi(String(f.bodyText || '')).replace(/\s+/g, ' ').trim();
+    const layout = (f.layout || []).filter(x => AI_LAYOUTS.has(x));
+    if (layout.length) head.push(`layout: ${layout.join('; ')}.`);
+    const body = mask(String(f.bodyText || '')).replace(/\s+/g, ' ').trim();
     return { head: head.join(' '), sentences: splitSentences(body) };
 }
 
@@ -283,8 +309,10 @@ function aiAdvice(result, extensionStatus, vouching) {
     const pct = Math.min(99, Math.round(((result && result.probability) || 0) * 100));   // no model is ever 100% sure
     const v = (vouching || []).sort((a, b) => b.weight - a.weight)[0];
     if (v && v.weight >= 5) return { level: 'danger', headline: 'This email tries to talk to AI tools and filters.', note: `${v.text} ${keepOwn}`.trim() };
+    // A safety claim is only a small weight in the extension's own verdict: here it is mentioned when the
+    // model warns anyway, and never makes a warning of its own.
     if (pct >= 85) return { level: 'danger', headline: `The model thinks this is likely phishing (${pct}%).`, note: `${v ? v.text + ' ' : ''}${keepOwn}`.trim() };
-    if (pct >= 50 || (v && v.weight >= 3)) return { level: 'caution', headline: pct >= 50 ? `The model finds this email suspicious (${pct}%).` : `The model sees few signs of phishing (${pct}%), but the email claims to be safe.`, note: `${v ? v.text + ' ' : ''}${keepOwn}`.trim() };
+    if (pct >= 50) return { level: 'caution', headline: `The model finds this email suspicious (${pct}%).`, note: `${v ? v.text + ' ' : ''}${keepOwn}`.trim() };
     return { level: 'info', headline: `The model found no strong signs of phishing (${pct}%).`,
              note: keepOwn || 'That is an opinion, not a check: phishing can look ordinary. Still be careful with links, attachments and requests for money or passwords.' };
 }
