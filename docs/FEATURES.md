@@ -207,7 +207,9 @@ the Inspector explains that no tool can read them offline.
 - **AI opinion of opened emails** (Settings → AI analysis, on by default): each email is analyzed as it
   opens (**Analyze opened emails automatically**, on by default; off: an **Ask the AI** button instead)
   by the extension's own small AI model, `phish-tiny` (a BERT-tiny classifier, about 5 MB, trained by this
-  project: see [tools/ai/README.md](../tools/ai/README.md)). It runs inside the extension on the
+  project: see [tools/ai/README.md](../tools/ai/README.md); it learned from synthetic emails and from
+  phishing, spear-phishing and scam examples that schools and agencies published, paraphrased without
+  personal data). It runs inside the extension on the
   computer, in plain JavaScript; nothing is sent anywhere. It says how likely the email is phishing and
   which sentences, on their own, read most like phishing. Email addresses keep only their domain and
   numbers are hidden before it sees the text. The automatic run waits (up to 3 seconds) for the email's

@@ -208,7 +208,8 @@ The real-world held-out set is the most honest number for missed phishing, with 
 phishing (it measures missed phishing, not false alarms); it is small (variants of {len(real) // 3} published examples, mostly
 aimed at universities); and its variants get the same random sender, layout and wording changes as the
 training data. It was never trained on, and the generator was not changed to fit it, but its score was
-seen between training runs (model 0.3.0, before the real-world examples: 34 of 39).
+seen between training runs (model 0.4.0, before the spear-phishing and scam examples were added: 144 of
+153 on this set).
 
 **Regression cases** (`tests/fixtures/ai-regressions.jsonl`): emails earlier versions got wrong, reported
 by the maintainer and paraphrased without personal data: genuine ones (a deal-site newsletter, a security

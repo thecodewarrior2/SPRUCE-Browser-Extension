@@ -649,7 +649,10 @@ if (require.main === module) {
     fs.mkdirSync(outDir, { recursive: true });
     const seed = arg('seed', 7);
     const real = realWorldSets(arg('real-variants', 12), arg('real-held-variants', 3), seed + 2000);
-    const train = makeSet(arg('train', 8000), seed).concat(real.train, extraExamples());
+    // Real-world rows are all phishing: as many extra genuine emails keep the two classes even.
+    const rg = rng(seed + 3000), balance = [];
+    for (let i = 0; i < real.train.length; i++) balance.push(makeExample(rg, 0));
+    const train = makeSet(arg('train', 8000), seed).concat(real.train, balance, extraExamples());
     const test = makeSet(arg('test', 1500), seed + 1000);
     const write = (f, rows) => fs.writeFileSync(path.join(outDir, f), rows.map(x => JSON.stringify(x)).join('\n') + '\n');
     write('train.jsonl', train);
@@ -661,6 +664,6 @@ if (require.main === module) {
     // Genuine emails that look like spear phishing and scams (hand-written, never trained on): false alarms.
     const look = fs.readFileSync(path.join(__dirname, 'eval-lookalikes.jsonl'), 'utf8').split('\n').filter(l => l.trim()).map(l => JSON.parse(l));
     write('lookalikes.jsonl', look.map(x => ({ text: modelInputText(x.facts), label: x.label, kind: `look:${x.name}` })));
-    console.log(`train ${train.length} (${real.train.length} real-world), test ${test.length}, hand-written ${hand.length}, real-world held out ${real.held.length} → ${outDir}`);
+    console.log(`train ${train.length} (${real.train.length} real-world, ${balance.length} genuine to balance them), test ${test.length}, hand-written ${hand.length}, real-world held out ${real.held.length} → ${outDir}`);
 }
 module.exports = { makeSet, makeExample, rng, realWorldSets, realWorldEmail, finishExample };
