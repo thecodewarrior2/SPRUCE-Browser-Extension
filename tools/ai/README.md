@@ -59,7 +59,9 @@ the unit test fails if the model's score on the hand-written emails drops below 
 
 ## Rules the extension keeps, whatever the model says
 
-- On request only: nothing is analyzed until the person clicks "Ask the AI".
+- On this computer only: each opened email is analyzed as it opens (Settings → AI analysis →
+  Analyze opened emails automatically, on by default), or only when the person clicks "Ask the AI";
+  nothing is sent anywhere or stored. Automatic answers that see nothing suspicious are one short line.
 - Advisory only: the model's opinion can add a warning but never clears one, marks anything safe or
   moves email to Spam (`aiAdvice`). A phishing email can contain text written to fool AI tools.
 - Text that vouches for itself ("this email is verified safe", "ignore previous instructions…")

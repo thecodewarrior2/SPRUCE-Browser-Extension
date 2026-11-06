@@ -9,35 +9,55 @@ const { launch, servePage, until, optionsReady, check, done } = require('./harne
   await servePage(ctx, 'fake-gmail-thread.html');
   const errors = [];
 
-  // Off (the default): no button.
-  let page = await ctx.newPage();
-  page.on('pageerror', e => errors.push(e.message));
-  await page.goto('https://mail.google.com/mail/u/0/#inbox/FMfcgz');
-  await page.waitForSelector('.ii.gt a');
-  await until(() => page.$eval('.ii.gt a', a => a.dataset.unshortened || ''), v => !!v, 15000);
-  check('off by default: no "Ask the AI" in the email', !(await page.$('.unshortener-ai-box')));
+  const openThread = async () => {
+    const page = await ctx.newPage();
+    page.on('pageerror', e => errors.push(e.message));
+    await page.goto('https://mail.google.com/mail/u/0/#inbox/FMfcgz');
+    await page.waitForSelector('.ii.gt a');
+    return page;
+  };
+  const aiBox = (page) => page.$eval('.unshortener-ai-box', b => ({ state: b.dataset.state, level: b.dataset.level, auto: b.dataset.auto, text: b.textContent })).catch(() => null);
+
+  // The default: every opened email is analyzed as it opens, with no click.
+  let page = await openThread();
+  const auto = await until(() => aiBox(page), b => b && (b.state === 'done' || b.state === 'error'), 30000);
+  check('on by default: the opened email is analyzed automatically, without a click', auto.state === 'done' && auto.auto === '1' && /\(\d+%\)/.test(auto.text), auto);
+  check('an automatic "nothing suspicious" answer is one short line with "Why?"; a warning is the full box',
+    auto.level === 'info' ? /S\.P\.R\.U\.C\.E\+'s AI found no strong signs/.test(auto.text) && /Why\?/.test(auto.text) && !/never changes/.test(auto.text)
+                          : /own small AI model/.test(auto.text), auto);
+  console.log(`      (the model's opinion of the one-line test email: ${auto.level}, ${(auto.text.match(/\((\d+%)\)/) || [])[1]})`);
+  if (auto.level === 'info') {
+    await page.click('.unshortener-ai-box button');
+    const full = await aiBox(page);
+    check('"Why?" opens the full answer', /own small AI model/.test(full.text) && /Ask again/.test(full.text), full.text);
+  }
   await page.close();
 
-  // On: the button appears; nothing is analyzed until it is clicked.
-  await sw.evaluate(() => chrome.storage.local.set({ enableAiAnalysis: true }));
-  page = await ctx.newPage();
-  page.on('pageerror', e => errors.push(e.message));
-  await page.goto('https://mail.google.com/mail/u/0/#inbox/FMfcgz');
-  await page.waitForSelector('.unshortener-ai-box', { timeout: 15000 });
+  // Automatic analysis off: a button, and nothing is analyzed until it is clicked.
+  await sw.evaluate(() => chrome.storage.local.set({ aiAutoAnalyze: false }));
+  page = await openThread();
+  await page.waitForSelector('.unshortener-ai-ask', { timeout: 15000 });
   const logBefore = await sw.evaluate(async () => ((await chrome.storage.local.get('errorLogs')).errorLogs || []).filter(e => e.source === 'AI analysis').length);
-  check('on: the email gets an "Ask the AI" button, and nothing is analyzed before the click', logBefore === 0 && !!(await page.$('.unshortener-ai-ask')));
+  const idle = await aiBox(page);
+  check('automatic off: an "Ask the AI" button, and nothing analyzed before the click', !idle.state && /Ask the AI/.test(idle.text), idle);
   const statusBefore = await until(() => page.$eval('.unshortener-sender-address', e => e.dataset.status || ''), v => !!v, 15000);
   await page.click('.unshortener-ai-ask');
-  const box = await until(() => page.$eval('.unshortener-ai-box', b => ({ state: b.dataset.state, level: b.dataset.level, text: b.textContent })), b => b.state === 'done' || b.state === 'error', 30000);
-  // The wiring is tested here (button → model in the service worker → answer in the email); how good the
-  // model is, is tested on the hand-written emails (unit tests). Its score for this one-line test email
-  // is printed for the record.
-  check('the model answers in the email: a score, an opinion, and that it is the extension\'s own model on this computer',
+  const box = await until(() => aiBox(page), b => b && (b.state === 'done' || b.state === 'error'), 30000);
+  check('clicked: the full answer, from the extension\'s own model on this computer',
     box.state === 'done' && /\(\d+%\)/.test(box.text) && /own small AI model \(phish-tiny/.test(box.text) && /on this computer/.test(box.text) && !/\bis safe\b/.test(box.text), box);
-  console.log(`      (the model's opinion of the one-line test email: ${box.level}, ${(box.text.match(/\((\d+%)\)/) || [])[1]})`);
+  const logAfter = await sw.evaluate(async () => ((await chrome.storage.local.get('errorLogs')).errorLogs || []).filter(e => e.source === 'AI analysis').length);
+  check('a clicked analysis is logged (automatic ones only when they warn)', logAfter >= logBefore, { logBefore, logAfter });
   const statusAfter = await page.$eval('.unshortener-sender-address', e => e.dataset.status || '');
   check('the AI opinion never changes the email\'s own verdict', statusAfter === statusBefore, { statusBefore, statusAfter });
   await page.close();
+
+  // AI analysis off: nothing at all.
+  await sw.evaluate(() => chrome.storage.local.set({ enableAiAnalysis: false, aiAutoAnalyze: true }));
+  page = await openThread();
+  await until(() => page.$eval('.ii.gt a', a => a.dataset.unshortened || ''), v => !!v, 15000);
+  check('AI analysis off: no AI box in the email', !(await page.$('.unshortener-ai-box')));
+  await page.close();
+  await sw.evaluate(() => chrome.storage.local.set({ enableAiAnalysis: true }));
 
   // Settings → AI analysis: status and "Try it".
   const opt = await ctx.newPage();

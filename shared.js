@@ -153,7 +153,11 @@ const SETTING_DEFS = [
     // EXPERIMENT (llm_testing): small weights for a sender outside the user's own organization and for
     // the first email from an address (remembered as hashes on this device).
     { key: 'weighSenderHistory',         managedKey: 'managedWeighSenderHistory',         def: true, type: 'boolean' },
-    { key: 'enableAiAnalysis',            managedKey: 'managedEnableAiAnalysis',            def: false, type: 'boolean' }
+    // EXPERIMENT (llm_testing): the extension's own small language model (models/phish-tiny, trained by
+    // tools/ai) gives its opinion of opened emails: automatically when one is opened (aiAutoAnalyze),
+    // or only when the person clicks "Ask the AI".
+    { key: 'enableAiAnalysis',            managedKey: 'managedEnableAiAnalysis',            def: true, type: 'boolean' },
+    { key: 'aiAutoAnalyze',               managedKey: 'managedAiAutoAnalyze',               def: true, type: 'boolean' }
 ];
 // secret: true => may hold API keys; never written to exported backups.
 

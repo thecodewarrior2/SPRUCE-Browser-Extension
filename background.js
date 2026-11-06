@@ -3166,7 +3166,7 @@ function secondOpinionLinks(urlString) {
 
 // ---------------------------------------------------------------------------
 // AI EMAIL ANALYSIS — EXPERIMENT (llm_testing). The extension's own model (models/phish-tiny, run by
-// ai.js in plain JavaScript, right here) gives its opinion of an email. On request only, advisory only
+// ai.js in plain JavaScript, right here) gives its opinion of an email (automatically as it opens, or on request). Advisory only
 // (never lowers a verdict), addresses and numbers redacted. Text that vouches for itself counts toward
 // phishing (selfVouchingSigns). Only the verdict and the time taken are logged, never the email.
 // ---------------------------------------------------------------------------
@@ -3181,7 +3181,7 @@ async function aiModelStatus() {
     }
 }
 
-async function aiAnalyzeEmail(facts) {
+async function aiAnalyzeEmail(facts, auto = false) {
     const cfg = await getConfig();
     if (!cfg.values.enableAiAnalysis) return { error: 'AI analysis is turned off (Settings → AI analysis).' };
     const f = facts || {};
@@ -3195,8 +3195,10 @@ async function aiAnalyzeEmail(facts) {
     const vouching = selfVouchingSigns(`${f.subject || ''}\n${f.bodyText || ''}`);
     const status = f.verdict ? f.verdict.status : null;
     const ms = Date.now() - t0;
-    logInfo(`AI analysis (${result.model} ${result.version}): ${Math.round(result.probability * 100)}% phishing in ${(ms / 1000).toFixed(1)} s.`, 'AI analysis');
-    return { result, vouching, advice: aiAdvice(result, status, vouching), ms };
+    const advice = aiAdvice(result, status, vouching);
+    // Automatic runs (every opened email) are logged only when they warn, so the log isn't flooded.
+    if (!auto || advice.level !== 'info') logInfo(`AI analysis (${result.model} ${result.version}${auto ? ', automatic' : ''}): ${Math.round(result.probability * 100)}% phishing in ${(ms / 1000).toFixed(1)} s.`, 'AI analysis');
+    return { result, vouching, advice, ms };
 }
 
 // ---------------------------------------------------------------------------
@@ -3610,7 +3612,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     // EXPERIMENT (llm_testing): AI opinion of an email (opened email in the webmail, or pasted in Settings).
     if (request.action === 'aiAnalyze') {
-        aiAnalyzeEmail(request.facts).then(sendResponse)
+        aiAnalyzeEmail(request.facts, !!request.auto).then(sendResponse)
             .catch((e) => { logError(`AI analysis failed: ${errorText(e)}`, 'AI analysis'); sendResponse({ error: 'It failed; see Logging → Application log.' }); });
         return true;
     }

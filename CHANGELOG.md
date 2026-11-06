@@ -1,5 +1,20 @@
 # Changelog
 
+## 5.94.3 — EXPERIMENT (branch `llm_testing`): AI analysis on by default, automatic on opened emails
+
+Not for release.
+
+- `enableAiAnalysis` is now on by default, and new `aiAutoAnalyze` (policy `managedAiAutoAnalyze`), also
+  on by default, analyzes each opened email as it opens, with no click. Off: the **Ask the AI** button as
+  before. Both in Settings → AI analysis.
+- The automatic run waits for the email's own verdict (`whenVerdictReady`, at most 3 s), so the model is
+  given it. A result with nothing suspicious is one short line ("S.P.R.U.C.E+'s AI found no strong signs
+  of phishing (3%). Why?"), so emails aren't crowded; **Why?** opens the full answer. Caution and danger
+  show the full box. Automatic runs are logged only when they warn.
+- Unchanged: advisory only (never clears a warning, marks anything safe or moves email), on this computer
+  only, addresses and numbers redacted.
+- Tests: `test-ai.js` covers automatic (default), click-only and off.
+
 ## 5.94.2 — EXPERIMENT (branch `llm_testing`): weights for outside and first-time senders
 
 Not for release.
