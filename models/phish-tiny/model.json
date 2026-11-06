@@ -1,6 +1,6 @@
 {
  "name": "phish-tiny",
- "version": "0.2.0",
+ "version": "0.3.0",
  "base": "prajjwal1/bert-tiny",
  "labels": [
   "genuine",

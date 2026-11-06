@@ -180,7 +180,13 @@ today" phishing; genuine IT notices, invitations and code emails), so those emai
 the training. A fresh set of hand-written or real (de-identified) emails, never looked at while
 changing the generator, is needed for an honest score.
 Known miss: a one-line "Please sign in at example.com today." from "IT Support" at an unknown domain
-scores about 32% (below the 50% caution line); the model leans on longer text and on link warnings. Real-world accuracy needs real, labelled,
+scores about 13% (below the 50% caution line); with an ordinary-looking domain and no link warning,
+one short sentence is too little for it.
+
+**Regression cases** (`tests/fixtures/ai-regressions.jsonl`): genuine emails earlier versions got wrong,
+reported by the maintainer and paraphrased without personal data (a deal-site newsletter, a security
+vendor's sales thread, an automated district reimbursement statement). The generator was extended
+because of them, so they are a regression check, not an independent score. Real-world accuracy needs real, labelled,
 de-identified examples (add them in `tools/ai/data/extra/`). English only. Advisory only in the
 extension: it never clears a warning or moves email.
 """)

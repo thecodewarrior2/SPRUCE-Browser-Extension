@@ -3179,6 +3179,18 @@ function whenVerdictReady(body) {
     });
 }
 
+// The message's own text, without the quoted earlier messages (written by other people, often the user's
+// own colleagues): the model judges what this sender wrote now.
+function ownText(body) {
+    let text = body.innerText || '';
+    for (const q of body.querySelectorAll('.gmail_quote, .gmail_quote_container, blockquote, .gmail_extra')) {
+        if (q.parentElement && q.parentElement.closest('.gmail_quote, .gmail_quote_container, blockquote, .gmail_extra')) continue;
+        const t = q.innerText || '';
+        if (t.trim()) text = text.replace(t, '');
+    }
+    return text.trim() || body.innerText || '';
+}
+
 async function aiFactsFor(body) {
     const sender = openedSenderOf(body) || {};
     let auth = null;
@@ -3197,10 +3209,11 @@ async function aiFactsFor(body) {
     }
     return {
         subject: openedSubject(), senderName: sender.name || '', senderAddress: sender.address || '',
+        org: ownOrgDomain() && sender.address ? (isOwnDomain(String(domainOfAddress(sender.address) || '').toLowerCase(), ownOrgDomain()) ? 'inside' : 'outside') : undefined,
         auth: auth ? { dmarc: auth.dmarc, spf: auth.spf, dkim: auth.dkim, headerFrom: auth.headerFrom } : null,
         links, attachments: [],
         verdict: st && st.final ? { status: st.final.status, reasons: st.final.reasons || [] } : null,
-        bodyText: (body.innerText || '').slice(0, 8000)
+        bodyText: ownText(body).slice(0, 8000)
     };
 }
 

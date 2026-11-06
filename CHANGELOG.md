@@ -1,5 +1,27 @@
 # Changelog
 
+## 5.94.4 — EXPERIMENT (branch `llm_testing`): model 0.3.0, after three false alarms
+
+Not for release. Three genuine emails reported as flagged by the AI (model 0.2.0): a deal-site
+newsletter (90%), a security vendor's sales thread (97% on its quoted part), and an automated district
+reimbursement statement with a PDF (over 99%; the PDF itself was clean: no links, scripts or forms, and
+the extension's attachment check didn't flag it). The model had never seen genuine mail like them.
+
+- Training data (`tools/ai/make-dataset.js`): new genuine kinds `deals` (big brands as products, huge
+  discounts, coupon fine print, click-tracking links), `thread` (vendors and colleagues scheduling, with
+  signatures, titles, disclaimers, public-records notes and quoted messages, including salespeople and IT
+  staff describing scams), `statement` (automated one-line statements and notices through internal
+  groups or agencies); broader `receipt` and `shipping` wording; a third of the sign-in phishing on
+  ordinary-looking domains.
+- Model input (`ai.js`): the sender's place, "(your organization)" or "(outside your organization)", when
+  the account has its own domain (8% of the training phishing comes from inside, as from a compromised
+  account); `[EXTERNAL]`-style tags removed from the subject (`stripExternalTag`). In the webmail, the
+  quoted earlier messages are left out of the text (`ownText`).
+- Model 0.3.0: 1,500/1,500 synthetic, 33/33 hand-written (optimistic, see the model card), the five
+  regression cases at 0.1%. Known miss: a one-line "sign in at … today" email at about 13%.
+- `tests/fixtures/ai-regressions.jsonl`: the reported emails, paraphrased without personal data; a unit
+  test keeps them genuine.
+
 ## 5.94.3 — EXPERIMENT (branch `llm_testing`): AI analysis on by default, automatic on opened emails
 
 Not for release.

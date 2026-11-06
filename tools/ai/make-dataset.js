@@ -90,7 +90,8 @@ const GENUINE_FOOTERS = ['Virus-free. www.avast.com', 'Sent from my iPhone', 'Pl
 const PHISH = {
     // A one-liner asking to sign in somewhere (the shortest phishing there is).
     signin(r) {
-        const bad = badDomain(r, null), b = r.pick(BRANDS.slice(0, 7));
+        // A third use an ordinary-looking (often hacked) domain: the request itself is the sign.
+        const bad = r.chance(0.35) ? `${r.pick(ORG_WORDS)}${r.pick(['', '-', ''])}${r.pick(['design', 'studio', 'consulting', 'farms', 'dental', 'realty', 'photo', 'travel'])}.${r.pick(['com', 'net', 'org', 'com'])}` : badDomain(r, null), b = r.pick(BRANDS.slice(0, 7));
         return { subject: r.pick(['Your password expires', 'Password expiry notice', 'Account verification required', 'Re-activate your account', 'Mailbox upgrade', 'Login required', 'Your session expired']),
                  senderName: r.pick(['IT Support', 'Help Desk', 'IT Department', 'System Administrator', 'Email Admin', `${b.name} Support`, 'Technology Services']),
                  senderAddress: `${r.pick(['it', 'support', 'helpdesk', 'admin'])}@${r.chance(0.6) ? bad : orgDomain(r).replace(/\.(\w+)$/, `-${r.pick(['it', 'mail', 'portal'])}.${r.pick(BAD_TLDS)}`)}`,
@@ -231,11 +232,17 @@ const GENUINE = {
     },
     receipt(r) {
         const b = r.pick(BRANDS.filter(x => ['Amazon', 'Apple', 'Netflix', 'PayPal', 'Zoom', 'Dropbox'].includes(x.name)));
-        return { subject: r.pick([`Your ${b.name} order has shipped`, `Your receipt from ${b.name}`, `${b.name}: payment received`, `Your ${r.pick(b.product)} membership renews soon`]),
-                 senderName: b.name, senderAddress: `${r.pick(['auto-confirm', 'no_reply', 'receipts', 'service'])}@${b.domain}`, dmarc: 'pass',
-                 links: [{ text: r.pick(['View order', 'Manage membership', 'View receipt']), host: `www.${b.domain}`, destHost: '', finding: '' }, { text: 'Help', host: `www.${b.domain}`, destHost: '', finding: '' }],
-                 body: [r.pick(['Hello,', 'Thanks for your order.', 'Hi there,']), r.pick([`Your payment of ${money(r)} was received.`, 'Your order is on its way and should arrive in 2 to 4 days.', `Your membership will renew on ${day(r)} for ${money(r)}.`]),
-                     r.pick(['You can view or change your order in your account.', 'No action is needed.', 'To cancel, visit your account settings.']), r.pick([`Questions? Visit the ${b.name} Help Center.`, '']), `${b.name}`] };
+        const merchant = `${r.pick(ORG_WORDS).replace(/^./, c => c.toUpperCase())} ${r.pick(['Books', 'Coffee', 'Outfitters', 'Hardware', 'Bakery', 'Music', 'Pet Supply'])}`;
+        const item = r.pick(['Wireless Mouse', 'USB-C Cable', 'Paperback Book', 'Phone Case', 'Desk Lamp', 'Water Bottle', 'Headphones', 'Notebook Set', 'Printer Ink']);
+        const lines = b.name === 'PayPal'
+            ? [r.pick([`You sent a payment of ${money(r)} USD to ${merchant}.`, `You paid ${money(r)} to ${merchant}.`, `${merchant} received your payment of ${money(r)}.`, `You sent ${money(r)} to ${person(r)}.`]),
+               r.pick(['It may take a few moments for this transaction to appear in your account.', 'Transaction details are in your account.', `Transaction ID: ${r.int(1000000, 9999999)}`, 'Thanks for using PayPal.'])]
+            : [r.pick([`Your order of ${item} has shipped.`, `Thanks for your order. Order #${r.int(100, 999)}-${r.int(1000000, 9999999)}.`, `Your payment of ${money(r)} was received.`, `Your membership will renew on ${day(r)} for ${money(r)}.`, `Receipt for ${item}: ${money(r)}.`]),
+               r.pick(['You can view or change your order in your account.', 'No action is needed.', 'To cancel, visit your account settings.', `Arriving ${day(r)}.`, 'Track your package in Your Orders.'])];
+        return { subject: r.pick([`Your ${b.name} order has shipped`, `Your receipt from ${b.name}`, `${b.name}: payment received`, `Your ${r.pick(b.product)} membership renews soon`, `Receipt for your payment to ${merchant}`, `Shipped: ${item}`, `Your order of ${item}`]),
+                 senderName: b.name === 'PayPal' ? 'PayPal' : r.pick([b.name, `${b.name}.com`]), senderAddress: `${r.pick(['auto-confirm', 'no_reply', 'receipts', 'service', 'shipment-tracking', 'order-update'])}@${b.domain}`, dmarc: 'pass',
+                 links: [{ text: r.pick(['View order', 'Manage membership', 'View receipt', 'View transaction', 'Track package']), host: `www.${b.domain}`, destHost: '', finding: '' }, ...(r.chance(0.5) ? [{ text: 'Help', host: `www.${b.domain}`, destHost: '', finding: '' }] : [])],
+                 body: [r.pick(['Hello,', 'Thanks for your order.', 'Hi there,', '']), ...lines, r.pick([`Questions? Visit the ${b.name} Help Center.`, '']), `${b.name}`] };
     },
     school(r) {
         const org = orgDomain(r), sender = person(r);
@@ -255,8 +262,12 @@ const GENUINE = {
     },
     shipping(r) {
         const b = r.pick(BRANDS.filter(x => ['UPS', 'FedEx', 'Amazon'].includes(x.name)));
-        return { subject: r.pick([`${b.name} update: your package arrives ${day(r)}`, 'Your package was delivered', `${b.name}: delivery scheduled`]), senderName: `${b.name}`, senderAddress: `${r.pick(['mcinfo', 'tracking', 'shipment-tracking'])}@${b.domain}`, dmarc: 'pass',
-                 links: [{ text: 'Track package', host: `www.${b.domain}`, destHost: '', finding: '' }], body: ['Hello,', r.pick([`Your package is scheduled for delivery on ${day(r)}.`, 'Your package was delivered at the front door.', 'Your shipment is on its way.']), r.pick(['Track it anytime in the app.', 'No signature is required.']), `${b.name}`] };
+        const item = r.pick(['Wireless Mouse', 'Desk Chair', 'Laptop Stand', 'Running Shoes', 'Coffee Maker', 'Backpack', 'Book', 'Toner Cartridge']);
+        return { subject: r.pick([`${b.name} update: your package arrives ${day(r)}`, 'Your package was delivered', `${b.name}: delivery scheduled`, `Shipped: your order`, `Out for delivery: ${item}`, `Delivered: ${item}`]),
+                 senderName: r.pick([b.name, `${b.name}.com`, `${b.name} Shipping`]), senderAddress: `${r.pick(['mcinfo', 'tracking', 'shipment-tracking', 'order-update'])}@${b.domain}`, dmarc: 'pass',
+                 links: [{ text: r.pick(['Track package', 'View order', 'See delivery details']), host: `www.${b.domain}`, destHost: '', finding: '' }],
+                 body: [r.pick(['Hello,', 'Hi,', '']), r.pick([`Your package is scheduled for delivery on ${day(r)}.`, 'Your package was delivered at the front door.', 'Your shipment is on its way.', `Your package with ${item} has shipped and will arrive ${day(r)}.`, `${item} is out for delivery today.`]),
+                     r.pick(['Track it anytime in the app.', 'No signature is required.', 'Track your package in Your Orders.', '']), `${b.name}`] };
     },
     colleague(r) {
         const org = orgDomain(r), sender = person(r);
@@ -279,6 +290,79 @@ const GENUINE = {
                  links: [{ text: 'View statement', host: `myaccount.${org}`, destHost: '', finding: '' }],
                  body: ['Hello,', r.pick([`Your statement for ${money(r)} is ready.`, `Your payment of ${money(r)} is due on the 15th.`, 'Your AutoPay payment is scheduled.']), r.pick(['Log in to your account to view it.', 'No action is needed if you use AutoPay.']), 'Thank you for being a customer.'] };
     },
+    // Automated statements and notices with an attached document, often one line ("Attachment: …"),
+    // from internal systems, mailing groups or known agencies: genuine, though the words (statement,
+    // reimbursement, pay period, remittance) are invoice-scam words. They come with no links to "pay".
+    statement(r) {
+        const org = orgDomain(r), internal = r.chance(0.65);
+        const prog = r.pick(['JROTC', 'Finance', 'Payroll', 'Food Service', 'Transportation', 'Athletics', 'Title I', 'Grants', 'Purchasing', 'Accounts Payable']);
+        const doc = r.pick([`${prog} District Statement`, 'District Reimbursement Statement', 'Remittance Advice', 'Pay Statement', 'Purchase Order', 'Monthly Expenditure Report', 'Grant Reimbursement Report', 'Payment Confirmation', 'Account Statement']);
+        const period = `${r.int(1, 12)}/1/2026-${r.int(1, 12)}/${r.int(28, 31)}/2026`;
+        const sys = r.pick(['WINGSDoNotReply', 'NoReply', 'Payroll System', 'Finance Notifications', 'Skyward', 'Tyler ERP', 'State Reporting', 'eReimbursement']);
+        return { subject: r.pick([`${prog} ${doc} for ${period}`, `${doc} for ${period}`, `${doc} ${r.int(1000, 99999)}`, `Your ${doc} is available`, `${doc} attached`]),
+                 senderName: internal ? r.pick([`${sys} via ${prog}`, `${prog} Office`, sys, `${sys}.${r.pick(['agency', 'state', 'center'])}.gov via ${prog}`]) : r.pick([`${sys}`, `${prog} Program Office`, 'Accounts Receivable']),
+                 senderAddress: internal ? `${prog.toLowerCase().replace(/\s+/g, '')}@${org}` : `${r.pick(['noreply', 'statements', 'remittance'])}@${r.pick(['state.example.gov', 'agency.example.mil', 'treasury.example.gov', `${r.pick(ORG_WORDS)}supply.com`])}`,
+                 dmarc: r.pick(['pass', 'pass', 'pass', 'unknown']), links: [], inside: internal,
+                 body: [r.pick([`Attachment: ${r.pick(['FL0', 'TX0', 'GA0', 'CA0'])}${r.int(10, 99)} ${doc} for pay period ${period}`, `Please see the attached ${doc.toLowerCase()}.`, `Attached is the ${doc.toLowerCase()} for ${period}.`,
+                     `Your ${doc.toLowerCase()} for ${period} is attached. No action is needed.`, `The ${doc.toLowerCase()} has been processed and is attached for your records.`]), r.pick(['', '', 'This is an automated message. Please do not reply.', 'Questions? Contact the business office.'])] };
+    },
+    // Business threads: vendors, partners and colleagues scheduling and following up, with signatures and
+    // titles, legal disclaimers, public-records notes and quoted earlier messages. Security vendors and IT
+    // staff DESCRIBE scams ("a vendor changing bank details"): talking about phishing isn't phishing.
+    thread(r) {
+        const vendorCo = `${r.pick(ORG_WORDS)}${r.pick(['security', 'learning', 'systems', 'networks', 'data', 'cloud'])}`.replace(/^./, c => c.toUpperCase());
+        const vdom = `${vendorCo.toLowerCase()}.${r.pick(['com', 'ai', 'io', 'net'])}`, org = orgDomain(r);
+        const rep_ = person(r), them = person(r), other = person(r);
+        const title = r.pick(['Account Executive', 'Public Sector Account Executive', 'Customer Success Manager', 'Solutions Engineer', 'Regional Sales Director', 'Partner Manager']);
+        const theirTitle = r.pick(['Director of Technology', 'Director of Technology and Information Systems', 'Network Administrator', 'Assistant Superintendent', 'IT Coordinator', 'Principal', 'Finance Director']);
+        const topic = r.pick([
+            'The emails that hurt districts now are the plain-text ones, like a vendor changing bank details or a payroll change from a spoofed staff member.',
+            'Most of the attacks we see start with a compromised staff or student account sending mail to colleagues.',
+            'Our platform flags invoice fraud and fake direct deposit requests before staff act on them.',
+            'Credential phishing is still the top way accounts are taken over, so we focus on catching it early.',
+            'The demo covers how the system handles a compromised account and suspicious sign-ins.',
+            'We will review the new device rollout and the network upgrade timeline.',
+            'I attached the quote we discussed and the cooperative contract details.',
+            'The renewal pricing stays the same as last year.']);
+        const ask = r.pick([`Would ${day(r)} at ${r.int(9, 3)}:${r.pick(['00', '30'])} work for ${r.pick([20, 30, 45])} minutes?`, 'Let me know which week works best for your team.', 'Happy to move it if your calendar shifts.', 'Could you confirm the time with your team?']);
+        const sig = (n, t, co, dom) => [r.pick(['Thanks,', 'Best,', 'V/r,', 'Regards,', 'Best regards,']), n, `${t}, ${co}`, `${n.split(' ')[0].toLowerCase()}@${dom}`, r.chance(0.6) ? `M: 555.${r.int(100, 999)}.${r.int(1000, 9999)}` : ''].filter(Boolean);
+        const disclaimer = r.pick(['The information contained in this e-mail message and any attachments may be privileged and confidential. If you have received this communication in error, please notify the sender and delete the message.',
+            'Please Note: Under Florida law, most written communications to or from public entities regarding official business are public records and subject to disclosure upon request.',
+            'This message is intended only for the named recipient. If you are not the intended recipient, any review, distribution or copying is strictly prohibited.', '']);
+        const fromVendor = r.chance(0.6);
+        const body = [`Hi ${them.split(' ')[0]},`, r.pick(['Thanks for the update.', 'Thanks for getting back to me.', 'Good to hear from you.', `I hope ${other.split(' ')[0]} is feeling better.`]), topic, ask,
+            ...(fromVendor ? sig(rep_, title, vendorCo, vdom) : sig(them, theirTitle, 'School District', org)), disclaimer];
+        if (r.chance(0.6)) body.push(`On ${day(r)}, ${fromVendor ? them : rep_} wrote:`, r.pick(['Thank you for following up after the conference.', 'We are booked solid until early next month.', 'Our director has been out sick, so we need a bit more time.', 'Looking forward to the demo.']),
+            r.pick(['Let us stay in touch.', 'I will confirm a date soon.', '']), ...(fromVendor ? sig(them, theirTitle, 'School District', org) : sig(rep_, title, vendorCo, vdom)));
+        return { subject: `${r.chance(0.7) ? 'Re: ' : ''}${r.pick([`${org.split('.')[0].split('-')[0].replace(/^./, c => c.toUpperCase())} + ${vendorCo}: a look for your team`, 'Demo next week', 'Following up', 'Quote and next steps', 'Renewal', 'Meeting recap'])}`,
+                 senderName: fromVendor ? rep_ : them, senderAddress: fromVendor ? `${rep_.split(' ')[0].toLowerCase()}${r.int(1, 9)}@${vdom}` : `${them.toLowerCase().replace(' ', '.')}@${org}`, dmarc: r.pick(['pass', 'pass', 'unknown']),
+                 links: r.chance(0.3) ? [{ text: r.pick(['calendar link', 'quote.pdf', vdom]), host: r.pick([vdom, 'calendly.com', 'docs.google.com']), destHost: '', finding: '' }] : [],
+                 body: body.filter(Boolean) };
+    },
+    // Deal sites and retailers' marketing: big brands as PRODUCTS, huge discounts, deadlines, coupon fine
+    // print, links through the sender's click-tracking domain. Genuine, though it reads like a "prize".
+    deals(r) {
+        const store = r.pick(['dealhub', 'gadgetshop', 'techdeals', 'brightbuy', 'shopwise', 'stackdeals', 'appsumo-like', 'cedarmarket', 'harborgoods', 'pinecrest-outlet']);
+        const site = `${store}.${r.pick(['com', 'com', 'net', 'co'])}`, esp = r.pick([`email.${site}`, `e.${site}`, `mail.${site}`, `news.${site}`]);
+        const click = r.pick([`link.${esp}`, `click.${esp}`, `links.${site}`, `trk.${site}`]);
+        const PRODUCTS = ['Microsoft Office Professional 2024: Lifetime License', 'Microsoft Visio Professional 2024', 'Microsoft Project 2024 Lifetime License', 'Windows 11 Pro', 'Adobe Creative Cloud Course Bundle',
+            'Apple iPad 9th Gen (Refurbished)', 'Apple MacBook Air 13" (Refurbished)', 'Apple AirPods Pro', 'Surfshark VPN 2-Year Plan', 'NordVPN 3-Year Plan', 'Rosetta Stone Lifetime Subscription', 'Babbel Lifetime Subscription',
+            'PDF Editor Pro: Lifetime License', 'Cloud Storage 2TB: Lifetime Plan', 'Retro Handheld Gaming Console', 'Smart Watch Fitness Tracker', 'Wireless Earbuds', 'Robot Vacuum', 'Language Learning: Lifetime Access',
+            'Password Manager: Lifetime Subscription', 'Coding Bootcamp Bundle', 'Mail Backup: Lifetime License', 'Weather Radar App: Lifetime Subscription', 'Book Summary App: Lifetime Premium'];
+        const items = r.some(PRODUCTS, r.int(3, 10));
+        const lines = [];
+        for (const it of items) { lines.push(it); if (r.chance(0.8)) lines.push(r.pick([`${r.int(30, 95)}% OFF`, `Only ${money(r)}`, `Save ${r.int(30, 95)}%`, `${money(r)} (reg. ${money(r)})`])); }
+        const head = r.pick([`That's ${money(r)} off MSRP, with no monthly fees attached.`, `Today's top deals are here.`, `Our best prices of the season.`, `New deals just dropped.`, `Prices this low won't last.`, '']);
+        const fine = r.pick(['*Some exclusions may apply. Coupons must be used within 48 hours. Cannot combine promos with account credit, price drops or other promotions.',
+            'Offer valid while supplies last. Prices and availability subject to change.', 'The list price represents the suggested retail price provided by the manufacturer.', 'Deal ends Sunday at 11:59 PM PT. See the sales page for details.', '']);
+        const footer = [r.pick([`${store} is powered by ${r.pick(['StoreStack', 'ShopEngine', 'CommerceCo'])}.`, '']), r.pick(['Unsubscribe from this list.', 'Unsubscribe | Manage preferences']), r.pick(['View this email in your browser.', '']),
+            `${r.int(100, 9999)} ${r.pick(['Sunset Blvd.', 'Main St.', 'Market St.', 'Commerce Way'])} | ${r.pick(['Los Angeles, CA', 'Austin, TX', 'Denver, CO', 'Portland, OR'])} | United States`, `© 2026 ${store}`];
+        const shown = items.slice(0, 8).map(t => ({ text: t, host: click, destHost: r.chance(0.3) ? `shop.${site}` : '', finding: '' }));
+        return { subject: r.pick([`Own ${items[0].split(':')[0]} forever. ${money(r)} ends Sunday.`, `${r.int(40, 95)}% off ${items[0].split(':')[0]}`, `Today only: ${items[0].split(':')[0]} for ${money(r)}`, 'Our best deals of the week', `Last chance: ${items[0].split(':')[0]}`, 'Black Friday prices are live']),
+                 senderName: r.pick([`${store} Shop`, `${store} Deals`, store, `${store} Store`]), senderAddress: `${r.pick(['shop', 'deals', 'news', 'hello', 'offers'])}@${esp}`, dmarc: r.pick(['pass', 'pass', 'pass', 'unknown']),
+                 links: shown.concat([{ text: r.pick(['Shop best sellers', 'Shop now', 'See all deals']), host: click, destHost: '', finding: '' }, { text: 'Login to your account', host: click, destHost: '', finding: '' }, { text: 'unsubscribe from this list', host: click, destHost: '', finding: '' }]),
+                 body: [head, ...lines, fine, ...footer].filter(Boolean) };
+    },
     sale(r) {
         const store = `${r.pick(ORG_WORDS)}${r.pick(['outfitters', 'books', 'home', 'kitchen', 'gear'])}.com`;
         return { subject: r.pick(['Last chance! 40% off ends tonight', 'Flash sale: today only', 'Your exclusive offer expires soon', 'Free shipping this weekend']),
@@ -296,6 +380,9 @@ const GENUINE = {
 };
 
 // One email of a kind: facts as the extension collects them, with variation and noise.
+const INSIDE_KINDS = new Set(['note', 'notice', 'school', 'colleague', 'thread']);
+const ORG_DOMAIN_RE = new RegExp(`^(${ORG_WORDS.join('|')})-?(${ORG_KINDS.join('|')})\\.(${TLDS.join('|')})$`);
+
 function makeExample(r, label) {
     const kinds = label ? PHISH : GENUINE, kind = r.pick(Object.keys(kinds));
     const e = kinds[kind](r);
@@ -305,8 +392,15 @@ function makeExample(r, label) {
     if (label && r.chance(0.3)) body.splice(r.int(1, body.length), 0, r.pick(SAFETY_CLAIMS));
     if (label && r.chance(0.08)) body.push(r.pick(AI_DIRECTED));
     if (r.chance(0.15)) body = body.map(s => (r.chance(0.2) ? s.toUpperCase() : s));
-    const facts = { subject: e.subject, senderName: e.senderName, senderAddress: e.senderAddress, auth: e.dmarc === 'unknown' ? null : { dmarc: e.dmarc },
-                    links: e.links, bodyText: body.join(r.pick(['\n', ' ', '\n\n'])) };
+    // Inside or outside the user's organization (known only when the account has its own domain): genuine
+    // notes, notices and school mail usually come from inside; phishing almost never does, except from a
+    // compromised staff account (8%), so the text still matters for inside mail.
+    let address = e.senderAddress, inside = !!e.inside;
+    if (!label && INSIDE_KINDS.has(kind) && ORG_DOMAIN_RE.test(address.split('@')[1] || '')) inside = true;
+    if (label && r.chance(0.08)) { address = `${address.split('@')[0]}@${orgDomain(r)}`; inside = true; }
+    const org = r.chance(0.25) ? undefined : (inside ? 'inside' : 'outside');
+    const facts = { subject: (r.chance(0.15) ? r.pick(['[EXTERNAL] ', 'EXTERNAL: ', '[EXT] ', 'CAUTION: ']) : '') + e.subject, senderName: e.senderName, senderAddress: address, auth: e.dmarc === 'unknown' ? null : { dmarc: e.dmarc },
+                    links: e.links, bodyText: body.join(r.pick(['\n', ' ', '\n\n'])), org };
     return { text: modelInputText(facts), label, kind: `${label ? 'phish' : 'genuine'}:${kind}` };
 }
 

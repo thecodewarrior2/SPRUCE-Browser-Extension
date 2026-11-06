@@ -1683,3 +1683,18 @@ test('llm_testing: the sender history learns for 14 days, then a new address cou
 test('llm_testing: the sender history is data, not settings (writing it never clears the sender caches)', () => {
   for (const k of ['seenSenders', 'seenSendersSince']) assert.ok(S(`NON_CONFIG_KEYS.has(${JSON.stringify(k)})`), k);
 });
+
+test('AI model: genuine emails earlier versions got wrong stay genuine (ai-regressions.jsonl)', async () => {
+  const model = await AI('loadPhishModel()');
+  const rows = fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'ai-regressions.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l));
+  assert.ok(rows.length >= 5);
+  for (const r of rows) {
+    const p = model.analyze(r.facts).probability;
+    assert.equal(p >= 0.5, r.label === 1, `${r.name}: ${(p * 100).toFixed(1)}%`);
+  }
+  // Tags every outside email carries say nothing, and the user's organization is part of the input.
+  assert.equal(AI(`stripExternalTag('[EXTERNAL] Re: [EXTERNAL] Hello')`), 'Re: [EXTERNAL] Hello', 'only leading tags are removed');
+  assert.equal(AI(`stripExternalTag('[EXTERNAL] [EXT] CAUTION: Notice')`), 'Notice');
+  assert.match(AI(`modelInputText({ subject: 's', senderName: 'n', senderAddress: 'a@x.example', org: 'inside', bodyText: 't' })`), /at x\.example \(your organization\)/);
+  assert.match(AI(`modelInputText({ subject: 's', senderName: 'n', senderAddress: 'a@x.example', org: 'outside', bodyText: 't' })`), /\(outside your organization\)/);
+});
