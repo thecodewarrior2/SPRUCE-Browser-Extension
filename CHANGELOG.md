@@ -1,5 +1,51 @@
 # Changelog
 
+## 5.94.8 — EXPERIMENT (branch `llm_testing`): model 0.6.0, forum examples and published genuine emails
+
+Not for release. 111 more published examples. For the first time they include real emails that look
+like scams, and these showed that 0.5.0 raised many false alarms on real security alerts and notices.
+
+- **77 more phishing examples** (231 in `tools/ai/real-world.jsonl`):
+  - **IT-admin communities and write-ups** (38): Spiceworks threads, Microsoft Q&A, MailGuard, KnowBe4,
+    IRONSCALES and CyberNut (K-12 cases), Cofense, Hoxhunt, Malwarebytes. They cover mailbox and
+    quarantine notices, "keep your same password", fax and voicemail lures, payroll and HR QR codes,
+    thread hijacking and ACH changes, "are you free?" errands, bid invitations and RFQs, parent and
+    student lures, fake purchase orders.
+  - **Consumer scams from the UK, Ireland, Canada and Australia** (39): Which?, Malwarebytes Labs,
+    Scamwatch, the Garda, the Canadian Anti-Fraud Centre, the RCMP, ESET, the CFTC. They cover
+    government rebates and fines, licence and vehicle-tax notices, utility credits, subscription and
+    storage scams, callback receipts, tax-agency mail, fake transfers, fake investigators, money-mule
+    and cheque jobs, sextortion and crypto lures.
+  - Reddit refuses automated reading, so nothing comes from it.
+- **34 published genuine emails** (`"label": 0`): Brown University's "legitimate email" posts, other
+  schools' IT pages, and the companies' own descriptions of their real emails. They include Microsoft
+  and Google security alerts, Apple sign-in notices, DocuSign, PayPal, Venmo, Duo, Okta and Login.gov
+  notices, Teams and phone voicemail, a Microsoft 365 quarantine report, a PowerSchool breach notice,
+  donation receipts, QuickBooks invoices, Handshake, HealthStream and Workday emails. Paraphrased, with
+  placeholders for every person and school.
+- **Generator:** genuine rows use the brand's real sending domain and link host (`senderDomain`,
+  `host`), or the organization's own or a supplier's, always passing the sender check. They are split
+  and held out on their own, and the model card scores them as false alarms. The class balance counts
+  them.
+
+| Held-out set | 0.4.0 | 0.5.0 | 0.6.0 |
+|---|---|---|---|
+| Published phishing caught (231 variants of 77 examples) | 217 | 228 | 218 |
+| Published genuine judged right (33 variants of 11 emails) | 17 | 6 | 22 |
+| Genuine look-alikes called phishing (24) | 10 | 4 | 5 |
+| Hand-written check set (33) | 33 | 32 | 33 |
+| Regression cases (15) | 15 | 15 | 15 |
+| Total mistakes | 40 | 35 | 29 |
+
+0.6.0 makes the fewest mistakes and flags far fewer real notices, but misses more published phishing
+than 0.5.0: 13 variants of 8 examples, mostly short file-share messages from compromised partners and
+students (a phonics worksheet, an essay to review, a customer's documents), a QR benefits guide, a
+dispute notice, a fake Microsoft unusual-sign-in alert, a conference purchase report and a Zoom invite. Still called phishing: real DocuSign envelopes, a Google
+password-breach alert, a lab-results portal registration, a Microsoft support case, a phone-system
+voicemail, a help-desk ticket update and a donation receipt. The held-out genuine set is small (11
+emails), so its score moves a lot with each email.
+
+
 ## 5.94.7 — EXPERIMENT (branch `llm_testing`): model 0.5.0, trained on published spear phishing and email scams
 
 Not for release. The AI model learned from 114 more published examples, and from genuine emails that
