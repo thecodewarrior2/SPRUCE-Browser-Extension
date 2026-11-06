@@ -150,6 +150,9 @@ const SETTING_DEFS = [
     { key: 'virusTotalApiKey',            managedKey: 'managedVirusTotalApiKey',            def: '',   type: 'string', secret: true },
     // EXPERIMENT (llm_testing): the extension's own small language model (models/phish-tiny, trained by
     // tools/ai) gives its opinion of an opened email, only when the person clicks. Off until turned on.
+    // EXPERIMENT (llm_testing): small weights for a sender outside the user's own organization and for
+    // the first email from an address (remembered as hashes on this device).
+    { key: 'weighSenderHistory',         managedKey: 'managedWeighSenderHistory',         def: true, type: 'boolean' },
     { key: 'enableAiAnalysis',            managedKey: 'managedEnableAiAnalysis',            def: false, type: 'boolean' }
 ];
 // secret: true => may hold API keys; never written to exported backups.
@@ -2858,5 +2861,37 @@ function selfVouchingSigns(text) {
     if (best) out.push({ weight: best.weight, kind: 'safety-claim', text: best.weight >= 3
         ? `It claims to be safe (“${best.quote.slice(0, 80)}”). Genuine emails don't need to say so; phishing emails often do, to lower your guard.`
         : `It carries an antivirus or "scanned" notice (“${best.quote.slice(0, 80)}”). Real mail systems add these, but so do scammers; it means nothing about the email's safety.` });
+    return out;
+}
+
+// ---------------------------------------------------------------------------
+// SENDER CONTEXT — EXPERIMENT (llm_testing). Two small weights that only tip the balance together with
+// other signs (neither, nor both together, makes an email amber on its own: 1 + 1.5 < 3):
+//   - outsideOrg: the sender is outside the user's own organization. Only when the user has their own
+//     domain (a school or work account); a personal gmail.com/outlook.com user has no "inside".
+//   - firstTime: the first email from this address. "First" = first seen by the extension less than
+//     FIRST_SEEN_WINDOW_MS ago, after the extension has been learning for SENDER_HISTORY_LEARNING_MS
+//     (right after installation every sender would look new). Within the user's own organization it
+//     doesn't count (new colleagues).
+// Addresses are remembered only as a hash (senderHistoryKey), on this device, in seenSenders.
+// ---------------------------------------------------------------------------
+const SENDER_CONTEXT_WEIGHTS = Object.freeze({ outsideOrg: 1, firstTime: 1.5 });
+const FIRST_SEEN_WINDOW_MS = 24 * 60 * 60 * 1000;
+const SENDER_HISTORY_LEARNING_MS = 14 * 24 * 60 * 60 * 1000;
+
+// 64 bits from two FNV-1a passes with different seeds: 16 hex characters, not reversible.
+function senderHistoryKey(address) {
+    const a = String(address || '').trim().toLowerCase();
+    const fnv = (seed) => { let h = seed >>> 0; for (const c of a) { h ^= c.codePointAt(0); h = Math.imul(h, 0x01000193) >>> 0; } return h.toString(16).padStart(8, '0'); };
+    return fnv(0x811c9dc5) + fnv(0x01000193 ^ 0x5bd1e995);
+}
+
+function senderContextSigns(address, own, firstTime) {
+    const out = [];
+    const domain = String(domainOfAddress(address) || '').toLowerCase();
+    if (!domain) return out;
+    const outside = !!own && !isOwnDomain(domain, own);
+    if (outside) out.push({ weight: SENDER_CONTEXT_WEIGHTS.outsideOrg, kind: 'outside-org', text: `It comes from outside your organization (${own}).` });
+    if (firstTime && (!own || outside)) out.push({ weight: SENDER_CONTEXT_WEIGHTS.firstTime, kind: 'first-time', text: `It's the first email you've received from ${String(address).trim().toLowerCase()}.` });
     return out;
 }

@@ -214,6 +214,13 @@ the Inspector explains that no tool can read them offline.
   that the email is safe ("verified safe by Microsoft", "this is not a scam") is amber, red with any
   other sign; antivirus and gateway footers weigh less. Hidden text counts too.
 - **Try it** (Settings → AI analysis): paste an email to see the model's opinion.
+- **New and outside senders** (Settings → Senders → Weigh new and outside senders, on by default): two
+  small weights in every email's verdict, which only count together with other warning signs: from
+  outside the user's own organization (weight 1, when the account has its own domain) and the first
+  email from an address (weight 1.5; not for the user's own organization). Together they make 2.5, below
+  amber (3): a claim to be safe (3) from a new outside sender is red, from a known colleague amber. A
+  sender counts as new for a day after the extension first sees it, and only after 14 days of learning;
+  addresses are remembered as hashes on the device (`seenSenders`).
 
 ## Logging
 

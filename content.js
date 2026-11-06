@@ -2261,6 +2261,22 @@ function accountAddress() {
     const all = (document.title || '').match(/[A-Za-z0-9._%+'-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g);
     return all ? all[all.length - 1].toLowerCase() : '';
 }
+// EXPERIMENT (llm_testing): is this the first email from an address? Asked once per address per page;
+// only a hash of the address is sent to the background (senderHistoryKey).
+const firstTimeAsks = new Map();
+function firstTimeSender(address) {
+    if (!lastSettings.weighSenderHistory || !address) return Promise.resolve(false);
+    const k = senderHistoryKey(address);
+    if (!firstTimeAsks.has(k)) {
+        if (firstTimeAsks.size >= 2000) firstTimeAsks.delete(firstTimeAsks.keys().next().value);
+        firstTimeAsks.set(k, new Promise(res => safeSend({ action: 'senderHistory', keys: [k] }, (r) => res(!!(r && r.firstTime && r.firstTime[k])))));
+    }
+    return firstTimeAsks.get(k);
+}
+function senderContextFor(address, firstTime) {
+    return lastSettings.weighSenderHistory ? senderContextSigns(address, ownOrgDomain(), firstTime) : [];
+}
+
 function ownOrgDomain() {
     const d = domainOfAddress(accountAddress());
     return d && !isPersonalMailDomain(d) ? d : '';
@@ -2930,7 +2946,7 @@ function scanSenderRows(S) {
         const infoP = readHeaders ? messageInfo(msgId) : Promise.resolve(null);
         if (readHeaders && unread && thread) infoP.then(info => { if (info && headersFetched.has(msgId)) unreadHeaderReads.set(thread, Date.now()); });
         const subjectText = MAIL.list.subject ? ((firstMatch(row, MAIL.list.subject) || {}).textContent || '') : '';
-        const show = (results, info, ours, owns) => guarded('Showing who sent an email', () => {
+        const show = (results, info, ours, owns, firsts) => guarded('Showing who sent an email', () => {
             if (!row.isConnected || row.dataset.unshortenerSender !== key) return;
             // Signs in this email: the names shown, and the headers when they belong to the last sender.
             const org = ownOrgDomain();
@@ -2943,6 +2959,8 @@ function scanSenderRows(S) {
                 // A "call this number" subject (whoever sent it).
                 if (S.enableCallbackScamCheck && r && r.status !== 'trusted') signals.push(...subjectScamSigns(subjectText));
                 if (info && info.fh === addressFingerprint(senders[k].address)) signals.push(...info.an);
+                // Outside the user's organization, and a first email from the address (llm_testing).
+                if (r && r.status !== 'trusted') signals.push(...senderContextFor(senders[k].address, firsts && firsts[k]));
                 const f = applyEmailSignals(r, signals);
                 if (r && f) logEmailVerdict(`${thread}|${senders[k].address}`, senders[k].address, r, f);
                 return f;
@@ -2973,10 +2991,10 @@ function scanSenderRows(S) {
                 ? { kind: 'row', address: senders[0].address, reason: finals[0].reasons.join(' '), msgId, unread, how: isSearchView(location.hash, MAIL.views) ? 'automatically, from search results' : 'automatically, from the inbox list' } : null;
             if (row.unshortenerSpam && S.enableAutoSpam) queueSpamMove(thread, row.unshortenerSpam);
         });
-        Promise.all([senderResultsFor(senders.map(s => s.raw)), spamFolder ? spamMovedReasons() : null, ownershipsFor(senders, S)]).then(([results, moved, owns]) => {
+        Promise.all([senderResultsFor(senders.map(s => s.raw)), spamFolder ? spamMovedReasons() : null, ownershipsFor(senders, S), Promise.all(senders.map(s => firstTimeSender(s.address)))]).then(([results, moved, owns, firsts]) => {
             const ours = moved && thread ? moved.get(thread) : null;
-            show(results, null, ours, owns);
-            infoP.then(info => { if (info) show(results, info, ours, owns); });
+            show(results, null, ours, owns, firsts);
+            infoP.then(info => { if (info) show(results, info, ours, owns, firsts); });
         });
     }
     scheduleGuardSync();        // rows the webmail redrew for another conversation lose a stale guard
@@ -3078,7 +3096,8 @@ function updateOpenedVerdict(body) {
                      ...(lastSettings.enableLookalikeCheck !== false && st.base.status !== 'trusted' ? nameAddressSigns(st.name, st.address, ownOrgDomain(), loadColleagueHashes(), st.ownership) : []),
                      ...(lastSettings.enableOwnNameCheck !== false && st.base.status !== 'trusted' ? ownNameSigns(st.name, st.address, accountAddress()) : []),
                      ...(lastSettings.enableCallbackScamCheck !== false && st.base.status !== 'trusted' ? [...subjectScamSigns(openedSubject()), ...bodyScamSigns(body.innerText)] : []),
-                     ...(st.base.status !== 'trusted' ? selfVouchingSigns(body.textContent) : [])];   // EXPERIMENT (llm_testing): textContent includes hidden text
+                     ...(st.base.status !== 'trusted' ? selfVouchingSigns(body.textContent) : []),
+                     ...(st.base.status !== 'trusted' ? senderContextFor(st.address, st.firstTime) : [])];   // llm_testing   // EXPERIMENT (llm_testing): textContent includes hidden text
     const final = applyEmailSignals(st.base, signals);
     st.final = final;
     logEmailVerdict(st.msgId || st.address, st.address, st.base, final);
@@ -3245,9 +3264,10 @@ function scanOpenedSenders(S) {
         const msgId = messageIdOf(body);
         const st = { nameEl, chip, icon, address: who.address, domain: who.domain, name: who.name, msgId, thread: currentThreadKey(), base: null, info: null, authLine: [], ownership: null };
         openedStates.set(body, st);
-        Promise.all([senderResultsFor([who.raw]), messageInfo(msgId), getMessageAuth(body), ownershipsFor([who], S)]).then(([[r], info, auth, [owned]]) => guarded('Showing who sent an email', () => {
+        Promise.all([senderResultsFor([who.raw]), messageInfo(msgId), getMessageAuth(body), ownershipsFor([who], S), firstTimeSender(who.address)]).then(([[r], info, auth, [owned], firstTime]) => guarded('Showing who sent an email', () => {
             if (!nameEl.isConnected || nameEl.dataset.unshortenerSender !== key || !r || openedStates.get(body) !== st) return;
             st.base = r;
+            st.firstTime = firstTime;
             st.info = info;
             st.ownership = owned;
             harvestAvatar(body, who, auth);
