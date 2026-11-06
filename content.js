@@ -862,6 +862,7 @@ function unshortenLinks() {
         guarded('Checking attachments', scanAttachments);
         guarded('Looking for drawn QR codes', scanDrawnQr);
         guarded('Checking senders', scanSenders);
+        guarded('Adding the AI button', scanAiButtons);       // EXPERIMENT (llm_testing)
         const S = cfg.values;
         visualOverridesActive = S.visualOverridesActive;
 
@@ -3076,7 +3077,8 @@ function updateOpenedVerdict(body) {
                      ...serviceWarningSigns(webmailTextAround(body), SITE.name),
                      ...(lastSettings.enableLookalikeCheck !== false && st.base.status !== 'trusted' ? nameAddressSigns(st.name, st.address, ownOrgDomain(), loadColleagueHashes(), st.ownership) : []),
                      ...(lastSettings.enableOwnNameCheck !== false && st.base.status !== 'trusted' ? ownNameSigns(st.name, st.address, accountAddress()) : []),
-                     ...(lastSettings.enableCallbackScamCheck !== false && st.base.status !== 'trusted' ? [...subjectScamSigns(openedSubject()), ...bodyScamSigns(body.innerText)] : [])];
+                     ...(lastSettings.enableCallbackScamCheck !== false && st.base.status !== 'trusted' ? [...subjectScamSigns(openedSubject()), ...bodyScamSigns(body.innerText)] : []),
+                     ...(st.base.status !== 'trusted' ? selfVouchingSigns(body.textContent) : [])];   // EXPERIMENT (llm_testing): textContent includes hidden text
     const final = applyEmailSignals(st.base, signals);
     st.final = final;
     logEmailVerdict(st.msgId || st.address, st.address, st.base, final);
@@ -3100,6 +3102,108 @@ function updateOpenedVerdict(body) {
     // [5.90-3] Its verdict no longer moves it (a red link turned out to be the verified sender's own,
     // [5.90-4] or a company's own country site): a move this message's verdict queued and that hasn't started is withdrawn.
     else if (st.thread && !final.move) withdrawOpenedMove(st.thread, st.msgId);
+}
+
+// ---------------------------------------------------------------------------
+// AI OPINION — EXPERIMENT (llm_testing). With Settings → AI analysis on, each opened email gets an
+// "Ask the AI" button. Only when it is clicked, the facts the extension already has (sender, the
+// webmail's authentication results, the links and their checks, its own verdict) and the email's text
+// go to the background, which asks the model on this computer (ai.js). The answer is shown in its own
+// box and is advisory only: it never changes the email's verdict, its links' marks or Spam moves.
+// ---------------------------------------------------------------------------
+function scanAiButtons() {
+    if (!lastSettings.enableAiAnalysis || !MAIL_CAN.opened) return;
+    for (const body of inBodies('')) {
+        if (body.dataset.aiBox || !isShown(body) || !body.parentElement) continue;
+        const sender = openedSenderOf(body);
+        if (!sender || !sender.address) continue;
+        body.dataset.aiBox = '1';
+        const box = document.createElement('div');
+        box.className = 'unshortener-ai-box';
+        box.setAttribute('role', 'region');
+        box.setAttribute('aria-label', 'S.P.R.U.C.E+ AI opinion about this email');
+        styleNotice(box, body, 'info');
+        box.style.margin = '0 0 12px';
+        const intro = document.createElement('span');
+        intro.textContent = '🤖 ';
+        const btn = noticeButton('Ask the AI: could this be phishing?', () => runAiAnalysis(body, box));
+        btn.style.marginLeft = '0';
+        btn.className = 'unshortener-ai-ask';
+        const small = document.createElement('span');
+        small.style.cssText = 'font-size:11px;opacity:.8;margin-left:8px;';
+        small.textContent = '(experimental; S.P.R.U.C.E+\'s own model, on this computer)';
+        box.append(intro, btn, small);
+        body.parentElement.insertBefore(box, body);
+    }
+}
+
+async function aiFactsFor(body) {
+    const sender = openedSenderOf(body) || {};
+    let auth = null;
+    try { auth = senderChecksActive() ? await getMessageAuth(body) : null; } catch (e) { auth = null; }
+    const st = openedStates.get(body);
+    const links = [], seen = new Set();
+    for (const a of body.querySelectorAll('a[href]')) {
+        if (inQuotedSection(a) || !/^https?:/i.test(a.href)) continue;
+        const d = processedLinksMap.get(a);
+        const original = (d && d.originalUrl) || a.href;
+        const key = `${(a.textContent || '').trim()}|${original}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        links.push({ text: (a.textContent || '').trim(), host: hostLabel(original), destHost: d && d.finalUrl ? hostLabel(d.finalUrl) : '',
+                     finding: d && !d.isSafe ? (d.reason || d.severity || '') : '' });
+    }
+    return {
+        subject: openedSubject(), senderName: sender.name || '', senderAddress: sender.address || '',
+        auth: auth ? { dmarc: auth.dmarc, spf: auth.spf, dkim: auth.dkim, headerFrom: auth.headerFrom } : null,
+        links, attachments: [],
+        verdict: st && st.final ? { status: st.final.status, reasons: st.final.reasons || [] } : null,
+        bodyText: (body.innerText || '').slice(0, 8000)
+    };
+}
+
+function runAiAnalysis(body, box) {
+    styleNotice(box, body, 'info');
+    box.style.margin = '0 0 12px';
+    box.textContent = '🤖 The AI is reading this email…';
+    box.dataset.state = 'running';
+    aiFactsFor(body).then(facts => safeSend({ action: 'aiAnalyze', facts }, (res) => guarded('Showing the AI opinion', () => showAiResult(body, box, res))));
+}
+
+function showAiResult(body, box, res) {
+    box.textContent = '';
+    if (!res || res.error || !res.advice) {
+        box.dataset.state = 'error';
+        styleNotice(box, body, 'caution');
+        box.style.margin = '0 0 12px';
+        box.append(`🤖 The AI couldn't give an opinion: ${(res && res.error) || 'no answer from the extension.'} `, noticeButton('Try again', () => runAiAnalysis(body, box)));
+        return;
+    }
+    const { advice, result } = res;
+    box.dataset.state = 'done';
+    box.dataset.level = advice.level;
+    styleNotice(box, body, advice.level === 'danger' ? 'danger' : advice.level === 'caution' ? 'caution' : 'info');
+    box.style.margin = '0 0 12px';
+    const head = document.createElement('div');
+    head.style.fontWeight = 'bold';
+    head.textContent = `🤖 ${advice.headline}`;
+    box.appendChild(head);
+    const reasons = (result && result.reasons) || [];
+    if (reasons.length && result.probability >= 0.5) {
+        const label = document.createElement('div');
+        label.style.cssText = 'font-size:12px;margin-top:2px;';
+        label.textContent = 'What weighed most in its opinion:';
+        const ul = document.createElement('ul');
+        ul.style.cssText = 'margin:2px 0 0;padding-left:18px;font-size:12px;';
+        for (const r of reasons) { const li = document.createElement('li'); li.textContent = r.facts ? r.sentence : `“${r.sentence}”`; ul.appendChild(li); }
+        box.append(label, ul);
+    }
+    if (advice.note) { const n = document.createElement('div'); n.style.cssText = 'margin-top:4px;font-size:12px;'; n.textContent = advice.note; box.appendChild(n); }
+    const foot = document.createElement('div');
+    foot.style.cssText = 'margin-top:4px;font-size:11px;opacity:.85;';
+    foot.textContent = `The opinion of S.P.R.U.C.E+'s own small AI model (${result ? `${result.model} ${result.version}` : 'model'}, ${(res.ms / 1000).toFixed(1)} s, on this computer). It can be wrong and never changes the extension's own checks. `;
+    foot.appendChild(noticeButton('Ask again', () => runAiAnalysis(body, box)));
+    box.appendChild(foot);
 }
 
 // The opened conversation's subject, where the webmail's entry says where it is.

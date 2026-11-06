@@ -43,6 +43,16 @@ const settings = (page) => openExt(page, 'options.html', () => document.querySel
     endings: await chrome.runtime.sendMessage({ action: 'getCompanyEndings' }).then(d => d && d.endings && d.operators ? { amex: d.operators[d.endings.amex] || '', app: 'app' in d.endings, count: Object.keys(d.endings).length } : null)
   }));
   check('background page answers (settings, link decoding)', bg.settings && bg.unwrap === 'https://example.com/x', bg);
+  // EXPERIMENT (llm_testing): the extension's own AI model loads and answers in Firefox's background page.
+  const ai = await opt.evaluate(async () => {
+    await chrome.storage.local.set({ enableAiAnalysis: true });
+    const r = await chrome.runtime.sendMessage({ action: 'aiAnalyze', facts: { subject: 'Your password expires today', senderName: 'Microsoft Security',
+      senderAddress: 'no-reply@ms-verify.example', auth: { dmarc: 'fail' }, links: [{ text: 'Keep my password', host: 'ms-verify.example', destHost: '', finding: '' }],
+      bodyText: 'Dear user, your password expires in 2 hours. Click below to keep your current password.' } });
+    await chrome.storage.local.set({ enableAiAnalysis: false });
+    return r && r.result ? { p: r.result.probability, level: r.advice.level, ms: r.ms } : r;
+  });
+  check('[llm_testing] the AI model runs in the background page: a password phish is likely phishing', ai && ai.p > 0.9 && ai.level === 'danger', ai);
   check('[5.90-2] background page hands out the single-company endings (ICANN\'s list: .amex, not .app)', bg.endings && /American Express/.test(bg.endings.amex) && !bg.endings.app && bg.endings.count >= 100, bg.endings);
   const variants = await opt.evaluate(() => ({
     browser: document.documentElement.dataset.browser,

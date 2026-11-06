@@ -470,6 +470,67 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    // --- EXPERIMENT (llm_testing): AI analysis card ---
+    const aiStatusEl = document.getElementById('aiStatus');
+    function showAiStatus(text, ok) {
+        aiStatusEl.style.display = 'inline-block';
+        aiStatusEl.textContent = text;
+        aiStatusEl.className = 'test-result ' + (ok === true ? 'result-pass' : ok === false ? 'result-fail' : '');
+    }
+    document.getElementById('aiCheckBtn').addEventListener('click', () => {
+        showAiStatus('Checking…');
+        chrome.runtime.sendMessage({ action: 'aiStatus' }, (r) => {
+            if (!r) { showAiStatus('No answer.', false); return; }
+            const h = r.metrics && r.metrics.hand_written;
+            showAiStatus(r.ready && h ? `${r.text} On ${h.n} hand-written test emails it was right ${Math.round(h.accuracy * 100)}% of the time.` : r.text, !!r.ready);
+        });
+    });
+    // A pasted email: "From:" and "Subject:" lines are read if present; the rest is the text.
+    function factsFromPaste(text) {
+        const lines = String(text || '').split(/\r?\n/);
+        const facts = { subject: '', senderName: '', senderAddress: '', auth: null, links: [], attachments: [], verdict: null, bodyText: '' };
+        let i = 0;
+        for (; i < lines.length; i++) {
+            const m = /^(from|subject|to|date):\s*(.*)$/i.exec(lines[i]);
+            if (!m) break;
+            if (/^from$/i.test(m[1])) {
+                const a = /^(.*?)\s*<([^>]+)>\s*$/.exec(m[2]);
+                facts.senderName = a ? a[1].replace(/^"|"$/g, '') : '';
+                facts.senderAddress = a ? a[2] : m[2].trim();
+            } else if (/^subject$/i.test(m[1])) facts.subject = m[2];
+        }
+        facts.bodyText = lines.slice(i).join('\n').trim();
+        for (const u of facts.bodyText.match(/https?:\/\/[^\s<>"')]+/g) || []) {
+            try { facts.links.push({ text: u, host: new URL(u).hostname, destHost: '', finding: '' }); } catch (e) { /* not a link */ }
+        }
+        return facts;
+    }
+    document.getElementById('aiTryBtn').addEventListener('click', () => {
+        const out = document.getElementById('aiTryResult');
+        const text = document.getElementById('aiTryText').value;
+        if (!text.trim()) { out.textContent = 'Paste an email first.'; return; }
+        out.textContent = 'The AI is reading it…';
+        chrome.runtime.sendMessage({ action: 'aiAnalyze', facts: factsFromPaste(text) }, (res) => {
+            out.textContent = '';
+            if (!res || res.error || !res.advice) {
+                out.appendChild(node('span', { style: 'color: var(--danger-text);' }, (res && res.error) || 'No answer.'));
+                return;
+            }
+            const st = LEVEL_STYLE[res.advice.level] || LEVEL_STYLE.info;
+            out.appendChild(node('div', { className: 'callout-warn ai-try-verdict', style: `border-left-color: ${st.color};` },
+                node('strong', { style: `color: ${st.color};` }, `${st.icon} ${res.advice.headline}`),
+                res.advice.note ? node('div', { style: 'font-size: 12px; margin-top: 4px;' }, res.advice.note) : ''));
+            const reasons = res.result.reasons || [];
+            if (reasons.length && res.result.probability >= 0.5) {
+                const ul = node('ul', { className: 'simple-list ai-try-reasons', style: 'font-size: 12px;' });
+                reasons.forEach(x => ul.appendChild(node('li', null, x.facts ? x.sentence : `“${x.sentence}”`)));
+                out.append(node('div', { style: 'font-size: 12px; font-weight: 600; margin-top: 6px;' }, 'What weighed most in its opinion:'), ul);
+            }
+            out.appendChild(node('div', { style: 'font-size: 11px; color: var(--text-muted);' },
+                `${res.result.model} ${res.result.version}, ${(res.ms / 1000).toFixed(1)} s on this computer.`));
+        });
+    });
+
     // Current form values (saved or not), for the Test buttons.
     function formConf(prefix, endpointInput) {
         const get = (k) => { const el = document.querySelector(`[data-setting="${prefix}${k}"]`); return el ? el.value : ''; };

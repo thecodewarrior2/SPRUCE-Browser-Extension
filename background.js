@@ -5,7 +5,7 @@
 // message, an alarm or a storage change, and in-memory caches are bounded.
 
 // Chrome's service worker loads the shared files here; background.html loads them before this file.
-if (typeof importScripts === 'function') importScripts('shared.js', 'decoders.js', 'custom-endpoints.js', 'qr-decoder.js', 'icon-store.js');
+if (typeof importScripts === 'function') importScripts('shared.js', 'decoders.js', 'custom-endpoints.js', 'qr-decoder.js', 'icon-store.js', 'ai.js');
 
 // ---------------------------------------------------------------------------
 // SETTINGS CACHE
@@ -3139,6 +3139,41 @@ function secondOpinionLinks(urlString) {
 }
 
 // ---------------------------------------------------------------------------
+// AI EMAIL ANALYSIS — EXPERIMENT (llm_testing). The extension's own model (models/phish-tiny, run by
+// ai.js in plain JavaScript, right here) gives its opinion of an email. On request only, advisory only
+// (never lowers a verdict), addresses and numbers redacted. Text that vouches for itself counts toward
+// phishing (selfVouchingSigns). Only the verdict and the time taken are logged, never the email.
+// ---------------------------------------------------------------------------
+async function aiModelStatus() {
+    const t0 = Date.now();
+    try {
+        const m = await loadPhishModel();
+        return { ready: true, name: m.meta.name, version: m.meta.version, trained: m.meta.trained, metrics: m.meta.metrics, loadMs: Date.now() - t0,
+                 text: `${m.meta.name} ${m.meta.version} is ready (trained ${m.meta.trained}; runs on this computer).` };
+    } catch (e) {
+        return { ready: false, text: `The model couldn't be loaded: ${errorText(e)}` };
+    }
+}
+
+async function aiAnalyzeEmail(facts) {
+    const cfg = await getConfig();
+    if (!cfg.values.enableAiAnalysis) return { error: 'AI analysis is turned off (Settings → AI analysis).' };
+    const f = facts || {};
+    const t0 = Date.now();
+    let result;
+    try { result = (await loadPhishModel()).analyze(f); }
+    catch (e) {
+        logWarning(`AI analysis failed: ${errorText(e)}`, 'AI analysis');
+        return { error: `The model couldn't run: ${errorText(e)}` };
+    }
+    const vouching = selfVouchingSigns(`${f.subject || ''}\n${f.bodyText || ''}`);
+    const status = f.verdict ? f.verdict.status : null;
+    const ms = Date.now() - t0;
+    logInfo(`AI analysis (${result.model} ${result.version}): ${Math.round(result.probability * 100)}% phishing in ${(ms / 1000).toFixed(1)} s.`, 'AI analysis');
+    return { result, vouching, advice: aiAdvice(result, status, vouching), ms };
+}
+
+// ---------------------------------------------------------------------------
 // VIRUSTOTAL (Link Inspector, optional). Needs the person's own free API key (Settings → Your own
 // services) and runs only when they click. Looking up a link sends it to VirusTotal; submitting one
 // for a new scan shares it with VirusTotal's community and partners, so the Inspector never offers
@@ -3538,6 +3573,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         // Only what the Gmail tab uses (the synced shortener list can hold thousands of domains and is
         // needed only here in the background).
         getConfig().then(cfg => sendResponse({ values: cfg.values, locked: cfg.locked, allowlist: cfg.allowlist, blocklist: cfg.blocklist, policy: cfg.policy })).catch((e) => { logError(`Settings could not be loaded: ${errorText(e)}`, 'Background'); sendResponse(null); });
+        return true;
+    }
+
+    // EXPERIMENT (llm_testing): AI opinion of an email (opened email in the webmail, or pasted in Settings).
+    if (request.action === 'aiAnalyze') {
+        aiAnalyzeEmail(request.facts).then(sendResponse)
+            .catch((e) => { logError(`AI analysis failed: ${errorText(e)}`, 'AI analysis'); sendResponse({ error: 'It failed; see Logging → Application log.' }); });
+        return true;
+    }
+    if (request.action === 'aiStatus') {
+        aiModelStatus().then(sendResponse);
         return true;
     }
 
