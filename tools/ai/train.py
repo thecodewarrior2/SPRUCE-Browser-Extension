@@ -125,6 +125,7 @@ def main():
     train, test, hand = read('train.jsonl'), read('test.jsonl'), read('eval.jsonl')
     real = read('realworld-heldout.jsonl') if (DATA / 'realworld-heldout.jsonl').exists() else []
     look = read('lookalikes.jsonl') if (DATA / 'lookalikes.jsonl').exists() else []
+    realg = read('realworld-genuine-heldout.jsonl') if (DATA / 'realworld-genuine-heldout.jsonl').exists() else []
     # BERT-tiny publishes only its uncased vocabulary, so the tokenizer is set up explicitly.
     tok = BertTokenizer.from_pretrained(args.base, do_lower_case=True, model_max_length=MAX_LEN)
     model = BertForSequenceClassification.from_pretrained(args.base, num_labels=2)   # its config names no model type
@@ -158,6 +159,10 @@ def main():
     if look:
         metrics['genuine_lookalikes'] = m_look
     look_wrong = [(r['kind'], round(p, 3)) for r, p in zip(look, p_look) if p >= .5]
+    m_realg, p_realg = evaluate(model, tok, realg) if realg else ({'n': 0}, [])
+    if realg:
+        metrics['real_world_genuine_heldout'] = m_realg
+    realg_wrong = sorted({r['kind'] for r, p in zip(realg, p_realg) if p >= .5})
     manifest = json.loads((OUT / 'model.json').read_text()); manifest['metrics'] = metrics
     (OUT / 'model.json').write_text(json.dumps(manifest, indent=1) + '\n')
     (ROOT / 'tests' / 'fixtures' / 'ai-vectors.json').write_text(json.dumps(vec) + '\n')
@@ -166,6 +171,7 @@ def main():
     print('hand-written mistakes:', wrong)
     print('real-world held-out misses:', real_wrong)
     print('genuine look-alike false alarms:', look_wrong)
+    print('published genuine held-out false alarms:', realg_wrong)
     (OUT / 'MODEL_CARD.md').write_text(f"""# phish-tiny {args.version} (EXPERIMENT, branch llm_testing)
 
 A BERT-tiny classifier ({args.base}, 2 layers, 4.4 million parameters) fine-tuned to tell phishing from
@@ -187,10 +193,12 @@ examples in `tools/ai/data/extra/`.
 | Hand-written ({m_hand['n']}, not from the templates) | {m_hand['accuracy']} | {m_hand['precision']} | {m_hand['recall']} | {m_hand['false_positives']} | {m_hand['false_negatives']} |
 {f"| Real-world, held out ({m_real['n']}: 3 variants of each of {len(real) // 3} published examples never trained on; all phishing) | {m_real['accuracy']} | - | {m_real['recall']} | - | {m_real['false_negatives']} |" if real else ''}
 {f"| Genuine look-alikes ({m_look['n']}, hand-written, never trained on; all genuine) | {m_look['accuracy']} | - | - | {m_look['false_positives']} | - |" if look else ''}
+{f"| Real-world genuine, held out ({m_realg['n']}: 3 variants of each of {len(realg) // 3} published genuine emails never trained on) | {m_realg['accuracy']} | - | - | {m_realg['false_positives']} | - |" if realg else ''}
 
 Hand-written emails it got wrong: {', '.join(f'{k} ({p})' for k, p in wrong) or 'none'}.
 Held-out real-world examples it missed (any variant): {', '.join(real_wrong) or 'none'}.
 Genuine look-alikes it called phishing: {', '.join(f'{k} ({p})' for k, p in look_wrong) or 'none'}.
+Held-out published genuine emails it called phishing (any variant): {', '.join(realg_wrong) or 'none'}.
 
 **Limits:** the synthetic score mostly measures how well it learned the templates. The hand-written
 score is the better check, but it is small, and it is OPTIMISTIC: while building this experiment the
