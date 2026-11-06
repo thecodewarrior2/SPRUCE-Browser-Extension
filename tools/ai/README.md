@@ -18,9 +18,15 @@ the user's computer, with no download, no online service, nothing sent anywhere.
 email, the same way for training and in use:
 
 ```
-subject: … from: "<display name>" at <sender domain> (shared mailbox). sender check: dmarc pass|fail|none|unknown.
-links: "<link text>" goes to <host> then <destination> (warning: <the extension's finding>); … text: <the email's text>
+subject: … from: "<display name>" at <sender domain> (your organization | outside your organization) (shared mailbox).
+sender check: dmarc pass|fail|none|unknown. links: "<link text>" goes to <host> then <destination> (warning: <the extension's finding>); … text: <the message's own text>
 ```
+
+Email addresses keep only their domain, and phone numbers and long numbers are replaced
+(`redactForAi`). Tags that mail systems add to every outside email (`[EXTERNAL]`, `EXT:`, `CAUTION:`)
+are removed from the subject, because phishing and genuine mail carry them alike. "Your organization"
+is known only when the account has its own domain. In the webmail, quoted earlier messages are left out
+(`ownText` in `content.js`): the model judges what this sender wrote now.
 
 Email addresses keep only their domain, and phone numbers and long numbers are replaced
 (`redactForAi`), before the model sees anything, in training and in use.
@@ -44,15 +50,22 @@ the unit test fails if the model's score on the hand-written emails drops below 
 
 - **The generator** (`make-dataset.js`) writes synthetic emails from templates: ten kinds of phishing
   (sign-in, credential, invoice, gift card, delivery fee, "call this number", prize, payroll, shared
-  document, threats) and thirteen kinds of genuine mail (notes, notices, invitations, codes,
-  newsletters, receipts, school mail, password resets, shipping, colleagues, settlement notices,
-  bills, sales, security alerts). About a third of the phishing emails claim to be safe, and some
+  document, threats) and seventeen kinds of genuine mail (notes, notices, invitations, codes,
+  automated statements, business and vendor threads, deal-site marketing, newsletters, receipts, school
+  mail, password resets, shipping, colleagues, settlement notices, bills, sales, security alerts). The
+  genuine kinds deliberately include what reads like phishing but isn't: huge discounts and coupon
+  deadlines, salespeople describing scams, one-line payment statements, signatures with titles and
+  legal disclaimers. About 8% of the phishing comes from inside the organization (a compromised staff
+  account), so being inside never settles it. About a third of the phishing emails claim to be safe, and some
   address AI tools: the model learns that such text is a phishing sign. Every person and organization
   in it is made up.
 - **Your own examples:** add `tools/ai/data/extra/*.jsonl`, one example per line:
   `{"facts": {"subject": "…", "senderName": "…", "senderAddress": "…", "auth": {"dmarc": "pass"}, "links": [{"text": "…", "host": "…", "destHost": "", "finding": ""}], "bodyText": "…"}, "label": 1}`
   (1 = phishing, 0 = genuine). **Remove names, addresses, account numbers and anything personal
   first**: the files are used as they are. `tools/ai/data/` is never committed.
+- **Regression cases** (`tests/fixtures/ai-regressions.jsonl`): genuine emails an earlier version got
+  wrong, paraphrased with made-up names. The unit tests keep them right. Add one for each false alarm
+  you report, after removing personal details.
 - **The check set** (`eval-handwritten.jsonl`): hand-written emails that are not generated from the
   templates. Keep a second set you never look at while changing the generator, or its score stops
   meaning anything (see the model card: the current score is optimistic for that reason).

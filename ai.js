@@ -22,7 +22,8 @@
 // The model's input: one text built from the email's facts. tools/ai/make-dataset.js builds its
 // training emails with this same function, so training and use always see the same format.
 // facts: { subject, senderName, senderAddress, auth: { dmarc } | null,
-//          links: [{ text, host, destHost, finding }], bodyText }
+//          links: [{ text, host, destHost, finding }], bodyText,
+//          org: 'inside' | 'outside' | undefined (the user's own organization, when the account has one) }
 // ---------------------------------------------------------------------------------------------------
 const AI_MAX_LINKS = 8;
 
@@ -39,13 +40,22 @@ function redactForAi(text) {
         .replace(AI_LONG_NUMBER_RE, 'number');
 }
 
+// Tags that mail systems add to EVERY outside email ("[EXTERNAL] …", "EXT: …", "CAUTION: …"): they say
+// nothing about phishing (both kinds carry them), so the model never sees them.
+function stripExternalTag(subject) {
+    let s = String(subject || '');
+    for (let i = 0; i < 3; i++) s = s.replace(/^\s*(\[\s*(external|ext|caution|warning|outside sender|non-district|external sender)[^\]]{0,30}\]|\*{0,3}\s*(external|ext|caution)\s*\*{0,3}\s*:)\s*/i, '');
+    return s.trim();
+}
+
 function modelInputParts(facts) {
     const f = facts || {};
     const addr = String(f.senderAddress || '').toLowerCase();
     const domain = addr.split('@')[1] || 'unknown';
     const head = [];
-    head.push(`subject: ${redactForAi(f.subject || 'none').slice(0, 160)}.`);
-    head.push(`from: "${redactForAi(f.senderName || '').slice(0, 80)}" at ${domain}${typeof isSharedMailbox === 'function' && isSharedMailbox(addr) ? ' (shared mailbox)' : ''}.`);
+    head.push(`subject: ${redactForAi(stripExternalTag(f.subject) || 'none').slice(0, 160)}.`);
+    const where = f.org === 'inside' ? ' (your organization)' : f.org === 'outside' ? ' (outside your organization)' : '';
+    head.push(`from: "${redactForAi(f.senderName || '').slice(0, 80)}" at ${domain}${where}${typeof isSharedMailbox === 'function' && isSharedMailbox(addr) ? ' (shared mailbox)' : ''}.`);
     head.push(`sender check: ${f.auth && f.auth.dmarc ? `dmarc ${f.auth.dmarc}` : 'unknown'}.`);
     const links = (f.links || []).slice(0, AI_MAX_LINKS).map(l => {
         const text = redactForAi(String(l.text || '').trim()).slice(0, 40) || 'image';
