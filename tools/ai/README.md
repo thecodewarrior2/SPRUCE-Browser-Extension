@@ -44,7 +44,7 @@ node tools/ai/make-dataset.js
 ```
 
 ```bash
-python3 tools/ai/train.py --version 0.5.0
+python3 tools/ai/train.py --version 0.6.0
 ```
 
 `train.py` needs Python 3 with `torch` (the CPU build is enough) and `transformers`, and takes about 2
@@ -79,7 +79,12 @@ the unit test fails if the model's score on the hand-written emails drops below 
   `{pct}`, `{weekly}`. Sender kinds: `compromised`, `spoof`, `freemail`, `lookalike`, `vendor` (a
   compromised supplier, law firm or title company: outside, passes checks), `unknown`. Link kinds:
   `form`, `drive`, `lookalike`, `random`, and `qr` (a QR code in a picture: the model sees only the
-  text asking to scan it). Two thirds are
+  text asking to scan it).
+- **Published genuine emails** (rows with `"label": 0` in the same file): real emails that look like
+  scams, from a company's own pages or a school IT office's "this one is legitimate" posts. Their
+  sender is `brand` (the real `senderDomain`), `inside` or `vendor`, always passing the sender check;
+  `brand` links keep their real `host`. Every third is held out and scored as false alarms
+  (`real_world_genuine_heldout`). Phishing and genuine rows are split on their own. Two thirds are
   trained on (12 variants each, with made-up names and domains); every third one is held out and only
   scored (`real_world_heldout` in the model card). Never change the generator to fit the held-out ones,
   or that score stops meaning anything. Add new examples at the end.
