@@ -601,6 +601,14 @@ function realWorldEmail(r, row) {
     const look = `${word}${r.pick(['-portal', '-edu', '-support', 'mail', '-login', '-helpdesk'])}.${r.pick(BAD_TLDS)}`;
     const free = r.pick(['gmail.com', 'outlook.com', 'yahoo.com', 'hotmail.com', 'aol.com']);
     const k = row.senderKind;
+    if (row.label === 0) {
+        const addr = k === 'brand' ? `${r.pick(['no-reply', 'noreply', 'notifications', 'service', 'alerts', 'info'])}@${row.senderDomain}`
+            : k === 'inside' ? `${r.pick(['hr', 'it', 'payroll', 'office', 'tech', 'benefits', who.split(' ')[0].toLowerCase()])}@${org}`
+            : `${r.pick([who.split(' ')[0].toLowerCase(), 'billing', 'accounts', 'office'])}@${vendorDomain}`;
+        const genuineHost = (l) => l.kind === 'brand' ? l.host : l.kind === 'inside' ? r.pick([org, `portal.${org}`, `www.${org}`]) : r.pick([vendorDomain, `portal.${vendorDomain}`]);
+        return { subject: fill(row.subject), senderName: fill(row.senderName), senderAddress: addr, inside: k === 'inside', dmarc: 'pass',
+                 links: (row.links || []).map(l => ({ text: fill(l.text), host: genuineHost(l), destHost: '', finding: '' })), body: (row.body || []).map(fill) };
+    }
     const senderAddress = k === 'compromised' || k === 'spoof' ? `${who.toLowerCase().replace(' ', '.')}@${org}`
         : k === 'freemail' ? `${who.toLowerCase().replace(' ', '')}${r.int(1, 999)}@${free}` : k === 'lookalike' ? `${r.pick(['support', 'admin', 'noreply', 'it'])}@${look}`
         : k === 'vendor' ? `${r.pick([who.split(' ')[0].toLowerCase(), 'billing', 'accounts', 'ar', 'office'])}@${vendorDomain}`
@@ -611,17 +619,19 @@ function realWorldEmail(r, row) {
              // A QR code in a picture is not a link the model sees: only the text asking to scan it.
              links: (row.links || []).filter(l => l.kind !== 'qr').map(l => ({ text: fill(l.text), host: hostFor(l.kind), destHost: '', finding: '' })), body: (row.body || []).map(fill) };
 }
+// Phishing rows and genuine rows (label 0) are each split on their own: every third is held out.
 function realWorldSets(variants, heldVariants, seed) {
-    const rows = realWorldRows(), r = rng(seed), train = [], held = [];
-    rows.forEach((row, i) => {
-        const out = i % 3 === 2 ? held : train, n = i % 3 === 2 ? heldVariants : variants;
+    const rows = realWorldRows(), r = rng(seed), train = [], held = [], heldGenuine = [], seen = [0, 0];
+    rows.forEach((row) => {
+        const label = row.label === 0 ? 0 : 1, isHeld = seen[label]++ % 3 === 2;
+        const out = isHeld ? (label ? held : heldGenuine) : train, n = isHeld ? heldVariants : variants;
         for (let v = 0; v < n; v++) {
             const e = realWorldEmail(r, row);
-            const x = finishExample(r, 1, `real:${row.id}`, e);
+            const x = finishExample(r, label, `real:${row.id}`, e);
             out.push(Object.assign(x, { kind: `real:${row.id}` }));
         }
     });
-    return { train, held };
+    return { train, held, heldGenuine };
 }
 
 function makeSet(n, seed) {
@@ -649,9 +659,9 @@ if (require.main === module) {
     fs.mkdirSync(outDir, { recursive: true });
     const seed = arg('seed', 7);
     const real = realWorldSets(arg('real-variants', 12), arg('real-held-variants', 3), seed + 2000);
-    // Real-world rows are all phishing: as many extra genuine emails keep the two classes even.
-    const rg = rng(seed + 3000), balance = [];
-    for (let i = 0; i < real.train.length; i++) balance.push(makeExample(rg, 0));
+    // Real-world rows are mostly phishing: extra genuine emails keep the two classes even.
+    const rg = rng(seed + 3000), balance = [], realPhish = real.train.filter(x => x.label === 1).length;
+    for (let i = 0; i < realPhish - (real.train.length - realPhish); i++) balance.push(makeExample(rg, 0));
     const train = makeSet(arg('train', 8000), seed).concat(real.train, balance, extraExamples());
     const test = makeSet(arg('test', 1500), seed + 1000);
     const write = (f, rows) => fs.writeFileSync(path.join(outDir, f), rows.map(x => JSON.stringify(x)).join('\n') + '\n');
@@ -661,9 +671,10 @@ if (require.main === module) {
     const hand = fs.readFileSync(path.join(__dirname, 'eval-handwritten.jsonl'), 'utf8').split('\n').filter(l => l.trim()).map(l => JSON.parse(l));
     write('eval.jsonl', hand.map(x => ({ text: modelInputText(x.facts), label: x.label, kind: `hand:${x.name}` })));
     write('realworld-heldout.jsonl', real.held);
+    write('realworld-genuine-heldout.jsonl', real.heldGenuine);
     // Genuine emails that look like spear phishing and scams (hand-written, never trained on): false alarms.
     const look = fs.readFileSync(path.join(__dirname, 'eval-lookalikes.jsonl'), 'utf8').split('\n').filter(l => l.trim()).map(l => JSON.parse(l));
     write('lookalikes.jsonl', look.map(x => ({ text: modelInputText(x.facts), label: x.label, kind: `look:${x.name}` })));
-    console.log(`train ${train.length} (${real.train.length} real-world, ${balance.length} genuine to balance them), test ${test.length}, hand-written ${hand.length}, real-world held out ${real.held.length} → ${outDir}`);
+    console.log(`train ${train.length} (${real.train.length} real-world, ${balance.length} genuine to balance them), test ${test.length}, hand-written ${hand.length}, real-world held out ${real.held.length} phishing + ${real.heldGenuine.length} genuine → ${outDir}`);
 }
 module.exports = { makeSet, makeExample, rng, realWorldSets, realWorldEmail, finishExample };
