@@ -59,15 +59,27 @@ the unit test fails if the model's score on the hand-written emails drops below 
   document, threats, cloud storage full, spam offers such as IPTV and credit cards) and nineteen kinds of
   genuine mail (notes, notices, invitations, codes, automated statements, business and vendor threads,
   deal-site marketing, newsletters, receipts, school mail, password resets, shipping, colleagues,
-  settlement notices, bills, sales, security alerts, banks' card offers, storage companies' own notices). The
+  settlement notices, bills, sales, security alerts, banks' card offers, storage companies' own notices,
+  and the genuine look-alikes of spear phishing: leaders' short requests about real work, HR and payroll
+  notices that send people to the usual portal, suppliers' invoices with unchanged payment details,
+  real share notifications, IT announcing sign-in changes, school fundraisers, career-office job
+  listings). The
   genuine kinds deliberately include what reads like phishing but isn't: huge discounts and coupon
   deadlines, salespeople describing scams, one-line payment statements, signatures with titles and
   legal disclaimers. About 8% of the phishing comes from inside the organization (a compromised staff
   account), so being inside never settles it. About a third of the phishing emails claim to be safe, and some
   address AI tools: the model learns that such text is a phishing sign. Every person and organization
   in it is made up.
-- **Real-world phishing** (`real-world.jsonl`): 40 phishing emails that universities and the FTC
-  published as warnings, paraphrased with placeholders for names, each with its source. Two thirds are
+- **Real-world phishing** (`real-world.jsonl`): phishing and email scams that universities, school
+  security groups, the FTC, FBI (IC3), IRS and others published as warnings, including spear phishing
+  and business email compromise (leader gift-card requests, payroll diversion, supplier "new bank
+  details", W-2 requests, closing-wire changes), paraphrased with placeholders, each with its source.
+  No real person, address, account number or bank detail is ever kept. Placeholders: `{school}`,
+  `{person}`, `{title}` (a leader's title), `{vendor}`, `{freemail}`, `{phone}`, `{amount}`, `{term}`,
+  `{pct}`, `{weekly}`. Sender kinds: `compromised`, `spoof`, `freemail`, `lookalike`, `vendor` (a
+  compromised supplier, law firm or title company: outside, passes checks), `unknown`. Link kinds:
+  `form`, `drive`, `lookalike`, `random`, and `qr` (a QR code in a picture: the model sees only the
+  text asking to scan it). Two thirds are
   trained on (12 variants each, with made-up names and domains); every third one is held out and only
   scored (`real_world_heldout` in the model card). Never change the generator to fit the held-out ones,
   or that score stops meaning anything. Add new examples at the end.
@@ -78,6 +90,9 @@ the unit test fails if the model's score on the hand-written emails drops below 
 - **Regression cases** (`tests/fixtures/ai-regressions.jsonl`): genuine emails an earlier version got
   wrong, paraphrased with made-up names. The unit tests keep them right. Add one for each false alarm
   you report, after removing personal details.
+- **Genuine look-alikes** (`eval-lookalikes.jsonl`): hand-written genuine emails that resemble spear
+  phishing and scams. Never trained on; `train.py` reports how many the model calls phishing (false
+  alarms). Don't change the generator to fit them.
 - **The check set** (`eval-handwritten.jsonl`): hand-written emails that are not generated from the
   templates. Keep a second set you never look at while changing the generator, or its score stops
   meaning anything (see the model card: the current score is optimistic for that reason).
