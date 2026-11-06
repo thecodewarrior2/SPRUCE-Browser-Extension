@@ -1,5 +1,49 @@
 # Changelog
 
+## 5.94.5 — EXPERIMENT (branch `llm_testing`): model 0.4.0, real-world phishing, hidden filler; safety claims are only a small weight
+
+Not for release. Three spam/phishing emails the AI missed (model 0.3.0: a credit-card offer made of
+pictures, 0.1%; a fake cloud-storage notice whose sender name was the reader's own mailbox name, 8%; an
+IPTV offer already marked as spam by its own provider, 0.1%), and a genuine retailer survey marked amber
+because its footer explains how to "confirm that this email is not a scam".
+
+- **Safety claims are one small weight** (`selfVouchingSigns`, `shared.js`): 1 (was 3), an antivirus
+  footer 0.5 (was 2). Alone, or with a first-time sender (1 + 1.5), they stay below caution (3); they add
+  up only with other signs. Text that tells the reader how to check ("confirm that…", "to see if…",
+  "unlike scam emails…", `VOUCH_CHECKING_RE`) isn't counted. In the AI's answer (`aiAdvice`, `ai.js`) a
+  claim no longer makes a warning of its own: it is named only when the model warns. Text addressed to
+  AI tools or filters is unchanged (5, red).
+- **Hidden filler** (`emailLayout`, `content.js`): an empty spacer at least 1000px tall by its own inline
+  size (`AI_GAP_PX`), followed by at least 200 characters of text, is filler for spam filters. It is a
+  weight of 3 in the email's verdict (`layoutSigns`, `shared.js`), and the AI reads only the visible text
+  before it. A body of pictures with almost no text ("images only") gives the AI its hidden preheader.
+- **AI input** (`modelInputParts`, `ai.js`; old facts give exactly the old input): the reader's own
+  mailbox name becomes "your name" wherever it appears (`recipient`, `maskRecipient`), so the model sees
+  "your name!Apply…" or a sender named after the reader without ever seeing the name; `layout:` (images
+  only, text after a large blank gap); and the header findings' kinds after the DMARC result
+  (`mailChecks`, `AI_MAIL_CHECKS`: already marked as spam, home-made bulk-mail tool, broken To,
+  placeholders…). `headerAnomalies` findings carry a `kind`; `HEADER_SIGNS_VERSION` 6.
+- **Real-world phishing** (`tools/ai/real-world.jsonl`): 40 phishing emails that universities (Cornell,
+  Toronto, Tulane, Georgetown) and the FTC published as warnings, paraphrased with placeholders for
+  names, each with its source. Two thirds are trained on (12 variants each); every third one is HELD OUT
+  (3 variants each) and only scored (`realworld-heldout.jsonl`, `real_world_heldout` in the metrics).
+  Model 0.3.0 caught 34 of 39 held-out variants; 0.4.0 catches 39.
+- Training data (`make-dataset.js`): new phishing kinds `storage` (storage full, photos deleted, payment
+  failed; throwaway domains, links on cloud-storage pages) and `spamoffer` (IPTV, credit cards, loans,
+  crypto, pills; free-mail senders, WhatsApp and Telegram contacts, long emoji lists, unsubscribe on
+  127.0.0.1); their genuine versions `offer` (banks' card offers) and `storagenotice` (the storage
+  companies' own notices); the reader's name in subjects, greetings and sender names; image-only and
+  filler layouts; header findings; genuine companies' "how to check it's us" notes.
+- Model 0.4.0: synthetic test 1500/1500, hand-written 33/33, real-world held out 39/39. Regression
+  cases (`ai-regressions.jsonl`, 15): the three missed emails (now 99.8–99.9%), the retailer survey and
+  six genuine look-alikes written for this check (a store coupon in pictures, a bank's card offer, a real
+  storage-full notice, an emoji newsletter, a friend on free mail, a colleague greeting the reader by
+  name; an early 0.4.0 build called three of them phishing), all genuine at 0.1–1.4%. The one-line
+  "sign in today" test email, a known miss of 0.3.0 (13%), is now 99%.
+- Tests: unit (claim weights and the "how to check" wording, the new AI input, `layoutSigns`, header
+  finding kinds, regression cases both ways), e2e `test-ai.js` (hidden filler in the verdict; a claim is
+  named only when the model warns; waits for a settled verdict before comparing).
+
 ## 5.94.4 — EXPERIMENT (branch `llm_testing`): model 0.3.0, after three false alarms
 
 Not for release. Three genuine emails reported as flagged by the AI (model 0.2.0): a deal-site

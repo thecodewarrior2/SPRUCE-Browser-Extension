@@ -2519,7 +2519,7 @@ const ESP_HEADER_MARKERS = [
 ];
 // Bumped whenever headerAnomalies learns new signs, so results saved by an older version are worked
 // out again (see messageInfo in content.js).
-const HEADER_SIGNS_VERSION = 5;
+const HEADER_SIGNS_VERSION = 6;
 // receiver: the webmail's receiving mail system, whose own records can be trusted:
 // { host: 'mx.google.com', name: 'Gmail' } (see the `mail.headers` entry of WEBMAIL_SITES).
 function headerAnomalies(raw, accountAddress, receiver = {}) {
@@ -2554,8 +2554,8 @@ function headerAnomalies(raw, accountAddress, receiver = {}) {
                 .filter(x => x.to && !own.has(x.to.toLowerCase()));
             const people = new Set(others.map(x => x.to.toLowerCase())).size;
             const spread = others.length ? Math.max(...others.map(x => x.t)) - Math.min(...others.map(x => x.t)) : 0;
-            if (people >= 2 && spread > 12 * 36e5) out.push({ weight: 5, text: `Its headers contain ${what} copied from emails to ${people} other people${gm ? '' : ` (dated ${years.join(', ')})`}, which no genuine email has.` });
-            else out.push({ weight: 3, text: `Its headers contain ${what} (copied from other, older emails${gm ? '' : `; dated ${years.join(', ')}`}).` });
+            if (people >= 2 && spread > 12 * 36e5) out.push({ weight: 5, kind: 'forged-received', text: `Its headers contain ${what} copied from emails to ${people} other people${gm ? '' : ` (dated ${years.join(', ')})`}, which no genuine email has.` });
+            else out.push({ weight: 3, kind: 'forged-received', text: `Its headers contain ${what} (copied from other, older emails${gm ? '' : `; dated ${years.join(', ')}`}).` });
         }
     }
     // The sender's own verification (DMARC), as Gmail itself recorded it on arrival. When the domain
@@ -2597,7 +2597,7 @@ function headerAnomalies(raw, accountAddress, receiver = {}) {
             out.push({ weight: 2, text: 'Its “To” line shows one address but is really addressed to another.' });
             break;
         }
-        if (tm && (tm[2].match(/@/g) || []).length > 1) { out.push({ weight: 3, text: 'Its “To” address is broken (two “@”).' }); break; }
+        if (tm && (tm[2].match(/@/g) || []).length > 1) { out.push({ weight: 3, kind: 'broken-to', text: 'Its “To” address is broken (two “@”).' }); break; }
     }
     // Subject: walls of blank space or long runs of random capitals; or filler and a random tail that
     // makes each copy unique ("125$ FOR YOU!_______kvksrphdly").
@@ -2606,7 +2606,7 @@ function headerAnomalies(raw, accountAddress, receiver = {}) {
     else if (/[_~=*]{4,}\s*[A-Za-z0-9]{6,}\s*$/.test(decodeEncodedWords(subject))) out.push({ weight: 2, text: 'Its subject ends in filler and random letters, which make each copy unique to slip past filters.' });
     // Address lines holding web-page code (<strong>, <br/>…): pasted text, never written by a mail program.
     const markup = /<\/?(strong|em|br|div|span|p|b|i|u|font|table|td|tr|img|html|body|head)(\s[^<>]*)?\/?>/i;
-    if (['to', 'cc', 'bcc', 'reply-to', 'from'].some(n => get(n).some(v => markup.test(v)))) out.push({ weight: 3, text: 'Its address lines contain web-page code, which no mail program writes there.' });
+    if (['to', 'cc', 'bcc', 'reply-to', 'from'].some(n => get(n).some(v => markup.test(v)))) out.push({ weight: 3, kind: 'markup', text: 'Its address lines contain web-page code, which no mail program writes there.' });
     // A reply names the email it answers by its Message-ID (<id@host>), never by an address.
     const irt = (get('in-reply-to')[0] || '').trim();
     if (irt && !/</.test(irt) && /@/.test(irt)) out.push({ weight: 2, text: 'Its “In-Reply-To” line holds an address instead of a message ID: a made-up reply.' });
@@ -2614,9 +2614,9 @@ function headerAnomalies(raw, accountAddress, receiver = {}) {
     // as the receiver recorded it: the providers publish every key they sign with, so it was made up.
     const results = headers.find(([n, v]) => n === 'authentication-results' && receiver.host && v.split(';')[0].trim().toLowerCase() === receiver.host);
     const fakeSig = results && [...results[1].matchAll(/dkim=permerror\s*\(no key[^)]*\)\s*header\.(?:i=@?|d=)([^\s;]+)/gi)].map(m => domainOfAddress(m[1])).find(isPersonalMailDomain);
-    if (fakeSig) out.push({ weight: 3, text: `It carries a fake ${fakeSig} signature (with a key ${fakeSig} doesn't have).` });
+    if (fakeSig) out.push({ weight: 3, kind: 'fake-signature', text: `It carries a fake ${fakeSig} signature (with a key ${fakeSig} doesn't have).` });
     // A mail system it passed through (often the sender's own provider) already found it was spam.
-    if (get('x-spam-flag').some(v => /^\s*yes\b/i.test(v)) || get('x-spam-status').some(v => /^\s*yes\b/i.test(v))) out.push({ weight: 3, text: 'A mail system it passed through had already marked it as spam.' });
+    if (get('x-spam-flag').some(v => /^\s*yes\b/i.test(v)) || get('x-spam-status').some(v => /^\s*yes\b/i.test(v))) out.push({ weight: 3, kind: 'spam-flag', text: 'A mail system it passed through had already marked it as spam.' });
     // An unsubscribe link or tracking image on the sender's own computer (127.0.0.1, localhost) or a
     // private network: a home-made bulk-mail tool. (Only those: other links to localhost are normal in
     // developers' mail, such as quoted bug reports.)
@@ -2624,7 +2624,7 @@ function headerAnomalies(raw, accountAddress, receiver = {}) {
     const body = String(raw || '').replace(/\r\n/g, '\n').split(/\n\n/).slice(1).join('\n\n').slice(0, 200000).replace(/=\n/g, '').replace(/=3D/gi, '=');
     if (get('list-unsubscribe').some(v => new RegExp(local, 'i').test(v)) || new RegExp(`${local}[^\\s"'<>]*(unsub|opt-?out)`, 'i').test(body)
         || new RegExp(`<img\\b[^>]*\\bsrc=["']?${local}`, 'i').test(body)) {
-        out.push({ weight: 3, text: 'Its unsubscribe link or tracking image points to the sender\'s own computer (such as 127.0.0.1), a sign of a home-made bulk-mail tool.' });
+        out.push({ weight: 3, kind: 'local-tool', text: 'Its unsubscribe link or tracking image points to the sender\'s own computer (such as 127.0.0.1), a sign of a home-made bulk-mail tool.' });
     }
     // Headers claiming several unrelated sending services at once.
     const names = new Set(headers.map(([h]) => h));
@@ -2632,11 +2632,11 @@ function headerAnomalies(raw, accountAddress, receiver = {}) {
     if (esps.length >= 3) out.push({ weight: 3, text: `Its headers claim it was sent by ${esps.length} unrelated email services at once (${esps.slice(0, 4).join(', ')}), so they were copied together to look legitimate.` });
     // Unfilled template placeholders such as "(_IE6rxc5)" or "[RANDOM1]".
     const placeholder = headers.map(([, v]) => v).join('\n').match(/\(_[A-Za-z0-9]{4,12}\)|\[RANDOM\d*\]|__Random_/g);
-    if (placeholder && placeholder.length >= 3) out.push({ weight: 2, text: 'Its headers contain unfilled placeholders from a bulk-mailing tool.' });
+    if (placeholder && placeholder.length >= 3) out.push({ weight: 2, kind: 'placeholders', text: 'Its headers contain unfilled placeholders from a bulk-mailing tool.' });
     // Headers that must appear once.
     const dup = ['from', 'subject', 'date', 'message-id', 'mime-version'].filter(n => get(n).length > 1);
     if (new Set(get('content-length').map(v => v.trim())).size > 1) dup.push('content-length');   // two different sizes
-    if (dup.length) out.push({ weight: 2, text: `Its headers repeat ${dup.map(d => d.replace(/(^|-)([a-z])/g, (m, a, b) => a + b.toUpperCase())).join(', ')}, which a mail program writes only once.` });
+    if (dup.length) out.push({ weight: 2, kind: 'duplicate-headers', text: `Its headers repeat ${dup.map(d => d.replace(/(^|-)([a-z])/g, (m, a, b) => a + b.toUpperCase())).join(', ')}, which a mail program writes only once.` });
     return out;
 }
 
@@ -2849,23 +2849,47 @@ function threatConsensus(services) {
 // ---------------------------------------------------------------------------
 const AI_DIRECTED_RE = /\b(ignore|disregard|forget|override)\s+(all\s+|any\s+|the\s+|your\s+)?(previous|prior|above|earlier|preceding|existing)\s+(instructions|prompts?|rules|directions)\b|\b(you are|act as|pretend to be)\s+(an?\s+)?(ai|assistant|language model|llm|chatbot|email (filter|scanner|classifier))\b|\bsystem prompt\b|\b(classify|mark|label|treat|rate|categori[sz]e|flag)\s+(this|the)\s+(email|message|mail|content)\s+as\s+(safe|legitimate|clean|benign|trusted|not (phishing|spam|malicious))\b|\b(note|message|instructions?)\s+(to|for)\s+(the\s+)?(ai|assistant|scanner|filter|model|llm|classifier)\b/i;
 const SAFETY_CLAIMS = [
-    { weight: 3, re: /\b(this|the|our)\s+(e-?mail|message|link|attachment|document|file|invoice)\s+(is|has been)\s+(completely\s+|totally\s+|100%\s+)?(safe|secure|verified|virus[- ]free|legitimate|authentic|genuine|not (a\s+)?(phishing|spam|scam|virus))\b/i },
-    { weight: 3, re: /\b(scanned|checked)\s+and\s+(verified|confirmed|found)\s+(as\s+|to\s+be\s+)?(safe|secure|clean)\b/i },
-    { weight: 3, re: /\b(verified|secured|protected|certified|approved|authenticated|validated)\s+(as\s+)?(safe\s+|secure\s+)?by\s+(microsoft|norton|mcafee|avast|avg|google|gmail|outlook|office\s?365|microsoft\s?365|windows\s+defender|defender|symantec|kaspersky|bitdefender|trend\s?micro|proofpoint|mimecast|barracuda|docusign|paypal|your\s+(it|security|email)\s+(team|department|administrator))\b/i },
-    { weight: 3, re: /\b(this|it)\s+is\s+(not|n't)\s+(a\s+)?(phishing|scam|spam|fraud)\b|\bis\s+(100%|completely|totally|perfectly)\s+(safe|secure|legit(imate)?)\b|\bsafe\s+to\s+(open|click|download)\b/i },
-    { weight: 2, re: /\bvirus[- ]free\b|\bno\s+(virus(es)?|malware|threats?)\s+(were\s+)?(detected|found)\b|\b(scanned|checked)\s+(for\s+viruses\s+)?by\s+[a-z0-9 ]{2,30}\b(anti-?virus|security|email security)/i }
+    { weight: 1, re: /\b(this|the|our)\s+(e-?mail|message|link|attachment|document|file|invoice)\s+(is|has been)\s+(completely\s+|totally\s+|100%\s+)?(safe|secure|verified|virus[- ]free|legitimate|authentic|genuine|not (a\s+)?(phishing|spam|scam|virus))\b/i },
+    { weight: 1, re: /\b(scanned|checked)\s+and\s+(verified|confirmed|found)\s+(as\s+|to\s+be\s+)?(safe|secure|clean)\b/i },
+    { weight: 1, re: /\b(verified|secured|protected|certified|approved|authenticated|validated)\s+(as\s+)?(safe\s+|secure\s+)?by\s+(microsoft|norton|mcafee|avast|avg|google|gmail|outlook|office\s?365|microsoft\s?365|windows\s+defender|defender|symantec|kaspersky|bitdefender|trend\s?micro|proofpoint|mimecast|barracuda|docusign|paypal|your\s+(it|security|email)\s+(team|department|administrator))\b/i },
+    { weight: 1, re: /\b(this|it)\s+is\s+(not|n't)\s+(a\s+)?(phishing|scam|spam|fraud)\b|\bis\s+(100%|completely|totally|perfectly)\s+(safe|secure|legit(imate)?)\b|\bsafe\s+to\s+(open|click|download)\b/i },
+    { weight: 0.5, re: /\bvirus[- ]free\b|\bno\s+(virus(es)?|malware|threats?)\s+(were\s+)?(detected|found)\b|\b(scanned|checked)\s+(for\s+viruses\s+)?by\s+[a-z0-9 ]{2,30}\b(anti-?virus|security|email security)/i }
 ];
+// A claim that the email is safe is ONE SMALL WEIGHT among the others (1; an antivirus footer 0.5): it
+// never makes an email amber on its own, nor with a first-time sender (1 + 1.5), and it never puts up a
+// warning of its own in the AI's answer either. Genuine companies write such lines too ("Verified email",
+// "if you want to confirm that this email is not a scam, visit our website"); phrasing that tells the
+// reader how to CHECK ("confirm that…", "to see if…", "unlike scam emails") isn't a claim at all.
+// Text addressed to AI tools or filters is different: a mail program never writes it (5, red).
+const VOUCH_CHECKING_RE = /\b(confirm|verify|check|make sure|ensure|whether|if|unsure|not sure|to see|unlike|wonder(ing)?|how to tell)\b[^.!?]{0,60}$/i;
 function selfVouchingSigns(text) {
     const t = String(text || '').normalize('NFKC').slice(0, 20000);
     const out = [];
     const ai = AI_DIRECTED_RE.exec(t);
     if (ai) out.push({ weight: 5, kind: 'ai-directed', text: `It contains text addressed to AI tools or filters (“${ai[0].slice(0, 80)}”), a trick to make automated checks call it safe. Genuine emails don't do this.` });
     let best = null;
-    for (const c of SAFETY_CLAIMS) { const m = c.re.exec(t); if (m && (!best || c.weight > best.weight)) best = { weight: c.weight, quote: m[0] }; }
-    if (best) out.push({ weight: best.weight, kind: 'safety-claim', text: best.weight >= 3
-        ? `It claims to be safe (“${best.quote.slice(0, 80)}”). Genuine emails don't need to say so; phishing emails often do, to lower your guard.`
+    for (const c of SAFETY_CLAIMS) {
+        const re = new RegExp(c.re.source, 'gi');
+        for (let m = re.exec(t), n = 0; m && n < 20; m = re.exec(t), n++) {
+            if (VOUCH_CHECKING_RE.test(t.slice(Math.max(0, m.index - 80), m.index))) continue;
+            if (!best || c.weight > best.weight) best = { weight: c.weight, quote: m[0] };
+            break;
+        }
+    }
+    if (best) out.push({ weight: best.weight, kind: 'safety-claim', text: best.weight >= 1
+        ? `It claims to be safe (“${best.quote.slice(0, 80)}”). Phishing emails often say so to lower your guard; on its own it proves nothing either way.`
         : `It carries an antivirus or "scanned" notice (“${best.quote.slice(0, 80)}”). Real mail systems add these, but so do scammers; it means nothing about the email's safety.` });
     return out;
+}
+
+// How an email hides its real text (emailLayout in content.js finds it). Spam and phishing pad
+// themselves with a block of unrelated text (old forum posts, newsletters, other people's mail) far below
+// the message, after a huge blank space, so filters judge that text instead of the lure ("filter
+// poisoning"). Genuine mail has no reason to. EXPERIMENT (llm_testing).
+function layoutSigns(layout) {
+    return (layout || []).includes('text after a large blank gap')
+        ? [{ weight: 3, kind: 'hidden-filler', text: 'It hides a block of unrelated text far below the message, after a large blank space: a trick to make spam filters judge that text instead of the message.' }]
+        : [];
 }
 
 // ---------------------------------------------------------------------------

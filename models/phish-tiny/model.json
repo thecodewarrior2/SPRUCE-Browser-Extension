@@ -1,6 +1,6 @@
 {
  "name": "phish-tiny",
- "version": "0.3.0",
+ "version": "0.4.0",
  "base": "prajjwal1/bert-tiny",
  "labels": [
   "genuine",
@@ -23,6 +23,14 @@
    "false_positives": 0,
    "false_negatives": 0,
    "n": 33
+  },
+  "real_world_heldout": {
+   "accuracy": 1.0,
+   "precision": 1.0,
+   "recall": 1.0,
+   "false_positives": 0,
+   "false_negatives": 0,
+   "n": 39
   }
  },
  "config": {

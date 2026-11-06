@@ -214,8 +214,17 @@ the Inspector explains that no tool can read them offline.
   or moves email to Spam; when the extension's own checks warn, it says to trust them.
 - **Text that vouches for itself counts toward phishing**, in the extension's own verdict for every
   opened email (not only the AI's): text addressed to AI tools or filters is red on its own; a claim
-  that the email is safe ("verified safe by Microsoft", "this is not a scam") is amber, red with any
-  other sign; antivirus and gateway footers weigh less. Hidden text counts too.
+  that the email is safe ("verified safe by Microsoft", "this is not a scam") is one small weight (1),
+  never amber on its own or with a first-time sender, and never a warning of its own in the AI's answer;
+  antivirus and gateway footers weigh less (0.5); notes telling the reader how to check an email ("to
+  confirm that this email is not a scam, visit our website") don't count. Hidden text counts too.
+- **Hidden filler** (experimental): unrelated text far below the message after a blank space at least
+  1000 pixels tall, written for spam filters, weighs 3 in the email's verdict, and the AI reads only the
+  text before it. When an email is only pictures, the AI is given its hidden preheader line.
+- **What the AI sees** besides the text: the reader's own mailbox name is replaced by "your name" (so
+  "YOURNAME! Apply…" or a sender named after you show as tricks without the model ever seeing the
+  name), how the email hides its text, and what the mail systems already found in its headers (already
+  marked as spam, a home-made bulk-mail tool, a broken To line…).
 - **Try it** (Settings → AI analysis): paste an email to see the model's opinion.
 - **New and outside senders** (Settings → Senders → Weigh new and outside senders, on by default): two
   small weights in every email's verdict, which only count together with other warning signs: from

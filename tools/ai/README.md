@@ -19,8 +19,16 @@ email, the same way for training and in use:
 
 ```
 subject: … from: "<display name>" at <sender domain> (your organization | outside your organization) (shared mailbox).
-sender check: dmarc pass|fail|none|unknown. links: "<link text>" goes to <host> then <destination> (warning: <the extension's finding>); … text: <the message's own text>
+sender check: dmarc pass|fail|none|unknown; <what mail systems found in the headers>. links: "<link text>" goes to <host>
+then <destination> (warning: <the extension's finding>); … layout: images only; text after a large blank gap. text: <the text a person sees>
 ```
+
+The reader's own mailbox name (the part of their address before @) is replaced by "your name"
+wherever it appears, so a subject like "READER! Apply for a card" or a sender named after the reader is
+visible to the model as a trick, without the name. The header findings come from `headerAnomalies`
+(already marked as spam, a home-made bulk-mail tool on 127.0.0.1, a broken To line, placeholders…), and
+the layout from `emailLayout` in `content.js`: text after a blank spacer at least 1000px tall is filler
+for spam filters and is cut off; a body of pictures gives the model its hidden preheader instead.
 
 Email addresses keep only their domain, and phone numbers and long numbers are replaced
 (`redactForAi`). Tags that mail systems add to every outside email (`[EXTERNAL]`, `EXT:`, `CAUTION:`)
@@ -28,8 +36,6 @@ are removed from the subject, because phishing and genuine mail carry them alike
 is known only when the account has its own domain. In the webmail, quoted earlier messages are left out
 (`ownText` in `content.js`): the model judges what this sender wrote now.
 
-Email addresses keep only their domain, and phone numbers and long numbers are replaced
-(`redactForAi`), before the model sees anything, in training and in use.
 
 ## Retraining
 
@@ -38,7 +44,7 @@ node tools/ai/make-dataset.js
 ```
 
 ```bash
-python3 tools/ai/train.py --version 0.3.0
+python3 tools/ai/train.py --version 0.4.0
 ```
 
 `train.py` needs Python 3 with `torch` (the CPU build is enough) and `transformers`, and takes about 2
@@ -48,17 +54,23 @@ the unit test fails if the model's score on the hand-written emails drops below 
 
 ## Controlling what it learns
 
-- **The generator** (`make-dataset.js`) writes synthetic emails from templates: ten kinds of phishing
+- **The generator** (`make-dataset.js`) writes synthetic emails from templates: twelve kinds of phishing
   (sign-in, credential, invoice, gift card, delivery fee, "call this number", prize, payroll, shared
-  document, threats) and seventeen kinds of genuine mail (notes, notices, invitations, codes,
-  automated statements, business and vendor threads, deal-site marketing, newsletters, receipts, school
-  mail, password resets, shipping, colleagues, settlement notices, bills, sales, security alerts). The
+  document, threats, cloud storage full, spam offers such as IPTV and credit cards) and nineteen kinds of
+  genuine mail (notes, notices, invitations, codes, automated statements, business and vendor threads,
+  deal-site marketing, newsletters, receipts, school mail, password resets, shipping, colleagues,
+  settlement notices, bills, sales, security alerts, banks' card offers, storage companies' own notices). The
   genuine kinds deliberately include what reads like phishing but isn't: huge discounts and coupon
   deadlines, salespeople describing scams, one-line payment statements, signatures with titles and
   legal disclaimers. About 8% of the phishing comes from inside the organization (a compromised staff
   account), so being inside never settles it. About a third of the phishing emails claim to be safe, and some
   address AI tools: the model learns that such text is a phishing sign. Every person and organization
   in it is made up.
+- **Real-world phishing** (`real-world.jsonl`): 40 phishing emails that universities and the FTC
+  published as warnings, paraphrased with placeholders for names, each with its source. Two thirds are
+  trained on (12 variants each, with made-up names and domains); every third one is held out and only
+  scored (`real_world_heldout` in the model card). Never change the generator to fit the held-out ones,
+  or that score stops meaning anything. Add new examples at the end.
 - **Your own examples:** add `tools/ai/data/extra/*.jsonl`, one example per line:
   `{"facts": {"subject": "…", "senderName": "…", "senderAddress": "…", "auth": {"dmarc": "pass"}, "links": [{"text": "…", "host": "…", "destHost": "", "finding": ""}], "bodyText": "…"}, "label": 1}`
   (1 = phishing, 0 = genuine). **Remove names, addresses, account numbers and anything personal
@@ -77,8 +89,10 @@ the unit test fails if the model's score on the hand-written emails drops below 
   nothing is sent anywhere or stored. Automatic answers that see nothing suspicious are one short line.
 - Advisory only: the model's opinion can add a warning but never clears one, marks anything safe or
   moves email to Spam (`aiAdvice`). A phishing email can contain text written to fool AI tools.
-- Text that vouches for itself ("this email is verified safe", "ignore previous instructions…")
-  counts toward phishing in the extension's own verdict too (`selfVouchingSigns` in `shared.js`).
+- Text that vouches for itself counts toward phishing in the extension's own verdict too
+  (`selfVouchingSigns` in `shared.js`): a claim of safety ("this email is verified safe") is one small
+  weight (1), never a warning on its own; text addressed to AI tools ("ignore previous instructions…")
+  is red.
 
 ## Why not a generative LLM?
 

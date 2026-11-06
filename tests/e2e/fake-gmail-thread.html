@@ -23,7 +23,11 @@ const LINKS = {
            'Offers: <a id="other" href="https://www.aexp.com/offers">americanexpress.com/offers</a>.',
   name: 'Your order: <a id="name" href="https://www.amazon.de/gp/your-orders">amazon.com/orders</a>.',
   // ?links=allred: every link shows the company's main site and goes to a domain not known as its own.
-  allred: 'Offers: <a id="r1" href="https://www.aexp.com/offers">americanexpress.com/offers</a> and <a id="r2" href="https://www.aexp.com/travel">americanexpress.com/travel</a>.'
+  allred: 'Offers: <a id="r1" href="https://www.aexp.com/offers">americanexpress.com/offers</a> and <a id="r2" href="https://www.aexp.com/travel">americanexpress.com/travel</a>.',
+  // ?links=filler: the lure, then a huge blank spacer and unrelated text for spam filters (test-ai.js).
+  filler: 'Your photos and videos will be deleted! <a href="https://storage.example/renew">Update my payment information</a>.' +
+          '<div style="height:3000px"></div><p>Please remember to drop your regalia back to the regalia room. This is an archived section of the community. ' +
+          'Thank you again, it has been a pleasure doing business with you. This change was done to make the forum easier to use and to keep only the most helpful content.</p>'
 };
 const linkHtml = cloud ? [1,2,3,4].map(i => `<a href="https://oyl6s96s2xyr5tq6mj36.blob.core.windows.net/oyl6s96s2xyr5tq6mj36/link.html#qs=r-${i}ageikagdefbjkd">Message ${i}</a>`).join(' ')
   : LINKS[P.get('links')] || 'Please sign in at <a href="https://example.com/login">example.com</a> today.';

@@ -3097,6 +3097,7 @@ function updateOpenedVerdict(body) {
                      ...(lastSettings.enableOwnNameCheck !== false && st.base.status !== 'trusted' ? ownNameSigns(st.name, st.address, accountAddress()) : []),
                      ...(lastSettings.enableCallbackScamCheck !== false && st.base.status !== 'trusted' ? [...subjectScamSigns(openedSubject()), ...bodyScamSigns(body.innerText)] : []),
                      ...(st.base.status !== 'trusted' ? selfVouchingSigns(body.textContent) : []),
+                     ...(st.base.status !== 'trusted' ? layoutSigns(emailLayout(body).layout) : []),
                      ...(st.base.status !== 'trusted' ? senderContextFor(st.address, st.firstTime) : [])];   // llm_testing   // EXPERIMENT (llm_testing): textContent includes hidden text
     const final = applyEmailSignals(st.base, signals);
     st.final = final;
@@ -3191,11 +3192,69 @@ function ownText(body) {
     return text.trim() || body.innerText || '';
 }
 
+// How the opened email hides its real text, and the text a person actually reads in it.
+//   - 'text after a large blank gap': an empty spacer at least AI_GAP_PX tall (by its own inline size,
+//     so a tall table cell in an ordinary layout doesn't count) followed by a block of other text: filler
+//     for spam filters, out of the reader's sight. The text is cut at the spacer.
+//   - 'images only': almost no text, only pictures (the pitch is in the images, where filters can't
+//     read it). The hidden "preheader" (the line the inbox shows next to the subject) is then the only
+//     text there is, so it is given to the model.
+// Returns { text, layout: [...] }; text is ownText(body) when there is no trick. EXPERIMENT (llm_testing).
+const AI_GAP_PX = 1000;
+const AI_FILLER_MIN = 200;
+function inlineHeightPx(el) {
+    const v = (el.style && el.style.height) || el.getAttribute('height') || '';
+    const m = /^\s*(\d+(?:\.\d+)?)\s*(px)?\s*$/i.exec(v);
+    return m ? parseFloat(m[1]) : 0;
+}
+function textHiddenFromReader(el) {
+    if (!el) return true;
+    if (typeof el.checkVisibility === 'function' && !el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) return true;
+    if (!el.getClientRects().length) return true;
+    const cs = getComputedStyle(el);
+    return cs.visibility === 'hidden' || parseFloat(cs.opacity) < 0.05 || parseFloat(cs.fontSize) < 2;
+}
+function emailLayout(body) {
+    const layout = [];
+    const quoted = (el) => !!(el && el.closest('.gmail_quote, .gmail_quote_container, blockquote, .gmail_extra'));
+    let gap = null;
+    for (const el of body.querySelectorAll('[style*="height"], [height]')) {
+        if (quoted(el) || inlineHeightPx(el) < AI_GAP_PX || el.querySelector('img, video, svg, canvas, iframe') || (el.textContent || '').trim()) continue;
+        gap = el;
+        break;
+    }
+    let text = '';
+    if (gap) {
+        // The visible text before the spacer is the message; after it, filler (when there is enough).
+        let before = '', after = 0;
+        const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
+        for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+            const t = n.nodeValue.replace(/\s+/g, ' ').trim();
+            if (!t || quoted(n.parentElement)) continue;
+            if (gap.compareDocumentPosition(n) & Node.DOCUMENT_POSITION_FOLLOWING) after += t.length;
+            else if (before.length < 8000 && !textHiddenFromReader(n.parentElement)) before += t + '\n';
+        }
+        if (after >= AI_FILLER_MIN) { layout.push('text after a large blank gap'); text = before; }
+    }
+    if (!text) text = ownText(body);
+    const visible = text.replace(/\s+/g, '');
+    const pictures = [...body.querySelectorAll('img')].filter(i => !quoted(i) && Math.max(i.width || 0, parseFloat(i.getAttribute('width')) || 0) >= 100);
+    if (visible.length < 60 && pictures.length) {
+        layout.push('images only');
+        for (const el of body.querySelectorAll('div, span, p, td')) {
+            const t = (el.textContent || '').replace(/\s+/g, ' ').trim();
+            if (t.length >= 10 && t.length <= 300 && !quoted(el) && textHiddenFromReader(el)) { text = `${t}\n${text}`; break; }
+        }
+    }
+    return { text: text.trim(), layout };
+}
+
 async function aiFactsFor(body) {
     const sender = openedSenderOf(body) || {};
     let auth = null;
     try { auth = senderChecksActive() ? await getMessageAuth(body) : null; } catch (e) { auth = null; }
     const st = openedStates.get(body);
+    const shown = emailLayout(body);
     const links = [], seen = new Set();
     for (const a of body.querySelectorAll('a[href]')) {
         if (inQuotedSection(a) || !/^https?:/i.test(a.href)) continue;
@@ -3213,7 +3272,10 @@ async function aiFactsFor(body) {
         auth: auth ? { dmarc: auth.dmarc, spf: auth.spf, dkim: auth.dkim, headerFrom: auth.headerFrom } : null,
         links, attachments: [],
         verdict: st && st.final ? { status: st.final.status, reasons: st.final.reasons || [] } : null,
-        bodyText: ownText(body).slice(0, 8000)
+        recipient: String(accountAddress() || '').split('@')[0] || '',
+        mailChecks: st && st.info && st.info.fh === addressFingerprint(st.address) ? (st.info.an || []).map(x => x.kind).filter(Boolean) : [],
+        layout: shown.layout,
+        bodyText: shown.text.slice(0, 8000)
     };
 }
 
