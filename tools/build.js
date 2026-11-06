@@ -132,9 +132,27 @@ function zipDir(dir, zip) {
     execFileSync('zip', ['-qr', '-X', zip, '.'], { cwd: dir });
 }
 
+// Third-party code bundled as it is, pinned to the exact files of its release (SHA-256). A changed or
+// swapped file stops the build. To update PDF.js: take pdf.min.mjs and pdf.worker.min.mjs from the
+// pdfjs-dist package of the new version (npm), check them, and put the new version and hashes here.
+const PINNED_FILES = {
+    'lib/pdf.min.mjs':        { from: 'pdfjs-dist 5.6.205 (npm), build/pdf.min.mjs',        sha256: '2221020ea508479dcc1221f36f2731656339230097c69ba1f78802832c0ad685' },
+    'lib/pdf.worker.min.mjs': { from: 'pdfjs-dist 5.6.205 (npm), build/pdf.worker.min.mjs', sha256: '51a2fd1ea47f1a9b0814e65e0c336c739c54957795ee774e8f93cb81e8028dd1' }
+};
+function checkPinnedFiles(dir) {
+    const crypto = require('crypto');
+    for (const [file, pin] of Object.entries(PINNED_FILES)) {
+        const p = path.join(dir, file);
+        if (!fs.existsSync(p)) throw new Error(`${file} is missing (expected ${pin.from}).`);
+        const got = crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex');
+        if (got !== pin.sha256) throw new Error(`${file} is not ${pin.from}: its SHA-256 is ${got}. If PDF.js was updated on purpose, update PINNED_FILES in tools/build.js.`);
+    }
+}
+
 function build(browsers, workingTree) {
     const src = sourceFiles(workingTree);
     try {
+        checkPinnedFiles(src);
         const chromeManifest = JSON.parse(fs.readFileSync(path.join(src, 'manifest.json'), 'utf8'));
         const version = chromeManifest.version;
         fs.mkdirSync(OUT, { recursive: true });
@@ -196,4 +214,4 @@ if (require.main === module) {
     console.log(`S.P.R.U.C.E+ ${version}${workingTree ? ' (working tree)' : ''}:\n  ` + made.join('\n  '));
 }
 
-module.exports = { BROWSERS, manifestFor, build };
+module.exports = { BROWSERS, manifestFor, build, PINNED_FILES, checkPinnedFiles };

@@ -192,7 +192,7 @@ has the same extension ID and managed policies reach it.
 | `compat.js` | Shims for JavaScript features pdf.js uses that older browsers lack |
 | `options.*`, `help.js`, `popup.*` | Settings, logging, Link Inspector and Help; the toolbar popup |
 | `theme.css` / `theme.js` | Design tokens and light/dark appearance (WCAG 2.1 AA) |
-| `lib/` | Bundled pdf.js (Apache-2.0), used only for PDF attachments |
+| `lib/` | Bundled pdf.js (Apache-2.0), used only for PDF attachments. Pinned: `tools/build.js` refuses to build unless both files match `PINNED_FILES` (SHA-256 of the pdfjs-dist release). To update it, copy `build/pdf.min.mjs` and `build/pdf.worker.min.mjs` from the new pdfjs-dist package (npm), and put the version and new hashes in `PINNED_FILES` |
 | `icons/` | Toolbar and store icons |
 | `tools/` | `build.js` (every browser's package), `build-safari.sh` (the Safari app, on a Mac), `refresh-snapshot.js` (the bundled shortener list and company endings; run before a release) |
 | `docs/` | Features, admin guide, architecture, this guide, install steps for test versions, policy examples |

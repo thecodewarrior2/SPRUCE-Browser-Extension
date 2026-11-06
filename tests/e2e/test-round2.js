@@ -1,5 +1,5 @@
 const fs = require('fs');
-const { launch, servePage, waitFor, until, settled, check, done } = require('./harness');
+const { launch, servePage, waitFor, until, settled, check, done, logMessages } = require('./harness');
 const FX = __dirname + '/../fixtures/';
 const scam1 = fs.readFileSync(FX + 'scam1.eml', 'utf8');
 const legit = fs.readFileSync(FX + 'legit.eml', 'utf8');
@@ -107,6 +107,9 @@ global.RAW_MESSAGES = {
   const fromOptions = await until(() => optPage.evaluate(async () => (await iconStore.all()).map(r => r.site)), sites => sites.includes('paypal.com'), 10000);
   check('Settings page reads the same icon store', fromOptions.includes('paypal.com'), fromOptions);
   await optPage.close();
+  // Every message the extension's own pages and the webmail sent was accepted (MESSAGE_RULES).
+  const refused = (await logMessages(sw)).filter(x => /message was refused/.test(x));
+  check('no message from the extension itself was refused', refused.length === 0, refused);
   await ctx.close();
   done();
 })().catch(e => { console.error(e); process.exit(1); });

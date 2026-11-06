@@ -1140,6 +1140,19 @@ test('list sync throttle: a numeric lastSyncTime within a day skips; the pre-5.8
 // One codebase for every browser: the generated manifests, browser detection, the background's two
 // ways of hosting the QR scanner.
 // ---------------------------------------------------------------------------
+test('build: the bundled PDF.js files are exactly the pinned release files', () => {
+  const { PINNED_FILES, checkPinnedFiles } = require(path.join(EXT, 'tools', 'build.js'));
+  assert.deepEqual(Object.keys(PINNED_FILES).sort(), ['lib/pdf.min.mjs', 'lib/pdf.worker.min.mjs']);
+  checkPinnedFiles(EXT);
+  // A changed file stops the build.
+  const dir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'pin-'));
+  fs.mkdirSync(path.join(dir, 'lib'));
+  for (const f of Object.keys(PINNED_FILES)) fs.copyFileSync(path.join(EXT, f), path.join(dir, f));
+  fs.appendFileSync(path.join(dir, 'lib', 'pdf.min.mjs'), '\n// changed');
+  assert.throws(() => checkPinnedFiles(dir), /pdf\.min\.mjs is not pdfjs-dist 5\.6\.205/);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
 test('build: Firefox and Safari manifests come from the Chrome one, with only their known differences', () => {
   const { manifestFor, BROWSERS } = require(path.join(EXT, 'tools', 'build.js'));
   const chrome = JSON.parse(fs.readFileSync(path.join(EXT, 'manifest.json'), 'utf8'));
@@ -1194,6 +1207,28 @@ test('QR scanner: Chrome asks its offscreen document; Firefox and Safari call th
   vm.runInContext('registerLocalScanner(async (job) => ({ ok: true, codes: [{ text: job.mime }] }))', b2);
   const r2 = await vm.runInContext('scanForQr({ b64: "AA==", mime: "application/pdf" })', b2);
   assert.equal(r2.codes[0].text, 'application/pdf', 'the job reached the local scanner');
+});
+
+test('QR scanner: a scan that never ends is given up, and Chrome\'s stuck scanner page is closed', async () => {
+  const fast = (f, t) => f === 'background.js' ? t.replace('const SCAN_JOB_LIMIT_MS = 30 * 1000;', 'const SCAN_JOB_LIMIT_MS = 50;') : t;
+  let closed = 0;
+  const b = loadBackground({}, { patchSource: fast, patchChrome: (c) => {
+    c.offscreen = { createDocument: async () => {}, closeDocument: async () => { closed++; } };
+    c.runtime.getContexts = async () => [];
+    c.runtime.sendMessage = () => new Promise(() => {});          // never answers
+  } });
+  await assert.rejects(vm.runInContext('scanForQr({ b64: "AA==", mime: "application/pdf" })', b), /took too long/);
+  await new Promise(r => setTimeout(r, 10));
+  assert.equal(closed, 1, 'the offscreen page was closed');
+  assert.equal(vm.runInContext('scansRunning', b), 0, 'its slot was given back');
+  // Firefox and Safari: the local scanner's answer is waited for the same way.
+  const b2 = loadBackground({}, { patchSource: fast });
+  vm.runInContext('registerLocalScanner(() => new Promise(() => {}))', b2);
+  await assert.rejects(vm.runInContext('scanForQr({ b64: "AA==", mime: "image/png" })', b2), /took too long/);
+  // A partial PDF scan (the scanner's own 20 s limit) still returns what it found.
+  const b3 = loadBackground({});
+  vm.runInContext('registerLocalScanner(async () => ({ ok: true, codes: [{ text: "https://a.example/", page: 1 }], links: [], pagesScanned: 1, pagesTotal: 8, timedOut: true }))', b3);
+  assert.equal((await vm.runInContext('scanForQr({ b64: "AA==", mime: "application/pdf" })', b3)).codes.length, 1);
 });
 
 // --- 5.90 company matching: each change on its own switch (COMPANY_MATCHING in shared.js) ----------
@@ -1546,7 +1581,9 @@ test('5.94: SendGrid open pixels are explained; following a link is only for the
   assert.equal((await vm.runInContext(`unwrapNestedUrl(${JSON.stringify(unlabelled)}, false)`, bg)).steps.length, 0);
   assert.match(S(`describeOpaqueLink(${JSON.stringify(unlabelled)})`), /encrypts the destination/);
   const sent = [];
-  const b = loadBackground({}, { fetch: async (u, init) => { sent.push({ u: String(u), init }); return { url: 'https://landing.example/', status: 200, ok: true }; },
+  // Public DNS (asked first: is the site on the public internet?) answers a public address.
+  const dnsAnswer = (u) => ({ ok: true, status: 200, json: async () => ({ Status: 0, Answer: /type=A$/.test(u) ? [{ type: 1, data: '93.184.216.34' }] : [] }) });
+  const b = loadBackground({}, { fetch: async (u, init) => { if (/dns-query/.test(String(u))) return dnsAnswer(String(u)); sent.push({ u: String(u), init }); return { url: 'https://landing.example/', status: 200, ok: true }; },
     patchChrome: (c) => { c.runtime.getURL = (p) => 'chrome-extension://abc/' + p; } });
   const ask = (request, sender) => new Promise(res => b.chrome.runtime.onMessage.fire(request, sender, res));
   const click = 'https://u1.ct.sendgrid.net/ls/click?upn=u001.abc';
@@ -1559,9 +1596,106 @@ test('5.94: SendGrid open pixels are explained; following a link is only for the
   assert.deepEqual([sent[0].init.method, sent[0].init.credentials, sent[0].init.redirect, sent[0].init.referrerPolicy], ['HEAD', 'omit', 'follow', 'no-referrer']);
   // A server refusing HEAD gets one GET (same privacy options).
   const tries = [];
-  const b2 = loadBackground({}, { fetch: async (u, init) => { tries.push(init.method); return init.method === 'HEAD' ? { url: String(u), status: 405 } : { url: 'https://dest.example/', status: 200 }; } });
+  const b2 = loadBackground({}, { fetch: async (u, init) => { if (/dns-query/.test(String(u))) return dnsAnswer(String(u)); tries.push(init.method); return init.method === 'HEAD' ? { url: String(u), status: 405 } : { url: 'https://dest.example/', status: 200 }; } });
   assert.equal((await vm.runInContext(`followLink(${JSON.stringify(click)})`, b2)).finalUrl, 'https://dest.example/');
   assert.deepEqual(tries, ['HEAD', 'GET']);
+});
+
+test('a saved link result counts only under the settings it was worked out with; the phishing lists are checked again', async () => {
+  const b = loadBackground({ enableResultCache: true, enableThirdPartyResolution: false, enableDnsThreatCheck: false, enablePhishingFeeds: true });
+  const run = (code) => vm.runInContext(code, b);
+  const url = 'https://shop.example/sale';
+  const values = (await run('getConfig()')).values;
+  const fp = run('verdictFingerprint')(values);
+  assert.match(fp, /^[0-9a-f]{16}$/);
+  // Saved as safe under these settings: reused.
+  run('cacheResult')(url, { finalUrl: url, isSafe: true, reason: 'Clean', resolvedIp: '93.184.216.34', fp });
+  assert.equal((await run('resolveLink')(url, '')).verdict, 'safe');
+  // Saved under other settings (or by an older version, without fp): ignored, the link is checked again
+  // (here with every check off, so it can't be called safe).
+  run('cacheResult')(url, { finalUrl: url, isSafe: true, reason: 'Clean', resolvedIp: '93.184.216.34', fp: 'ffffffffffffffff' });
+  assert.notEqual((await run('resolveLink')(url, '')).verdict, 'safe');
+  run('cacheResult')(url, { finalUrl: url, isSafe: true, reason: 'Clean', resolvedIp: '93.184.216.34' });
+  assert.notEqual((await run('resolveLink')(url, '')).verdict, 'safe');
+  // A different setting gives a different fingerprint; settings the verdict doesn't depend on don't.
+  assert.notEqual(run('verdictFingerprint')(Object.assign({}, values, { dnsAdGuard: !values.dnsAdGuard })), fp);
+  assert.equal(run('verdictFingerprint')(Object.assign({}, values, { rowHighlightColor: '#123456' })), fp);
+  // Listed as phishing after it was saved: caught on the next use.
+  run('cacheResult')(url, { finalUrl: url, isSafe: true, reason: 'Clean', resolvedIp: '93.184.216.34', fp });
+  run(`loadFeedSets = async () => ({ url: new Map(), domain: new Map([['shop.example', 'Test phishing list']]), address: new Map() })`);
+  const r = await run('resolveLink')(url, '');
+  assert.equal(r.verdict, 'unsafe');
+  assert.match(r.reason, /Listed as phishing by Test phishing list/);
+});
+
+test('outside services: a few requests at a time each, and left alone for a while after "too many requests"', async () => {
+  let running = 0, most = 0, status = 200, retryAfter = null;
+  const calls = [];
+  const b = loadBackground({}, { fetch: async (u) => {
+    calls.push(String(u));
+    running++; most = Math.max(most, running);
+    await new Promise(r => setTimeout(r, 20));
+    running--;
+    return { status, ok: status < 400, headers: { get: (h) => (h === 'retry-after' ? retryAfter : null) } };
+  } });
+  const run = (code) => vm.runInContext(code, b);
+  const get = (u, ms = 2000) => run('fetchWithTimeout')(u, {}, ms);
+  // unshorten.me: 2 at a time; the rest wait their turn and still get answers.
+  const answers = await Promise.all(Array.from({ length: 7 }, (_, i) => get(`https://unshorten.me/api/v2/unshorten?url=${i}`)));
+  assert.equal(answers.length, 7); assert.equal(most, 2);
+  most = 0;
+  await Promise.all(Array.from({ length: 20 }, (_, i) => get(`https://dns.example/q?${i}`)));
+  assert.equal(most, run('SERVICE_PARALLEL_DEFAULT'));
+  // A wait longer than the request's own time limit ends as a timeout (AbortError), as before.
+  most = 0;
+  const slow = await Promise.allSettled(Array.from({ length: 4 }, () => get('https://unshorten.me/x', 10)));
+  assert.ok(slow.some(r => r.status === 'rejected' && r.reason.name === 'AbortError'));
+  await new Promise(r => setTimeout(r, 60));
+  // 429 with Retry-After: the service is left alone, requests fail at once without being sent.
+  status = 429; retryAfter = '120';
+  assert.equal((await get('https://rate.example/a')).status, 429);
+  status = 200; const before = calls.length;
+  await assert.rejects(get('https://rate.example/b'), (e) => e.name === 'ServiceBusyError' && e.until - Date.now() > 100000);
+  assert.equal(calls.length, before, 'nothing sent while backing off');
+  assert.equal((await get('https://other.example/c')).status, 200, 'other services are not affected');
+  // Server errors: one or two are passed on as they are; the third in a row starts a back-off (2 s doubled, with jitter).
+  status = 500; retryAfter = null;
+  await get('https://flaky.example/1'); await get('https://flaky.example/2');
+  assert.equal(run(`serviceStates.get('flaky.example').until`), 0);
+  await get('https://flaky.example/3');
+  const wait = run(`serviceStates.get('flaky.example').until`) - Date.now();
+  assert.ok(wait > 5000 && wait <= 10000, String(wait));
+  // An answer that isn't an error ends it.
+  run(`serviceStates.get('flaky.example').until = 0`);
+  status = 200;
+  await get('https://flaky.example/4');
+  assert.deepEqual([run(`serviceStates.get('flaky.example').failures`), run(`serviceStates.get('flaky.example').until`)], [0, 0]);
+});
+
+test('the Link Inspector never follows a link into a private network', async () => {
+  const sent = [];
+  // DNS: intranet-like.example only has a private address; unknown.example isn't in public DNS at all.
+  const dns = (u) => {
+    const name = new URL(u).searchParams.get('name'), type = new URL(u).searchParams.get('type');
+    const ip = { 'public.example': '93.184.216.34', 'rebind.example': '192.168.1.10' }[name];
+    return { ok: true, status: 200, json: async () => ({ Status: ip ? 0 : 3, Answer: ip && type === 'A' ? [{ type: 1, data: ip }] : [] }) };
+  };
+  const b = loadBackground({}, { fetch: async (u, init) => {
+    if (/dns-query/.test(String(u))) return dns(String(u));
+    sent.push(String(u));
+    return { url: /redirects-in/.test(String(u)) ? 'https://10.0.0.5/admin' : 'https://public.example/end', status: 200, ok: true };
+  } });
+  const follow = (u) => vm.runInContext(`followLink(${JSON.stringify(u)})`, b);
+  for (const u of ['https://192.168.1.1/', 'https://10.1.2.3/login', 'https://127.0.0.1:8080/', 'https://[::1]/', 'https://[fd00::1]/', 'https://intranet/',
+                   'https://printer.local/', 'https://files.corp/', 'https://nas.home.arpa/', 'https://localhost/', 'https://2130706433/', 'https://0x7f.1/']) {
+    assert.match((await follow(u)).error, /private network/, u);
+  }
+  assert.match((await follow('https://rebind.example/')).error, /private network/, 'a public name pointing at a private address');
+  assert.match((await follow('https://unknown.example/')).error, /public internet/, 'a name only an internal DNS knows');
+  assert.equal(sent.length, 0, 'none of those was requested');
+  assert.equal((await follow('https://public.example/start')).finalUrl, 'https://public.example/end');
+  assert.match((await follow('https://public.example/redirects-in')).error, /redirected into a private network/);
+  assert.equal(vm.runInContext(`internalHost('mail.google.com')`, b), false);
 });
 
 // ---------------------------------------------------------------------------
@@ -1720,4 +1854,190 @@ test('AI model: emails earlier versions got wrong stay right (ai-regressions.jso
   assert.equal(AI(`stripExternalTag('[EXTERNAL] [EXT] CAUTION: Notice')`), 'Notice');
   assert.match(AI(`modelInputText({ subject: 's', senderName: 'n', senderAddress: 'a@x.example', org: 'inside', bodyText: 't' })`), /at x\.example \(your organization\)/);
   assert.match(AI(`modelInputText({ subject: 's', senderName: 'n', senderAddress: 'a@x.example', org: 'outside', bodyText: 't' })`), /\(outside your organization\)/);
+});
+
+// ---------------------------------------------------------------------------
+// 5.94.6: hardening. Fuzz tests use a FIXED SEED (mulberry32 below), so a failure repeats exactly; to
+// try other inputs locally, set FUZZ_SEED (and FUZZ_ROUNDS) in the environment.
+// ---------------------------------------------------------------------------
+const FUZZ_SEED = Number(process.env.FUZZ_SEED || 20261106);
+const FUZZ_ROUNDS = Number(process.env.FUZZ_ROUNDS || 1);
+function fuzzRng(seed) {
+  let a = seed >>> 0;
+  const r = () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  r.pick = (arr) => arr[Math.floor(r() * arr.length)];
+  r.int = (lo, hi) => lo + Math.floor(r() * (hi - lo + 1));
+  return r;
+}
+const XSS = ['"><img src=x onerror="window.__pwned=1">', '<svg onload=alert(1)>', 'javascript:alert(1)', "'><script>alert(1)</script>"];
+
+// Attacker-shaped links: real wrapper formats with random, nested, malformed and oversized payloads.
+function fuzzUrl(r, depth = 0) {
+  const inner = () => (depth < 6 && r() < 0.5 ? fuzzUrl(r, depth + 1) : r.pick(['https://evil.example/login', 'http://x.example/?a=1&b=2', 'javascript:alert(1)', 'data:text/html,<script>alert(1)</script>',
+    'file:///etc/passwd', 'https://xn--pypal-4ve.com/', 'https://[::1]/', 'https://user:pass@bank.example/', 'not a url', '', '%%%', 'https://' + 'a'.repeat(r.int(1, 3000)) + '.example/']));
+  const enc = (u) => r.pick([encodeURIComponent(u), u, encodeURIComponent(encodeURIComponent(u)), Buffer.from(u).toString('base64'), Buffer.from(u).toString('base64url'),
+    u.replace(/%/g, '%25'), '%E0%A4%A' + u, u + '%', u.split('').reverse().join(''), JSON.stringify({ url: u }), 'x'.repeat(r.int(0, 100000))]);
+  const v = enc(inner());
+  return r.pick([
+    `https://www.google.com/url?q=${v}&sa=D`, `https://l.facebook.com/l.php?u=${v}`, `https://nam12.safelinks.protection.outlook.com/?url=${v}&data=05`,
+    `https://urldefense.com/v3/__${v}__;!!abc`, `https://urldefense.proofpoint.com/v2/url?u=${v}&d=x`, `https://linkprotect.cudasvc.com/url?a=${v}`,
+    `https://u123.ct.sendgrid.net/ls/click?upn=${v}`, `https://click-1.icptrack.com/icp/relay.php?destination=${v}`, `https://r.search.yahoo.com/RU=${v}/RK=0`,
+    `https://translate.google.com/translate?u=${v}`, `https://track.example/redirect?url=${v}`, `https://x.awstrack.me/L0/${v}/1/abc`,
+    `https://example.com/${v}`, `https://bit.ly/${v}`, `https://secure-web.cisco.com/abc/${v}`, `https://t.co/${r.int(0, 9)}`, v]);
+}
+
+test('fuzz: link decoders never throw, give only http(s) or nothing, and finish quickly (fixed seed)', async () => {
+  const r = fuzzRng(FUZZ_SEED);
+  const decoders = S('[...STRICT_DECODERS, ...GENERIC_DECODERS]');
+  const ctx = S('({ redirectorSet: new Set(["track.example"]) })');
+  let slowest = 0, count = 0;
+  for (let i = 0; i < 400 * FUZZ_ROUNDS; i++) {
+    const url = fuzzUrl(r);
+    for (const [name, decode] of decoders) {
+      let out;
+      const t0 = Date.now();
+      try { out = decode(url, ctx); } catch (e) { assert.fail(`${name} threw on ${JSON.stringify(url.slice(0, 200))}: ${e.message}`); }
+      slowest = Math.max(slowest, Date.now() - t0);
+      const u = out && typeof out === 'object' ? out.url : out;
+      if (u === null || u === undefined || u === '') continue;
+      assert.equal(typeof u, 'string', `${name}: ${typeof u}`);
+    }
+    const t0 = Date.now();
+    const res = await S('unwrapNestedUrl')(url, false, ctx);
+    const took = Date.now() - t0;
+    slowest = Math.max(slowest, took);
+    assert.ok(took < 250, `unwrapping took ${took} ms: ${url.slice(0, 200)}`);
+    assert.ok(res.steps.length <= 6);
+    for (const st of res.steps) assert.match(st.outputUrl, /^https?:\/\//i, `decoded to a non-web address: ${st.outputUrl.slice(0, 120)}`);
+    if (res.unwrappedUrl !== url) assert.match(res.unwrappedUrl, /^https?:\/\//i);
+    count++;
+  }
+  assert.equal(count, 400 * FUZZ_ROUNDS);
+  assert.ok(slowest < 250, `slowest ${slowest} ms`);
+});
+
+test('messages: every action says who may send it, and the background answers only listed ones', async () => {
+  const rules = S('MESSAGE_RULES'), handlers = S('MESSAGE_HANDLERS');
+  assert.deepEqual(Object.keys(rules).sort(), Object.keys(handlers).sort(), 'MESSAGE_RULES and MESSAGE_HANDLERS list the same actions');
+  for (const [a, rule] of Object.entries(rules)) {
+    assert.ok(['page', 'any'].includes(rule.from), a);
+    assert.ok('refuse' in rule, `${a} has an answer for a refusal`);
+    for (const [k, ok] of Object.entries(rule.fields || {})) assert.equal(typeof ok, 'function', `${a}.${k}`);
+  }
+  // Privileged actions: only the extension's own pages.
+  assert.deepEqual(Object.keys(rules).filter(a => rules[a].from === 'page').sort(),
+    ['aiStatus', 'followLink', 'forceSync', 'getTabState', 'syncPhishFeeds', 'testCustomThreat', 'testCustomUnshortener', 'testResolver', 'testUnwrap', 'virusTotal']);
+  const gmail = { id: 'x', tab: { id: 7 }, url: 'https://mail.google.com/mail/u/0/' };
+  const page = { id: 'x' };                    // the popup or another page of the extension's own (no tab)
+  const why = (req, sender) => S('messageRefusal')(req, sender);
+  for (const a of Object.keys(rules)) {
+    if (rules[a].from === 'page') { assert.match(why({ action: a }, gmail), /own pages/, a); assert.equal(why({ action: a }, page), null, a); }
+    else assert.equal(why({ action: a }, gmail), null, a);
+  }
+  assert.match(why({ action: 'resolveUrl', url: 'x'.repeat(70000) }, gmail), /"url"/);
+  assert.equal(why({ action: 'resolveUrl', url: 'https://a.example/', linkText: 'a whole paragraph wrapped in a link '.repeat(500) }, gmail), null, 'long link text is fine');
+  assert.equal(why({ action: 'recordSpamMoves', moves: [], log: false }, gmail), null, 'log: false (not logged)');
+  assert.equal(why({ action: 'updateBadge', links: { total: 3, safe: 3 }, moveWait: null, linkCount: 3, pixelCount: 0 }, gmail), null);
+  assert.match(why({ action: 'checkSenders', senders: new Array(20001).fill({}) }, gmail), /"senders"/);
+  assert.match(why({ action: 'logEvent', message: { toString() { return 'x'; } } }, gmail), /"message"/);
+  assert.match(why({ action: 'aiAnalyze', facts: { bodyText: 'x'.repeat(4100000) } }, gmail), /"facts"/);
+  assert.match(why({ action: 'getSettings', mailbox: { account: 'x'.repeat(3000) } }, gmail), /"mailbox"/);
+  assert.match(why({ action: 'getSettings' }, { id: 'another-extension', tab: { id: 1 }, url: 'https://mail.google.com/' }), /not from this extension/);
+  assert.equal(why({ action: 'noSuchAction' }, gmail), 'unknown action');
+});
+
+test('fuzz: messages with random, wrong-typed and oversized fields are refused or answered, never crash the background (fixed seed)', async () => {
+  const sent = [];
+  const b = loadBackground({}, { fetch: async (u) => { sent.push(String(u)); throw new Error('offline'); }, patchChrome: (c) => { c.runtime.getURL = (p) => 'chrome-extension://x/' + p; c.tabs.create = (o, cb) => cb && cb({}); } });
+  const rules = vm.runInContext('MESSAGE_RULES', b);
+  const r = fuzzRng(FUZZ_SEED + 1);
+  const big = 'x'.repeat(20000000);
+  const values = () => r.pick([undefined, null, '', 0, -1, NaN, Infinity, true, {}, [], 'https://evil.example/', ...XSS, big.slice(0, r.int(0, 300000)),
+    new Array(r.int(0, 3000)).fill('a'), [null, 1, {}, 'x'], { a: { b: { c: [1, 2, 3] } } }, { toString: 'x' }, Array.from({ length: 5 }, () => ({ url: 'javascript:alert(1)', address: '"><img>', thread: 'thread-f:1' }))]);
+  const fields = (a) => [...Object.keys((Object.prototype.hasOwnProperty.call(rules, a) && rules[a].fields) || {}), 'mailbox', 'extra', 'url', 'domains', 'facts', 'b64'];
+  const senders = [{ id: 'x', tab: { id: 3 }, url: 'https://mail.google.com/mail/u/0/' }, { id: 'x', tab: { id: 4 }, url: 'chrome-extension://x/options.html' }, {}, { id: 'other' }];
+  const unhandled = [];
+  const onUnhandled = (e) => unhandled.push(e);
+  process.on('unhandledRejection', onUnhandled);
+  try {
+    for (let i = 0; i < 300 * FUZZ_ROUNDS; i++) {
+      const action = r() < 0.9 ? r.pick(Object.keys(rules)) : r.pick(['', 'constructor', '__proto__', 'toString', 'unknownThing']);
+      const req = { action };
+      for (const f of fields(action || 'getSettings')) if (r() < 0.6) req[f] = values();
+      const sender = r.pick(senders);
+      const answered = await new Promise((resolve) => {
+        let done = false;
+        const finish = (v) => { if (!done) { done = true; resolve({ v }); } };
+        let ret;
+        try { ret = b.chrome.runtime.onMessage.fire(req, sender, finish); } catch (e) { assert.fail(`${action} threw: ${e.message}`); }
+        Promise.resolve(ret).then(() => setTimeout(() => finish(undefined), 400));
+      });
+      // A refused message gets its rule's own answer at once.
+      const refusal = vm.runInContext('messageRefusal', b)(req, sender);
+      if (refusal && refusal !== 'unknown action') assert.deepEqual(answered.v, rules[action].refuse, `${action}: ${refusal}`);
+      if (refusal === 'unknown action') assert.equal(answered.v, undefined, `${action} is not answered`);
+    }
+  } finally { process.off('unhandledRejection', onUnhandled); }
+  assert.deepEqual(unhandled.map(e => String(e && e.message || e)), []);
+  assert.ok(!sent.some(u => /mail\.google|^javascript:|^data:/.test(u)), 'nothing odd was fetched');
+});
+
+test('high-risk requests (password, code, new bank details, gift cards, wire, remote access) are one small weight; denials don\'t count', () => {
+  const kinds = (t) => S(`highRiskRequestKinds(${JSON.stringify(t)}).map(x => x.kind)`);
+  assert.deepEqual(kinds('Please confirm your password at the link below.'), ['password']);
+  assert.deepEqual(kinds('Reply with the 6-digit code I just sent to your phone.'), ['code']);
+  assert.deepEqual(kinds('Approve the Duo push notification when it appears.'), ['approve']);
+  assert.deepEqual(kinds('I need you to update my direct deposit information before payroll runs.'), ['bank']);
+  assert.deepEqual(kinds('Can you buy 5 Apple gift cards for me today?'), ['giftcard']);
+  assert.deepEqual(kinds('Please process a wire transfer of $24,500 today.'), ['wire']);
+  assert.deepEqual(kinds('Download AnyDesk and send me the ID.'), ['remote']);
+  for (const t of ['Never share this code with anyone.', 'We will never ask for your password by email.', 'Your security code is 123456.', 'Use the code SAVE20 at checkout.',
+    'Update your payment method in your account settings to keep your plan.', 'Please read the code of conduct before the meeting.', "Don't send your password to anyone, including IT.",
+    'Our IT team will never ask you to install remote access software.', 'Use this code to finish signing in.', 'If you want to confirm that this email is not a scam, please visit the website.']) assert.deepEqual(kinds(t), [], t);
+  const sign = S('highRiskRequestSigns("Please confirm your password and buy 3 gift cards.")');
+  assert.equal(sign.length, 1); assert.equal(sign[0].weight, 1);
+  assert.match(sign[0].text, /your password or gift cards/);
+  // One small weight: never amber alone or with a first-time sender (1.5); with an outside sender (1) as well, amber.
+  const base = { status: 'clean', reasons: [], move: false };
+  const v = (extra) => S(`applyEmailSignals(${JSON.stringify(base)}, ${JSON.stringify([...sign, ...extra])}).status`);
+  assert.equal(v([]), 'clean'); assert.equal(v([{ weight: 1.5, text: 'first' }]), 'clean'); assert.equal(v([{ weight: 1.5, text: 'first' }, { weight: 1, text: 'outside' }]), 'caution');
+});
+
+test('links to brand-new sites weigh with what the email asks and how its sender checked out', async () => {
+  const signs = (ages, ctx) => S(`linkAgeSigns(${JSON.stringify(ages)}, ${JSON.stringify(ctx)}).map(x => x.weight)`);
+  assert.deepEqual(signs([{ domain: 'new.example', days: 5, signIn: true }], {}), [3]);
+  assert.deepEqual(signs([{ domain: 'new.example', days: 5, signIn: false }], { emailAsks: true }), [3]);
+  assert.deepEqual(signs([{ domain: 'new.example', days: 5, signIn: false }], { weakAuth: true }), [2]);
+  assert.deepEqual(signs([{ domain: 'new.example', days: 5, signIn: false }], {}), [], 'young alone is no sign');
+  assert.deepEqual(signs([{ domain: 'newish.example', days: 60, signIn: true }], { weakAuth: true }), [2]);
+  assert.deepEqual(signs([{ domain: 'newish.example', days: 60, signIn: true }], {}), []);
+  assert.deepEqual(signs([{ domain: 'old.example', days: 4000, signIn: true }], { emailAsks: true, weakAuth: true }), []);
+  assert.deepEqual(signs([{ domain: 'a.example', days: 60, signIn: true }, { domain: 'b.example', days: 2, signIn: true }], { weakAuth: true }), [3], 'one sign, the strongest');
+  assert.match(S(`linkAgeSigns([{ domain: 'new.example', days: 1, signIn: true }], {})[0].text`), /new\.example, a site registered only 1 day ago/);
+  // The background asks the registry only for unfamiliar domains, at most 3, and waits at most a few seconds.
+  const asked = [];
+  const rdapBase = 'https://rdap.test/';
+  const b = loadBackground({ enableDnsThreatCheck: true, rdapBootstrap: { updated: Date.now(), map: { example: rdapBase, com: rdapBase } } }, { fetch: async (u) => {
+    asked.push(String(u));
+    const d = decodeURIComponent(String(u).split('/domain/')[1] || '');
+    if (d === 'slow.example') await new Promise(r => setTimeout(r, 6000));
+    return { ok: true, status: 200, json: async () => ({ events: [{ eventAction: 'registration', eventDate: new Date(Date.now() - 3 * 86400000).toISOString() }] }), headers: { get: () => null } };
+  }, indexedDB: new (require('fake-indexeddb').IDBFactory)() });
+  const t0 = Date.now();
+  const ages = await vm.runInContext(`linkDomainAges(['login.fresh.example', 'gmail.com', 'paypal.com', 'slow.example', 'b.example', 'c.example', 'd.example'])`, b);
+  assert.ok(Date.now() - t0 < 5500, 'a slow registry is not waited for');
+  assert.deepEqual(Object.keys(ages).sort(), ['b.example', 'fresh.example']);
+  assert.equal(ages['fresh.example'], 3);
+  assert.ok(!asked.some(u => /gmail\.com|paypal\.com|d\.example/.test(u)), asked.join(' '));
+});
+
+test('look-alikes: hyphenated names with look-alike letters, capital I for l in sender names, mixed alphabets', () => {
+  assert.match(S(`lookalikeOf('xn--pypal-secure-x9j.net')`), /imitates paypal\.com with look-alike characters/);
+  assert.equal(S(`lookalikeOf('paypal-community.com')`), null, 'the real name with an ordinary word is not a homograph');
+  assert.equal(S(`displayNameBrand('PayPaI').name`), 'PayPal');
+  assert.equal(S(`displayNameBrand('ΑppІe Support').name`), 'Apple');
+  assert.equal(S(`displayNameBrand('Indeed')`), null);
+  const mixed = (n) => S(`displayNameAnomalies(${JSON.stringify(n)}).filter(x => x.kind === 'mixed-alphabets').length`);
+  assert.equal(mixed('Hеlp Desk'), 1, 'Cyrillic е in a Latin word');
+  for (const n of ['Иван Петров', 'Γιώργος Παπαδόπουλος', 'John Smith', 'José Muñoz', 'Анна Smith']) assert.equal(mixed(n), 0, n);
 });

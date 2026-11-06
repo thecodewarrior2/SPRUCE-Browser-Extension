@@ -3088,16 +3088,52 @@ function webmailTextAround(body) {
 
 // The opened email's own verdict from its sender, its headers, its name, its content and the webmail's
 // own warnings about the sender; drawn on its label and in its banner, and queued for Spam when flagged.
+// Links to brand-new sites (linkAgeSigns in shared.js). The registry date of at most LINK_AGE_LOOKUPS
+// unfamiliar link domains per email is asked of the background once the links are known; the verdict
+// is drawn without waiting and updated when the answer comes (a second or two at most).
+const LINK_AGE_LOOKUPS = 3;
+function linkAgeSignals(body, st, shownText) {
+    if (lastSettings.enableDnsThreatCheck === false) return [];
+    const cands = new Map();                                  // registrable domain → a link about signing in or paying
+    for (const [el, d] of processedLinksMap) {
+        if (!el.isConnected || containerOf(el) !== body || inQuotedSection(el)) continue;
+        for (const u of [d.finalUrl, d.originalUrl]) {
+            let host = '';
+            try { const x = new URL(u); if (x.protocol === 'https:' || x.protocol === 'http:') host = x.hostname; } catch (e) { continue; }
+            const reg = registrableDomain(host);
+            if (!reg || !SENDER_DOMAIN_RE.test(reg)) continue;
+            cands.set(reg, !!cands.get(reg) || SIGNIN_INTENT_RE.test(`${el.textContent || ''} ${u}`));
+        }
+    }
+    if (!st.linkAges) st.linkAges = new Map();               // domain → days, null (unknown) or 'pending'
+    const ask = [...cands.keys()].filter(r => !st.linkAges.has(r)).sort((a, b) => cands.get(b) - cands.get(a)).slice(0, Math.max(0, LINK_AGE_LOOKUPS - st.linkAges.size));
+    if (ask.length) {
+        ask.forEach(r => st.linkAges.set(r, 'pending'));
+        safeSend({ action: 'linkDomainAges', domains: ask }, (res) => guarded('Checking how old linked sites are', () => {
+            for (const r of ask) st.linkAges.set(r, res && typeof res[r] === 'number' ? res[r] : null);
+            if (openedStates.get(body) === st && body.isConnected && ask.some(r => typeof st.linkAges.get(r) === 'number')) updateOpenedVerdict(body);
+        }));
+    }
+    const ages = [...st.linkAges].filter(([, v]) => typeof v === 'number').map(([domain, days]) => ({ domain, days, signIn: !!cands.get(domain) }));
+    if (!ages.length) return [];
+    const emailAsks = highRiskRequestKinds(shownText).length > 0 || SIGNIN_INTENT_RE.test(openedSubject() || '');
+    const weakAuth = !!st.firstTime || !st.auth || st.auth.dmarc !== 'pass';
+    return linkAgeSigns(ages, { emailAsks, weakAuth });
+}
+
 function updateOpenedVerdict(body) {
     const st = openedStates.get(body);
     if (!st || !st.base || !st.nameEl.isConnected) return;
+    const shown = st.base.status !== 'trusted' ? emailLayout(body) : { text: '', layout: [] };
     const signals = [...displayNameAnomalies(st.name), ...(st.info && st.info.fh === addressFingerprint(st.address) ? st.info.an : []), ...emailContentSignals(body),
                      ...serviceWarningSigns(webmailTextAround(body), SITE.name),
                      ...(lastSettings.enableLookalikeCheck !== false && st.base.status !== 'trusted' ? nameAddressSigns(st.name, st.address, ownOrgDomain(), loadColleagueHashes(), st.ownership) : []),
                      ...(lastSettings.enableOwnNameCheck !== false && st.base.status !== 'trusted' ? ownNameSigns(st.name, st.address, accountAddress()) : []),
                      ...(lastSettings.enableCallbackScamCheck !== false && st.base.status !== 'trusted' ? [...subjectScamSigns(openedSubject()), ...bodyScamSigns(body.innerText)] : []),
                      ...(st.base.status !== 'trusted' ? selfVouchingSigns(body.textContent) : []),
-                     ...(st.base.status !== 'trusted' ? layoutSigns(emailLayout(body).layout) : []),
+                     ...(st.base.status !== 'trusted' ? layoutSigns(shown.layout) : []),
+                     ...(st.base.status !== 'trusted' ? highRiskRequestSigns(shown.text) : []),
+                     ...(st.base.status !== 'trusted' ? linkAgeSignals(body, st, shown.text) : []),
                      ...(st.base.status !== 'trusted' ? senderContextFor(st.address, st.firstTime) : [])];   // llm_testing   // EXPERIMENT (llm_testing): textContent includes hidden text
     const final = applyEmailSignals(st.base, signals);
     st.final = final;
@@ -3379,6 +3415,7 @@ function scanOpenedSenders(S) {
             st.base = r;
             st.firstTime = firstTime;
             st.info = info;
+            st.auth = auth;
             st.ownership = owned;
             harvestAvatar(body, who, auth);
             st.authLine = auth ? [`${SITE.name}'s sender verification: DMARC ${auth.dmarc}, SPF ${auth.spf}, DKIM ${auth.dkim}.`] : [];
