@@ -1,5 +1,62 @@
 # Changelog
 
+## 5.94.7 — EXPERIMENT (branch `llm_testing`): model 0.5.0, trained on published spear phishing and email scams
+
+Not for release. The AI model learned from 114 more published examples, and from genuine emails that
+look like them, so it catches more targeted phishing and raises fewer false alarms on ordinary school
+mail.
+
+- **114 new real-world examples** in `tools/ai/real-world.jsonl` (154 in all), each paraphrased with
+  placeholders and its source:
+  - **spear phishing and business email compromise** (35): leader gift-card requests and "are you
+    available?" openers, payroll diversion, W-2 requests, supplier "new bank details" and thread
+    hijacking, CEO and attorney wires, closing-wire changes, payroll-pirate and QR-code lures, Teams
+    voicemail, fake purchase orders. Sources: FBI IC3, IRS, the US Department of Education, FTC,
+    Microsoft, Abnormal, Proofpoint, universities, a Texas school risk fund.
+  - **consumer scams** (40): callback renewals (Geek Squad, PayPal, Venmo), payment-app tricks, customs
+    and parcel fees, account-suspended notices, SSA, IRS and Medicare scams, crypto recovery,
+    sextortion, prizes, inheritance, charity, job and check scams, domain, SEO and DMCA invoices,
+    tolls. Sources: FTC, FBI IC3, SSA OIG, IRS, AARP, state attorneys general and security write-ups.
+  - **school phishing galleries** (39): fourteen universities and two K-12 districts (benefits and Duo
+    QR codes, work-study and research-assistant jobs, stipends, fake grants, transcripts, peer-review
+    invitations, voicemail, dropped classes, a principal's hacked account).
+
+  No real person, address, phone number, account number or bank detail is kept: payment changes are
+  described in words only. Many sources show the email only as a picture or describe it; those rows
+  are rebuilt from the description. Every third example is held out and only scored.
+- **Genuine look-alikes in the generator** (`make-dataset.js`): leaders' short requests about real
+  work, HR and payroll notices that send people to the usual portal, suppliers' invoices with unchanged
+  payment details, real share notifications, IT announcing sign-in changes, school fundraisers and
+  career-office listings. Since the real-world examples are all phishing, as many extra genuine emails
+  are generated to keep the classes even.
+- **Generator:** real-world rows can use `{title}`, `{vendor}` and `{amount}`, a `vendor` sender (a
+  compromised supplier: outside, passes checks) and `qr` links (only the text asking to scan reaches the
+  model).
+- **A false-alarm check** (`tools/ai/eval-lookalikes.jsonl`): 24 hand-written genuine emails that
+  resemble scams, never trained on. `train.py` reports them in the model card.
+
+| Set | 0.4.0 | 0.5.0 |
+|---|---|---|
+| Published examples, held out (153 variants of 51 examples never trained on) | 144 caught | 152 caught |
+| Genuine look-alikes called phishing (24) | 10 | 4 |
+| Hand-written check set (33) | 33 right | 32 right |
+| Regression cases (15) | 15 right | 15 right |
+
+Still wrong:
+- **Missed:** one variant of a fake "conference purchase report" attachment.
+- **Missed, newly:** a one-line "your email will be deactivated tonight, log in now" from a look-alike
+  domain (hand-written set). The extension's own checks judge its domain and link separately.
+- **False alarms:** four genuine look-alikes: a payroll cut-off reminder, a DocuSign lease, a phone-system
+  voicemail notice, a donation receipt.
+
+The look-alike set was written alongside the generator's genuine kinds, by the same hand, so its score
+is somewhat optimistic.
+
+- **Unit test:** the CEO-wire email's explanation must include the wire request among its reasons, no
+  longer as the very first one. In 0.5.0, "I'll send the details once you confirm" (7.06) edges out the
+  wire sentence (7.04); both are business-email-compromise signs.
+
+
 ## 5.94.6 — EXPERIMENT (branch `llm_testing`): hardening (messages, caches, network, scanner), new weights, fuzz tests
 
 Not for release. From a review of suggested hardening, the changes judged worth making.
