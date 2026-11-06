@@ -1,5 +1,35 @@
 # Changelog
 
+## 5.94.1 — EXPERIMENT (branch `llm_testing`): the extension's own AI model; self-vouching text counts toward phishing
+
+Not for release: an experiment on its own branch.
+
+- **Our own model, inside the extension** (`ai.js`, `models/phish-tiny/`): a BERT-tiny classifier
+  (4.4 million parameters, 4.5 MB with 8-bit weights) fine-tuned by `tools/ai/train.py` on emails from
+  `tools/ai/make-dataset.js` (synthetic, made-up people and organizations; your own de-identified
+  examples can be added in `tools/ai/data/extra/`). It runs in plain JavaScript (WordPiece tokenizer and
+  BERT forward pass, no WebAssembly) in the service worker or background page, 50–300 ms per email; a
+  unit test checks it gives PyTorch's own token ids and scores (`tests/fixtures/ai-vectors.json`), and
+  that it stays at 90% or better on the hand-written emails (`tools/ai/eval-handwritten.jsonl`).
+- **Ask the AI** (setting `enableAiAnalysis`, policy `managedEnableAiAnalysis`, off by default): a
+  button in opened emails. Only on click, the facts the extension already has (subject, sender name and
+  domain, DMARC result, links with their findings) and the text, with addresses reduced to their domain
+  and numbers hidden (`redactForAi`), go to the model (`aiAnalyze` message). It shows how likely the
+  email is phishing and which sentences, on their own, read most like phishing (`analyze`). Advisory
+  only (`aiAdvice`): never "safe", never clears a warning or moves email; if the extension's own checks
+  warn, it says to trust them. Settings → AI analysis: on/off, model status and scores, and **Try it**
+  for a pasted email.
+- **Text that vouches for itself** (`selfVouchingSigns`, `shared.js`), in every opened email's own
+  verdict: text addressed to AI tools or filters, weight 5 (flagged); a safety claim to the reader
+  ("verified safe by Microsoft", "this is not a scam", "safe to click"), weight 3 (caution; flagged with
+  any other sign); antivirus or gateway footers ("Virus-free", "scanned by …"), weight 2. Read from the
+  message's `textContent`, so hidden text counts. "Add us to your safe senders list" and the like don't.
+- Model scores (`models/phish-tiny/MODEL_CARD.md`): 100% on 1,500 synthetic test emails and 33/33 on the
+  hand-written ones, the latter optimistic because the generator was improved after looking at that
+  set's mistakes. Known miss: a one-line "sign in at … today" email scores about 32%.
+- Tests: `tests/e2e/test-ai.js` (the real model in Chromium; button off by default, answers only on
+  click, never changes the verdict; Try it; safety claims and AI-directed text) and unit tests.
+
 ## 5.94 — Link Inspector: follow a SendGrid link to reveal it; open pixels explained
 
 SendGrid's current click links can't be decoded (two samples checked: the `upn` value, with or without

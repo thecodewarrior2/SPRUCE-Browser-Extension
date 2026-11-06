@@ -93,6 +93,8 @@
              onOff(S.enableSenderIdentity && S.enableDnsThreatCheck) + lock('enableSenderIdentity')],
             ['Stand-in sender icons (Gmail)', 'The site name of a sender whose site has no icon of its own (and not its parent domain either).', 'DuckDuckGo\'s icon service (icons.duckduckgo.com)',
              onOff(S.enableSenderIdentity && S.enableDnsThreatCheck && S.enableSenderIconFallback) + lock('enableSenderIconFallback')],
+            ['AI analysis (experimental)', 'Nothing. The extension\'s own model runs inside the extension on this computer, only when you click "Ask the AI"; email addresses and numbers are hidden from it first.',
+             'Nobody', onOff(S.enableAiAnalysis) + lock('enableAiAnalysis')],
             ['Following a link (Link Inspector)', 'Only when you click "Follow it to reveal the destination" on a tracking or short link whose destination is hidden: one request to the link, following its redirects as a click would, without your cookies and without loading the page. The sender\'s tracking service counts it as your click.',
              'The link\'s tracking service and the sites it redirects to (they see your IP address)', 'On request'],
             ['VirusTotal lookup (Link Inspector)', 'Only when you click "Look up on VirusTotal": the link you inspected (for a one-time link, only its site name); when you choose "Scan this link", the link is also shared with VirusTotal\'s community and security partners.',
