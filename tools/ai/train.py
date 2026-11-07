@@ -9,7 +9,9 @@ With --seeds, one model is trained per seed from the SAME starting point (base w
 head initialized with --seed), only the data order and dropout differ, and their weights are averaged
 into one model ("model soup"): the same size and speed as one model, but much less dependent on the
 luck of one training run (one run's score on the held-out genuine emails moved by up to 24 of 243
-between seeds).
+between seeds). With --runs-dir DIR, each run's weights are saved there as soon as it is trained (the
+file name carries a fingerprint of the training data and settings), so a run interrupted half-way
+reuses the finished runs instead of training them again.
 
 Needs: torch, transformers (CPU is enough: a few minutes). Writes:
     models/phish-tiny/model.bin, model.json, vocab.txt    the model the extension loads (8-bit weights)
@@ -19,7 +21,7 @@ Needs: torch, transformers (CPU is enough: a few minutes). Writes:
                                                            tested against PyTorch itself
 The base model is BERT-tiny (Google's BERT miniatures, MIT licence as published by prajjwal1).
 """
-import argparse, json, math, os, random, struct, time
+import argparse, hashlib, json, math, os, random, struct, time
 from pathlib import Path
 
 import torch
@@ -124,6 +126,7 @@ def main():
     ap.add_argument('--batch', type=int, default=32)
     ap.add_argument('--seed', type=int, default=7)
     ap.add_argument('--seeds', default='', help='comma-separated: train one model per seed and average their weights')
+    ap.add_argument('--runs-dir', default='', help='keep each trained run here and reuse it when data and settings are the same')
     ap.add_argument('--version', default='0.1.0')
     args = ap.parse_args()
     random.seed(args.seed); torch.manual_seed(args.seed)
@@ -163,8 +166,19 @@ def main():
         model = train_one(seeds[0])
     else:
         states = []
+        fp = hashlib.sha256((DATA / 'train.jsonl').read_bytes() + json.dumps([args.base, args.epochs, args.lr, args.batch, args.seed]).encode()).hexdigest()[:16]
         for s in seeds:
-            m1 = train_one(s)
+            saved = Path(args.runs_dir) / f'run-{fp}-seed{s}.pt' if args.runs_dir else None
+            if saved and saved.exists():
+                torch.manual_seed(args.seed)
+                m1 = BertForSequenceClassification.from_pretrained(args.base, num_labels=2)
+                m1.load_state_dict(torch.load(saved))
+                print(f'seed {s}: reusing the finished run {saved.name}', flush=True)
+            else:
+                m1 = train_one(s)
+                if saved:
+                    saved.parent.mkdir(parents=True, exist_ok=True)
+                    torch.save(m1.state_dict(), saved)
             for name, rows in (('held-out phishing', real), ('held-out genuine', realg), ('look-alikes', look)):
                 if rows:
                     print(f'  seed {s} {name}: {evaluate(m1, tok, rows)[0]}', flush=True)
