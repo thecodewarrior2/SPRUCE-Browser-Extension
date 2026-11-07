@@ -44,7 +44,7 @@ node tools/ai/make-dataset.js
 ```
 
 ```bash
-python3 tools/ai/train.py --version 0.9.0 --seeds 7,8,9
+python3 tools/ai/train.py --version 0.10.0 --seeds 7,8,9 --runs-dir <folder>
 ```
 
 `--seeds 7,8,9` trains three runs from the same starting point and averages their weights into one

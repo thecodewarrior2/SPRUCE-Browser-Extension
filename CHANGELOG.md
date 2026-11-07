@@ -1,5 +1,39 @@
 # Changelog
 
+## 5.94.12 — EXPERIMENT (branch `llm_testing`): model 0.10.0, round 6 of published examples
+
+Not for release. Trained on 909 published examples (478 phishing, 431 genuine; the 175 of round 6
+added two commits earlier), averaged over three runs (`--seeds 7,8,9`, kept in `--runs-dir` so a
+restart of the build machine doesn't lose finished runs).
+
+- **Round 6** (details in its commit): phishing from US campuses not used before (Minnesota,
+  Binghamton, Montclair State, UC Irvine, Utah State, Towson, Seton Hall) and state offices, and from
+  outside the US (Irish Revenue, NZ Inland Revenue, HMRC, HMCTS, CRA, Australia Post, ASIC, NZ Police,
+  NHS, universities in Ireland, Canada, Australia, NZ and the UK); genuine emails from the senders' own
+  open-source templates (Login.gov, Bitwarden, Mozilla, Wikipedia, Canvas, Code.org, the .gov
+  registrar, Mastodon, PyPI, Open Collective) and from education services (College Board, Parchment,
+  Turnitin, Cengage, Kelly Education, Swing Education) and universities abroad.
+
+| Held-out set | 0.9.0 | 0.10.0 |
+|---|---|---|
+| Published phishing caught (477 variants of 159 examples) | 451 | 464 |
+| Published genuine judged right (429 variants of 143 emails) | 403 | 412 |
+| Earlier sources only (both trained on them): phishing (393) / genuine (339) | 374 / 325 | 383 / 324 |
+| New sources only: phishing (84) / genuine (90) | 77 / 78 | 81 / 88 |
+| Genuine look-alikes called phishing (24) | 4 | 6 |
+| Hand-written check set (33) | 33 | 33 |
+| Regression cases (15) | 15 | 15 |
+| Total mistakes (held-out and look-alikes) | 56 | 36 |
+
+On the emails both models trained on the same sources for, 0.10.0 catches more phishing (383 vs 374)
+and is level on genuine mail. The hand-written look-alikes it calls phishing rose from 4 to 6 (its
+three runs flagged 5, 6 and 4; 0.8.0 flagged 2): short, plain internal notices (a phone-system
+voicemail, a help-desk ticket update, an HR meeting request, a PTA QR RSVP, a donation receipt, a
+DocuSign lease). That is worth watching: much of the newer phishing is short and internal-looking.
+Still missed: QR-code MFA and Duo lures, a calendar invite with a hidden link, SNAP and "sponsored
+scholarship" offers, a pay-dates notice.
+
+
 ## 5.94.11 — EXPERIMENT (branch `llm_testing`): model 0.9.0, averaged over three training runs
 
 Not for release. Trained on the 174 examples added in the previous commit (734 in all: 393 phishing,
