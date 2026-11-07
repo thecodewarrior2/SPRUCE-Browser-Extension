@@ -3,7 +3,13 @@
 extension.
 
     node tools/ai/make-dataset.js                        # writes tools/ai/data/*.jsonl
-    python3 tools/ai/train.py [--base prajjwal1/bert-tiny] [--epochs 4] [--lr 2e-4]
+    python3 tools/ai/train.py [--base prajjwal1/bert-tiny] [--epochs 4] [--lr 2e-4] [--seeds 7,8,9]
+
+With --seeds, one model is trained per seed from the SAME starting point (base weights and classifier
+head initialized with --seed), only the data order and dropout differ, and their weights are averaged
+into one model ("model soup"): the same size and speed as one model, but much less dependent on the
+luck of one training run (one run's score on the held-out genuine emails moved by up to 24 of 243
+between seeds).
 
 Needs: torch, transformers (CPU is enough: a few minutes). Writes:
     models/phish-tiny/model.bin, model.json, vocab.txt    the model the extension loads (8-bit weights)
@@ -117,6 +123,7 @@ def main():
     ap.add_argument('--lr', type=float, default=2e-4)
     ap.add_argument('--batch', type=int, default=32)
     ap.add_argument('--seed', type=int, default=7)
+    ap.add_argument('--seeds', default='', help='comma-separated: train one model per seed and average their weights')
     ap.add_argument('--version', default='0.1.0')
     args = ap.parse_args()
     random.seed(args.seed); torch.manual_seed(args.seed)
@@ -128,21 +135,44 @@ def main():
     realg = read('realworld-genuine-heldout.jsonl') if (DATA / 'realworld-genuine-heldout.jsonl').exists() else []
     # BERT-tiny publishes only its uncased vocabulary, so the tokenizer is set up explicitly.
     tok = BertTokenizer.from_pretrained(args.base, do_lower_case=True, model_max_length=MAX_LEN)
-    model = BertForSequenceClassification.from_pretrained(args.base, num_labels=2)   # its config names no model type
-    opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
-    steps = args.epochs * math.ceil(len(train) / args.batch)
-    sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda s: min(1.0, (s + 1) / (0.06 * steps)) * max(0.0, 1 - s / steps))
-    t0 = time.time()
-    for ep in range(args.epochs):
-        model.train()
-        total = 0.0
-        for enc, labels in batches(train, tok, args.batch, True):
-            loss = model(**enc, labels=labels).loss
-            loss.backward(); opt.step(); sched.step(); opt.zero_grad()
-            total += loss.item()
-        m, _ = evaluate(model, tok, test)
-        h, _ = evaluate(model, tok, hand)
-        print(f'epoch {ep + 1}: loss {total:.1f}  test {m}  hand-written {h}  ({time.time() - t0:.0f}s)', flush=True)
+
+    def train_one(seed):
+        # The starting point is the same for every seed (base weights, classifier head from --seed); the
+        # seed only changes the data order and dropout, so the trained weights can be averaged.
+        torch.manual_seed(args.seed)
+        model = BertForSequenceClassification.from_pretrained(args.base, num_labels=2)   # its config names no model type
+        random.seed(seed); torch.manual_seed(seed)
+        opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
+        steps = args.epochs * math.ceil(len(train) / args.batch)
+        sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda s: min(1.0, (s + 1) / (0.06 * steps)) * max(0.0, 1 - s / steps))
+        t0 = time.time()
+        for ep in range(args.epochs):
+            model.train()
+            total = 0.0
+            for enc, labels in batches(train, tok, args.batch, True):
+                loss = model(**enc, labels=labels).loss
+                loss.backward(); opt.step(); sched.step(); opt.zero_grad()
+                total += loss.item()
+            m, _ = evaluate(model, tok, test)
+            h, _ = evaluate(model, tok, hand)
+            print(f'seed {seed} epoch {ep + 1}: loss {total:.1f}  test {m}  hand-written {h}  ({time.time() - t0:.0f}s)', flush=True)
+        return model
+
+    seeds = [int(s) for s in args.seeds.split(',') if s.strip()] or [args.seed]
+    if len(seeds) == 1:
+        model = train_one(seeds[0])
+    else:
+        states = []
+        for s in seeds:
+            m1 = train_one(s)
+            for name, rows in (('held-out phishing', real), ('held-out genuine', realg), ('look-alikes', look)):
+                if rows:
+                    print(f'  seed {s} {name}: {evaluate(m1, tok, rows)[0]}', flush=True)
+            states.append({k: v.detach().clone() for k, v in m1.state_dict().items()})
+        model = m1
+        avg = {k: (sum(st[k].float() for st in states) / len(states)).to(states[0][k].dtype) if states[0][k].is_floating_point() else states[0][k] for k in states[0]}
+        model.load_state_dict(avg)
+        print(f'averaged the weights of {len(seeds)} models (seeds {", ".join(map(str, seeds))})', flush=True)
 
     m_test, _ = evaluate(model, tok, test)
     deq = export(model, tok, args, {})
@@ -177,7 +207,7 @@ def main():
 A BERT-tiny classifier ({args.base}, 2 layers, 4.4 million parameters) fine-tuned to tell phishing from
 genuine email, from the facts the extension collects (subject, sender name and domain, DMARC result,
 links and their checks) and the email's text with addresses and numbers redacted. Trained {time.strftime('%Y-%m-%d')}
-by `tools/ai/train.py` with {args.epochs} epochs at learning rate {args.lr}; weights stored in 8 bits.
+by `tools/ai/train.py` with {args.epochs} epochs at learning rate {args.lr}{f"; the weights of {len(seeds)} runs (seeds {', '.join(map(str, seeds))}) averaged into one model" if len(seeds) > 1 else ''}; weights stored in 8 bits.
 
 **Training data:** {len(train)} emails from `tools/ai/make-dataset.js`: synthetic ones from its templates, and variants
 of two thirds of `tools/ai/real-world.jsonl` (phishing and email scams that universities, school groups,
