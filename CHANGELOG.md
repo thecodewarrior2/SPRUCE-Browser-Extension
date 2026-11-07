@@ -1,5 +1,40 @@
 # Changelog
 
+## 5.94.11 — EXPERIMENT (branch `llm_testing`): model 0.9.0, averaged over three training runs
+
+Not for release. Trained on the 174 examples added in the previous commit (734 in all: 393 phishing,
+341 genuine), and for the first time as the average of three training runs (`train.py --seeds 7,8,9`).
+
+- **Why averaging:** training the same data with different random seeds moved the held-out genuine
+  score by up to 24 of 243 variants and the phishing score by up to 9 of 315. Differences that small
+  between model versions were partly luck. On 0.8.0's data the average of three runs scored as well as
+  the best of the three without picking it. The averaged model is one model: same size and speed.
+- **The new examples** (details in the previous commit): phishing from Cisco Talos, Netcraft,
+  Barracuda, Unit 42, Darktrace, Snopes, PolitiFact, the BBB and local news (churches, a township,
+  school districts), and from state, county, licensing-board, hospital and university security pages;
+  real emails from goodemailcopy.com, Really Good Emails, Snopes-confirmed emails, Postmark, GovDelivery
+  bulletins of 25 more agencies, and K-12 Smore and ParentSquare posts.
+
+| Held-out set | 0.8.0 | 0.9.0 |
+|---|---|---|
+| Published phishing caught (393 variants of 131 examples) | 376 | 374 |
+| Published genuine judged right (339 variants of 113 emails) | 314 | 325 |
+| Earlier sources only (both trained on them): phishing (315) / genuine (243) | 304 / 227 | 303 / 229 |
+| New sources only: phishing (78) / genuine (96) | 72 / 87 | 71 / 96 |
+| Genuine look-alikes called phishing (24) | 2 | 4 |
+| Hand-written check set (33) | 33 | 33 |
+| Regression cases (15) | 15 | 15 |
+| Total mistakes (held-out and look-alikes) | 44 | 37 |
+
+On the emails both models trained on the same sources for, 0.9.0 and 0.8.0 are level (the differences
+are within the seed noise). 0.9.0 judges the new kinds of real email better, partly because it trained
+on two thirds of those sources. Its two extra look-alike false alarms (a help-desk ticket update, an HR
+meeting request) are within the noise too: each of its three runs flagged 4; 0.8.0's single run was a
+lucky one with 2. Still missed or flagged: QR-code lures, a closing-wire change, a compromised
+partner's file share, a tariff-dividend scam; a DocuSign envelope, a LastPass activation, a Raptor
+volunteer approval, a charity appeal.
+
+
 ## 5.94.10 — EXPERIMENT (branch `llm_testing`): model 0.8.0, 170 more examples from new sources
 
 Not for release. 170 more published examples, all from sites not used before (560 in all: 317 phishing,

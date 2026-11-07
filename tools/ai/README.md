@@ -44,8 +44,12 @@ node tools/ai/make-dataset.js
 ```
 
 ```bash
-python3 tools/ai/train.py --version 0.8.0
+python3 tools/ai/train.py --version 0.9.0 --seeds 7,8,9
 ```
+
+`--seeds 7,8,9` trains three runs from the same starting point and averages their weights into one
+model (same size and speed). One run's scores move noticeably with its random seed; the average doesn't
+depend on a lucky one. It takes three times as long.
 
 `train.py` needs Python 3 with `torch` (the CPU build is enough) and `transformers`, and takes about 2
 minutes on a laptop. It writes the model into `models/phish-tiny/`, a `MODEL_CARD.md` with its scores,
