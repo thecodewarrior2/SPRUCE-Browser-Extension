@@ -1,5 +1,51 @@
 # Changelog
 
+## 5.94.9 — EXPERIMENT (branch `llm_testing`): model 0.7.0, 125 more real, legitimate emails
+
+Not for release. The maintainer can't share their own district's mail yet, so the model learned from
+real, legitimate emails that their senders published online. It now judges real notices far better
+and catches more phishing than 0.6.0.
+
+- **125 published genuine emails** (159 in `tools/ai/real-world.jsonl`, 390 rows in all). Each is
+  paraphrased with placeholders for every person, school and company, with no personal, account or
+  bank details:
+  - **Schools and universities** (40): Brown's "legitimate email" posts; university payroll offices'
+    W-2, direct-deposit-alert and one-time-passcode emails; Arizona's mass-email archive; Fairfax County
+    Public Schools' staff bulletins; Washington's school-employee benefits emails; district
+    ParentSquare and Smore posts (enrollment deadlines, data confirmation, fundraisers, picture day).
+  - **Vendors' own notification emails** (40): Microsoft Entra, Defender and Teams voicemail; Google
+    Workspace and Drive; Zoom, Dropbox, Slack, Box, Okta and 1Password; Stripe, Square, PayPal, Amazon
+    Business, ADP and Paychex; MySchoolBucks, ParentSquare, Remind, PowerSchool, Frontline, SafeSchools
+    and Securly.
+  - **Public archives of real sent emails** (45): GovDelivery bulletins (VA, IRS, SSA, state tax and
+    unemployment agencies, toll agencies, property-tax and utility notices, a school district) and
+    real brand emails from Really Good Emails (sign-in alerts, codes, receipts, gift cards, surveys with
+    prizes, trial endings, donation receipts and appeals).
+- Some vendor and archive pages refuse automated reading (Milled, KnowBe4, Gusto, Docusign, Clever,
+  Adobe Sign, Seesaw), so those aren't covered.
+
+| Held-out set | 0.4.0 | 0.5.0 | 0.6.0 | 0.7.0 |
+|---|---|---|---|---|
+| Published phishing caught (231 variants of 77 examples) | 217 | 228 | 218 | 222 |
+| Published genuine judged right (159 variants of 53 emails) | 84 | 58 | 113 | 143 |
+| Genuine look-alikes called phishing (24) | 10 | 4 | 5 | 3 |
+| Hand-written check set (33) | 33 | 32 | 33 | 33 |
+| Regression cases (15) | 15 | 15 | 15 | 15 |
+| Total mistakes | 99 | 109 | 64 | 28 |
+
+Still wrong:
+- **Missed phishing (6 examples):** a closing-wire change, a compromised partner's phonics-worksheet
+  share, a fake Microsoft unusual-sign-in alert, a Zoom invite, and two QR-code lures (Duo
+  registration, a benefits guide).
+- **Called phishing (9 genuine emails):** a DocuSign envelope, a Microsoft "users at risk" alert, a
+  Microsoft support case, a LastPass activation, a lab-results portal registration, LinkedIn Learning
+  access, a payroll text-confirmation notice, a "use your vacation hours" notice, and a charity appeal.
+  Plus three of the hand-written look-alikes: a DocuSign lease, a phone-system voicemail, a PTA QR RSVP.
+
+The held-out genuine emails come from the same sources as trained ones (several from one payroll
+office, one archive), so that score is somewhat optimistic.
+
+
 ## 5.94.8 — EXPERIMENT (branch `llm_testing`): model 0.6.0, forum examples and published genuine emails
 
 Not for release. 111 more published examples. For the first time they include real emails that look
