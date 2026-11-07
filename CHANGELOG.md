@@ -1,5 +1,39 @@
 # Changelog
 
+## 5.94.13 — EXPERIMENT (branch `llm_testing`): model 0.11.0, round 7 of published examples
+
+Not for release. Trained on 1092 published examples (564 phishing, 528 genuine; round 7 added two
+commits earlier), averaged over three runs.
+
+- **Round 7** (details in its commit): phishing from professional associations and regulators (state
+  bars, a federal court, ALTA and Realtor associations, health and accountancy boards, CPA societies,
+  school retirement systems, churches and dioceses, planners and municipal groups) and from
+  email-security companies not used before (real services carrying scams, device-code and QR lures,
+  HTML/SVG attachments, ClickFix, wire changes); 97 genuine emails from open-source templates of IT,
+  identity and help-desk software (Keycloak, GitLab, WordPress, Nextcloud, Zammad, osTicket…) and of
+  e-signature, invoicing, store, scheduling and school software (Documenso, DocuSeal, OpenSign,
+  Invoice Ninja, Odoo, WooCommerce, Cal.com, Moodle, Open edX…). 0.10.0 called about a third of those
+  genuine templates' variants phishing.
+
+| Held-out set | 0.10.0 | 0.11.0 |
+|---|---|---|
+| Published phishing caught (564 variants of 188 examples) | 549 | 550 |
+| Published genuine judged right (528 variants of 176 emails) | 484 | 508 |
+| Earlier sources only (both trained on them): phishing (477) / genuine (429) | 464 / 412 | 466 / 413 |
+| New sources only: phishing (87) / genuine (99) | 85 / 72 | 84 / 95 |
+| Genuine look-alikes called phishing (24) | 6 | 4 |
+| Hand-written check set (33) | 33 | 33 |
+| Regression cases (15) | 15 | 15 |
+| Total mistakes (held-out and look-alikes) | 65 | 38 |
+
+Level with 0.10.0 on the emails both trained on the same sources for; much better on genuine
+notification emails like the open-source templates (partly because it trained on two thirds of those
+sources); the hand-written look-alikes it flags are back down from 6 to 4 (each of its runs flagged 3
+or 4). Still missed or flagged: QR-code Duo/MFA lures, SNAP and scholarship offers, a fake Microsoft
+sign-in alert, a deepfake investment invite; a real DocuSign envelope, a Teams voicemail, a Microsoft
+support case, a lab-results portal registration.
+
+
 ## 5.94.12 — EXPERIMENT (branch `llm_testing`): model 0.10.0, round 6 of published examples
 
 Not for release. Trained on 909 published examples (478 phishing, 431 genuine; the 175 of round 6
