@@ -216,10 +216,10 @@ The real-world held-out set is the most honest number for missed phishing, with 
 phishing (it measures missed phishing, not false alarms); it is small (variants of {len(real) // 3} published examples, mostly
 aimed at universities); and its variants get the same random sender, layout and wording changes as the
 training data. It was never trained on, and the generator was not changed to fit it, but its score was
-seen between training runs (model 0.6.0, before 125 more published genuine emails were added: 218 of
-231 on this set, and 113 of the 159 held-out genuine variants right). The held-out genuine emails come
-from the same sources as trained ones (several emails from one payroll office, one archive), so that
-score is somewhat optimistic.
+seen between training runs (model 0.7.0, before 170 more examples from new sources were added: 301 of
+315 on this set, and 213 of the 243 held-out genuine variants right). Held-out emails often come from
+the same sources as trained ones (several emails from one payroll office or archive), so these scores
+are somewhat optimistic.
 
 **Regression cases** (`tests/fixtures/ai-regressions.jsonl`): emails earlier versions got wrong, reported
 by the maintainer and paraphrased without personal data: genuine ones (a deal-site newsletter, a security
