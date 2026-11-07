@@ -1,5 +1,58 @@
 # Changelog
 
+## 5.94.10 — EXPERIMENT (branch `llm_testing`): model 0.8.0, 170 more examples from new sources
+
+Not for release. 170 more published examples, all from sites not used before (560 in all: 317 phishing,
+243 genuine), paraphrased with placeholders and no personal, account or bank details.
+
+- **Phishing from security companies and agencies** (42): INKY, Kaspersky Securelist, Check Point,
+  Trustwave, Sophos, Mimecast, Trend Micro, Bitdefender, Cloudflare, Arctic Wolf, Forcepoint, FINRA,
+  the Secret Service, the Pennsylvania attorney general, Canada's Get Cyber Safe, and a newspaper's
+  reconstruction of the emails in a school district's construction-payment fraud. They cover vendor
+  ACH and wire changes, "fiscal year" bank updates, scams sent through real services (Adobe, Yousign,
+  Zoom Docs, SharePoint one-time codes, Google Docs comments, Microsoft 365 purchase confirmations,
+  PayPal invoices), SVG and HTML attachments, device-code sign-ins, fake CAPTCHA "ClickFix" commands,
+  calendar-invite links, copyright and legal threats.
+- **Phishing from school galleries** (44): Stanford, Broward College, Syracuse, Northeastern, Iowa,
+  Wisconsin, Florida State, San Diego State, Rice, Columbia, Purdue, UC Riverside, the Wisconsin
+  education department and three K-12 districts. They cover financial-aid refunds, scholarships, FAFSA
+  and SNAP scams, grant-award fees, "you are failing this class", fake professors and job scams, an IEP
+  document sent to parents from a hacked staff account, a 403(b) audit, voicemail and Zoom transcripts.
+- **Real emails from K-12 vendors** (43): Gaggle, GoGuardian Beacon and Bark student-safety alerts,
+  Google Classroom and Schoology summaries, Raptor volunteer approvals, Skyward, Aeries and Infinite
+  Campus portal emails, DonorsChoose, Scholastic Book Clubs, Lifetouch, Jostens, MemberHub and
+  99Pledges, Prodigy, Lexia, Newsela, and teacher-certificate renewals (Texas, California) and a
+  teachers' retirement system.
+- **Real emails from new verified sources** (41): GovDelivery bulletins from ten new agencies (a jury
+  questionnaire, a state pension office, Texas DMV identity checks, a comptroller's 1099-G, Medicare's
+  MFA change, an educator-certificate renewal, transit and court notices), university IT and HR
+  announcements (Wisconsin–Madison, UNC Greensboro, Clemson, Howard, USC, Rochester), goodemailcopy.com
+  (Slack, HipChat, Figma, Squarespace, Dropbox, GitHub, Headspace) and new Really Good Emails.
+- Some sites refuse automated reading (justice.gov, fbi.gov, emaillove.com, several help centers), and
+  ohioauditor.gov isn't reachable from the build environment, so they aren't covered.
+
+| Held-out set | 0.7.0 | 0.8.0 |
+|---|---|---|
+| Published phishing caught (315 variants of 105 examples) | 301 | 304 |
+| Published genuine judged right (243 variants of 81 emails) | 213 | 227 |
+| Same, earlier sources only: phishing (231) / genuine (159) | 222 / 143 | 225 / 149 |
+| Genuine look-alikes called phishing (24) | 3 | 2 |
+| Hand-written check set (33) | 33 | 33 |
+| Regression cases (15) | 15 | 15 |
+
+The "earlier sources only" row is the fairer comparison: 0.7.0 and 0.8.0 trained on the same sources
+for those emails. The synthetic test drops from 1500/1500 to 1497/1500 (templates only).
+
+Still wrong:
+- **Missed phishing (8 examples):** a closing-wire change, a compromised partner's worksheet share, a
+  401(k) QR PDF, a calendar invite with a hidden link, a SNAP-benefits offer, a "sponsored scholarship
+  scheme", a Zoom invite and a Duo registration QR code.
+- **Called phishing (7 genuine emails):** a lab-results portal registration, a LastPass activation,
+  DonorsChoose "fully funded", a Microsoft support case, a Raptor volunteer approval, a charity appeal
+  and LinkedIn Learning access. Plus two hand-written look-alikes: a DocuSign lease and a phone-system
+  voicemail.
+
+
 ## 5.94.9 — EXPERIMENT (branch `llm_testing`): model 0.7.0, 125 more real, legitimate emails
 
 Not for release. The maintainer can't share their own district's mail yet, so the model learned from

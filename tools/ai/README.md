@@ -44,7 +44,7 @@ node tools/ai/make-dataset.js
 ```
 
 ```bash
-python3 tools/ai/train.py --version 0.7.0
+python3 tools/ai/train.py --version 0.8.0
 ```
 
 `train.py` needs Python 3 with `torch` (the CPU build is enough) and `transformers`, and takes about 2
