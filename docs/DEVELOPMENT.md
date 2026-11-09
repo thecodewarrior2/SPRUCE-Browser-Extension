@@ -160,8 +160,9 @@ Every release goes to the stores only: the Chrome Web Store, Microsoft Edge Add-
 addons.mozilla.org (Safari isn't published yet). There are no GitHub releases.
 
 1. Before the release (on `testing`), refresh the bundled copies of the downloaded lists, which a fresh
-   install uses until its first download: `node tools/refresh-snapshot.js` (the shortener list and
-   ICANN's single-company endings; nothing in them is written by hand). Commit the result. Write the
+   install uses until its first download: `node tools/refresh-snapshot.js` (the shortener list,
+   ICANN's single-company endings and the Public Suffix List's shared hosting platforms; nothing in them
+   is written by hand). Commit the result. Write the
    version's entry in [store/WHATS-NEW.md](../store/WHATS-NEW.md): what users notice since the previous
    store version, in plain words (no file names, settings keys or internal terms; the technical detail
    stays in `CHANGELOG.md`).

@@ -14,15 +14,18 @@ if (typeof importScripts === 'function') importScripts('shared.js', 'decoders.js
 // sets (allowlist, blocklist, the synced shortener list…) are built once per settings version.
 // ---------------------------------------------------------------------------
 let configPromise = null;
+// [5.95-1] The shared hosting platforms are loaded first: every check starts by reading the settings.
 function getConfig() {
-    if (!configPromise) configPromise = loadEffectiveSettings().catch((e) => { configPromise = null; throw e; });
+    if (!configPromise) configPromise = loadEffectiveSettings()
+        .then(cfg => CHANGES_5_95.privateSuffixes ? ensureSharedHosting().then(() => cfg, () => cfg) : cfg)
+        .catch((e) => { configPromise = null; throw e; });
     return configPromise;
 }
 
 // Keys that never affect settings; changes to them don't invalidate the cache.
 const NON_CONFIG_KEYS = new Set(['errorLogs', 'recentActivity', 'resolutionHistory', 'lastSyncTime', 'listState', 'cacheSchema', 'welcomeDismissed', 'uiTheme',
     'detectedConflicts', 'ignoredConflicts', 'keptConflictFeatures', 'popularDomains', 'verifiedDomains', 'colleagueNameHashes', 'rdapBootstrap',
-    'senderDomainCache', 'geoCache', 'spamMovedThreads', 'spamRescuedThreads', 'senderMessageCache', 'senderResultCache', 'faviconCache', 'spamMoveLog', 'spamUnreadHeadersOff']);
+    'senderDomainCache', 'geoCache', 'sharedHosting', 'spamMovedThreads', 'spamRescuedThreads', 'senderMessageCache', 'senderResultCache', 'faviconCache', 'spamMoveLog', 'spamUnreadHeadersOff']);
 function invalidateConfig() {
     configPromise = null;
     domainSafetyCache.clear();      // e.g. a resolver was switched off: don't reuse its verdicts
@@ -361,7 +364,7 @@ function sanitizeRemoteDomains(list) {
     for (const raw of Array.isArray(list) ? list : []) {
         const d = String(raw || '').trim().toLowerCase();
         if (!d || d.startsWith('#') || !DOMAIN_RE.test(d)) continue;
-        if (PROTECTED_DOMAINS.has(registrableDomain(d))) continue;
+        if (PROTECTED_DOMAINS.has(registrableDomain(d)) || isSharedHostingSuffix(d)) continue;   // [5.95-1] nor a whole hosting platform
         out.add(d);
         if (out.size >= REMOTE_LIST_MAX_DOMAINS) break;
     }
@@ -589,12 +592,14 @@ chrome.runtime.onInstalled.addListener(async (details) => {
         await migrateStoredData();
         await ensureListState();      // bundled snapshot on a fresh install: coverage before any download
         await ensureCompanyEndings(); // [5.90-2] the same for the company endings
+        await ensureSharedHosting();  // [5.95-1] and the shared hosting platforms
         ensureAlarms();
         const cfg = await getConfig();
         updateRemoteLists();
         syncPhishFeeds().catch(() => {});          // a list added by this version is fetched now, not tomorrow
         syncPopularDomains().catch(() => {});
         syncCompanyEndings().catch(() => {});      // [5.90-2]
+        syncSharedHosting().catch(() => {});       // [5.95-1]
         await pruneExpiredData(cfg.values.retentionDays);
         if (details && (details.reason === 'install' || details.reason === 'update')) {
             logInfo(details.reason === 'install' ? `Installed version ${chrome.runtime.getManifest().version}.`
@@ -608,7 +613,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 chrome.alarms.onAlarm.addListener(async (alarm) => {
     try {
         if (alarm.name === 'syncLists') updateRemoteLists();
-        if (alarm.name === 'syncPhishFeeds') { await syncPhishFeeds(); await syncPopularDomains(); await syncCompanyEndings(); }   // the last two at most monthly
+        if (alarm.name === 'syncPhishFeeds') { await syncPhishFeeds(); await syncPopularDomains(); await syncCompanyEndings(); await syncSharedHosting(); }   // the last three at most monthly
         if (alarm.name === 'pruneExpiredEntries') {
             const cfg = await getConfig();
             await pruneExpiredData(cfg.values.retentionDays);
@@ -635,6 +640,10 @@ function cleanTrackingParams(urlString) {
     }
 }
 
+// [5.95-3] How long a list download may wait for the server to start answering (the timeout covers the
+// wait for the reply, not reading it). Chrome stops an extension's service worker when a reply takes
+// more than 30 seconds to arrive, before a longer timeout of our own could report it or retry.
+const LIST_ANSWER_TIMEOUT_MS = 25000;
 function fetchWithTimeout(url, options = {}, ms = 6000) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), ms);
@@ -1196,7 +1205,8 @@ function sanitizeFeed(feed, text) {
             out.add(n);
         } else if (feed.kind === 'domain') {
             const d = line.split(/\s+/).pop().toLowerCase().replace(/^\*\./, '');
-            if (!DOMAIN_RE.test(d) || PROTECTED_DOMAINS.has(registrableDomain(d)) || cloudStoragePage(`https://${d}/x.html`)) continue;
+            // [5.95-1] Nor a hosting platform's own ending (github.io), which would be every site on it.
+            if (!DOMAIN_RE.test(d) || PROTECTED_DOMAINS.has(registrableDomain(d)) || isSharedHostingSuffix(d) || cloudStoragePage(`https://${d}/x.html`)) continue;
             out.add(d);
         } else if (feed.kind === 'address') {
             // Full addresses only (never a whole domain), and never a company's own address on a major
@@ -1222,7 +1232,7 @@ async function syncPhishFeeds(force = false) {
         // At most once a day. (`force` exists only for the automated tests.)
         if (!force && prev && Date.now() - prev.updated < THIRD_PARTY_LIST_MIN_INTERVAL_MS) continue;
         try {
-            const res = await fetchWithTimeout(feed.url, {}, 30000);
+            const res = await fetchWithTimeout(feed.url, {}, LIST_ANSWER_TIMEOUT_MS);
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const text = await res.text();
             if (text.length > PHISH_FEED_MAX_BYTES) throw new Error(`list too large (${text.length} bytes)`);
@@ -1819,7 +1829,7 @@ async function readPopularDomains(stream, top = POPULAR_TOP) {
                 if (++rows > top) return out;
                 let host;
                 try { host = new URL(origin).hostname; } catch (e) { continue; }
-                const reg = registrableDomain(host);
+                const reg = icannRegistrableDomain(host);   // [5.95-1] a site on a hosting platform counts as the platform, as before
                 if (SENDER_DOMAIN_RE.test(reg)) out.add(reg);
             }
         }
@@ -1832,7 +1842,7 @@ async function readPopularDomains(stream, top = POPULAR_TOP) {
 function parseTrancoList(text, top = POPULAR_TOP) {
     const out = new Set();
     for (const line of String(text).split('\n').slice(0, top)) {
-        const reg = registrableDomain((line.split(',')[1] || '').trim().toLowerCase());
+        const reg = icannRegistrableDomain((line.split(',')[1] || '').trim().toLowerCase());   // [5.95-1] as above
         if (SENDER_DOMAIN_RE.test(reg)) out.add(reg);
     }
     return out;
@@ -1864,7 +1874,7 @@ async function syncPopularDomainsNow(force) {
     if (!force && prev && Date.now() - prev.updated < POPULAR_REFRESH_MS) return { skipped: true };
     const sources = [
         { name: 'Chrome UX Report top list', id: 'crux', get: async () => {
-            const res = await fetchWithTimeout(POPULAR_LIST_URL, { credentials: 'omit' }, 60000);
+            const res = await fetchWithTimeout(POPULAR_LIST_URL, { credentials: 'omit' }, LIST_ANSWER_TIMEOUT_MS);
             if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
             return readPopularDomains(res.body);
         } },
@@ -1873,7 +1883,7 @@ async function syncPopularDomainsNow(force) {
             if (!idRes.ok) throw new Error(`HTTP ${idRes.status}`);
             const id = (await idRes.text()).trim();
             if (!/^[A-Za-z0-9]{3,12}$/.test(id)) throw new Error('no list id');
-            const res = await fetchWithTimeout(TRANCO_LIST_URL(id), { credentials: 'omit' }, 30000);
+            const res = await fetchWithTimeout(TRANCO_LIST_URL(id), { credentials: 'omit' }, LIST_ANSWER_TIMEOUT_MS);
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             return parseTrancoList(await res.text());
         } }
@@ -2235,7 +2245,7 @@ async function syncCompanyEndingsNow(force) {
     const prev = (await storageGet('local', { companyEndings: null })).companyEndings;
     if (!force && prev && prev.source === 'icann' && Date.now() - prev.updated < COMPANY_ENDINGS_REFRESH_MS) return { skipped: true };
     try {
-        const res = await fetchWithTimeout(COMPANY_ENDINGS_URL, { credentials: 'omit' }, 30000);
+        const res = await fetchWithTimeout(COMPANY_ENDINGS_URL, { credentials: 'omit' }, LIST_ANSWER_TIMEOUT_MS);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json();
         const data = companyEndingsFromIcann(json);
@@ -2248,6 +2258,61 @@ async function syncCompanyEndingsNow(force) {
         return { skipped: false, count: data.count };
     } catch (e) {
         logWarning(`ICANN's list of company endings could not be updated (${errorText(e)}); ${prev ? 'the previous copy is kept' : 'the copy bundled with the extension is used'}.`, 'List sync');
+        return { skipped: false, failed: true };
+    }
+}
+
+// [5.95-1] The shared hosting platforms (see sharedHosting in shared.js): the private section of the
+// Public Suffix List, downloaded once a month with the other lists (Update lists on), kept in storage as
+// { updated, source, listVersion, rules }; the copy bundled with the extension (shared-hosting.json)
+// until then. A download that fails, or has too few rules to be the real list, keeps the previous copy.
+const SHARED_HOSTING_REFRESH_MS = 30 * 24 * 60 * 60 * 1000;
+let sharedHostingData = null;
+async function bundledSharedHosting() {
+    const res = await fetch(chrome.runtime.getURL('shared-hosting.json'));
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const j = await res.json();
+    if (!Array.isArray(j.rules)) throw new Error('no rules');
+    return { updated: 0, source: 'bundled', listVersion: String(j.listVersion || ''), rules: j.rules.join('\n') };
+}
+// The list in use (stored, else the bundled copy, which is then stored); also set in this context.
+async function ensureSharedHosting() {
+    if (sharedHostingData) return sharedHostingData;
+    const st = await storageGet('local', { sharedHosting: null });
+    let data = st.sharedHosting && parseSharedHosting(st.sharedHosting) ? st.sharedHosting : null;
+    if (!data) {
+        try { data = await bundledSharedHosting(); await chrome.storage.local.set({ sharedHosting: data }); }
+        catch (e) { logError(`The bundled list of shared hosting platforms could not be loaded (${errorText(e)}); it is downloaded with the other lists.`, 'List sync'); return null; }
+    }
+    setSharedHosting(data);
+    sharedHostingData = data;
+    return data;
+}
+chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes.sharedHosting) sharedHostingData = null;   // read again when next asked
+});
+let sharedHostingSyncInFlight = null;
+function syncSharedHosting(force = false) {
+    if (!sharedHostingSyncInFlight) sharedHostingSyncInFlight = syncSharedHostingNow(force).finally(() => { sharedHostingSyncInFlight = null; });
+    return sharedHostingSyncInFlight;
+}
+async function syncSharedHostingNow(force) {
+    const cfg = await getConfig();
+    if (!CHANGES_5_95.privateSuffixes || !cfg.values.enableRemoteListSync) return { skipped: true };
+    const prev = (await storageGet('local', { sharedHosting: null })).sharedHosting;
+    if (!force && prev && prev.source === 'psl' && Date.now() - prev.updated < SHARED_HOSTING_REFRESH_MS) return { skipped: true };
+    try {
+        const res = await fetchWithTimeout(SHARED_HOSTING_URL, { credentials: 'omit' }, LIST_ANSWER_TIMEOUT_MS);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = sharedHostingFromPsl(await res.text());
+        if (data.count < SHARED_HOSTING_MIN) throw new Error(`only ${data.count} shared hosting endings`);
+        await chrome.storage.local.set({ sharedHosting: { updated: Date.now(), source: 'psl', listVersion: data.version, rules: data.rules } });
+        sharedHostingData = null;
+        await ensureSharedHosting();
+        logInfo(`Shared hosting platforms (so that name.github.io and other.github.io count as two sites): updated from the Public Suffix List (${data.count} endings).`, 'List sync');
+        return { skipped: false, count: data.count };
+    } catch (e) {
+        logWarning(`The Public Suffix List (shared hosting platforms) could not be updated (${errorText(e)}); ${prev ? 'the previous copy is kept' : 'the copy bundled with the extension is used'}.`, 'List sync');
         return { skipped: false, failed: true };
     }
 }
@@ -3355,6 +3420,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'getCompanyEndings') {
         if (!sender || sender.id !== chrome.runtime.id) { sendResponse(null); return false; }
         ensureCompanyEndings().then(d => sendResponse(d ? { operators: d.operators, endings: d.endings } : null)).catch(() => sendResponse(null));
+        return true;
+    }
+
+    // [5.95-1] The shared hosting platforms, for the link and sender checks in the webmail page.
+    if (request.action === 'getSharedHosting') {
+        if (!sender || sender.id !== chrome.runtime.id) { sendResponse(null); return false; }
+        ensureSharedHosting().then(d => sendResponse(d ? { rules: d.rules } : null)).catch(() => sendResponse(null));
         return true;
     }
 

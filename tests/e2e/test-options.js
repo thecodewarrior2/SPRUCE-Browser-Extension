@@ -96,7 +96,7 @@ const { launch, until, optionsReady, check, done } = require('./harness');
     ['In use', 'New entries on hold', 'Last update'].every(c => layout.columns.includes(c)) && ['Short-link lists', 'Phishing and scam lists', 'Popular-site lists'].every(c => layout.safeguards.includes(c)), layout);
   check('architecture: "This installation right now" doesn\'t repeat the lists', !/OpenPhish|url-shorteners|Synced shortener/.test(layout.state) && /see Downloaded lists above/.test(layout.state), layout.state.slice(0, 300));
   const credits = await page.$eval('#help-about', e => e.textContent);
-  const missing = ['PeterDaveHello', 'boutetnico', 'OpenPhish', 'Phishing Army', 'Sefinek', 'Chrome UX Report', 'Tranco', 'unshorten.me', 'DuckDuckGo', 'country.is', 'IANA', 'ICANN'].filter(n => !credits.includes(n));
+  const missing = ['PeterDaveHello', 'boutetnico', 'OpenPhish', 'Phishing Army', 'Sefinek', 'Chrome UX Report', 'Tranco', 'unshorten.me', 'DuckDuckGo', 'country.is', 'IANA', 'ICANN', 'Public Suffix List'].filter(n => !credits.includes(n));
   check('About & credits names every list and online service', missing.length === 0, missing);
   check('no page errors', errors.filter(e => !/^dialog/.test(e)).length === 0, errors);
   // Popup renders.

@@ -11,9 +11,18 @@
 Short notes on each version in the browser stores. Every detail is in the
 [full changelog](../CHANGELOG.md).
 
-## 5.94
+## 5.95
 
 Changes since 5.91.
+
+**Stronger against phishing**
+- On sites where anyone can have their own page (such as github.io, pages.dev or blogspot.com), each page
+  now counts as its own site: a link whose text shows one person's page but leads to someone else's is
+  pointed out, and a company's name used there isn't taken for the company's.
+- QR codes and links inside Word documents (.docx) attached to an email are now checked on your device,
+  like those in PDFs and pictures (Gmail).
+- An email that fails its sender's verification is no longer excused just because it was passed through a
+  forwarding service; only forwarding by Google or by your own organization still counts.
 
 **Fewer false alarms**
 - A legal notice about a company, such as a class-action settlement administrator writing about an
@@ -34,6 +43,8 @@ Changes since 5.91.
   link for you (without your cookies, and without opening the page) to show where it goes; it tells you
   first that the sender will count it as a click.
 - Invisible "email opened" trackers pasted into the Inspector are explained: they lead nowhere.
+
+**More reliable:** a slow server no longer interrupts the extension's list updates in Chrome and Edge.
 
 ## 5.91
 

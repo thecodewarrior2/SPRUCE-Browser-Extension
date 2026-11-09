@@ -173,7 +173,7 @@
     },
     "managedEnableAttachmentScanning": {
       "title": "Check Attachments",
-      "description": "Scan image and PDF attachments (up to 10 MB, first 10 pages) on the device for QR codes and links.",
+      "description": "Scan image, PDF and Word (.docx) attachments (up to 10 MB; first 10 PDF pages, first 20 pictures of a Word document) on the device for QR codes and links.",
       "type": "boolean"
     },
     "managedEnableOutlookSupport": {

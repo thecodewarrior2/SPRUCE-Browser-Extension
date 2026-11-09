@@ -397,7 +397,19 @@ const US_STATES = new Set(['al', 'ak', 'az', 'ar', 'ca', 'co', 'ct', 'de', 'dc',
     'sd', 'tn', 'tx', 'ut', 'vt', 'va', 'wa', 'wv', 'wi', 'wy', 'as', 'gu', 'mp', 'pr', 'vi']);
 const US_STATE_SUBS = new Set(['k12', 'cc', 'lib', 'tec', 'gen', 'mus', 'state', 'dst', 'cog']);
 const US_K12_SUBS = new Set(['pvt', 'chtr', 'paroch']);
+// The site a host name belongs to: [5.95-1] on a shared hosting platform (below), the site of its own
+// there (mybank.github.io); otherwise the domain someone registered (icannRegistrableDomain).
 function registrableDomain(hostname) {
+    const host = String(hostname || '').toLowerCase().replace(/\.$/, '');
+    const reg = icannRegistrableDomain(host);
+    if (!CHANGES_5_95.privateSuffixes) return reg;
+    const site = sharedHostingSite(host);
+    return site.length > reg.length ? site : reg;
+}
+// The domain someone registered under a public ending, the platform for a site on shared hosting
+// (github.io for mybank.github.io): the registrable domain before 5.95, still used where a platform's
+// sites count as one (the popular-site lists).
+function icannRegistrableDomain(hostname) {
     const host = String(hostname || '').toLowerCase().replace(/\.$/, '');
     const parts = host.split('.');
     if (parts.length <= 2) return host;
@@ -412,6 +424,84 @@ function registrableDomain(hostname) {
     }
     if (tld.length === 2 && SECOND_LEVEL_LABELS.has(sld)) return parts.slice(-3).join('.');
     return parts.slice(-2).join('.');
+}
+
+// [5.95-1] Shared hosting platforms: endings under which anyone can have a site of their own
+// (name.github.io, name.pages.dev, name.web.app, name.blogspot.com), so that two sites there belong to
+// two different people. The platforms register them in the private section of the Public Suffix List
+// (publicsuffix.org, Mozilla Public License 2.0), which browsers use to keep such sites apart. Nothing
+// here is written by hand: the list is downloaded once a month (syncSharedHosting in background.js);
+// until the first download, the copy bundled with the extension (shared-hosting.json, made by
+// tools/refresh-snapshot.js) is used. Stored as { rules: one rule per line }, as on the list:
+// "github.io", "*.compute.example" (any one label under it is an ending too), "!www.compute.example"
+// (an exception to a "*." rule).
+const SHARED_HOSTING_URL = 'https://publicsuffix.org/list/public_suffix_list.dat';
+const SHARED_HOSTING_MIN = 1000;            // fewer in a download: not the real list (the previous copy is kept)
+const SHARED_HOSTING_MAX = 20000;
+const sharedHosting = { exact: new Set(), wild: new Set(), except: new Set() };
+// A rule: two labels or more (never a whole ending such as "com"), letters, digits and hyphens, in ASCII.
+const SHARED_HOSTING_RULE_RE = /^(?:\*\.|!)?(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+function parseSharedHosting(data) {
+    if (!data || typeof data !== 'object' || typeof data.rules !== 'string') return null;
+    const exact = new Set(), wild = new Set(), except = new Set();
+    for (const rule of data.rules.split('\n').slice(0, SHARED_HOSTING_MAX)) {
+        if (!SHARED_HOSTING_RULE_RE.test(rule)) continue;
+        if (rule.startsWith('*.')) wild.add(rule.slice(2));
+        else if (rule.startsWith('!')) except.add(rule.slice(1));
+        else exact.add(rule);
+    }
+    return { exact, wild, except };
+}
+// The private section of the Public Suffix List (its text), its names in ASCII (punycode), as the rules
+// stored: { rules, count, version }.
+function sharedHostingFromPsl(text) {
+    const src = String(text || '');
+    const begin = src.indexOf('// ===BEGIN PRIVATE DOMAINS==='), end = src.indexOf('// ===END PRIVATE DOMAINS===');
+    const version = (/^\/\/ VERSION: (\S+)/m.exec(src) || [])[1] || '';
+    const rules = new Set();
+    if (begin >= 0 && end > begin) for (const raw of src.slice(begin, end).split('\n')) {
+        const line = raw.trim().split(/\s/)[0];
+        if (!line || line.startsWith('//')) continue;
+        const prefix = /^(\*\.|!)/.exec(line), name = prefix ? line.slice(prefix[0].length) : line;
+        let ascii = '';
+        try { ascii = new URL('http://' + name).hostname; } catch (e) { continue; }
+        const rule = (prefix ? prefix[0] : '') + ascii;
+        if (SHARED_HOSTING_RULE_RE.test(rule)) rules.add(rule);
+    }
+    return { rules: [...rules].join('\n'), count: rules.size, version };
+}
+// Replaces the platforms in use; false (nothing changed) for data that isn't such a list.
+function setSharedHosting(data) {
+    const parsed = parseSharedHosting(data);
+    if (!parsed) return false;
+    Object.assign(sharedHosting, parsed);
+    return true;
+}
+// The number of labels of the longest shared hosting ending a host is under or is (0: none), as the
+// Public Suffix List's own rules work it out (an exception wins over a "*." rule).
+function sharedHostingSuffixLength(host) {
+    if (!CHANGES_5_95.privateSuffixes) return 0;
+    const parts = String(host || '').toLowerCase().replace(/\.$/, '').split('.');
+    let best = 0;
+    for (let k = 2; k <= parts.length; k++) {
+        const s = parts.slice(-k).join('.');
+        if (sharedHosting.except.has(s)) return k - 1;
+        if (sharedHosting.exact.has(s) || (k > 2 && sharedHosting.wild.has(parts.slice(-(k - 1)).join('.')))) best = k;
+    }
+    return best;
+}
+// A host's site on a shared hosting platform (mybank.github.io for www.mybank.github.io; the platform's
+// own address, github.io, for itself), or '' for a host on none.
+function sharedHostingSite(host) {
+    const parts = String(host || '').toLowerCase().replace(/\.$/, '').split('.');
+    const n = sharedHostingSuffixLength(host);
+    return n ? parts.slice(-Math.min(parts.length, n + 1)).join('.') : '';
+}
+// Whether a host is a shared hosting platform's own ending (github.io, s3.amazonaws.com), where every
+// site is someone else's.
+function isSharedHostingSuffix(host) {
+    const h = String(host || '').toLowerCase().replace(/\.$/, '');
+    return !!h && sharedHostingSuffixLength(h) === h.split('.').length;
 }
 
 // Structural check for short links on shorteners that are not on any list (new services,
@@ -497,6 +587,20 @@ const FILE_EXTENSION_TLDS = new Set([
 //                            (who owns a domain, its DMARC policy) are still used; nothing new is asked
 // ---------------------------------------------------------------------------
 const COMPANY_MATCHING = Object.freeze({ oneTable: true, ownEndings: true, verifiedSender: true, nameNeedsProof: true, storedOffline: true });
+
+// ---------------------------------------------------------------------------
+// 5.95: changes that can each be switched off on their own, in the same way (set to false and rebuild;
+// what it changed then works as in 5.94). Every place a change touches carries its tag.
+//   [5.95-1] privateSuffixes     sites on a shared hosting platform (name.github.io, name.pages.dev) are
+//                                each a site of their own, from the Public Suffix List's private section,
+//                                not one site with the platform
+//   [5.95-2] wordAttachments     QR codes and links inside Word (.docx) attachments are checked
+//   [5.95-3]                     background downloads give up before Chrome's 30-second limit (no switch)
+//   [5.95-4] arcKnownForwarders  a failed sender verification (DMARC) is softened by an intact forwarding
+//                                chain (ARC) only when a known forwarder sealed it: Google or your own
+//                                organization
+// ---------------------------------------------------------------------------
+const CHANGES_5_95 = Object.freeze({ privateSuffixes: true, wordAttachments: true, arcKnownForwarders: true });
 
 // Companies that own several domains, including their own short-link domains. Link text and destination
 // within one family are consistent (text "gmail.com" pointing to google.com, or Google's c.gle).
@@ -603,7 +707,12 @@ function companyIndex() {
 function companyOfDomain(regDomain) {
     const d = String(regDomain || '').toLowerCase();
     if (!d) return null;
-    return companyIndex().get(d) || null;
+    const company = companyIndex().get(d);
+    if (company) return company;
+    // [5.95-1] A site on a platform that is itself one of a company's own domains (Google's withgoogle.com,
+    // which only Google publishes on) is the company's, as before 5.95. The tables never hold a platform
+    // where anyone can have a site (github.io, blogspot.com): those sites are no one's in particular.
+    return sharedHostingSuffixLength(d) ? companyIndex().get(icannRegistrableDomain(d)) || null : null;
 }
 // [5.90-4] The company whose name a domain carries under an ending not known to be the company's
 // (amazon.de, paypal.cm), or null. Whose it really is takes evidence: the background's
@@ -611,6 +720,9 @@ function companyOfDomain(regDomain) {
 function companyNameOf(regDomain) {
     const d = String(regDomain || '').toLowerCase();
     if (!d || companyOfDomain(d)) return null;
+    // [5.95-1] A site on a shared hosting platform (paypal.pages.dev) is anyone's who picked the name
+    // there, not the name registered under another ending: it says nothing about the company.
+    if (sharedHostingSuffixLength(d)) return null;
     const label = d.split('.')[0];
     const f = BRAND_FAMILIES.find(b => b.labels.includes(label));
     return f ? f.name : null;
@@ -670,6 +782,9 @@ function detectLinkProblem(visibleText, originalUrl, finalUrl, trackerDomains, f
     const textDomain = registrableDomain(textHost);
     const destDomain = registrableDomain(host);
     if (textDomain === destDomain) return null;
+    // [5.95-1] Text that shows a hosting platform itself (github.io, s3.amazonaws.com) names no one's site
+    // in particular: a link to a site on it is consistent with it, as before 5.95.
+    if (CHANGES_5_95.privateSuffixes && isSharedHostingSuffix(textHost) && hostMatches(host, textHost)) return null;
     const textCompany = brandOfDomain(textDomain), destCompany = brandOfDomain(destDomain);
     if (textCompany && textCompany === destCompany) return null;   // same company ([5.90-1]: more of them known)
     if (sameCompanyByEnding(textDomain, destDomain)) return null;   // [5.90-2] through the company's own ending
@@ -1961,8 +2076,14 @@ function parseAuthResults(raw, receiver) {
     const dp = /\bdmarc=[a-z]+\s*\(([^)]*)\)/i.exec(v);
     const dmarcPolicy = dp && (/\bp=([a-z]+)/i.exec(dp[1]) || [])[1];
     const mf = /smtp\.mailfrom=([^\s;]+)/i.exec(v);
+    // [5.95-4] The forwarding chain (ARC) Gmail checked: the instance its result names ("arc=pass (i=2 …)"),
+    // else the newest, and the domain that sealed it (the d= of that ARC-Seal).
+    const seals = headers.filter(([n]) => n === 'arc-seal').map(([, x]) => ({ i: Number((/\bi=\s*(\d+)/i.exec(x) || [])[1]) || 0, d: ((/\bd=\s*([^\s;]+)/i.exec(x) || [])[1] || '').toLowerCase() }));
+    const arcI = Number((/\barc=[a-z]+\s*\(\s*i=(\d+)/i.exec(v) || [])[1]) || Math.max(0, ...seals.map(x => x.i));
+    const seal = seals.find(x => x.i === arcI);
     return {
         dmarc: result('dmarc'), spf: result('spf'), dkim: result('dkim'), arc: result('arc'),
+        arcSealer: seal ? seal.d : '',
         dmarcPolicy: dmarcPolicy ? dmarcPolicy.toLowerCase() : '',
         headerFrom: hf ? domainOfAddress(hf[1]) : domainOfAddress(fm ? fm[2] : fromHeader),
         spfDomain: mf ? domainOfAddress(mf[1]) : '',
@@ -1974,6 +2095,22 @@ function parseAuthResults(raw, receiver) {
         deliveredTo: ((headers.find(([n]) => n === 'delivered-to') || [])[1] || '').toLowerCase().trim(),
         isList: headers.some(([n]) => n === 'list-id')
     };
+}
+
+// [5.95-4] Whether an intact forwarding chain (ARC) may soften a failed sender verification: only when a
+// forwarder known to pass on genuine mail sealed it, Google (Google Groups, Gmail and Workspace
+// forwarding) or the reader's own organization. Anyone can add an ARC seal that checks out, and the
+// standard itself says a valid chain doesn't make a message trustworthy (RFC 8617; the IETF is retiring
+// ARC), so a chain sealed by anyone else changes nothing. accountAddress: the signed-in address.
+const KNOWN_ARC_SEALERS = ['google.com'];
+function arcFromKnownForwarder(auth, accountAddress) {
+    if (!auth || auth.arc !== 'pass') return false;
+    if (!CHANGES_5_95.arcKnownForwarders) return true;          // switched off: any intact chain, as before 5.95
+    const sealer = registrableDomain(auth.arcSealer || '');
+    if (!sealer) return false;
+    if (KNOWN_ARC_SEALERS.includes(sealer)) return true;
+    const own = domainOfAddress(accountAddress);
+    return !!own && !isPersonalMailDomain(own) && sealer === registrableDomain(own);
 }
 
 // Verdict for a company-only link whose destination is unknown: { verified } or { severity, code,
@@ -2509,7 +2646,7 @@ const ESP_HEADER_MARKERS = [
 ];
 // Bumped whenever headerAnomalies learns new signs, so results saved by an older version are worked
 // out again (see messageInfo in content.js).
-const HEADER_SIGNS_VERSION = 5;
+const HEADER_SIGNS_VERSION = 6;   // 6: [5.95-4] only a known forwarder's ARC seal softens a DMARC failure
 // receiver: the webmail's receiving mail system, whose own records can be trusted:
 // { host: 'mx.google.com', name: 'Gmail' } (see the `mail.headers` entry of WEBMAIL_SITES).
 function headerAnomalies(raw, accountAddress, receiver = {}) {
@@ -2551,19 +2688,21 @@ function headerAnomalies(raw, accountAddress, receiver = {}) {
     // The sender's own verification (DMARC), as Gmail itself recorded it on arrival. When the domain
     // in the From line publishes "quarantine" or "reject", its owner says mail that fails is not
     // theirs. A mailing list or forwarder can break DMARC for genuine mail, so a real mailing list
-    // (a well-formed List-ID) or a trusted forwarding chain (ARC) only makes it a strong sign.
+    // (a well-formed List-ID) or a forwarding chain (ARC) sealed by a known forwarder (Google, your own
+    // organization: [5.95-4] arcFromKnownForwarder) only makes it a strong sign.
     const auth = parseAuthResults(raw, receiver.host);
     const listId = get('list-id')[0] || '';
     const realList = /<[a-z0-9][^<>\s]*\.[a-z]{2,}>/i.test(listId) && !/\.(local|localhost|invalid|test|example)>/i.test(listId);
+    const forwarded = arcFromKnownForwarder(auth, accountAddress);
     if (auth && auth.dmarc === 'fail') {
         const d = auth.headerFrom || 'its domain';
         if (auth.dmarcPolicy === 'quarantine' || auth.dmarcPolicy === 'reject') {
-            out.push({ weight: auth.arc === 'pass' || realList ? 3 : 5,
+            out.push({ weight: forwarded || realList ? 3 : 5,
                 text: `It failed its sender's verification (DMARC): it wasn't sent by ${d}, whose owner asks for such mail to be ${auth.dmarcPolicy === 'reject' ? 'rejected' : 'treated as spam'}.` });
         } else {
             // Even where the owner only watches (p=none), a failure is worth a caution (amber); for a
             // real mailing list or a trusted forwarding chain, which often break DMARC, it stays a weak sign.
-            out.push({ weight: auth.arc === 'pass' || realList ? 2 : 3, text: `It failed its sender's verification (DMARC), so it may not have been sent by ${d}.` });
+            out.push({ weight: forwarded || realList ? 2 : 3, text: `It failed its sender's verification (DMARC), so it may not have been sent by ${d}.` });
         }
     }
     if (listId && !realList) out.push({ weight: 1, text: 'Its mailing-list ID is malformed (made up to look like a newsletter).' });

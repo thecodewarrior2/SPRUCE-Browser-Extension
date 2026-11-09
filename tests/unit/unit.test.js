@@ -37,6 +37,18 @@ function loadBackground(local = {}, extra = {}) {
     Blob, Response, CompressionStream, DecompressionStream, TextDecoderStream,
     fetch: async (u) => { fetchLog.push(String(u)); throw new Error('offline'); }, self: { addEventListener() {} } };
   Object.assign(ctx, extra);
+  // The lists bundled with the extension (chrome.runtime.getURL gives their bare name here, or an
+  // extension address when a test sets one) are read from the extension folder, as the browser reads
+  // them: not a network request.
+  const netFetch = ctx.fetch;
+  ctx.fetch = async (u, o) => {
+    const name = (/^(?:chrome-extension:\/\/[^/]+\/)?([a-z-]+\.json)$/.exec(String(u)) || [])[1];
+    if (name && fs.existsSync(path.join(EXT, name))) {
+      const text = fs.readFileSync(path.join(EXT, name), 'utf8');
+      return { ok: true, status: 200, json: async () => JSON.parse(text), text: async () => text };
+    }
+    return netFetch(u, o);
+  };
   // extra.patchSource(file, text): changes a file's text before it runs (e.g. a switch turned off).
   const sourceOf = (f) => { const t = fs.readFileSync(path.join(EXT, f), 'utf8'); return typeof extra.patchSource === 'function' ? extra.patchSource(f, t) : t; };
   ctx.importScripts = (...files) => files.forEach(f => vm.runInContext(sourceOf(f), ctx, { filename: f }));
@@ -1200,15 +1212,23 @@ test('QR scanner: Chrome asks its offscreen document; Firefox and Safari call th
 // shared.js alone, with some switches turned off (as a maintainer rolling one back would).
 function loadShared(off = []) {
   let src = fs.readFileSync(path.join(EXT, 'shared.js'), 'utf8');
-  const decl = /const COMPANY_MATCHING = Object\.freeze\(\{([^}]*)\}\);/;
-  assert.ok(decl.test(src), 'COMPANY_MATCHING switches found');
-  for (const k of off) { assert.ok(new RegExp(`\\b${k}: true\\b`).test(src.match(decl)[1]), `switch ${k}`); src = src.replace(decl, (m) => m.replace(`${k}: true`, `${k}: false`)); }
+  // The switches: 5.90's COMPANY_MATCHING and 5.95's CHANGES_5_95.
+  const decls = [/const COMPANY_MATCHING = Object\.freeze\(\{([^}]*)\}\);/, /const CHANGES_5_95 = Object\.freeze\(\{([^}]*)\}\);/];
+  for (const decl of decls) assert.ok(decl.test(src), `switches found: ${decl}`);
+  for (const k of off) {
+    const decl = decls.find(d => new RegExp(`\\b${k}: true\\b`).test(src.match(d)[1]));
+    assert.ok(decl, `switch ${k}`);
+    src = src.replace(decl, (m) => m.replace(`${k}: true`, `${k}: false`));
+  }
   const ctx = { console, URL, URLSearchParams, TextEncoder, TextDecoder, atob, btoa, Intl, chrome: { runtime: { getURL: p => 'chrome-extension://x/' + p, id: 'x' } }, location: { href: 'https://mail.google.com/' } };
   vm.createContext(ctx);
   vm.runInContext(src, ctx, { filename: 'shared.js' });
   // The bundled company endings, as the background hands them to the webmail page ([5.90-2]).
   ctx.__endings = JSON.parse(fs.readFileSync(path.join(EXT, 'company-endings.json'), 'utf8'));
   vm.runInContext('setCompanyEndings(__endings)', ctx);
+  // [5.95-1] And the bundled shared hosting platforms.
+  ctx.__hosting = { rules: JSON.parse(fs.readFileSync(path.join(EXT, 'shared-hosting.json'), 'utf8')).rules.join('\n') };
+  vm.runInContext('setSharedHosting(__hosting)', ctx);
   return (code) => vm.runInContext(code, ctx);
 }
 const ALL_SWITCHES = ['oneTable', 'ownEndings', 'verifiedSender', 'nameNeedsProof', 'storedOffline'];
@@ -1562,4 +1582,171 @@ test('5.94: SendGrid open pixels are explained; following a link is only for the
   const b2 = loadBackground({}, { fetch: async (u, init) => { tries.push(init.method); return init.method === 'HEAD' ? { url: String(u), status: 405 } : { url: 'https://dest.example/', status: 200 }; } });
   assert.equal((await vm.runInContext(`followLink(${JSON.stringify(click)})`, b2)).finalUrl, 'https://dest.example/');
   assert.deepEqual(tries, ['HEAD', 'GET']);
+});
+
+// --- 5.95: each change on its own switch (CHANGES_5_95 in shared.js) ----------------------------------
+test('[5.95-1] shared hosting: a site on github.io, pages.dev… is a site of its own; the platform stays the platform; off: as in 5.94', () => {
+  const R = loadShared();
+  const reg = (h) => R(`registrableDomain(${JSON.stringify(h)})`);
+  assert.equal(reg('mybank.github.io'), 'mybank.github.io');
+  assert.equal(reg('www.mybank.github.io'), 'mybank.github.io');
+  assert.equal(reg('shop.pages.dev'), 'shop.pages.dev');
+  assert.equal(reg('a.blogspot.com'), 'a.blogspot.com');
+  assert.equal(reg('bucket.s3.amazonaws.com'), 'bucket.s3.amazonaws.com');
+  assert.equal(reg('github.io'), 'github.io', 'the platform\'s own address');
+  assert.equal(R('isSharedHostingSuffix("github.io")'), true);
+  assert.equal(R('isSharedHostingSuffix("mybank.github.io")'), false);
+  // Everything else as before (the endings of ICANN's section are still worked out as before).
+  for (const [h, r] of [['mail.google.com', 'google.com'], ['www.bbc.co.uk', 'bbc.co.uk'], ['example.k12.fl.us', 'example.k12.fl.us'], ['x.amazonaws.com', 'amazonaws.com']]) assert.equal(reg(h), r, h);
+  assert.equal(R('icannRegistrableDomain("mybank.github.io")'), 'github.io');
+  // Links: the text shows one person's site, the link goes to another person's site on the same platform.
+  const p = linkSays(R, 'mybank.github.io', 'https://attacker-login.github.io/x');
+  assert.equal(p, 'link text shows mybank.github.io but the link goes to attacker-login.github.io');
+  assert.equal(linkSays(R, 'mybank.github.io', 'https://mybank.github.io/login'), null);
+  assert.equal(linkSays(R, 'github.io', 'https://someone.github.io/'), null, 'text showing the platform itself names no one\'s site');
+  assert.equal(linkSays(R, 's3.amazonaws.com/bucket/f', 'https://bucket.s3.amazonaws.com/f'), null);
+  assert.notEqual(linkSays(R, 'shop.pages.dev', 'https://phish.pages.dev/'), null);
+  // A company's name chosen on a platform is not its name under another ending: red, not amber.
+  assert.equal(severityOf(R, linkSays(R, 'paypal.com', 'https://paypal.pages.dev/x')), 'danger');
+  assert.equal(R('companyNameOf("paypal.pages.dev")'), null);
+  assert.equal(R('companyNameOf("paypal.cm")'), 'PayPal', 'a domain registered under another ending still is');
+  assert.equal(R('lookalikeOf("paypal-login.github.io")'), 'uses the name "paypal" but isn\'t paypal.com');
+  assert.equal(R('lookalikeOf("microsoft.github.io")'), null, 'a company\'s own name there is no imitation');
+  // A platform that is one company's own (only Google publishes on withgoogle.com) stays the company's.
+  assert.equal(linkSays(R, 'google.com', 'https://grow.withgoogle.com/'), null);
+  assert.equal(R('brandOfSender("events.withgoogle.com")'), 'Google');
+  const Off = loadShared(['privateSuffixes']);
+  assert.equal(Off('registrableDomain("mybank.github.io")'), 'github.io');
+  assert.equal(linkSays(Off, 'mybank.github.io', 'https://attacker-login.github.io/x'), null, 'switched off: one site, as before');
+  assert.equal(Off('isSharedHostingSuffix("github.io")'), false);
+  assert.equal(Off('companyNameOf("paypal.pages.dev")'), 'PayPal');
+});
+
+test('[5.95-1] the Public Suffix List: only its private section, in ASCII, with "*." and "!" rules; bad rules refused; the bundled copy is that list', () => {
+  const R = loadShared();
+  const psl = ['// ===BEGIN ICANN DOMAINS===', 'com', 'co.uk', '*.ck', '!www.ck', '// ===END ICANN DOMAINS===',
+    '// VERSION: 2026-11-06_09-01-47_UTC', '// ===BEGIN PRIVATE DOMAINS===', '// Example Hosting: https://example', 'hosting.example',
+    '*.cloud.example', '!www.cloud.example', 'günstig.example', '*.com', 'net', 'bad_rule.example', '// ===END PRIVATE DOMAINS==='].join('\n');
+  const d = JSON.parse(JSON.stringify(R(`sharedHostingFromPsl(${JSON.stringify(psl)})`)));
+  assert.deepEqual(d.rules.split('\n'), ['hosting.example', '*.cloud.example', '!www.cloud.example', 'xn--gnstig-3ya.example']);
+  assert.equal(d.count, 4);
+  assert.equal(d.version, '2026-11-06_09-01-47_UTC');
+  assert.equal(R(`setSharedHosting(${JSON.stringify({ rules: d.rules })})`), true);
+  const reg = (h) => R(`registrableDomain(${JSON.stringify(h)})`);
+  assert.equal(reg('a.b.cloud.example'), 'a.b.cloud.example', '"*." rule: b.cloud.example is an ending');
+  assert.equal(reg('x.www.cloud.example'), 'www.cloud.example', '"!" rule: www.cloud.example is a site');
+  assert.equal(reg('me.hosting.example'), 'me.hosting.example');
+  assert.equal(reg('mybank.github.io'), 'github.io', 'replaced by the new list');
+  assert.equal(R('setSharedHosting({ rules: 7 })'), false);
+  assert.equal(R('setSharedHosting(null)'), false);
+  assert.equal(reg('me.hosting.example'), 'me.hosting.example', 'refused data changes nothing');
+  const snap = JSON.parse(fs.readFileSync(path.join(EXT, 'shared-hosting.json'), 'utf8'));
+  assert.equal(snap.source, 'https://publicsuffix.org/list/public_suffix_list.dat');
+  assert.match(snap.license, /Mozilla Public License, v\. 2\.0/);
+  assert.ok(snap.rules.length >= R('SHARED_HOSTING_MIN'), 'the bundled copy is the real list');
+  for (const r of ['github.io', 'pages.dev', 'web.app', 'blogspot.com', 'netlify.app', 'workers.dev']) assert.ok(snap.rules.includes(r), r);
+  for (const r of ['com', 'co.uk', 'google.com', 'sharepoint.com', 'amazonaws.com']) assert.ok(!snap.rules.includes(r), r);
+  assert.ok(snap.rules.every(r => R(`SHARED_HOSTING_RULE_RE`).test(r)), 'every bundled rule is well-formed');
+});
+
+test('[5.95-1] background: the list is loaded before any check, downloaded once a month, kept when a download is bad; feed entries for a whole platform dropped', async () => {
+  const pslUrl = 'https://publicsuffix.org/list/public_suffix_list.dat';
+  const many = Array.from({ length: 1200 }, (_, i) => `host${i}.example`);
+  let reply = ['// VERSION: v2', '// ===BEGIN PRIVATE DOMAINS===', ...many, '// ===END PRIVATE DOMAINS==='].join('\n');
+  const asked = [];
+  const b = loadBackground({ enableRemoteListSync: true }, {
+    fetch: async (u) => { asked.push(String(u)); if (String(u) === pslUrl) return { ok: true, status: 200, text: async () => reply }; throw new Error('offline'); } });
+  const run = (c) => vm.runInContext(c, b);
+  await run('getConfig()');
+  assert.equal(run('registrableDomain("mybank.github.io")'), 'mybank.github.io', 'loaded with the settings');
+  assert.equal(b.__store.sharedHosting.source, 'bundled');
+  assert.deepEqual([...run('sanitizeRemoteDomains(["github.io", "evil.github.io", "x.example"])')], ['evil.github.io', 'x.example']);
+  assert.ok(run('parseTrancoList("1,foo.github.io\\n2,example.com")').has('github.io'), 'popular lists: a site on a platform counts as the platform, as before');
+  const r1 = await run('syncSharedHosting()');
+  assert.equal(r1.count, 1200);
+  assert.equal(b.__store.sharedHosting.source, 'psl');
+  assert.equal(b.__store.sharedHosting.listVersion, 'v2');
+  assert.equal(run('registrableDomain("me.host7.example")'), 'me.host7.example', 'the download is in use');
+  assert.deepEqual(await run('syncSharedHosting()'), { skipped: true }, 'within a month: not downloaded again');
+  reply = ['// ===BEGIN PRIVATE DOMAINS===', 'only.example', '// ===END PRIVATE DOMAINS==='].join('\n');
+  assert.ok((await run('syncSharedHosting(true)')).failed);
+  assert.equal(b.__store.sharedHosting.rules.split('\n').length, 1200, 'too few to be the real list: the previous copy is kept');
+  assert.equal(asked.filter(u => u === pslUrl).length, 2);
+  b.__store.enableRemoteListSync = false;
+  run('invalidateConfig()');
+  assert.deepEqual(await run('syncSharedHosting(true)'), { skipped: true }, 'Update lists off: nothing downloaded');
+  // The webmail page asks for it.
+  const answer = await new Promise(res => run('chrome.runtime.onMessage').fire({ action: 'getSharedHosting' }, { id: 'x' }, res));
+  assert.equal(answer.rules.split('\n').length, 1200);
+});
+
+test('[5.95-4] ARC: a failed DMARC is softened only by a chain Google or your own organization sealed; off: by any intact chain', () => {
+  const RX = S('WEBMAIL_SITES').find(w => w.id === 'gmail').mail.headers.receiver;
+  const mail = (sealer, i = 1) => `ARC-Seal: i=${i}; a=rsa-sha256; t=1700000000; cv=none; d=${sealer}; s=arc-20240605; b=AAAA\n` +
+    'Received: by 2002:a05::1 with SMTP id x; Mon, 13 Feb 2023 12:46:47 -0800 (PST)\n' +
+    `Authentication-Results: mx.google.com; arc=pass (i=${i} spf=pass dkim=pass); spf=fail smtp.mailfrom=a@bank.example; dmarc=fail (p=REJECT sp=REJECT dis=QUARANTINE) header.from=bank.example\n` +
+    'From: Bank <alerts@bank.example>\n\nx';
+  const weight = (raw, account = 'me@school.org', src = S) => src('headerAnomalies')(raw, account, RX).filter(x => /DMARC/.test(x.text)).reduce((a, x) => a + x.weight, 0);
+  assert.equal(weight(mail('google.com')), 3, 'Google forwarding (Groups, Gmail): a strong sign only');
+  assert.equal(weight(mail('school.org')), 3, 'your own organization\'s forwarding');
+  assert.equal(weight(mail('mail.school.org')), 3);
+  assert.equal(weight(mail('relay-anyone.example')), 5, 'a seal anyone could add changes nothing');
+  assert.equal(weight(mail('gmail.com'), 'me@gmail.com'), 5, 'a personal address is no organization');
+  assert.equal(weight(mail('google.com').replace('arc=pass', 'arc=fail')), 5, 'a broken chain changes nothing');
+  // The instance Gmail's result names, not another one the sender added.
+  const two = mail('google.com', 2).replace('ARC-Seal:', 'ARC-Seal: i=1; a=rsa-sha256; cv=none; d=relay-anyone.example; s=x; b=AA\nARC-Seal:');
+  assert.equal(S('parseAuthResults')(two, RX.host).arcSealer, 'google.com');
+  assert.equal(S('parseAuthResults')(mail('relay-anyone.example'), RX.host).arcSealer, 'relay-anyone.example');
+  const Off = loadBackground({}, { patchSource: (f, t) => f === 'shared.js' ? t.replace('arcKnownForwarders: true', 'arcKnownForwarders: false') : t });
+  const O = (c) => vm.runInContext(c, Off);
+  assert.equal(weight(mail('relay-anyone.example'), 'me@school.org', O), 3, 'switched off: any intact chain, as before');
+  assert.equal(S('HEADER_SIGNS_VERSION'), 6, 'results worked out by 5.94 are worked out again');
+});
+
+test('[5.95-2] Word documents: links (hyperlinks and HYPERLINK fields) and pictures read on the device, with limits', async () => {
+  const ctx = { console, URL, TextDecoder, TextEncoder, Blob, DecompressionStream };
+  vm.createContext(ctx);
+  vm.runInContext(fs.readFileSync(path.join(EXT, 'docx-reader.js'), 'utf8'), ctx, { filename: 'docx-reader.js' });
+  const read = (bytes) => vm.runInContext('readDocx', ctx)(new Uint8Array(bytes));
+  const doc = await read(fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'qr.docx')));
+  assert.deepEqual([...doc.links], ['https://docx-link.example/start?a=1&b=2', 'https://docx-field.example/x']);
+  assert.equal(doc.images.length, 1);
+  assert.equal(doc.imagesTotal, 1);
+  assert.equal(doc.images[0].name, 'image1.png');
+  assert.equal(doc.images[0].type, 'image/png');
+  assert.deepEqual(Buffer.from(doc.images[0].bytes), fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'qr.png')), 'the picture unpacked intact');
+  // Not a Word document: a PDF, random bytes, a ZIP without word/document.xml.
+  assert.equal(await read(fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'qr.pdf'))), null);
+  assert.equal(await read(Buffer.from('PK\u0003\u0004 not really a zip')), null);
+  const zlib = require('zlib');
+  const zip = (files, claim) => {   // a minimal ZIP archive (deflated), as Word writes them; claim: a made-up unpacked size
+    const local = [], central = []; let offset = 0;
+    for (const [name, data] of Object.entries(files)) {
+      const raw = Buffer.from(data), packed = zlib.deflateRawSync(raw), n = Buffer.from(name);
+      const lh = Buffer.alloc(30); lh.writeUInt32LE(0x04034b50, 0); lh.writeUInt16LE(8, 8); lh.writeUInt32LE(packed.length, 18); lh.writeUInt32LE(raw.length, 22); lh.writeUInt16LE(n.length, 26);
+      const cd = Buffer.alloc(46); cd.writeUInt32LE(0x02014b50, 0); cd.writeUInt16LE(8, 10); cd.writeUInt32LE(packed.length, 20); cd.writeUInt32LE(claim || raw.length, 24); cd.writeUInt16LE(n.length, 28); cd.writeUInt32LE(offset, 42);
+      local.push(lh, n, packed); central.push(cd, n); offset += 30 + n.length + packed.length;
+    }
+    const cdb = Buffer.concat(central), end = Buffer.alloc(22);
+    end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(central.length / 2, 8); end.writeUInt16LE(central.length / 2, 10); end.writeUInt32LE(cdb.length, 12); end.writeUInt32LE(offset, 16);
+    return Buffer.concat([...local, cdb, end]);
+  };
+  assert.equal(await read(zip({ 'xl/workbook.xml': '<x/>' })), null, 'a spreadsheet is not read as a Word document');
+  // A part that unpacks far beyond what it claims (a "zip bomb") is left out, not unpacked whole.
+  const bomb = zip({ 'word/document.xml': '<w:document/>', 'word/_rels/document.xml.rels': 'x'.repeat(6 * 1024 * 1024) });
+  const b = await read(bomb);
+  assert.deepEqual([...b.links], [], 'over the limit: skipped');
+  const lying = await read(zip({ 'word/document.xml': '<w:document/>', 'word/_rels/document.xml.rels': 'x'.repeat(6 * 1024 * 1024) }, 100));
+  assert.deepEqual([...lying.links], [], 'claims to be small: unpacking stops at the limit');
+  // Only web links; the same link once.
+  const rels = '<Relationships><Relationship Id="a" Type="http://x/hyperlink" Target="javascript:alert(1)" TargetMode="External"/>' +
+    '<Relationship Id="b" Type="http://x/hyperlink" Target="https://one.example/" TargetMode="External"/><Relationship Id="c" Type="http://x/hyperlink" Target="https://one.example/" TargetMode="External"/>' +
+    '<Relationship Id="d" Type="http://x/image" Target="https://pic.example/remote.png" TargetMode="External"/></Relationships>';
+  const only = await read(zip({ 'word/document.xml': '<w:document/>', 'word/_rels/document.xml.rels': rels, 'word/_rels/footer1.xml.rels': rels.replace(/one\.example/g, 'foot.example') }));
+  assert.deepEqual([...only.links], ['https://one.example/', 'https://foot.example/']);
+  // Switched off: the webmail page doesn't send Word documents to the scanner.
+  const R = loadShared(['wordAttachments']);
+  assert.equal(R('CHANGES_5_95.wordAttachments'), false);
+  const content = fs.readFileSync(path.join(EXT, 'content.js'), 'utf8');
+  assert.match(content, /CHANGES_5_95\.wordAttachments && \(/, 'attachmentKind asks the switch');
 });

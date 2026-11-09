@@ -38,7 +38,7 @@ flowchart LR
   end
   subgraph Ext["Extension"]
     SW["Background<br/>background.js + decoders.js<br/>+ custom-endpoints.js + shared.js<br/>• link pipeline<br/>• threat checks and lookups<br/>• sender verdicts<br/>• list downloads, logging, cleanup"]
-    OFF["Hidden scanner page<br/>scanner.js + qr-decoder.js + pdf.js<br/>QR codes in images and PDFs"]
+    OFF["Hidden scanner page<br/>scanner.js + qr-decoder.js + pdf.js<br/>+ docx-reader.js<br/>QR codes in images, PDFs<br/>and Word documents"]
     UI["Settings and popup<br/>options.js + help.js + popup.js"]
     ST[("Browser storage<br/>local: settings, caches, logs<br/>managed: administrator policy<br/>IndexedDB: sender pictures")]
   end
@@ -142,6 +142,17 @@ touches carries its tag:
 | `[5.90-4]` `nameNeedsProof` | A domain that only carries the name of a company that uses its name under many endings (Google, Amazon, PayPal: `labels` in `BRAND_FAMILIES`) is not the company's by its name (`companyNameOf`): the link is amber and the background is asked (`companyDomainEvidence`): on the popular-site lists and enforcing DMARC, or `brandOwnership` proof → not marked. A sender named for the company at such a domain is amber, never red or moved | the name alone makes it the company's, as before 5.90 (paypal.*anything* trusted) |
 
 With all of them off, every answer is 5.89's (a unit test checks it).
+
+### 5.95's changes
+
+5.95's changes have their switches in `CHANGES_5_95` (`shared.js`), in the same way:
+
+| Change | What it does | Switch it off (set to `false`, rebuild) and |
+|---|---|---|
+| `[5.95-1]` `privateSuffixes` | Shared hosting platforms (github.io, pages.dev, web.app, blogspot.com…) from the private section of the Public Suffix List (downloaded monthly by `syncSharedHosting`; until then `shared-hosting.json`, made by `tools/refresh-snapshot.js`; loaded before any check, `getConfig`). A site on one is its own registrable domain (`registrableDomain`; `icannRegistrableDomain` is the platform, used by the popular-site lists). Text showing the platform itself is consistent with any site on it; a company's name chosen there is not its name under another ending (`companyNameOf`); a platform that is a company's own domain in the table (withgoogle.com) stays the company's (`companyOfDomain`); a downloaded list never blocks a platform's own ending | every site on a platform is the platform, as in 5.94 (mybank.github.io → attacker.github.io not marked) |
+| `[5.95-2]` `wordAttachments` | Word attachments (.docx, .docm) go to the scanner (`attachmentKind` → `scanDocx`), which unpacks them on the device (`docx-reader.js`: only the hyperlink lists, the text parts' HYPERLINK fields and up to 20 pictures, each part size-limited): their links and the QR codes in their pictures are shown and checked like a PDF's | Word attachments aren't read |
+| `[5.95-3]` (no switch) | List downloads give up waiting for an answer after 25 seconds (`LIST_ANSWER_TIMEOUT_MS`), before Chrome stops a service worker whose request takes 30 | — |
+| `[5.95-4]` `arcKnownForwarders` | A failed DMARC check is only a strong sign (not a flag on its own) for a real mailing list, or for a forwarding chain (ARC) that Gmail checked and that Google or the reader's own organization sealed (`arcFromKnownForwarder`, the sealer from the `ARC-Seal` of the instance Gmail names); anyone can add a seal that checks out | any intact chain softens it, as in 5.94 |
 
 ```mermaid
 flowchart TD
@@ -295,8 +306,9 @@ Senders — records it. Taking a moved email out of Spam marks that move's own l
 ## 8. QR codes and attachments
 
 Images in an email and attachments up to 10 MB are read **on the device**. The hidden scanner page
-decodes QR codes (its own reader, qr-decoder.js) in images and in PDF pages (pdf.js), and every QR
-destination goes through the same link check as a clickable link. Attachments are also checked for
+decodes QR codes (its own reader, qr-decoder.js) in images, in PDF pages (pdf.js) and in the pictures of
+Word documents (docx-reader.js unpacks them, with a size limit on every part), and every QR destination,
+and every link in a PDF or Word document, goes through the same link check as a clickable link. Attachments are also checked for
 scripts in SVG and HTML files, fake sign-in pages, encrypted archives and disguised file names.
 
 ## 9. What leaves the device
@@ -403,6 +415,6 @@ each browser its own deployment steps.
 | `background.js` | link pipeline, threat checks, lookups, sender verdicts, lists, logging, cleanup |
 | `decoders.js` | offline decoders for link wrappers and redirects |
 | `custom-endpoints.js` | your organization's own threat-check and short-link services |
-| `scanner.js`, `qr-decoder.js`, `lib/pdf*.mjs` | QR codes in images and PDFs |
+| `scanner.js`, `qr-decoder.js`, `lib/pdf*.mjs`, `docx-reader.js` | QR codes in images, PDFs and Word documents; the links in PDFs and Word documents |
 | `icon-store.js` | sender pictures in IndexedDB |
 | `options.js`, `help.js`, `popup.js` | Settings, Help (including live architecture tables), popup |

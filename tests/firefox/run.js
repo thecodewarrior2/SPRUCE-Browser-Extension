@@ -40,10 +40,13 @@ const settings = (page) => openExt(page, 'options.html', () => document.querySel
     settings: !!((await chrome.runtime.sendMessage({ action: 'getSettings' })) || {}).values,
     unwrap: ((await chrome.runtime.sendMessage({ action: 'testUnwrap', url: 'https://www.google.com/url?q=https://example.com/x' })) || {}).unwrappedUrl,
     // [5.90-2] The single-company endings (the bundled copy, read by the background page).
-    endings: await chrome.runtime.sendMessage({ action: 'getCompanyEndings' }).then(d => d && d.endings && d.operators ? { amex: d.operators[d.endings.amex] || '', app: 'app' in d.endings, count: Object.keys(d.endings).length } : null)
+    endings: await chrome.runtime.sendMessage({ action: 'getCompanyEndings' }).then(d => d && d.endings && d.operators ? { amex: d.operators[d.endings.amex] || '', app: 'app' in d.endings, count: Object.keys(d.endings).length } : null),
+    // [5.95-1] The shared hosting platforms (the bundled copy of the Public Suffix List's private section).
+    hosting: await chrome.runtime.sendMessage({ action: 'getSharedHosting' }).then(d => d && typeof d.rules === 'string' ? { github: d.rules.split('\n').includes('github.io'), count: d.rules.split('\n').length } : null)
   }));
   check('background page answers (settings, link decoding)', bg.settings && bg.unwrap === 'https://example.com/x', bg);
   check('[5.90-2] background page hands out the single-company endings (ICANN\'s list: .amex, not .app)', bg.endings && /American Express/.test(bg.endings.amex) && !bg.endings.app && bg.endings.count >= 100, bg.endings);
+  check('[5.95-1] background page hands out the shared hosting platforms (Public Suffix List: github.io)', bg.hosting && bg.hosting.github && bg.hosting.count >= 1000, bg.hosting);
   const variants = await opt.evaluate(() => ({
     browser: document.documentElement.dataset.browser,
     ownCard: !!document.getElementById('copyFirefoxPolicyBtn') && !!document.getElementById('checkExtensionsBtn'),
@@ -91,6 +94,9 @@ const settings = (page) => openExt(page, 'options.html', () => document.querySel
   check('QR code in an image decoded', img && img.ok && (img.codes || []).some(c => /qr-target\.example/.test(c.text)), img);
   const pdf = await opt.evaluate((b64) => chrome.runtime.sendMessage({ action: 'scanQr', b64, mime: 'application/pdf', name: 'invoice.pdf' }), fixture('qr.pdf'));
   check('PDF attachment: its QR code and its link found', pdf && pdf.ok && (pdf.codes || []).some(c => /qr-target\.example/.test(c.text)) && (pdf.links || []).some(l => /pdf-link\.example/.test(l.url)), pdf);
+  // [5.95-2] A Word document: the QR code in its picture, and its links.
+  const docx = await opt.evaluate((b64) => chrome.runtime.sendMessage({ action: 'scanQr', b64, mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', name: 'invoice.docx' }), fixture('qr.docx'));
+  check('Word attachment: the QR code in its picture and its links found', docx && docx.ok && docx.kind === 'docx' && (docx.codes || []).some(c => /qr-target\.example/.test(c.text)) && (docx.links || []).some(l => /docx-link\.example/.test(l.url)) && (docx.links || []).some(l => /docx-field\.example/.test(l.url)), docx);
 
   // --- Message frames, in the four ways webmail apps make them (Proton, iCloud, Zoho, GMX).
   const frames = await browser.newPage();

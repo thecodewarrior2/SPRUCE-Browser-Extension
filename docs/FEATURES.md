@@ -39,6 +39,11 @@ settings can't be locked). What leaves your device, and to whom, is in the [priv
   enforces sender verification, or its DNS records tie it to the company (looked up at most once a month;
   at Offline only, what was looked up earlier still counts). Until then such a link, or a sender with the
   company's name at such a domain, is amber, never red or moved to Spam.
+- **Sites on shared hosting are each their own.** On a platform where anyone can have a site (github.io,
+  pages.dev, web.app, blogspot.com…), text showing one site with a link to another on the same platform
+  (mybank.github.io → attacker-login.github.io) is pointed out, and a company's name chosen there
+  (paypal.pages.dev) is never taken for the company's. The platforms come from the Public Suffix List,
+  downloaded once a month (nothing written by hand).
 - **One calm banner per email.** Findings about the email as a whole are summarized at the top,
   with **Show details** and **What should I do?**; an email with many unusual links gets one
   sentence instead of a marking on every link. It follows Gmail's light or dark theme.
@@ -96,10 +101,11 @@ settings can't be locked). What leaves your device, and to whom, is in the [priv
 - **Threat checks.** DNS-over-HTTPS threat filters (Cloudflare Security and Family, Quad9,
   Control D; AdGuard as a backup), community shortener lists, and local phishing lists (OpenPhish,
   Phishing Army), downloaded at most once a day.
-- **QR codes** in email images and image/PDF attachments are decoded on-device and their
+- **QR codes** in email images and image, PDF and Word (.docx) attachments are decoded on-device and their
   destination is checked like a link; QR codes drawn with HTML tables or block characters are
   caught too.
-- **Attachment checks.** SVG/HTML attachments are scanned for scripts and hidden destinations;
+- **Attachment checks.** The links in PDF and Word attachments are checked like the email's own;
+  SVG/HTML attachments are scanned for scripts and hidden destinations;
   encrypted archives and deceptive file names are flagged.
 - **Tracking pixels** (1×1 images and known open-tracking addresses) are removed, while keeping
   the email's real images.

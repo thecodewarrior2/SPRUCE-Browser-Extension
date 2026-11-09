@@ -912,7 +912,7 @@ function unshortenLinks() {
                     action: 'resolveUrl',
                     url: originalUrl,
                     linkText: linkTextForCheck
-                }, (response) => companyEndingsReady.then(() => {   // [5.90-2] the endings are known before any link is judged
+                }, (response) => linkListsReady.then(() => {   // [5.90-2] [5.95-1] the endings and platforms are known before any link is judged
                     const elements = pendingHrefs.get(originalUrl) || [];
 
                     elements.forEach(el => guarded(`Applying the result for a link on ${originOf(originalUrl)}`, () => {
@@ -1067,11 +1067,13 @@ function maybeScanQr(img) {
 // Attachments, located as the site's `attachments` entry describes (Gmail: the chip's download_url
 // attribute, "mime:name:url", and as a fallback its download links, attid= with view=att / disp=).
 // Each is fetched with the user's own session (same site) and checked on this device, by type:
-//   images, PDFs → QR codes (+ PDF links) · SVG, HTML → scripts, redirects, fake logins · .ics → links
+//   images, PDFs, [5.95-2] Word documents → QR codes (+ PDF and Word links) · SVG, HTML → scripts, redirects,
+//   fake logins · .ics → links
 //   ZIP/RAR/7z → encrypted? · any file name → hidden text-direction characters
 const ATTACHMENT_MAX_PER_SCAN = 6;
+const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const EXT_MIME = { pdf: 'application/pdf', svg: 'image/svg+xml', svgz: 'image/svg+xml', html: 'text/html', htm: 'text/html', shtml: 'text/html',
-    xhtml: 'text/html', ics: 'text/calendar', zip: 'application/zip', rar: 'application/x-rar', '7z': 'application/x-7z-compressed',
+    xhtml: 'text/html', ics: 'text/calendar', docx: DOCX_MIME, docm: 'application/vnd.ms-word.document.macroEnabled.12', zip: 'application/zip', rar: 'application/x-rar', '7z': 'application/x-7z-compressed',
     png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', bmp: 'image/bmp' };
 
 // Attachment cards, as the site's `attachments` entry describes them: an attribute holding
@@ -1099,6 +1101,8 @@ function attachmentKind(mime, name) {
     if (/svg/i.test(mime) || ext === 'svg' || ext === 'svgz') return 'svg';
     if (/html/i.test(mime) || ['html', 'htm', 'shtml', 'xhtml'].includes(ext)) return 'html';
     if (/calendar/i.test(mime) || ext === 'ics') return 'ics';
+    // [5.95-2] Word documents (read in the scanner: their links, and QR codes in their pictures).
+    if (CHANGES_5_95.wordAttachments && (/wordprocessingml\.document|ms-word\.document\.macroenabled/i.test(mime) || ext === 'docx' || ext === 'docm')) return 'docx';
     if (/zip|rar|7z|compressed/i.test(mime) || ['zip', 'rar', '7z'].includes(ext)) return 'archive';
     if (/pdf/i.test(mime) || ext === 'pdf') return 'pdf';
     if (/^image\//i.test(mime) || EXT_MIME[ext] && /^image\//.test(EXT_MIME[ext])) return 'image';
@@ -1186,7 +1190,9 @@ function checkAttachment(att, kind, url) {
             if (urls.length) guarded('Checking a calendar invite', () => showScanResults(att.el, { ok: true, codes: [], links: urls.map(url => ({ url })) }, label, null));
             return;
         }
-        safeSend({ action: 'scanQr', b64: await blobToBase64(blob), mime: att.mime || blob.type, name: att.name }, (res) => guarded('Showing an attachment result', () => {
+        // [5.95-2] A Word document is named as one, whatever type the webmail gave it.
+        const mime = kind === 'docx' && !/wordprocessingml|ms-word/i.test(att.mime || blob.type) ? DOCX_MIME : att.mime || blob.type;
+        safeSend({ action: 'scanQr', b64: await blobToBase64(blob), mime, name: att.name }, (res) => guarded('Showing an attachment result', () => {
             if (res && res.ok && ((res.codes && res.codes.length) || (res.links && res.links.length))) showScanResults(att.el, res, label, null);
         }));
     }).catch((e) => reportEvent('warning', `An attachment could not be read (${e.message}).`));
@@ -1525,6 +1531,16 @@ const companyEndingsReady = new Promise(resolve => {
 chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'local' && changes.companyEndings && changes.companyEndings.newValue) setCompanyEndings(changes.companyEndings.newValue);
 });
+// [5.95-1] The shared hosting platforms (the Public Suffix List's private section, kept by the
+// background), in the same way.
+const sharedHostingReady = !CHANGES_5_95.privateSuffixes ? Promise.resolve() : new Promise(resolve => {
+    const t = setTimeout(resolve, 3000);
+    safeSend({ action: 'getSharedHosting' }, (data) => { try { setSharedHosting(data); } catch (e) { /* none */ } clearTimeout(t); resolve(); });
+});
+chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes.sharedHosting && changes.sharedHosting.newValue) setSharedHosting(changes.sharedHosting.newValue);
+});
+const linkListsReady = Promise.all([companyEndingsReady, sharedHostingReady]);
 
 // A link whose text shows another site, looked at again once more is known. It is marked at once
 // (a red link asks before opening from the start); then:

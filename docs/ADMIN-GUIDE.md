@@ -282,7 +282,7 @@ Safari has no extension policies; see [Safari](#safari) below.
 | managedEnableSpamNotice | boolean | true | Gmail: a 15-second notice at the top of Gmail with the number moved and a **Review** link to Spam |
 | managedEnableSpamFolderFlags | boolean | true | Gmail: in the Spam folder, emails the same checks would move there are red, whether the extension moved them or not (with why); unread ones' headers are read there too (stops by itself, with a log line, if that ever marks an email read). Spam without a red label was put there by Gmail or the user |
 | managedEnableQrScanning | boolean | true | Decode QR codes in email images on the device and check their destinations |
-| managedEnableAttachmentScanning | boolean | true | Check attachments on the device (≤ 10 MB): QR codes in images/PDFs, scripts in SVG/HTML, links in calendar invites, encrypted archives, disguised file names |
+| managedEnableAttachmentScanning | boolean | true | Check attachments on the device (≤ 10 MB): QR codes in images, PDFs and Word documents (.docx), links in PDFs and Word documents, scripts in SVG/HTML, links in calendar invites, encrypted archives, disguised file names |
 | managedEnableOutlookSupport, managedEnableProtonSupport, managedEnableYahooSupport, managedEnableAolSupport, managedEnableZohoSupport, managedEnableIcloudSupport, managedEnableFastmailSupport, managedEnableGmxSupport | boolean | true | Experimental support for each webmail app (Outlook on the web, Proton, Yahoo, AOL, Zoho, iCloud, Fastmail, GMX) |
 | managedEnableTrackerReveal | boolean | true | 🔍 on email tracking links and cloud-storage pages; on request sends the link to the lookup service (the sender sees a click). `false` = tracking links are never sent anywhere |
 | managedEnableOneTimeLinkProtection | boolean | true | Never request/cache/log reset, verification, login, unsubscribe links |
@@ -297,7 +297,7 @@ Safari has no extension policies; see [Safari](#safari) below.
 | managedDnsQuad9 / managedDnsCloudflareSecurity | boolean | true | Security resolvers: a match flags the link |
 | managedDnsCloudflareFamily | boolean | true | Adult-content filter: a match flags the link |
 | managedDnsAdGuard | boolean | true | Backup resolver: only queried when no security resolver can be reached |
-| managedEnableRemoteListSync | boolean | true | Daily download of shortener lists from GitHub |
+| managedEnableRemoteListSync | boolean | true | Daily download of shortener lists from GitHub; monthly, ICANN's list of internet endings (www.icann.org, for endings only one company may use) and the Public Suffix List (publicsuffix.org, for shared hosting platforms such as github.io). Off: the copies bundled with the extension are used |
 | managedEnableResultCache | boolean | true | Cache results locally |
 | managedEnableHistoryLog | boolean | true | Keep local history and activity |
 | managedRetentionDays | integer 1–365 | 30 | Automatic deletion age |
@@ -379,7 +379,8 @@ All of this is on by default and every part has its own key above. In short:
   a malformed address (encoded part, more than 64 characters before the @, two @, invalid domain); and an email
   that shows enough signs of forgery itself. Signs are weighted (strong ones flag on their own, weaker ones add
   up): a failed DMARC check when the From domain's owner publishes quarantine or reject (Gmail's own result on
-  arrival; only a strong sign for real mailing lists and trusted forwarders), forged delivery records copied from
+  arrival; only a strong sign for real mailing lists and for forwarding chains (ARC) sealed by Google or by
+  your own organization's domain), forged delivery records copied from
   older emails (dated more than a week before arrival), MIME-Version other than 1.0, an encoding that doesn't
   exist, a malformed List-ID, headers claiming several unrelated sending services,
   bulk-mail placeholders, repeated From/Subject/Date lines, a "To" line hiding the real recipient, a padded subject

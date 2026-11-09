@@ -1,5 +1,51 @@
 # Changelog
 
+## 5.95 — Sites on shared hosting, Word attachments, forwarded mail
+
+Four changes from a review of the extension's checks. Three have their own switch (`CHANGES_5_95` in
+`shared.js`: set one to `false` and rebuild, and that part works as in 5.94), and every line of code a
+change touches carries its tag:
+
+- **[5.95-1] A site on a shared hosting platform is a site of its own.** On platforms where anyone can
+  have a site (github.io, pages.dev, web.app, blogspot.com, netlify.app, workers.dev, s3.amazonaws.com…)
+  every site counted as the platform: text showing mybank.github.io with a link to attacker-login.github.io
+  wasn't marked, as both were "github.io". The platforms now come from the private section of the Public
+  Suffix List (the list browsers use to keep such sites apart; Mozilla Public License 2.0), downloaded once
+  a month from publicsuffix.org with the other lists (Update lists on); until the first download, the copy
+  bundled with the extension (`shared-hosting.json`, made by `tools/refresh-snapshot.js`, 3,458 endings).
+  Nothing about them is written by hand. A site on a platform is its own registrable domain, so such a link
+  is pointed out (amber), and look-alike names there are caught (paypal-login.github.io). Text that shows
+  the platform itself (github.io, s3.amazonaws.com) is still consistent with any site on it. A company's
+  name chosen on a platform (paypal.pages.dev) is never taken for its name under another ending: text
+  paypal.com with that link stays red, where 5.90's rule would have made it amber. A platform that is
+  itself one of a company's own domains (Google's withgoogle.com) stays the company's, and the popular-site
+  lists still count a platform's sites as the platform, as before. A downloaded shortener or phishing list
+  can no longer block a whole platform (an entry that is a platform's own ending is left out). The list
+  is loaded before any check (the background reads it with the settings; the webmail page asks for it
+  before judging links, as for the company endings).
+- **[5.95-2] QR codes and links in Word attachments (Gmail).** Word documents (.docx, .docm) are now opened
+  on the device like PDFs: the links they hold (hyperlinks in the text, headers, footers and notes, and
+  HYPERLINK fields) are listed and checked, and their pictures (the first 20) are searched for QR codes,
+  a common way to slip a phishing link past email filters. Only those parts are unpacked (a new reader,
+  `docx-reader.js`, in the scanner page), each with a size limit (5 MB for text parts, 10 MB per picture,
+  40 MB in all), so a booby-trapped archive can't use up memory; nothing in the document is run. Older
+  .doc files aren't read.
+- **[5.95-3] List downloads give up before Chrome's 30-second limit (no switch).** Chrome stops an
+  extension's background when a request takes more than 30 seconds to get an answer, before the
+  extension's own 30- or 60-second timeouts could report it or try again. The phishing lists, the
+  popular-site lists and ICANN's list now give up after 25 seconds.
+- **[5.95-4] Forwarded mail: only known forwarders soften a failed sender verification (Gmail).** A failed
+  DMARC check, when the sender's domain asks for such mail to be rejected or treated as spam, is a strong
+  sign on its own; it was only a weaker one whenever the email carried an intact forwarding chain (ARC),
+  because forwarding can break DMARC for genuine mail. But anyone can add a forwarding seal that checks
+  out, and the standard itself says a valid chain doesn't make a message trustworthy (RFC 8617; the IETF
+  is retiring ARC). Now only a chain sealed by Google (Google Groups, Gmail and Workspace forwarding) or by
+  the reader's own organization's domain softens it; a real mailing list still does. Emails checked by
+  5.94 are worked out again (`HEADER_SIGNS_VERSION` 6).
+
+Not changed, on purpose: callback-scam checks (a phone number in an email "from" a company) still skip
+trusted senders.
+
 ## 5.94 — Link Inspector: follow a SendGrid link to reveal it; open pixels explained
 
 SendGrid's current click links can't be decoded (two samples checked: the `upn` value, with or without

@@ -111,7 +111,7 @@ Schedules the daily download of the public phishing and short-link lists and the
 **offscreen**
 
 ```
-Opens a hidden page, only while an email image or attachment is being checked, to decode QR codes and read PDF attachments on the user's device. It closes itself after a minute without work.
+Opens a hidden page, only while an email image or attachment is being checked, to decode QR codes and read PDF and Word attachments on the user's device. It closes itself after a minute without work.
 ```
 
 **storage**

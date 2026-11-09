@@ -1,4 +1,5 @@
-// scanner.js — decodes QR codes in images and PDF attachments, and lists the links inside PDFs. It runs
+// scanner.js — decodes QR codes in images, PDF and [5.95-2] Word attachments, and lists the links inside
+// PDFs and Word documents (read by docx-reader.js). It runs
 // in Chrome's hidden offscreen document (scanner.html), and in Firefox and Safari in the background page
 // itself (background.html). Everything happens on this device: images come either as bytes from the
 // Gmail tab or from Google's image proxy (never from the sender's own server).
@@ -85,6 +86,21 @@ async function scanPdf(bytes) {
     return { codes, links, pagesScanned: pages, pagesTotal: total };
 }
 
+// [5.95-2] A Word document (.docx): its web links, and QR codes in its pictures (the first 20).
+async function scanDocx(bytes) {
+    const doc = await readDocx(bytes);
+    if (!doc) throw new Error('not a Word document');
+    const codes = [];
+    for (const img of doc.images) {
+        try {
+            const r = await scanImage(new Blob([img.bytes], { type: img.type }));
+            for (const c of r.codes) codes.push({ text: c.text, image: img.name });
+        } catch (e) { /* a picture the browser can't decode */ }
+    }
+    return { codes, links: doc.links.map(url => ({ url })), imagesScanned: doc.images.length, imagesTotal: doc.imagesTotal };
+}
+const DOCX_MIME_RE = /wordprocessingml\.document|ms-word\.document\.macroenabled/i;
+
 async function scan(msg) {
     let bytes, mime = msg.mime || '';
     if (msg.url) {
@@ -98,6 +114,7 @@ async function scan(msg) {
         bytes = Uint8Array.from(atob(msg.b64 || ''), c => c.charCodeAt(0));
     }
     const isPdf = /pdf/i.test(mime) || (bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46);
+    if (!isPdf && DOCX_MIME_RE.test(mime)) return Object.assign({ ok: true, kind: 'docx' }, await scanDocx(bytes));   // [5.95-2]
     const result = isPdf ? await scanPdf(bytes) : await scanImage(new Blob([bytes], { type: mime || 'image/png' }));
     return Object.assign({ ok: true, kind: isPdf ? 'pdf' : 'image' }, result);
 }

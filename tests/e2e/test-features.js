@@ -1,4 +1,5 @@
-// Row highlighter and warnings about overlapping extensions (simulated Gmail and Outlook pages).
+// Row highlighter and warnings about overlapping extensions (simulated Gmail and Outlook pages), and the
+// attachment scanner.
 const fs = require('fs');
 const { launch, servePage, waitFor, until, settled, check, part, runParts } = require('./harness');
 // A fresh browser per part (the parts run in parallel). The extension's id comes from the browser.
@@ -158,6 +159,30 @@ part('conflicts', async () => {
   await sw.evaluate(() => invalidateConfig());
   page = await ctx.newPage(); await page.goto('https://mail.google.com/mail/u/0/?ext=1&fakeicons=1#inbox'); await settled(page);
   check('administrator suppressed the warnings: nothing shown', !(await notice(page)));
+  await page.close();
+  await ctx.close();
+});
+
+// The attachment scanner in Chrome's hidden offscreen document: a QR code in an image, in a PDF and
+// [5.95-2] in a Word document's picture, with the documents' links (the fixtures the Firefox suite uses).
+part('scanner', async () => {
+  const { ctx, set, base, ID } = await setup();
+  await set(Object.assign({}, base, { enableQrScanning: true, enableAttachmentScanning: true }));
+  const page = await ctx.newPage();
+  await page.goto(`chrome-extension://${ID}/options.html`);
+  const fixture = (f) => fs.readFileSync(__dirname + '/../fixtures/' + f).toString('base64');
+  const scan = (f, mime, name) => page.evaluate(([b64, mime, name]) => chrome.runtime.sendMessage({ action: 'scanQr', b64, mime, name }), [fixture(f), mime, name]);
+  const img = await scan('qr.png', 'image/png');
+  check('scanner: QR code in an image decoded', img && img.ok && (img.codes || []).some(c => /qr-target\.example/.test(c.text)), img);
+  const pdf = await scan('qr.pdf', 'application/pdf', 'invoice.pdf');
+  check('scanner: PDF attachment, its QR code and its link', pdf && pdf.ok && (pdf.codes || []).some(c => /qr-target\.example/.test(c.text)) && (pdf.links || []).some(l => /pdf-link\.example/.test(l.url)), pdf);
+  const docx = await scan('qr.docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'invoice.docx');
+  check('scanner: Word attachment, the QR code in its picture and its links', docx && docx.ok && docx.kind === 'docx' && (docx.codes || []).some(c => /qr-target\.example/.test(c.text))
+    && (docx.links || []).map(l => l.url).join(' ') === 'https://docx-link.example/start?a=1&b=2 https://docx-field.example/x', docx);
+  const pdfNamedWord = await scan('qr.pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'fake.docx');
+  check('scanner: a PDF named as a Word document is read as the PDF it is', pdfNamedWord && pdfNamedWord.ok && pdfNamedWord.kind === 'pdf', pdfNamedWord);
+  const notWord = await scan('qr.png', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'fake.docx');
+  check('scanner: anything else named as a Word document is refused', notWord && notWord.ok === false, notWord);
   await page.close();
   await ctx.close();
 });
