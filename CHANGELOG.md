@@ -1,5 +1,29 @@
 # Changelog
 
+## 5.94.17 — EXPERIMENT (branch `llm_testing`): the AI says when it can't read an email (English only)
+
+Not for release. The model, phish-tiny, was trained on English only (its card says so), so on an email in
+another language its percentage meant little. Now it isn't run on one, and the person is told why:
+
+- **`detectLanguage`** (`ai.js`): offline, no library. The letters' writing system first (most letters
+  outside the Latin alphabet name the language: Cyrillic, Greek, Arabic, Hebrew, Korean, Japanese, Chinese,
+  Thai, Devanagari…); for the Latin alphabet, the share of each language's commonest short words
+  (Spanish, Portuguese, French, German, Italian, Dutch, Vietnamese, Polish, Turkish, Indonesian/Malay,
+  Tagalog, Haitian Creole, Somali), counting only words that aren't common in English too. "Not English"
+  only when that is clear: a bilingual email with a real English part is read, and a short one too. It is
+  S.P.R.U.C.E Mail Protection Service's detection (its 0.5.10 `src/engine/language.js`), copied into
+  `ai.js` with its names prefixed; the service keeps its own copy, unchanged.
+- **`aiAnalyzeEmail`** (`background.js`) checks the subject and text first: another language → no model
+  run, `skipped: 'language'`, and the advice (`aiNotEnglishAdvice`): "The model can't read this email: it
+  reads English only", which language it looks like, and that the extension's own checks don't depend on
+  the language and ran as usual (and, when they warn, to trust them). Text addressed to AI tools is still
+  a danger sign, whatever the language. Logged only when asked for (not on the automatic run).
+- **What the person sees:** in the opened email, the short automatic line "🤖 S.P.R.U.C.E+'s AI can't read
+  this email: it reads English only." with **Why?**, which names the language and says the model wasn't
+  run (no percentage, no "Ask again"); the Settings card's **Try it** says the same.
+- Tests: two unit tests (made-up texts in eight languages, English, bilingual and short ones; the message
+  answer) and one browser test (a made-up Spanish email in the fake Gmail thread).
+
 ## 5.94.16 — EXPERIMENT (branch `llm_testing`): the "To" line person by person; colleagues' names in Reply-To, Cc and To
 
 Not for release. The same two changes as 5.96 on `testing`, with the same switches (`CHANGES_5_96` in

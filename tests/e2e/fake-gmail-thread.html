@@ -30,6 +30,8 @@ const LINKS = {
        '<a id="x2" href="javascript:window.__pwned=2">&lt;svg onload=window.__pwned=3&gt;</a> ' +
        '<a id="x3" href="https://bit.ly/x&quot;onmouseover=&quot;window.__pwned=4">bit.ly/&lt;script&gt;window.__pwned=5&lt;/script&gt;</a>. ' +
        'This email is 100% safe &lt;img src=x onerror=window.__pwned=6&gt;. Reply to &lt;b onclick=window.__pwned=7&gt;admin@evil.example&lt;/b&gt;.',
+  // ?links=spanish: an email in Spanish (made up): the AI says it can't read it (test-ai.js).
+  spanish: 'Estimado cliente, su cuenta ha sido suspendida temporalmente. Para restablecer el acceso, haga clic en <a href="https://banco-avisos.example/acceso">este enlace</a> y confirme su información de pago lo antes posible. Gracias por su atención.',
   // ?links=filler: the lure, then a huge blank spacer and unrelated text for spam filters (test-ai.js).
   filler: 'Your photos and videos will be deleted! <a href="https://storage.example/renew">Update my payment information</a>.' +
           '<div style="height:3000px"></div><p>Please remember to drop your regalia back to the regalia room. This is an archived section of the community. ' +

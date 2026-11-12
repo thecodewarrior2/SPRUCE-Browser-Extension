@@ -3370,6 +3370,15 @@ async function aiAnalyzeEmail(facts, auto = false) {
     if (!cfg.values.enableAiAnalysis) return { error: 'AI analysis is turned off (Settings → AI analysis).' };
     const f = facts || {};
     const t0 = Date.now();
+    // The model reads English only: an email clearly in another language gets no opinion, and the person
+    // is told why (detectLanguage, aiNotEnglishAdvice in ai.js). Nothing else changes.
+    const language = detectLanguage(`${f.subject || ''}\n${f.bodyText || ''}`);
+    if (!language.english) {
+        const vouching = selfVouchingSigns(`${f.subject || ''}\n${f.bodyText || ''}`);
+        const advice = aiNotEnglishAdvice(language, f.verdict ? f.verdict.status : null, vouching);
+        if (!auto) logInfo(`AI analysis: not run (the email looks like it is in ${language.name}; the model reads English only).`, 'AI analysis');
+        return { result: { probability: null, reasons: [], skipped: 'language' }, skipped: 'language', language: language.name, vouching, advice, ms: Date.now() - t0 };
+    }
     let result;
     try { result = (await loadPhishModel()).analyze(f); }
     catch (e) {

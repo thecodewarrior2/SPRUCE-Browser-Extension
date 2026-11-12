@@ -3375,8 +3375,13 @@ function showAiResult(body, box, res, auto = false) {
     if (advice.note) { const n = document.createElement('div'); n.style.cssText = 'margin-top:4px;font-size:12px;'; n.textContent = advice.note; box.appendChild(n); }
     const foot = document.createElement('div');
     foot.style.cssText = 'margin-top:4px;font-size:11px;opacity:.85;';
-    foot.textContent = `The opinion of S.P.R.U.C.E+'s own small AI model (${result ? `${result.model} ${result.version}` : 'model'}, ${(res.ms / 1000).toFixed(1)} s, on this computer). It can be wrong and never changes the extension's own checks. `;
-    foot.appendChild(noticeButton('Ask again', () => runAiAnalysis(body, box)));
+    if (res.skipped === 'language') {
+        // Another language: the model wasn't run (it reads English only); asking again would say the same.
+        foot.textContent = 'S.P.R.U.C.E+\'s own small AI model wasn\'t run on this email: it was trained on English only. The extension\'s own checks ran as usual.';
+    } else {
+        foot.textContent = `The opinion of S.P.R.U.C.E+'s own small AI model (${result ? `${result.model} ${result.version}` : 'model'}, ${(res.ms / 1000).toFixed(1)} s, on this computer). It can be wrong and never changes the extension's own checks. `;
+        foot.appendChild(noticeButton('Ask again', () => runAiAnalysis(body, box)));
+    }
     box.appendChild(foot);
 }
 

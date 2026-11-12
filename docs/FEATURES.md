@@ -216,6 +216,11 @@ the Inspector explains that no tool can read them offline.
   numbers are hidden before it sees the text. The automatic run waits (up to 3 seconds) for the email's
   own verdict, so the model sees it; when it finds nothing suspicious it shows one short line with
   **Why?**, and the full box only when it warns. Automatic runs are logged only when they warn.
+- **English only:** the model was trained on English. An email clearly in another language (its writing
+  system, or the commonest words of Spanish, Portuguese, French, German, Vietnamese and others) isn't
+  given to the model: the box says "S.P.R.U.C.E+'s AI can't read this email: it reads English only", and
+  **Why?** names the language. A bilingual email with a real English part, and a short one, are read. The
+  extension's own checks don't depend on the language.
 - **Advisory only:** the model's opinion can add a warning but never clears one, marks anything safe
   or moves email to Spam; when the extension's own checks warn, it says to trust them.
 - **Text that vouches for itself counts toward phishing**, in the extension's own verdict for every

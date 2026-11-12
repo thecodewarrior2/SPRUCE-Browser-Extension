@@ -51,6 +51,21 @@ const { launch, servePage, until, optionsReady, check, done } = require('./harne
   check('the AI opinion never changes the email\'s own verdict', statusAfter === statusBefore, { statusBefore, statusAfter });
   await page.close();
 
+  // 5.94.17: an email in another language: the model isn't run, and the box says it can't read it (the
+  // automatic run on again for this one, then off as before).
+  await sw.evaluate(() => chrome.storage.local.set({ aiAutoAnalyze: true }));
+  page = await ctx.newPage();
+  page.on('pageerror', e => errors.push(e.message));
+  await page.goto('https://mail.google.com/mail/u/0/?links=spanish&subj=Su%20cuenta%20ha%20sido%20suspendida&from=avisos@banco-avisos.example&name=Banco#inbox/FMfcgz');
+  const es = await until(() => aiBox(page), b => b && (b.state === 'done' || b.state === 'error'), 30000);
+  check('another language: "can\'t read this email: it reads English only", no percentage, with "Why?"',
+    es.state === 'done' && /S\.P\.R\.U\.C\.E\+'s AI can't read this email: it reads English only/.test(es.text) && !/\d+%/.test(es.text) && /Why\?/.test(es.text), es);
+  await page.click('.unshortener-ai-box button');
+  const esFull = await aiBox(page);
+  check('"Why?" says which language, that the model wasn\'t run, and that the own checks ran', /looks like it is in Spanish/.test(esFull.text) && /wasn't run on this email: it was trained on English only/.test(esFull.text) && !/Ask again/.test(esFull.text), esFull.text);
+  await page.close();
+  await sw.evaluate(() => chrome.storage.local.set({ aiAutoAnalyze: false }));
+
   // Filler hidden far below the message after a huge blank space: a weight in the verdict, and the AI
   // reads only the message (the automatic run is off here, so this asks with a click).
   page = await ctx.newPage();

@@ -520,14 +520,15 @@ document.addEventListener('DOMContentLoaded', () => {
             out.appendChild(node('div', { className: 'callout-warn ai-try-verdict', style: `border-left-color: ${st.color};` },
                 node('strong', { style: `color: ${st.color};` }, `${st.icon} ${res.advice.headline}`),
                 res.advice.note ? node('div', { style: 'font-size: 12px; margin-top: 4px;' }, res.advice.note) : ''));
-            const reasons = res.result.reasons || [];
+            const reasons = (res.result && res.result.reasons) || [];
             if (reasons.length && res.result.probability >= 0.5) {
                 const ul = node('ul', { className: 'simple-list ai-try-reasons', style: 'font-size: 12px;' });
                 reasons.forEach(x => ul.appendChild(node('li', null, x.facts ? x.sentence : `“${x.sentence}”`)));
                 out.append(node('div', { style: 'font-size: 12px; font-weight: 600; margin-top: 6px;' }, 'What weighed most in its opinion:'), ul);
             }
             out.appendChild(node('div', { style: 'font-size: 11px; color: var(--text-muted);' },
-                `${res.result.model} ${res.result.version}, ${(res.ms / 1000).toFixed(1)} s on this computer.`));
+                res.skipped === 'language' ? `Not run: the email looks like it is in ${res.language || 'another language'}, and the model reads English only.`
+                    : `${res.result.model} ${res.result.version}, ${(res.ms / 1000).toFixed(1)} s on this computer.`));
         });
     });
 
