@@ -1710,6 +1710,26 @@ const fileFetch = async (u) => {
 const aiBg = loadBackground({ enableAiAnalysis: true }, { fetch: fileFetch, patchChrome: (c) => { c.runtime.getURL = (p) => 'chrome-extension://abc/' + p; } });
 const AI = (code) => vm.runInContext(code, aiBg);
 
+// The model comes from TinyPhishLLM, its own repository (tools/sync-model.js): its files must be the ones synced,
+// and this extension must build the model's input exactly as the model was trained.
+test('AI model: the files are TinyPhishLLM\'s, as synced (models/phish-tiny/SOURCE.json)', () => {
+  const src = JSON.parse(fs.readFileSync(path.join(EXT, 'models', 'phish-tiny', 'SOURCE.json'), 'utf8'));
+  const manifest = JSON.parse(fs.readFileSync(path.join(EXT, 'models', 'phish-tiny', 'model.json'), 'utf8'));
+  assert.equal(src.model, `${manifest.name} ${manifest.version}`);
+  assert.match(src.commit, /^[0-9a-f]{40}$/);
+  assert.ok(Object.keys(src.files).length >= 8);
+  for (const [f, h] of Object.entries(src.files)) {
+    const now = require('crypto').createHash('sha256').update(fs.readFileSync(path.join(EXT, f))).digest('hex');
+    assert.equal(now, h, `${f} differs from TinyPhishLLM's: change the model there and run tools/sync-model.js`);
+  }
+});
+
+test('AI model: the input is built exactly as the model was trained (TinyPhishLLM\'s input-format reference)', () => {
+  const rows = fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'ai-input-format.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l));
+  assert.ok(rows.length > 50);
+  for (const r of rows) assert.equal(AI(`modelInputText(${JSON.stringify(r.facts)})`), r.text, r.name);
+});
+
 test('AI model: the JavaScript tokenizer and network give PyTorch\'s own answers (ai-vectors.json)', async () => {
   const model = await AI('loadPhishModel()');
   for (const v of JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'ai-vectors.json'), 'utf8'))) {
@@ -1721,7 +1741,7 @@ test('AI model: the JavaScript tokenizer and network give PyTorch\'s own answers
 
 test('AI model: still right on the hand-written emails (at least 90%), and explains itself', async () => {
   const model = await AI('loadPhishModel()');
-  const rows = fs.readFileSync(path.join(EXT, 'tools', 'ai', 'eval-handwritten.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l));
+  const rows = fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'ai-handwritten.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l));
   let right = 0;
   for (const r of rows) if ((model.analyze(r.facts).probability >= 0.5) === (r.label === 1)) right++;
   assert.ok(right / rows.length >= 0.9, `${right}/${rows.length}`);

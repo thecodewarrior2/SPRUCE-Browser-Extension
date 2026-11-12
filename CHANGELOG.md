@@ -1,5 +1,28 @@
 # Changelog
 
+## 5.94.14 — EXPERIMENT (branch `llm_testing`): the AI model comes from TinyPhishLLM; phish-tiny 0.13.0
+
+Not for release. The model moves to its own repository, TinyPhishLLM, which S.P.R.U.C.E+ Mail Protection
+uses too: one model, trained in one place.
+
+- **The model is now phish-tiny 0.13.0**, the one S.P.R.U.C.E+ Mail Protection 0.5.7 runs (trained with
+  this branch's training tools at `9292388` plus 96 de-identified examples from one district's own mail,
+  which are in no repository). It replaces 0.11.0. From its card (held-out sets, at the service's 90%
+  line): published phishing missed 20 → 11 of 603, published genuine called phishing 17 → 13 of 624, the
+  district's genuine mail called phishing 15 → 7 of 23, look-alikes 3 → 3, hand-written 33 of 33.
+- **`tools/sync-model.js <TinyPhishLLM folder>`** copies the model (`models/phish-tiny/`) and its
+  references from a clean TinyPhishLLM checkout, after TinyPhishLLM's own check and a check that
+  `ai.js` builds the model's input exactly as it was trained; it records the commit and each file's
+  SHA-256 in `models/phish-tiny/SOURCE.json`.
+- **Unit tests:** the model's files must match `SOURCE.json`; `modelInputText` must build exactly the
+  82 texts of TinyPhishLLM's input-format reference (`tests/fixtures/ai-input-format.jsonl`). The
+  hand-written check set now comes with the model (`tests/fixtures/ai-handwritten.jsonl`), as do
+  `ai-vectors.json` (for 0.13.0) and `ai-regressions.jsonl`.
+- **`tools/ai/` is gone:** the training (`make-dataset.js`, `train.py`, the published examples, the
+  check sets) is in TinyPhishLLM's `training/`, unchanged except for its paths. `CLAUDE.md` says not to
+  train or edit the model here.
+
+
 ## 5.94.13 — EXPERIMENT (branch `llm_testing`): model 0.11.0, round 7 of published examples
 
 Not for release. Trained on 1092 published examples (564 phishing, 528 genuine; round 7 added two

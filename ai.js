@@ -2,8 +2,8 @@
 // email and gives its opinion on whether it is phishing, and which sentences made it think so.
 //
 // The model (models/phish-tiny/) is a BERT-tiny classifier (2 layers, 4.4 million parameters, about
-// 4.5 MB with 8-bit weights) that WE train: tools/ai/ generates the training emails, fine-tunes the
-// model and exports it. It runs right here, in plain JavaScript (no WebAssembly, no download, nothing
+// 4.5 MB with 8-bit weights) that WE train, in TinyPhishLLM, the model's own repository (shared with
+// S.P.R.U.C.E+ Mail Protection); tools/sync-model.js copies it here (models/phish-tiny/SOURCE.json). It runs right here, in plain JavaScript (no WebAssembly, no download, nothing
 // sent anywhere), in Chrome's service worker, Firefox's and Safari's background page, and in Node for
 // the tests, which check it against PyTorch's own numbers (tests/fixtures/ai-vectors.json).
 //
@@ -19,8 +19,9 @@
 // Loaded after shared.js (registrableDomain, selfVouchingSigns, isSharedMailbox).
 
 // ---------------------------------------------------------------------------------------------------
-// The model's input: one text built from the email's facts. tools/ai/make-dataset.js builds its
-// training emails with this same function, so training and use always see the same format.
+// The model's input: one text built from the email's facts. TinyPhishLLM builds its training emails with
+// the same lines (its training/model-input.js), so training and use see the same format; the unit tests
+// hold this copy to its reference (tests/fixtures/ai-input-format.jsonl, synced with the model).
 // facts: { subject, senderName, senderAddress, auth: { dmarc } | null,
 //          links: [{ text, host, destHost, finding }], bodyText,
 //          org: 'inside' | 'outside' | undefined (the user's own organization, when the account has one),

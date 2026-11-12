@@ -26,6 +26,11 @@
   approval succeeded, then fast-forward `main` to that commit (`git push origin testing:main`). There is
   nothing to port: every browser's package is built from `main`.
 - **Never push to `firefox` or `safari`.** They hold only the history of the old per-browser builds.
+- **The AI model** (`models/phish-tiny/`, branch `llm_testing`) comes from **TinyPhishLLM**, the model's own
+  repository, shared with S.P.R.U.C.E+ Mail Protection. Don't train, edit or replace it here: change
+  TinyPhishLLM, then `node tools/sync-model.js <TinyPhishLLM folder>` (it records the commit and the files'
+  hashes in `models/phish-tiny/SOURCE.json`; the unit tests fail on any other change). A new model is a
+  behavior change like any other (version, changelog, the maintainer's approval).
 - Keep the browsers in one codebase: the top-level `manifest.json` is the Chrome one and the build makes
   the others (`BROWSERS` in `tools/build.js`); code that must differ asks `BROWSER` (`shared.js`) or checks
   for the feature; text in the extension's pages that differs by browser is marked `data-only="…"`.

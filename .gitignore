@@ -6,6 +6,6 @@ tests/.firefox/
 # The private key that signs releases (never commit it), and built packages.
 *.pem
 build/
-# EXPERIMENT (llm_testing): generated training data (rebuilt by tools/ai/make-dataset.js) and your own
-# examples in tools/ai/data/extra/, which may be sensitive: never committed.
+# EXPERIMENT (llm_testing): training moved to TinyPhishLLM; an old checkout's generated training data
+# (tools/ai/data/) may still be here, and examples from real mail must never be committed.
 tools/ai/data/
