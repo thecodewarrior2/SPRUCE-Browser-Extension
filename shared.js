@@ -508,6 +508,19 @@ const FILE_EXTENSION_TLDS = new Set([
 // ---------------------------------------------------------------------------
 const COMPANY_MATCHING = Object.freeze({ oneTable: true, ownEndings: true, verifiedSender: true, nameNeedsProof: true, storedOffline: true });
 
+// ---------------------------------------------------------------------------
+// 5.96: changes that can each be switched off on their own, in the same way (set to false and rebuild;
+// what it changed then works as before; the same switches and tags as 5.96 on testing). Every place a change touches carries its tag.
+//   [5.96-1] toLineByPerson   the "To" line is read person by person (a calendar invitation's "guest@x.org,
+//                             Organizer <organizer@y.org>" is two people, not a name showing another
+//                             address), and the address a name shows is read as written ('quoted',
+//                             +tag, "mailto:"); another address of the same domain or name is a weak sign
+//   [5.96-2] colleagueLines   colleagues' names in Reply-To, Cc and To: replies under a colleague's name
+//                             going to an outside address; a colleague copied in at an outside address,
+//                             or at one that imitates your organization's domain
+// ---------------------------------------------------------------------------
+const CHANGES_5_96 = Object.freeze({ toLineByPerson: true, colleagueLines: true });
+
 // Companies that own several domains, including their own short-link domains. Link text and destination
 // within one family are consistent (text "gmail.com" pointing to google.com, or Google's c.gle).
 // labels: the company's name, which it also uses under many endings (amazon.de, google.co.uk). Until
@@ -1922,6 +1935,73 @@ function nameAddressSigns(name, address, own, colleagues, ownership) {
     return out;
 }
 
+// [5.96-2] A domain that imitates the organization's own (asked only together with a colleague's name, in
+// colleagueLineSigns): its name under another ending (maple-schools.org for maple-schools.example), with
+// a hyphen more or less, one letter away, written with look-alike characters, or with something added
+// (maple-schools-k12.example).
+function ownDomainLookalike(domain, own) {
+    const reg = registrableDomain(String(domain || '').toLowerCase()) || '', ownReg = registrableDomain(String(own || '').toLowerCase()) || '';
+    if (!reg || !ownReg || reg === ownReg) return false;
+    const label = reg.split('.')[0], ownLabel = ownReg.split('.')[0];
+    const flat = (s) => s.replace(/[-_]/g, '');
+    if (label === ownLabel || flat(label) === flat(ownLabel)) return true;
+    if (ownLabel.length < 4) return false;
+    return confusableSkeleton(unicodeLabel(label)) === ownLabel || (ownLabel.length >= 5 && editDistanceAtMost1(label, ownLabel))
+        || flat(label).includes(flat(ownLabel));
+}
+
+// [5.96-2] Signs in the other address lines (Reply-To, Cc, To) that use the name of someone in the user's own
+// organization (colleagues: Set of colleagueNameHash values) on an address outside it:
+//   - replies under a colleague's name go to an outside address: 3 (amber);
+//   - a colleague copied in (Cc or To) at an outside address: 1, since staff are sometimes copied at a
+//     personal address; at an address that imitates the organization's domain (the "I've copied our
+//     superintendent" trick): 3.
+// Never for the organization's own addresses, nor for the sender's own address (the From checks cover
+// it). people: entries { line: 'reply-to' | 'cc' | 'to', name or h (colleagueNameHash of it), address or
+// domain, fromSame: it is the sender's own address }; own: the organization's domain, or a list of them.
+function colleagueLineSigns(people, own, colleagues, fromAddress) {
+    if (!CHANGES_5_96.colleagueLines) return [];
+    const owns = [].concat(own || []).map(d => String(d).toLowerCase()).filter(Boolean);
+    if (!colleagues || !colleagues.size || !owns.length) return [];
+    const from = String(fromAddress || '').toLowerCase();
+    let reply = null, copied = null;
+    for (const p of [].concat(people || []).slice(0, 60)) {
+        if (!p) continue;
+        const address = String(p.address || '').toLowerCase();
+        const domain = String(p.domain || (address.includes('@') ? address.slice(address.lastIndexOf('@') + 1) : '')).toLowerCase();
+        if (!domain || owns.some(o => isOwnDomain(domain, o)) || p.fromSame || (address && address === from)) continue;
+        const h = p.h || colleagueNameHash(p.name);
+        if (!h || !colleagues.has(h)) continue;
+        const look = owns.find(o => ownDomainLookalike(domain, o)) || '';
+        const where = address || `an address at ${domain}`;
+        if (p.line === 'reply-to') { if (!reply) reply = { look, where }; } else if (!copied || (look && !copied.look)) copied = { look, where };
+    }
+    const out = [];
+    if (reply) out.push({ weight: 3, kind: 'colleague-reply-to', text: `Replies go to an outside address (${reply.where}) under the name of someone in your organization${reply.look ? `, at a domain that imitates yours (${reply.look})` : ''}.` });
+    if (copied) out.push(copied.look
+        ? { weight: 3, kind: 'colleague-copied-lookalike', text: `It copies in someone of your organization at an address that imitates your domain (${copied.where}, not ${copied.look}).` }
+        : { weight: 1, kind: 'colleague-copied-outside', text: `It copies in someone of your organization at an outside address (${copied.where}).` });
+    return out;
+}
+
+// [5.96-2] The people in an email's Reply-To, Cc and To lines (headers: parseRawHeaders), each kept only as
+// the fingerprint of their name (colleagueNameHash) and their domain, never the name or the address, for
+// colleagueLineSigns when the email is shown: [{ line, h, domain, fromSame }]. A bare address has no name.
+function addressLinePeople(headers, fromAddress) {
+    const from = String(fromAddress || '').toLowerCase();
+    const out = [];
+    for (const line of ['reply-to', 'cc', 'to']) {
+        for (const entry of (headers || []).filter(([n]) => n === line).map(([, v]) => v).flatMap(addressList).slice(0, 30)) {
+            const m = /^\s*"?([^"<]*?)"?\s*<([^>]*)>\s*$/.exec(entry);
+            if (!m) continue;
+            const address = m[2].trim().toLowerCase();
+            const h = colleagueNameHash(decodeEncodedWords(m[1]).trim()), domain = domainOfAddress(address);
+            if (h && domain) out.push({ line, h, domain, fromSame: !!from && address === from });
+        }
+    }
+    return out.slice(0, 60);
+}
+
 // Signs that a sender borrows the reader's own name: a display name that is the reader's own email
 // address, or its mailbox name (the part before the @) written exactly as in the address, on someone
 // else's address, so the email looks like a notice about the reader's own account ("patdoe"
@@ -1960,6 +2040,24 @@ function parseRawHeaders(raw) {
 }
 
 const EMAIL_IN_TEXT_RE = /[A-Za-z0-9._%+'-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
+
+// [5.96-1] The entries of an address line ("ann@x.org, Bob Lee <bob@y.org>, \"Lee, Bob\" <bob@y.org>"),
+// one by one: split at the commas outside quotes and outside <…>.
+function addressList(value) {
+    const out = [];
+    let cur = '', quoted = false, angle = false;
+    const s = String(value || '');
+    for (let i = 0; i < s.length; i++) {
+        const ch = s[i];
+        if (ch === '\\' && quoted) { cur += ch + (s[i + 1] || ''); i++; continue; }
+        if (ch === '"') quoted = !quoted;
+        else if (!quoted && ch === '<') angle = true;
+        else if (!quoted && ch === '>') angle = false;
+        if (ch === ',' && !quoted && !angle) { out.push(cur); cur = ''; } else cur += ch;
+    }
+    out.push(cur);
+    return out.map(x => x.trim()).filter(Boolean);
+}
 const domainOfAddress = (a) => String(a || '').toLowerCase().replace(/^.*@/, '').replace(/[>\s]+$/, '');
 
 // Reads the receiver's verdict. Only the topmost Authentication-Results written by the receiving mail
@@ -2534,7 +2632,7 @@ const ESP_HEADER_MARKERS = [
 ];
 // Bumped whenever headerAnomalies learns new signs, so results saved by an older version are worked
 // out again (see messageInfo in content.js).
-const HEADER_SIGNS_VERSION = 6;
+const HEADER_SIGNS_VERSION = 7;   // 7: [5.96-1] the To line person by person, [5.96-2] the people of Reply-To, Cc and To kept (as fingerprints)
 // receiver: the webmail's receiving mail system, whose own records can be trusted:
 // { host: 'mx.google.com', name: 'Gmail' } (see the `mail.headers` entry of WEBMAIL_SITES).
 function headerAnomalies(raw, accountAddress, receiver = {}) {
@@ -2606,13 +2704,39 @@ function headerAnomalies(raw, accountAddress, receiver = {}) {
     if (parsed) out.push(...parsed.malformed);
     if (fm) out.push(...displayNameAnomalies(decodeEncodedWords(from.slice(0, fm.index))));
     // To: a display name that is an email address other than the real one, or a broken address.
-    for (const to of get('to').slice(0, 3)) {
-        const tm = /^\s*"?([^"<]*?)"?\s*<([^>]*)>/.exec(to);
-        if (tm && /@/.test(tm[1]) && tm[1].trim().toLowerCase() !== tm[2].trim().toLowerCase()) {
-            out.push({ weight: 2, text: 'Its “To” line shows one address but is really addressed to another.' });
-            break;
+    // [5.96-1] For each person on the line: a line with several, as a calendar invitation writes it
+    // ("ann@x.org, Bob Lee <bob@y.org>"), read whole, took "ann@x.org, Bob Lee" for a name showing an
+    // address that wasn't Bob's. The address shown is read out of the name as a mail program writes it: in
+    // single quotes (Outlook: 'ann@x.org' <ann@x.org>), after "mailto:", next to a name ("Ann
+    // (ann@x.org)"), encoded, with a +tag (ann+news@x.org is ann@x.org's). Another address in the same
+    // domain, or the same name in another domain, is what an alias, a group or a domain change shows too: a
+    // weak sign. Another address in another domain is the trick (the reader's own address shown on a mass
+    // mailing): a sign.
+    if (CHANGES_5_96.toLineByPerson) {
+        for (const to of get('to').flatMap(addressList).slice(0, 20)) {
+            const tm = /^\s*"?([^"<]*?)"?\s*<([^>]*)>/.exec(to);
+            const name = tm ? decodeEncodedWords(tm[1]).trim().replace(/^['"\s]+|['"\s]+$/g, '').replace(/^mailto:/i, '') : '';
+            const shown = ((name.match(EMAIL_IN_TEXT_RE) || [])[0] || '').toLowerCase().replace(/^'+|'+$/g, '');
+            const real = tm ? tm[2].trim().replace(/^mailto:/i, '').toLowerCase() : '';
+            const box = (a) => { const [local, domain = ''] = a.split('@'); return [local.replace(/\+.*$/, ''), domain]; };
+            if (shown && real && box(shown).join('@') !== box(real).join('@')) {
+                const [sl, sd] = box(shown), [rl, rd] = box(real);
+                out.push(sd === rd || sl === rl
+                    ? { weight: 1, text: 'Its “To” line shows one address but is addressed to another of the same domain or name (an alias, a group or a domain change can do that too).' }
+                    : { weight: 2, text: `Its “To” line shows an address at ${sd} but is really addressed to one at ${rd}.` });
+                break;
+            }
+            if (tm && (tm[2].match(/@/g) || []).length > 1) { out.push({ weight: 3, kind: 'broken-to', text: 'Its “To” address is broken (two “@”).' }); break; }
         }
-        if (tm && (tm[2].match(/@/g) || []).length > 1) { out.push({ weight: 3, kind: 'broken-to', text: 'Its “To” address is broken (two “@”).' }); break; }
+    } else {
+        for (const to of get('to').slice(0, 3)) {
+            const tm = /^\s*"?([^"<]*?)"?\s*<([^>]*)>/.exec(to);
+            if (tm && /@/.test(tm[1]) && tm[1].trim().toLowerCase() !== tm[2].trim().toLowerCase()) {
+                out.push({ weight: 2, text: 'Its “To” line shows one address but is really addressed to another.' });
+                break;
+            }
+            if (tm && (tm[2].match(/@/g) || []).length > 1) { out.push({ weight: 3, kind: 'broken-to', text: 'Its “To” address is broken (two “@”).' }); break; }
+        }
     }
     // Subject: walls of blank space or long runs of random capitals; or filler and a random tail that
     // makes each copy unique ("125$ FOR YOU!_______kvksrphdly").
