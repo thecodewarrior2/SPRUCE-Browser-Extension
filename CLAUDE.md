@@ -27,7 +27,7 @@
   nothing to port: every browser's package is built from `main`.
 - **Never push to `firefox` or `safari`.** They hold only the history of the old per-browser builds.
 - **The AI model** (`models/phish-tiny/`, branch `llm_testing` only) comes from **TinyPhishLLM**, the model's
-  own public repository, shared with S.P.R.U.C.E+ Mail Protection; its training (scripts, examples, check
+  own public repository, shared with S.P.R.U.C.E Mail Protection Service; its training (scripts, examples, check
   sets) is in the private TinyPhishLLM_Private_Training. On `llm_testing`, `models/phish-tiny/SOURCE.json`
   pins one TinyPhishLLM commit and each file's SHA-256, and `tools/build.js` adds the model to every package
   from there. **Never commit the model's files, a training example, a check set or an email from real mail
