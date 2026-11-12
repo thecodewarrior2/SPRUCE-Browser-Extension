@@ -1,17 +1,33 @@
 {
-  "repository": "https://github.com/thecodewarrior2/tinyphishllm",
-  "commit": "76040c72670cdbb23d3c8720460d2c529d90c5bb",
+  "repository": "https://github.com/thecodewarrior2/TinyPhishLLM",
+  "commit": "68f8dd69dd854e6cedfdd893a4dfbd87251d26f6",
   "model": "phish-tiny 0.13.0",
   "synced": "2026-11-12",
-  "note": "Copied by tools/sync-model.js from TinyPhishLLM, the model's own repository. Don't edit these files here: change TinyPhishLLM and sync again.",
+  "note": "Pinned by tools/sync-model.js. The model's files (models/phish-tiny/*) are not in this repository: tools/build.js adds them to every package from TinyPhishLLM at this commit (tools/fetch-model.js) and only with these SHA-256. Don't edit them here: change the model in TinyPhishLLM and sync again.",
   "files": {
-    "models/phish-tiny/model.bin": "c02a6ee8229d7141b2828a7ed8327cc98ba64e902378d3ca4decbb23a467e1f1",
-    "models/phish-tiny/model.json": "867c90883a905f33b2268ebc3d73fdc301533be17e9196022b8c8d2e9338ea35",
-    "models/phish-tiny/vocab.txt": "07eced375cec144d27c900241f3e339478dec958f92fddbc551f295c992038a3",
-    "models/phish-tiny/MODEL_CARD.md": "e5381b3714d3e96470045b1169fb8f073f427188c9cf3874e40700e21b150d7b",
-    "tests/fixtures/ai-vectors.json": "42e882acf4f664ee0445e2cf444527e1b00b5ddbfbd14c3fcb6501c9d8de80fe",
-    "tests/fixtures/ai-regressions.jsonl": "373c154a3fac6d28e8c8b1d2caae4eb7dd57dbef50ec6729dfa911b03cff47fd",
-    "tests/fixtures/ai-input-format.jsonl": "ec8abc78d66001f82a2a20a339ab39bfacc8e4f8ecb9ae27891fbdee9dcbd001",
-    "tests/fixtures/ai-handwritten.jsonl": "75b2b976bb5d7680363d5e7a1c7baa6e537a4db65e3329949d5c2c65b71f5cb5"
+    "models/phish-tiny/model.bin": {
+      "from": "model/phish-tiny/model.bin",
+      "sha256": "c02a6ee8229d7141b2828a7ed8327cc98ba64e902378d3ca4decbb23a467e1f1"
+    },
+    "models/phish-tiny/model.json": {
+      "from": "model/phish-tiny/model.json",
+      "sha256": "867c90883a905f33b2268ebc3d73fdc301533be17e9196022b8c8d2e9338ea35"
+    },
+    "models/phish-tiny/vocab.txt": {
+      "from": "model/phish-tiny/vocab.txt",
+      "sha256": "07eced375cec144d27c900241f3e339478dec958f92fddbc551f295c992038a3"
+    },
+    "models/phish-tiny/MODEL_CARD.md": {
+      "from": "model/phish-tiny/MODEL_CARD.md",
+      "sha256": "e5381b3714d3e96470045b1169fb8f073f427188c9cf3874e40700e21b150d7b"
+    },
+    "tests/fixtures/ai-vectors.json": {
+      "from": "model/reference/ai-vectors.json",
+      "sha256": "41d02ea0de2dc71f4fb773e04e8c0da11ce9c6ae4d56a21b00a8153770056f69"
+    },
+    "tests/fixtures/ai-input-format.jsonl": {
+      "from": "model/reference/input-format.jsonl",
+      "sha256": "607d8126ff3c238ee727464d41cd561a234d6201f773f96449138a4ec24d56df"
+    }
   }
 }

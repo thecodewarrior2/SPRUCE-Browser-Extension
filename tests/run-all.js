@@ -20,6 +20,11 @@ const TIMEOUT_S = Number(process.env.SUITE_TIMEOUT) || 240;
 const filters = process.argv.slice(2);
 
 fs.mkdirSync(LOGS, { recursive: true });
+// EXPERIMENT (llm_testing): the AI model's files (not in the repository) from TinyPhishLLM, at the commit
+// models/phish-tiny/SOURCE.json pins, before any suite loads the extension from this folder.
+if (!process.env.EXT && fs.existsSync(path.join(__dirname, '..', 'models', 'phish-tiny', 'SOURCE.json'))) {
+    require('child_process').execFileSync(process.execPath, [path.join(__dirname, '..', 'tools', 'fetch-model.js'), '--quiet'], { stdio: 'inherit' });
+}
 let timings = {};
 try { timings = JSON.parse(fs.readFileSync(TIMINGS, 'utf8')); } catch (e) { /* first run */ }
 

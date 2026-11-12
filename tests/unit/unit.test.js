@@ -1703,6 +1703,9 @@ test('the Link Inspector never follows a link into a private network', async () 
 // vouches for itself.
 // ---------------------------------------------------------------------------
 const AI_DIR = path.join(EXT, 'models', 'phish-tiny');
+// The model's files aren't in the repository: from TinyPhishLLM at the commit SOURCE.json pins (as run-all.js
+// does), so this file also runs on its own (node --test unit/unit.test.js).
+require('child_process').execFileSync(process.execPath, [path.join(EXT, 'tools', 'fetch-model.js'), '--quiet'], { stdio: 'inherit' });
 const fileFetch = async (u) => {
   const p = path.join(EXT, String(u).replace(/^.*?(models\/)/, '$1'));
   return new Response(fs.readFileSync(p), { status: 200 });
@@ -1710,17 +1713,73 @@ const fileFetch = async (u) => {
 const aiBg = loadBackground({ enableAiAnalysis: true }, { fetch: fileFetch, patchChrome: (c) => { c.runtime.getURL = (p) => 'chrome-extension://abc/' + p; } });
 const AI = (code) => vm.runInContext(code, aiBg);
 
-// The model comes from TinyPhishLLM, its own repository (tools/sync-model.js): its files must be the ones synced,
-// and this extension must build the model's input exactly as the model was trained.
-test('AI model: the files are TinyPhishLLM\'s, as synced (models/phish-tiny/SOURCE.json)', () => {
-  const src = JSON.parse(fs.readFileSync(path.join(EXT, 'models', 'phish-tiny', 'SOURCE.json'), 'utf8'));
-  const manifest = JSON.parse(fs.readFileSync(path.join(EXT, 'models', 'phish-tiny', 'model.json'), 'utf8'));
+// The model comes from TinyPhishLLM, its own public repository: SOURCE.json pins one commit and each file's
+// SHA-256 (tools/sync-model.js), tools/build.js adds the files to every package (tools/fetch-model.js), and this
+// extension must build the model's input exactly as the model was trained.
+const sha256 = (buf) => require('crypto').createHash('sha256').update(buf).digest('hex');
+test('AI model: SOURCE.json pins one commit of TinyPhishLLM; the files here are the pinned ones', () => {
+  const src = JSON.parse(fs.readFileSync(path.join(AI_DIR, 'SOURCE.json'), 'utf8'));
+  const manifest = JSON.parse(fs.readFileSync(path.join(AI_DIR, 'model.json'), 'utf8'));
   assert.equal(src.model, `${manifest.name} ${manifest.version}`);
+  assert.match(src.repository, /^https:\/\/github\.com\/thecodewarrior2\/TinyPhishLLM$/i);
   assert.match(src.commit, /^[0-9a-f]{40}$/);
-  assert.ok(Object.keys(src.files).length >= 8);
-  for (const [f, h] of Object.entries(src.files)) {
-    const now = require('crypto').createHash('sha256').update(fs.readFileSync(path.join(EXT, f))).digest('hex');
-    assert.equal(now, h, `${f} differs from TinyPhishLLM's: change the model there and run tools/sync-model.js`);
+  const { FILES } = require(path.join(EXT, 'tools', 'sync-model.js'));
+  assert.deepEqual(Object.keys(src.files).sort(), FILES.map(([, to]) => to).sort());
+  for (const [f, pin] of Object.entries(src.files)) {
+    assert.equal(pin.from, FILES.find(([, to]) => to === f)[0], f);
+    assert.equal(sha256(fs.readFileSync(path.join(EXT, f))), pin.sha256, `${f} differs from TinyPhishLLM's: change the model there and run tools/sync-model.js`);
+  }
+});
+
+test('AI model: its files are not in the repository; every package gets them, checked (tools/build.js)', () => {
+  const tracked = require('child_process').execFileSync('git', ['ls-files', 'models'], { cwd: EXT }).toString().trim().split('\n');
+  assert.deepEqual(tracked, ['models/phish-tiny/SOURCE.json'], 'only the pin is committed');
+  const { addModel } = require(path.join(EXT, 'tools', 'build.js'));
+  const dir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'spruce-pkg-'));
+  try {
+    assert.equal(addModel(dir), null, 'a package without SOURCE.json (a branch without the AI model) is left as it is');
+    fs.mkdirSync(path.join(dir, 'models', 'phish-tiny'), { recursive: true });
+    fs.copyFileSync(path.join(AI_DIR, 'SOURCE.json'), path.join(dir, 'models', 'phish-tiny', 'SOURCE.json'));
+    const src = addModel(dir);
+    for (const [f, pin] of Object.entries(src.files).filter(([f]) => f.startsWith('models/'))) assert.equal(sha256(fs.readFileSync(path.join(dir, f))), pin.sha256, f);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('tools/fetch-model.js: downloads the pinned files, checks each SHA-256, never keeps a different file', async () => {
+  const { fetchModel, plan } = require(path.join(EXT, 'tools', 'fetch-model.js'));
+  const commit = 'a'.repeat(40);
+  const good = { 'model/phish-tiny/model.json': Buffer.from('{"version":"9.9.9"}'), 'model/phish-tiny/vocab.txt': Buffer.from('[PAD]\n[UNK]\n') };
+  const served = { ...good };
+  let requests = 0;
+  const server = require('http').createServer((req, res) => {
+    requests++;
+    const key = req.url.replace(`/${commit}/`, '');
+    if (!req.url.startsWith(`/${commit}/`) || !served[key]) { res.writeHead(404); return res.end(); }
+    res.writeHead(200); res.end(served[key]);
+  });
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const dir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'spruce-fetch-'));
+  const source = { repository: 'https://github.com/thecodewarrior2/TinyPhishLLM', commit, files: {
+    'models/phish-tiny/model.json': { from: 'model/phish-tiny/model.json', sha256: sha256(good['model/phish-tiny/model.json']) },
+    'models/phish-tiny/vocab.txt': { from: 'model/phish-tiny/vocab.txt', sha256: sha256(good['model/phish-tiny/vocab.txt']) },
+    'tests/fixtures/ai-vectors.json': { from: 'model/reference/ai-vectors.json', sha256: 'b'.repeat(64) } } };
+  try {
+    const r = await fetchModel({ base, source, root: dir, quiet: true });
+    assert.deepEqual([r.fetched, r.files], [2, 2], 'only the files under models/');
+    requests = 0;
+    assert.equal((await fetchModel({ base, source, root: dir, quiet: true })).fetched, 0);
+    assert.equal(requests, 0, 'files already right are not downloaded again');
+    fs.writeFileSync(path.join(dir, 'models/phish-tiny/model.json'), 'edited');
+    await assert.rejects(fetchModel({ source, root: dir, check: true, quiet: true }), /isn't TinyPhishLLM's/);
+    served['model/phish-tiny/model.json'] = Buffer.from('{"version":"6.6.6"}');
+    await assert.rejects(fetchModel({ base, source, root: dir, quiet: true }), /has SHA-256 [0-9a-f]{64}, not [0-9a-f]{64}: not used/);
+    assert.equal(fs.readFileSync(path.join(dir, 'models/phish-tiny/model.json'), 'utf8'), 'edited', 'the wrong download wasn\'t written');
+    assert.throws(() => plan({ ...source, commit: 'main' }), /pins no commit/);
+    assert.throws(() => plan({ ...source, repository: 'https://example.com/x/y' }), /isn't a GitHub repository/);
+  } finally {
+    server.close();
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 });
 
@@ -1739,13 +1798,16 @@ test('AI model: the JavaScript tokenizer and network give PyTorch\'s own answers
   }
 });
 
-test('AI model: still right on the hand-written emails (at least 90%), and explains itself', async () => {
+// Made-up emails, clear either way (TinyPhishLLM_Private_Training checks the model on its check sets; here
+// the extension shows it runs the model and explains it).
+const AI_MADE_UP = [{"name": "ceo-wire", "label": 1, "facts": {"subject": "Urgent request", "senderName": "Superintendent Example", "senderAddress": "madeup.superintendent@gmail.com", "org": "outside", "auth": {"dmarc": "pass"}, "links": [], "bodyText": "Are you at your desk? I need you to process a wire transfer to a new vendor today. It is confidential, so don't discuss it with anyone. Reply with your direct number and I will send the account details. Sent from my iPhone"}}, {"name": "password-expiry", "label": 1, "facts": {"subject": "Your password expires today", "senderName": "IT Help Desk", "senderAddress": "helpdesk@maple-schools-support.example", "org": "outside", "auth": {"dmarc": "fail"}, "links": [{"text": "Keep my password", "host": "maple-schools-support.example", "destHost": "login-verify.example", "finding": "a sign-in page on a site registered 2 days ago"}], "bodyText": "Dear user, your password will expire in 2 hours. Click below to keep your current password or your account will be locked."}}, {"name": "colleague-note", "label": 0, "facts": {"subject": "Friday's assembly", "senderName": "Pat Example", "senderAddress": "madeup.pat@maple-schools.example", "org": "inside", "auth": {"dmarc": "pass"}, "links": [], "bodyText": "Hi, the assembly on Friday moves to 10:30 because of the bus schedule. Please bring your class to the gym a few minutes early. Thanks, Pat"}}, {"name": "library-reminder", "label": 0, "facts": {"subject": "Library books due next week", "senderName": "Maple County Library", "senderAddress": "notices@maplecountylibrary.example", "org": "outside", "auth": {"dmarc": "pass"}, "links": [{"text": "View your account", "host": "maplecountylibrary.example", "destHost": "", "finding": ""}], "bodyText": "This is a reminder that 2 items are due on November 19. You can renew them online or at any branch. Thank you for using the library."}}];
+test('AI model: right on clear made-up emails, and explains itself', async () => {
   const model = await AI('loadPhishModel()');
-  const rows = fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'ai-handwritten.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l));
-  let right = 0;
-  for (const r of rows) if ((model.analyze(r.facts).probability >= 0.5) === (r.label === 1)) right++;
-  assert.ok(right / rows.length >= 0.9, `${right}/${rows.length}`);
-  const wire = model.analyze(rows.find(r => r.name === 'ceo-wire').facts);
+  for (const r of AI_MADE_UP) {
+    const p = model.analyze(r.facts).probability;
+    assert.ok(r.label === 1 ? p > 0.9 : p < 0.1, `${r.name}: ${(p * 100).toFixed(1)}%`);
+  }
+  const wire = model.analyze(AI_MADE_UP.find(r => r.name === 'ceo-wire').facts);
   // The wire request is among the sentences it gives as reasons (the top ones are near-equal BEC signs).
   assert.ok(wire.probability > 0.9 && wire.reasons.some(x => /wire/.test(x.sentence)), JSON.stringify(wire.reasons));
 });
@@ -1862,15 +1924,8 @@ test('llm_testing: the sender history is data, not settings (writing it never cl
   for (const k of ['seenSenders', 'seenSendersSince']) assert.ok(S(`NON_CONFIG_KEYS.has(${JSON.stringify(k)})`), k);
 });
 
-test('AI model: emails earlier versions got wrong stay right (ai-regressions.jsonl)', async () => {
-  const model = await AI('loadPhishModel()');
-  const rows = fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'ai-regressions.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l));
-  assert.ok(rows.length >= 5);
-  for (const r of rows) {
-    const p = model.analyze(r.facts).probability;
-    assert.equal(p >= 0.5, r.label === 1, `${r.name}: ${(p * 100).toFixed(1)}%`);
-  }
-  // Tags every outside email carries say nothing, and the user's organization is part of the input.
+test('AI model input: tags every outside email carries say nothing; the user\'s organization is part of it', () => {
+  // (The emails earlier versions got wrong are checked in TinyPhishLLM_Private_Training, with the model.)
   assert.equal(AI(`stripExternalTag('[EXTERNAL] Re: [EXTERNAL] Hello')`), 'Re: [EXTERNAL] Hello', 'only leading tags are removed');
   assert.equal(AI(`stripExternalTag('[EXTERNAL] [EXT] CAUTION: Notice')`), 'Notice');
   assert.match(AI(`modelInputText({ subject: 's', senderName: 'n', senderAddress: 'a@x.example', org: 'inside', bodyText: 't' })`), /at x\.example \(your organization\)/);

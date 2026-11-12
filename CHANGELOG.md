@@ -1,5 +1,33 @@
 # Changelog
 
+## 5.94.15 — EXPERIMENT (branch `llm_testing`): the build takes the AI model from TinyPhishLLM
+
+Not for release. Nothing in how emails are judged changes: the model is still phish-tiny 0.13.0, byte for
+byte. TinyPhishLLM is now the model's public home and holds only the model; its training (scripts,
+published examples, check sets) moved to a private repository, TinyPhishLLM_Private_Training.
+
+- **The model's files are no longer in this repository.** `models/phish-tiny/SOURCE.json` pins one
+  TinyPhishLLM commit (`68f8dd6`) and each file's SHA-256; **`tools/build.js` adds the model to every
+  package** from there (**`tools/fetch-model.js`**: this checkout's copy when it is the pinned one,
+  otherwise downloaded) and stops if a file is missing or different. The tests run it first
+  (`tests/run-all.js`, `tests/unit/unit.test.js`; the Firefox suite builds with `tools/build.js`);
+  `--from <TinyPhishLLM folder>` works offline. Nothing is downloaded by the extension itself.
+- **`tools/sync-model.js`** pins a model after TinyPhishLLM's `tools/check.js`, a check that the commit is on
+  TinyPhishLLM's main branch, and the input-format check; it copies only the two references the tests use
+  (`tests/fixtures/ai-vectors.json`, `ai-input-format.jsonl`), both made of made-up emails now.
+- **Tests:** the pin; the files match it; only `SOURCE.json` is committed; a package gets the model
+  (`addModel`); `fetch-model.js` downloads, checks and never keeps a different file. The hand-written and
+  regression checks moved to the private training repository (`training/check-model.py`) with their
+  emails; here, four made-up emails (two scams over 90%, two genuine under 10%) and the explanation of the
+  CEO wire request.
+- **The history of this branch was rewritten** (2026-11-12, as the maintainer asked): the published
+  examples and check sets (`tools/ai/real-world.jsonl`, `eval-*.jsonl`, `tests/fixtures/ai-regressions.jsonl`,
+  `ai-handwritten.jsonl`, `ai-input-format.jsonl`) are gone from every commit, a statement code kept from
+  a real email is replaced, and made-up addresses at real domains became `madeup.…`. The three commits that
+  only added examples are gone; the older commits' AI tests no longer run.
+- `CLAUDE.md`: never commit the model's files or any training example.
+
+
 ## 5.94.14 — EXPERIMENT (branch `llm_testing`): the AI model comes from TinyPhishLLM; phish-tiny 0.13.0
 
 Not for release. The model moves to its own repository, TinyPhishLLM, which S.P.R.U.C.E+ Mail Protection

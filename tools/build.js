@@ -149,10 +149,29 @@ function checkPinnedFiles(dir) {
     }
 }
 
+// EXPERIMENT (llm_testing): the AI model (phish-tiny) isn't in the repository. models/phish-tiny/SOURCE.json
+// pins one commit of TinyPhishLLM, the model's own public repository, and each file's SHA-256, and every
+// package gets the files from there (tools/fetch-model.js: this checkout's copy when it is the pinned one,
+// else downloaded). A missing or different file stops the build. Packages without SOURCE.json (the
+// branches without the AI model) are left as they are.
+function addModel(dir) {
+    const pin = path.join(dir, 'models', 'phish-tiny', 'SOURCE.json');
+    if (!fs.existsSync(pin)) return null;
+    execFileSync(process.execPath, [path.join(ROOT, 'tools', 'fetch-model.js'), '--pin', pin, '--root', dir, '--quiet'], { stdio: ['ignore', 'inherit', 'inherit'] });
+    const source = JSON.parse(fs.readFileSync(pin, 'utf8'));
+    const crypto = require('crypto');
+    for (const [to, f] of Object.entries(source.files).filter(([to]) => to.startsWith('models/'))) {
+        const got = crypto.createHash('sha256').update(fs.readFileSync(path.join(dir, to))).digest('hex');
+        if (got !== f.sha256) throw new Error(`${to} is not TinyPhishLLM's at ${source.commit.slice(0, 7)} (SHA-256 ${got}).`);
+    }
+    return source;
+}
+
 function build(browsers, workingTree) {
     const src = sourceFiles(workingTree);
     try {
         checkPinnedFiles(src);
+        const model = addModel(src);
         const chromeManifest = JSON.parse(fs.readFileSync(path.join(src, 'manifest.json'), 'utf8'));
         const version = chromeManifest.version;
         fs.mkdirSync(OUT, { recursive: true });
@@ -190,7 +209,7 @@ function build(browsers, workingTree) {
                 made.push(`build/spruce-${version}-firefox.zip`);
             }
         }
-        return { version, made };
+        return { version, made, model: model && `${model.model} (TinyPhishLLM ${model.commit.slice(0, 7)})` };
     } finally {
         fs.rmSync(src, { recursive: true, force: true });
     }
@@ -210,8 +229,8 @@ if (require.main === module) {
         const dirty = execFileSync('git', ['status', '--porcelain', '--', '.', ':!build'], { cwd: ROOT }).toString().trim();
         if (dirty) console.error('Note: uncommitted changes are not included (built from the last commit; --working-tree includes them).');
     }
-    const { version, made } = build(browsers.length ? browsers : Object.keys(BROWSERS), workingTree);
-    console.log(`S.P.R.U.C.E+ ${version}${workingTree ? ' (working tree)' : ''}:\n  ` + made.join('\n  '));
+    const { version, made, model } = build(browsers.length ? browsers : Object.keys(BROWSERS), workingTree);
+    console.log(`S.P.R.U.C.E+ ${version}${workingTree ? ' (working tree)' : ''}${model ? `, AI model ${model}` : ''}:\n  ` + made.join('\n  '));
 }
 
-module.exports = { BROWSERS, manifestFor, build, PINNED_FILES, checkPinnedFiles };
+module.exports = { BROWSERS, manifestFor, build, PINNED_FILES, checkPinnedFiles, addModel };

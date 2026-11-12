@@ -6,6 +6,10 @@ tests/.firefox/
 # The private key that signs releases (never commit it), and built packages.
 *.pem
 build/
-# EXPERIMENT (llm_testing): training moved to TinyPhishLLM; an old checkout's generated training data
+# EXPERIMENT (llm_testing): training moved to TinyPhishLLM_Private_Training; an old checkout's generated training data
 # (tools/ai/data/) may still be here, and examples from real mail must never be committed.
 tools/ai/data/
+# EXPERIMENT (llm_testing): the AI model's files come from TinyPhishLLM at the commit SOURCE.json pins
+# (tools/fetch-model.js; tools/build.js adds them to every package): never committed here.
+models/phish-tiny/*
+!models/phish-tiny/SOURCE.json

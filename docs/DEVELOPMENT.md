@@ -92,8 +92,17 @@ node tools/build.js
 ```
 
 It builds from the last commit (add `--working-tree` to include uncommitted changes, for testing) and
-writes `build/chrome/`, `build/firefox/`, `build/safari/extension/` and the zips listed below. What
-differs between the browsers is decided in three places only:
+writes `build/chrome/`, `build/firefox/`, `build/safari/extension/` and the zips listed below.
+
+**The AI model (branch `llm_testing` only).** Its files are not in the repository: `models/phish-tiny/SOURCE.json`
+pins one commit of TinyPhishLLM, the model's own public repository, and each file's SHA-256, and the build
+adds the files to every package from there (`tools/fetch-model.js`; this checkout's copy when it is the
+pinned one, otherwise downloaded from `raw.githubusercontent.com`). A missing or different file stops the
+build. The tests run `tools/fetch-model.js` first; offline, with a TinyPhishLLM checkout at that commit:
+`node tools/fetch-model.js --from ../TinyPhishLLM`. A new model: train it in the private
+TinyPhishLLM_Private_Training, publish it to TinyPhishLLM, then `node tools/sync-model.js ../TinyPhishLLM`.
+
+What differs between the browsers is decided in three places only:
 
 - **The manifest.** The top-level `manifest.json` is the Chrome one; the build makes the Firefox and
   Safari manifests from it (`BROWSERS` in `tools/build.js`: no `key`, a background page instead of the
@@ -194,7 +203,7 @@ has the same extension ID and managed policies reach it.
 | `theme.css` / `theme.js` | Design tokens and light/dark appearance (WCAG 2.1 AA) |
 | `lib/` | Bundled pdf.js (Apache-2.0), used only for PDF attachments. Pinned: `tools/build.js` refuses to build unless both files match `PINNED_FILES` (SHA-256 of the pdfjs-dist release). To update it, copy `build/pdf.min.mjs` and `build/pdf.worker.min.mjs` from the new pdfjs-dist package (npm), and put the version and new hashes in `PINNED_FILES` |
 | `icons/` | Toolbar and store icons |
-| `tools/` | `build.js` (every browser's package), `build-safari.sh` (the Safari app, on a Mac), `refresh-snapshot.js` (the bundled shortener list and company endings; run before a release) |
+| `tools/` | `build.js` (every browser's package), `build-safari.sh` (the Safari app, on a Mac), `refresh-snapshot.js` (the bundled shortener list and company endings; run before a release); on `llm_testing`: `sync-model.js` (pins a model of TinyPhishLLM) and `fetch-model.js` (gets it: the build and the tests run it) |
 | `docs/` | Features, admin guide, architecture, this guide, install steps for test versions, policy examples |
 | `store/` | Chrome Web Store listing text and images, the script that makes the images, and `WHATS-NEW.md` (the plain-language notes for each store release) |
 | `branding/` | Logos, icons and the donation QR code (PNG and SVG) |
