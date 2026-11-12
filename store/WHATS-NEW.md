@@ -11,11 +11,14 @@
 Short notes on each version in the browser stores. Every detail is in the
 [full changelog](../CHANGELOG.md).
 
-## 5.95
+## 5.96
 
 Changes since 5.91.
 
 **Stronger against phishing**
+- A scam that uses a colleague's name for its reply address, so your answer goes to someone outside
+  your organization, is now pointed out. So is an email that copies in a colleague at an address that
+  imitates your organization's.
 - On sites where anyone can have their own page (such as github.io, pages.dev or blogspot.com), each page
   now counts as its own site: a link whose text shows one person's page but leads to someone else's is
   pointed out, and a company's name used there isn't taken for the company's.
@@ -25,6 +28,8 @@ Changes since 5.91.
   forwarding service; only forwarding by Google or by your own organization still counts.
 
 **Fewer false alarms**
+- Calendar invitations and other emails addressed to several people are no longer taken for a scam
+  that disguises who an email is addressed to.
 - A legal notice about a company, such as a class-action settlement administrator writing about an
   Amazon settlement, is no longer marked dangerous or moved to Spam because its sender's name mentions
   the company. It gets a caution instead, since fake settlement notices exist too.

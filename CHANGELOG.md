@@ -1,5 +1,37 @@
 # Changelog
 
+## 5.96 — The "To" line person by person; colleagues' names in Reply-To, Cc and To
+
+Two changes, each with its own switch (`CHANGES_5_96` in `shared.js`: set one to `false` and rebuild, and
+that part works as in 5.95); every line of code a change touches carries its tag. Both came from
+S.P.R.U.C.E Mail Protection Service (0.5.12 to 0.5.14), which uses the same checks:
+
+- **[5.96-1] `toLineByPerson`: the "To" line is read person by person.** The check for a disguised "To"
+  line (a display name showing an address other than the real one) read the whole line as one person, so
+  a Google Calendar invitation, whose "To" line lists the guest bare and then the organizer with a name
+  (`guest@district.org, Organizer Name <organizer@vendor.example>`), was taken for a name ("guest@…,
+  Organizer Name") showing another address: 2 points, and with a new outside sender, a caution. The line
+  is now split into its people (`addressList`: at the commas outside quotes and `<…>`) and each is judged
+  alone. The address a name shows is read as mail programs write it: Outlook's `'ann@x.org' <ann@x.org>`,
+  a name with the address in it ("Ann (ann@x.org)"), "mailto:", a +tag, encoded words. Another address of
+  the same domain, or the same name in another domain (an alias, a group, a domain change), is a weak sign
+  (1); another address in another domain is still a sign (2), and now names both domains. Off: the whole
+  line as one, as 5.95.
+- **[5.96-2] `colleagueLines`: colleagues' names in Reply-To, Cc and To.** The colleague-name check
+  (names learned from your organization's senders, kept as one-way hashes) looked only at the sender's
+  name. It now looks at the other address lines too (opened emails, and read emails in the list, setting
+  **Catch look-alike senders**): **Reply-To** under a colleague's name going to an outside address, so
+  replies go to someone else (3, amber; the sign says when the domain imitates yours); a colleague
+  **copied in** (Cc or To) at an outside address (1: staff are sometimes copied at a personal address) or
+  at an address that imitates your organization's domain (3: the "I've copied our superintendent"
+  trick; `ownDomainLookalike`: its name under another ending, a hyphen more or less, one letter away,
+  look-alike characters, or something added). Never for your own domain's addresses, nor the sender's own
+  address. Only the fingerprint of each name and its domain are kept with the email's header signs
+  (`addressLinePeople`; never a name or an address), and they are judged against the colleagues' names
+  whenever the email is shown (`colleagueLineSigns`). `HEADER_SIGNS_VERSION` is 7, so results saved by
+  5.95 are worked out again. Off: those lines aren't looked at, as 5.95.
+- Tests: two unit tests (`tests/unit/unit.test.js`, made-up addresses only).
+
 ## 5.95 — Sites on shared hosting, Word attachments, forwarded mail
 
 Four changes from a review of the extension's checks. Three have their own switch (`CHANGES_5_95` in

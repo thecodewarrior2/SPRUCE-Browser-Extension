@@ -1212,8 +1212,8 @@ test('QR scanner: Chrome asks its offscreen document; Firefox and Safari call th
 // shared.js alone, with some switches turned off (as a maintainer rolling one back would).
 function loadShared(off = []) {
   let src = fs.readFileSync(path.join(EXT, 'shared.js'), 'utf8');
-  // The switches: 5.90's COMPANY_MATCHING and 5.95's CHANGES_5_95.
-  const decls = [/const COMPANY_MATCHING = Object\.freeze\(\{([^}]*)\}\);/, /const CHANGES_5_95 = Object\.freeze\(\{([^}]*)\}\);/];
+  // The switches: 5.90's COMPANY_MATCHING, 5.95's CHANGES_5_95 and 5.96's CHANGES_5_96.
+  const decls = [/const COMPANY_MATCHING = Object\.freeze\(\{([^}]*)\}\);/, /const CHANGES_5_95 = Object\.freeze\(\{([^}]*)\}\);/, /const CHANGES_5_96 = Object\.freeze\(\{([^}]*)\}\);/];
   for (const decl of decls) assert.ok(decl.test(src), `switches found: ${decl}`);
   for (const k of off) {
     const decl = decls.find(d => new RegExp(`\\b${k}: true\\b`).test(src.match(d)[1]));
@@ -1700,7 +1700,7 @@ test('[5.95-4] ARC: a failed DMARC is softened only by a chain Google or your ow
   const Off = loadBackground({}, { patchSource: (f, t) => f === 'shared.js' ? t.replace('arcKnownForwarders: true', 'arcKnownForwarders: false') : t });
   const O = (c) => vm.runInContext(c, Off);
   assert.equal(weight(mail('relay-anyone.example'), 'me@school.org', O), 3, 'switched off: any intact chain, as before');
-  assert.equal(S('HEADER_SIGNS_VERSION'), 6, 'results worked out by 5.94 are worked out again');
+  assert.ok(S('HEADER_SIGNS_VERSION') >= 6, 'results worked out by 5.94 are worked out again');
 });
 
 test('[5.95-2] Word documents: links (hyperlinks and HYPERLINK fields) and pictures read on the device, with limits', async () => {
@@ -1749,4 +1749,65 @@ test('[5.95-2] Word documents: links (hyperlinks and HYPERLINK fields) and pictu
   assert.equal(R('CHANGES_5_95.wordAttachments'), false);
   const content = fs.readFileSync(path.join(EXT, 'content.js'), 'utf8');
   assert.match(content, /CHANGES_5_95\.wordAttachments && \(/, 'attachmentKind asks the switch');
+});
+
+// --- 5.96: each change on its own switch (CHANGES_5_96 in shared.js) ----------------------------------
+// Every address and name here is made up (maple-schools.example).
+const ORG96 = 'maple-schools.example', ME96 = `sam.okafor@${ORG96}`;
+const rawWithTo = (lines) => ['From: "Front Office" <office@lakeview-events.example>', ...lines, 'Subject: Spring open house', 'Message-ID: <x1@lakeview-events.example>', '', 'Hello.'].join('\r\n');
+
+test('[5.96-1] the To line person by person, the address a name shows read as written; off: as in 5.95', () => {
+  const R = loadShared();
+  const toSign = (to, Rx = R) => Rx(`headerAnomalies(${JSON.stringify(rawWithTo([`To: ${to}`]))}, ${JSON.stringify(ME96)}, {})`).find(s => /“To” line/.test(s.text));
+  // A calendar invitation's To line (the guest bare, the organizer with a name, folded): two people.
+  const invite = `${ME96},\r\n\tJordan Lee <jordan.lee@lakeview-events.example>`;
+  assert.equal(toSign(invite), undefined);
+  assert.deepEqual(R(`addressList(${JSON.stringify(`${ME96}, Jordan Lee <jordan.lee@lakeview-events.example>, "Lee, Pat" <pat.lee@lakeview-events.example>`)})`),
+    [ME96, 'Jordan Lee <jordan.lee@lakeview-events.example>', '"Lee, Pat" <pat.lee@lakeview-events.example>']);
+  // The same mailbox, as mail programs write it: no sign.
+  for (const to of [`"${ME96}" <${ME96}>`, `'${ME96}' <${ME96}>`, `"Sam Okafor (${ME96})" <${ME96}>`, `"mailto:${ME96}" <${ME96}>`, `"sam.okafor+events@${ORG96}" <${ME96}>`]) assert.equal(toSign(to), undefined, to);
+  // Same domain (an alias, a group): weak; another domain: the trick.
+  assert.equal(toSign(`"all-staff@${ORG96}" <${ME96}>`).weight, 1);
+  const trick = toSign(`Jordan Lee <jordan.lee@lakeview-events.example>, "${ME96}" <list-7781@bulk-sender.example>`);
+  assert.equal(trick.weight, 2);
+  assert.equal(trick.text, 'Its “To” line shows an address at maple-schools.example but is really addressed to one at bulk-sender.example.');
+  // Off: the whole line as one, as 5.95 read it (the invitation counted).
+  const Off = loadShared(['toLineByPerson']);
+  assert.equal(Off('CHANGES_5_96.toLineByPerson'), false);
+  assert.equal(toSign(invite, Off).weight, 2);
+});
+
+test('[5.96-2] colleagues\' names in Reply-To, Cc and To (kept as fingerprints and domains only); off: not looked at', () => {
+  const R = loadShared();
+  R(`var __c = new Set(['Dana Morales', 'Okafor, Sam'].map(colleagueNameHash))`);
+  const signsFor = (lines, Rx = R, from = 'ap@harbor-supply-invoices.example') => {
+    const people = Rx(`addressLinePeople(parseRawHeaders(${JSON.stringify(rawWithTo(lines))}), ${JSON.stringify(from)})`);
+    // Kept: no name and no address, only the fingerprint and the domain.
+    assert.ok(!/morales|okafor|freemail\.example>|@/i.test(JSON.stringify(people).replace(/"domain":"[^"]*"/g, '')), JSON.stringify(people));
+    Rx(`var __p = ${JSON.stringify(people)}`);
+    return Rx(`colleagueLineSigns(__p, ${JSON.stringify(ORG96)}, typeof __c === 'undefined' ? new Set() : __c, '')`);
+  };
+  let s = signsFor([`To: ${ME96}`, 'Reply-To: Dana Morales <dana.morales.office@freemail.example>']);
+  assert.deepEqual(s.map(x => [x.kind, x.weight]), [['colleague-reply-to', 3]]);
+  assert.equal(s[0].text, 'Replies go to an outside address (an address at freemail.example) under the name of someone in your organization.');
+  s = signsFor([`To: ${ME96}`, 'Cc: Dana Morales <dana.m@freemail.example>']);
+  assert.deepEqual(s.map(x => [x.kind, x.weight]), [['colleague-copied-outside', 1]]);
+  s = signsFor([`To: ${ME96}, "Morales, Dana" <dana.morales@maple-schools-k12.example>`]);
+  assert.deepEqual(s.map(x => [x.kind, x.weight]), [['colleague-copied-lookalike', 3]]);
+  // Not: colleagues at their own addresses, strangers, the sender's own address in Reply-To.
+  assert.deepEqual(signsFor([`To: Sam Okafor <${ME96}>`, `Cc: Dana Morales <dana.morales@${ORG96}>`]), []);
+  assert.deepEqual(signsFor([`To: ${ME96}`, 'Reply-To: Jordan Lee <jordan.lee@freemail.example>']), []);
+  assert.deepEqual(signsFor([`To: ${ME96}`, 'Reply-To: Dana Morales <dana.morales@freemail.example>'], R, 'dana.morales@freemail.example'), []);
+  // What imitates the organization's domain.
+  for (const d of ['maple-schools.org', 'mapleschools.example', 'maple-schoo1s.example']) assert.equal(R(`ownDomainLookalike(${JSON.stringify(d)}, ${JSON.stringify(ORG96)})`), true, d);
+  for (const d of ['freemail.example', 'maple.example', `sub.${ORG96}`]) assert.equal(R(`ownDomainLookalike(${JSON.stringify(d)}, ${JSON.stringify(ORG96)})`), false, d);
+  // Off: nothing kept, nothing judged.
+  const Off = loadShared(['colleagueLines']);
+  Off(`var __c = new Set(['Dana Morales'].map(colleagueNameHash))`);
+  assert.deepEqual(signsFor([`To: ${ME96}`, 'Reply-To: Dana Morales <dana.morales.office@freemail.example>'], Off), []);
+  // The webmail page keeps them with the header signs and asks for the signs where the email is shown.
+  const content = fs.readFileSync(path.join(EXT, 'content.js'), 'utf8');
+  assert.match(content, /const pl = CHANGES_5_96\.colleagueLines \? addressLinePeople\(headers, parsed && parsed\.address\) : \[\];/);
+  assert.equal((content.match(/colleagueLineSigns\((info|st\.info)\.pl, /g) || []).length, 2, 'the inbox list and the opened email');
+  assert.equal(R('HEADER_SIGNS_VERSION'), 7, 'results saved by 5.95 are worked out again');
 });

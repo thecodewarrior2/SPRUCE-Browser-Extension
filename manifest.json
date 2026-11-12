@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "S.P.R.U.C.E+",
-  "version": "5.95",
+  "version": "5.96",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAo7NhlZzYX6/vPOfI44XoeVyZmvGTXm/Tm2YR6jDcJP6wGR2LNqZUYF5RiiKGyfDiCBhGqHrXDm+JPNvHZhDJ2zRwOXwGNvCxJjeOkXQ5+C0c5u3SyGj/ICarRHUCCqYT5MTXsUj7bYecoHQNJnj/FJhhSbw/bWoRhdJYZ4J2Zp4YEyDyQSeAv3WHBfDp6IF+ebOwitrqcxo9v+0mi1SCYlzhTt0v8cJrulYbRa/p02XswSXbuud+C9Vtxt/BX2Y1KcD8G8fry9PmHaTlqnnoymnTFmtt35OayF1LPSDp/V63wn/cqOy73r1HvmcPOupoRVyQ3kd/oOfWG5fDPop9mwIDAQAB",
   "description": "Helps you spot phishing and scams in Gmail and other webmail: links, senders, QR codes and attachments.",
   "permissions": [

@@ -2456,7 +2456,10 @@ function messageInfo(msgId) {
             const parsed = parseSenderAddress(fm ? fm[1] : ((from.match(EMAIL_IN_TEXT_RE) || [])[0] || from));
             const receiver = MAIL.headers.receiver || {};
             const an = headerAnomalies(h.raw, accountAddress(), receiver);
-            const info = { fh: parsed ? addressFingerprint(parsed.address) : '', ip: deliveringIp(headers, receiver.host) || '', an, v: HEADER_SIGNS_VERSION, t: Date.now() };
+            // [5.96-2] The people of Reply-To, Cc and To, as name fingerprints and domains only (never a name
+            // or an address), judged against the colleagues' names whenever the email is shown.
+            const pl = CHANGES_5_96.colleagueLines ? addressLinePeople(headers, parsed && parsed.address) : [];
+            const info = { fh: parsed ? addressFingerprint(parsed.address) : '', ip: deliveringIp(headers, receiver.host) || '', an, pl, v: HEADER_SIGNS_VERSION, t: Date.now() };
             cache[msgId] = info;
             saveSenderMessageCache();
             return info;
@@ -2957,7 +2960,11 @@ function scanSenderRows(S) {
                 if (S.enableOwnNameCheck && r && r.status !== 'trusted') signals.push(...ownNameSigns(senders[k].name, senders[k].address, accountAddress()));
                 // A "call this number" subject (whoever sent it).
                 if (S.enableCallbackScamCheck && r && r.status !== 'trusted') signals.push(...subjectScamSigns(subjectText));
-                if (info && info.fh === addressFingerprint(senders[k].address)) signals.push(...info.an);
+                if (info && info.fh === addressFingerprint(senders[k].address)) {
+                    signals.push(...info.an);
+                    // [5.96-2] A colleague's name in Reply-To, Cc or To on an outside address.
+                    if (S.enableLookalikeCheck && r && r.status !== 'trusted') signals.push(...colleagueLineSigns(info.pl, org, loadColleagueHashes(), ''));
+                }
                 const f = applyEmailSignals(r, signals);
                 if (r && f) logEmailVerdict(`${thread}|${senders[k].address}`, senders[k].address, r, f);
                 return f;
@@ -3091,6 +3098,8 @@ function updateOpenedVerdict(body) {
     const signals = [...displayNameAnomalies(st.name), ...(st.info && st.info.fh === addressFingerprint(st.address) ? st.info.an : []), ...emailContentSignals(body),
                      ...serviceWarningSigns(webmailTextAround(body), SITE.name),
                      ...(lastSettings.enableLookalikeCheck !== false && st.base.status !== 'trusted' ? nameAddressSigns(st.name, st.address, ownOrgDomain(), loadColleagueHashes(), st.ownership) : []),
+                     // [5.96-2] A colleague's name in Reply-To, Cc or To on an outside address.
+                     ...(lastSettings.enableLookalikeCheck !== false && st.base.status !== 'trusted' && st.info && st.info.fh === addressFingerprint(st.address) ? colleagueLineSigns(st.info.pl, ownOrgDomain(), loadColleagueHashes(), '') : []),
                      ...(lastSettings.enableOwnNameCheck !== false && st.base.status !== 'trusted' ? ownNameSigns(st.name, st.address, accountAddress()) : []),
                      ...(lastSettings.enableCallbackScamCheck !== false && st.base.status !== 'trusted' ? [...subjectScamSigns(openedSubject()), ...bodyScamSigns(body.innerText)] : [])];
     const final = applyEmailSignals(st.base, signals);

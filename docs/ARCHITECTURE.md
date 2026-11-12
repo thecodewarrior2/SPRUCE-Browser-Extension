@@ -154,6 +154,15 @@ With all of them off, every answer is 5.89's (a unit test checks it).
 | `[5.95-3]` (no switch) | List downloads give up waiting for an answer after 25 seconds (`LIST_ANSWER_TIMEOUT_MS`), before Chrome stops a service worker whose request takes 30 | — |
 | `[5.95-4]` `arcKnownForwarders` | A failed DMARC check is only a strong sign (not a flag on its own) for a real mailing list, or for a forwarding chain (ARC) that Gmail checked and that Google or the reader's own organization sealed (`arcFromKnownForwarder`, the sealer from the `ARC-Seal` of the instance Gmail names); anyone can add a seal that checks out | any intact chain softens it, as in 5.94 |
 
+### 5.96's changes
+
+5.96's changes have their switches in `CHANGES_5_96` (`shared.js`), in the same way:
+
+| Change | What it does | Switch it off (set to `false`, rebuild) and |
+|---|---|---|
+| `[5.96-1]` `toLineByPerson` | The "To" line is read person by person (`addressList`: split at the commas outside quotes and `<…>`), so a calendar invitation's `guest@x.org, Organizer <organizer@y.org>` is two people; the address a name shows is read as written (single quotes, a name around it, "mailto:", +tag, encoded); another address of the same domain or name is a weak sign (1), another domain a sign (2) naming both | the whole line is one person, as in 5.95 (the invitation counts 2) |
+| `[5.96-2]` `colleagueLines` | Colleagues' names (`colleagueNameHash`) in Reply-To, Cc and To on outside addresses (`colleagueLineSigns`): an outside reply address 3; copied in 1, or 3 at an address imitating the organization's domain (`ownDomainLookalike`). `messageInfo` keeps each name's hash and domain with the header signs (`addressLinePeople`, `HEADER_SIGNS_VERSION` 7); the inbox list and the opened email judge them against the colleagues' names (setting **Catch look-alike senders**) | those lines aren't looked at, as in 5.95 |
+
 ```mermaid
 flowchart TD
   T["Text shows site A,<br/>link goes to site B"] --> S{"A and B one company?<br/>(table [5.90-1], ICANN brand ending [5.90-2])"}
@@ -361,7 +370,7 @@ The live version, with the current numbers, is in Settings → Help → Architec
 
 | Where | What | How long |
 |---|---|---|
-| `storage.local` | settings; recent link and sender verdicts; history of checked links; application log; moved-to-Spam memory; downloaded lists; colleague-name hashes | history and log: 30 days by default (adjustable); caches: hours to weeks |
+| `storage.local` | settings; recent link and sender verdicts; history of checked links; application log; moved-to-Spam memory; downloaded lists; colleague-name hashes; for read emails, the header signs and the name hashes and domains of Reply-To, Cc and To | history and log: 30 days by default (adjustable); caches: hours to weeks |
 | `storage.managed` | administrator policy (read only) | set by the organization |
 | IndexedDB | sender icons, colleagues' photos, company logos | refreshed weekly or monthly |
 
