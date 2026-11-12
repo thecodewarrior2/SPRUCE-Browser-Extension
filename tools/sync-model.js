@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // tools/sync-model.js — EXPERIMENT (llm_testing): moves the extension to a model of TinyPhishLLM, the AI
-// model's own public repository, which S.P.R.U.C.E+ Mail Protection uses too (one model, trained in one
+// model's own public repository, which S.P.R.U.C.E Mail Protection Service uses too (one model, trained in one
 // place; the training itself is in the private TinyPhishLLM_Private_Training).
 //
 //     node tools/sync-model.js <TinyPhishLLM folder>
