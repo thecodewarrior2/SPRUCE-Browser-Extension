@@ -637,6 +637,24 @@ const CHANGES_5_97 = Object.freeze({ sendingServiceLinks: true });
 // ---------------------------------------------------------------------------
 const CHANGES_5_98 = Object.freeze({ moreLists: true });
 
+// ---------------------------------------------------------------------------
+// 5.99: a change that can be switched off on its own, in the same way (set to false and rebuild; what it
+// changed then works as in 5.98). Every place it touches carries its tag.
+//   [5.99-1] colleagueContext  a colleague's name on an outside address counts (amber) only when the email
+//                              claims to come from inside the organization: from a personal email account,
+//                              from a domain imitating the organization's, a failed sender verification
+//                              (DMARC), replies going to another domain, a title or the organization's name
+//                              in the sender's name, or what impersonators ask for (a favor, a phone number,
+//                              gift cards, payroll or bank details, codes or passwords). Otherwise it is a
+//                              note that people share names (a vendor's employee with a colleague's name,
+//                              greeting the user from the vendor's own address). A colleague's name with a
+//                              title after it ("Name, Principal", "Name - Maple Schools") is recognized too.
+//                              Personal accounts are unaffected: colleagues' names are learned only from
+//                              senders at the user's own organization (from S.P.R.U.C.E Mail Protection
+//                              Service 0.5.43)
+// ---------------------------------------------------------------------------
+const CHANGES_5_99 = Object.freeze({ colleagueContext: true });
+
 // Companies that own several domains, including their own short-link domains. Link text and destination
 // within one family are consistent (text "gmail.com" pointing to google.com, or Google's c.gle).
 // labels: the company's name, which it also uses under many endings (amazon.de, google.co.uk). Until
@@ -2056,8 +2074,10 @@ function colleagueNameHash(name) {
 // public records say about the address's domain and the brand the name claims (ownershipNote):
 // proven the brand's, nothing is wrong with the name; looking like the brand's, amber (never moved)
 // instead of red; unknown (or not looked up), red as before. [5.90-5] Offline only uses an answer stored
-// from an earlier lookup.
-function nameAddressSigns(name, address, own, colleagues, ownership) {
+// from an earlier lookup. [5.99-1] context: what else the email says, for the colleague's name
+// (colleagueNameSign): { subject, text (or a function returning it), signals (the header signs),
+// replyTo (domains) }.
+function nameAddressSigns(name, address, own, colleagues, ownership, context) {
     const out = [];
     const domain = domainOfAddress(address);
     if (!name || !domain || (own && isOwnDomain(domain, own))) return out;
@@ -2071,11 +2091,67 @@ function nameAddressSigns(name, address, own, colleagues, ownership) {
         else if (nameSpeaksAboutBrand(name)) out.push({ weight: SIGNAL_CAUTION_SCORE, text: thirdPartyNameText(shown, address, claimed.name) });   // [5.92] amber, never moved
         else out.push({ weight: 5, text: `The sender's name says “${shown}”, but ${address} isn't ${claimed.name}'s address.` });
     }
+    if (CHANGES_5_99.colleagueContext) {   // [5.99-1]
+        const sign = colleagues && colleagues.size ? colleagueNameSign(name, address, own, colleagues, context) : null;
+        if (sign) out.push(sign);
+        return out;
+    }
     const h = colleagues && colleagues.size ? colleagueNameHash(name) : '';
     if (h && colleagues.has(h)) {
         out.push({ weight: 3, text: `The sender uses the name of someone in your organization, but writes from an outside address (${address}).` });
     }
     return out;
+}
+
+// [5.99-1] A colleague's name on an outside address counts only when the email claims to come from inside
+// the organization; a vendor's employee who shares a name with a colleague, greeting the user from the
+// vendor's own address, is no impersonation. Titles and words that only someone inside would put after
+// their name, and what impersonators ask for (the "are you available?" favor, a phone number, gift cards,
+// payroll or bank details, codes or passwords). The same rule as S.P.R.U.C.E Mail Protection Service 0.5.43.
+const INSIDE_TITLE_RE = /\b(superintendent|principal|director|coordinator|supervisor|chief|cfo|ceo|coo|president|treasurer|business office|finance|payroll|human resources|hr|board (?:member|chair)|dean|head of|manager|administrator)\b/i;
+const IMPERSONATOR_ASK_RE = /\b(are you (?:available|around|free|at your desk)|quick (?:favou?r|task|request|question)|i(?:'m| am) (?:in a meeting|on a call|in a conference|travel+ing|busy right now)|can'?t (?:talk|take (?:a )?calls?)|text me|(?:cell|mobile|personal) (?:phone )?(?:number|no\.?)|gift ?cards?|itunes cards?|google play cards?|direct deposit|payroll|bank (?:details|account|information)|wire (?:transfer|the funds)|w-?2s?|keep (?:this|it) (?:confidential|between us)|discreet)\b/i;
+const IMPERSONATOR_CODE_RE = /\b(send|share|give|tell|read|reply with|forward|text|provide|confirm|verify|enter)\b[^.!?\n]{0,40}\b(password|passcode|verification code|security code|sign-in code|login code|one-time code|otp)\b/i;
+const DMARC_FAIL_SIGN_RE = /^It failed its sender's verification \(DMARC\)/;
+// The name's colleague match: as written, or without a title after it ("Name, Principal", "Name - Maple
+// Schools", "Name | Finance"; a comma alone is "Last, First"). Brackets are already left out by colleagueNameKey.
+function colleagueNameMatches(name, colleagues) {
+    const h = colleagueNameHash(name);
+    if (h && colleagues.has(h)) return true;
+    const n = String(name || '').replace(/["']/g, '').trim();
+    const titles = INSIDE_TITLE_RE.source.replace(/^\\b\(|\)\\b$/g, '');
+    return [n.split(/\s+[-–—|]\s+/)[0], n.replace(new RegExp(`,\\s*(?:${titles}).*$`, 'i'), '')]
+        .map(x => x.trim()).filter(x => x && x !== n && x.split(/\s+/).length >= 2)
+        .some(p => { const k = colleagueNameHash(p); return !!k && colleagues.has(k); });
+}
+// The sign for a colleague's name on an outside address (own: the organization's domain), or null when
+// the name isn't a colleague's: amber (3) with what claims the inside, else a note (0) that people share names.
+function colleagueNameSign(name, address, own, colleagues, context) {
+    if (!colleagueNameMatches(name, colleagues)) return null;
+    const c = context || {};
+    const domain = domainOfAddress(address), reg = registrableDomain(domain) || domain;
+    const owns = [].concat(own || []).map(d => String(d).toLowerCase()).filter(Boolean);
+    const shown = String(name).trim().slice(0, 60);
+    const why = [];
+    if (isPersonalMailDomain(domain)) why.push('from a personal email account');
+    if (owns.some(o => ownDomainLookalike(domain, o))) why.push('from an address imitating your organization\'s domain');
+    if ((c.signals || []).some(s => s && DMARC_FAIL_SIGN_RE.test(String(s.text || '')))) why.push('and it failed its sender\'s verification (DMARC)');
+    const reply = [].concat(c.replyTo || []).map(d => String(d || '').toLowerCase())
+        .find(d => d && (registrableDomain(d) || d) !== reg && !owns.some(o => isOwnDomain(d, o)));
+    if (reply) why.push(`with replies going to another domain (${reply})`);
+    const orgWords = owns.flatMap(o => (registrableDomain(o) || o).split('.')[0].split(/[-_]/)).filter(w => w.length >= 4);
+    const lower = shown.toLowerCase();
+    if (INSIDE_TITLE_RE.test(shown) || orgWords.some(w => lower.includes(w))) why.push(`with a title or your organization's name in the sender's name (“${shown}”)`);
+    let text = '';
+    try { text = String((typeof c.text === 'function' ? c.text() : c.text) || '').slice(0, 20000); } catch (e) { text = ''; }
+    const said = `${c.subject || ''}\n${text}`;
+    if (IMPERSONATOR_ASK_RE.test(said) || IMPERSONATOR_CODE_RE.test(said)) why.push('asking for what impersonators ask (a favor, a phone number, payment or payroll details, codes or passwords)');
+    return why.length
+        ? { weight: 3, kind: 'sender-colleague-name', text: `The sender uses the name of someone in your organization, but writes from an outside address (${address}), ${why.slice(0, 3).join('; ')}.` }
+        : { weight: 0, kind: 'sender-name-shared', text: `The sender has the same name as someone in your organization, writing from ${reg}'s own address. Nothing in the email claims to be from inside your organization, so it doesn't count (people share names).` };
+}
+// [5.99-1] The domains an email's replies go to (header people from addressLinePeople), other than the sender's own.
+function replyToDomains(people) {
+    return [...new Set([].concat(people || []).filter(p => p && p.line === 'reply-to' && !p.fromSame && p.domain).map(p => p.domain))].slice(0, 5);
 }
 
 // [5.96-2] A domain that imitates the organization's own (asked only together with a colleague's name, in
@@ -2136,10 +2212,12 @@ function addressLinePeople(headers, fromAddress) {
     for (const line of ['reply-to', 'cc', 'to']) {
         for (const entry of (headers || []).filter(([n]) => n === line).map(([, v]) => v).flatMap(addressList).slice(0, 30)) {
             const m = /^\s*"?([^"<]*?)"?\s*<([^>]*)>\s*$/.exec(entry);
-            if (!m) continue;
-            const address = m[2].trim().toLowerCase();
-            const h = colleagueNameHash(decodeEncodedWords(m[1]).trim()), domain = domainOfAddress(address);
-            if (h && domain) out.push({ line, h, domain, fromSame: !!from && address === from });
+            // [5.99-1] A Reply-To address without a name is kept too, as its domain only (where replies go).
+            const bare = !m && CHANGES_5_99.colleagueContext && line === 'reply-to' && /^[^\s@<>"]+@[^\s@<>"]+$/.test(String(entry).trim());
+            if (!m && !bare) continue;
+            const address = (m ? m[2] : entry).trim().toLowerCase();
+            const h = m ? colleagueNameHash(decodeEncodedWords(m[1]).trim()) : '', domain = domainOfAddress(address);
+            if (domain && (h || (CHANGES_5_99.colleagueContext && line === 'reply-to'))) out.push({ line, h, domain, fromSame: !!from && address === from });
         }
     }
     return out.slice(0, 60);
@@ -2795,7 +2873,7 @@ const ESP_HEADER_MARKERS = [
 ];
 // Bumped whenever headerAnomalies learns new signs, so results saved by an older version are worked
 // out again (see messageInfo in content.js).
-const HEADER_SIGNS_VERSION = 7;   // 6: [5.95-4] only a known forwarder's ARC seal softens a DMARC failure; 7: [5.96-1] the To line person by person, [5.96-2] the people of Reply-To, Cc and To kept (as fingerprints)
+const HEADER_SIGNS_VERSION = 8;   // 6: [5.95-4] only a known forwarder's ARC seal softens a DMARC failure; 7: [5.96-1] the To line person by person, [5.96-2] the people of Reply-To, Cc and To kept (as fingerprints); 8: [5.99-1] every Reply-To's domain kept
 // receiver: the webmail's receiving mail system, whose own records can be trusted:
 // { host: 'mx.google.com', name: 'Gmail' } (see the `mail.headers` entry of WEBMAIL_SITES).
 function headerAnomalies(raw, accountAddress, receiver = {}) {

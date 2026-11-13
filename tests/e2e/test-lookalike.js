@@ -38,7 +38,11 @@ const { launch, servePage, until, settled, ready, check, done } = require('./har
     { t: 8306, email: 'pat.colleague.home@gmail.com', name: 'Pat Colleague', subj: 'Quick favor', unread: true },
     { t: 8307, email: 'billing@paypal-support.example', name: 'Support', subj: 'Trusted vendor', unread: true },
     { t: 8308, email: 'no-reply@amazonmusic.example', name: 'Amazon Music', subj: 'Your Halloween soundtrack awaits', unread: true },
-    { t: 8309, email: 'news@amazon-notices.example', name: 'Amazon', subj: 'Your order', unread: true }]));
+    { t: 8309, email: 'news@amazon-notices.example', name: 'Amazon', subj: 'Your order', unread: true },
+    // [5.99-1] Someone sharing the colleague's name at a vendor, greeting from the vendor's own address; and the
+    // same name with a title after it, as only someone inside would write it.
+    { t: 8310, email: 'pat.colleague@learnbridge-vendor.example', name: 'Pat Colleague', subj: 'Nice meeting you', unread: true },
+    { t: 8311, email: 'pat.c@learnbridge-vendor.example', name: 'Pat Colleague, Principal', subj: 'Staff update', unread: true }]));
   const status = (t) => page.evaluate((t) => { const c = document.querySelector(`[data-thread-id="#thread-f:${t}"]`); const chip = c && c.closest('tr').querySelector('.unshortener-sender-chip'); return chip ? { status: chip.dataset.status, title: chip.title } : (c ? null : 'moved'); }, t);
   const moved = () => page.evaluate(() => window.__spammed.slice());
   const m = await until(moved, s => ['#thread-f:8302', '#thread-f:8303', '#thread-f:8305'].every(t => s.includes(t)), 20000);
@@ -52,6 +56,10 @@ const { launch, servePage, until, settled, ready, check, done } = require('./har
   check('one letter off but registered years ago (a real company): not flagged', old && old.status !== 'flagged' && old.status !== 'caution', old);
   const col = await until(() => status(8306), s => s && s.status === 'caution', 8000);
   check('a colleague\'s name on an outside address: amber, with the reason', col && col.status === 'caution' && /name of someone in your organization/.test(col.title), col);
+  const vendor = await until(() => status(8310), s => s && s.status !== 'pending' && /same name as someone in your organization/.test(s.title), 8000);
+  check('[5.99-1] a colleague\'s name at a vendor, greeting from its own address: not amber, a note says people share names', vendor && vendor !== 'moved' && vendor.status !== 'caution' && vendor.status !== 'flagged' && /Nothing in the email claims to be from inside your organization/.test(vendor.title), vendor);
+  const titled = await until(() => status(8311), s => s && s.status === 'caution', 8000);
+  check('[5.99-1] the colleague\'s name with a title after it, from outside: amber, saying why', titled && titled.status === 'caution' && /title or your organization's name in the sender's name/.test(titled.title), titled);
   const trusted = await status(8307);
   check('a trusted sender is never judged', trusted && trusted.status === 'trusted', trusted);
   const owned = await status(8308);

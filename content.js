@@ -2971,7 +2971,10 @@ function scanSenderRows(S) {
             const finals = results.map((r, k) => {
                 const signals = displayNameAnomalies(senders[k].name);
                 // The name doesn't belong with the address (a brand's name, or a colleague's, outside).
-                if (S.enableLookalikeCheck && r && r.status !== 'trusted') signals.push(...nameAddressSigns(senders[k].name, senders[k].address, org, loadColleagueHashes(), owns && owns[k]));
+                // [5.99-1] With what the row shows (the subject) and the headers' signs and reply domains, when read.
+                const hdr = info && info.fh === addressFingerprint(senders[k].address) ? info : null;
+                if (S.enableLookalikeCheck && r && r.status !== 'trusted') signals.push(...nameAddressSigns(senders[k].name, senders[k].address, org, loadColleagueHashes(), owns && owns[k],
+                    { subject: subjectText, signals: hdr ? hdr.an : [], replyTo: hdr ? replyToDomains(hdr.pl) : [] }));
                 // The name is the user's own address or mailbox name, on someone else's address.
                 if (S.enableOwnNameCheck && r && r.status !== 'trusted') signals.push(...ownNameSigns(senders[k].name, senders[k].address, accountAddress()));
                 // A "call this number" subject (whoever sent it).
@@ -3111,9 +3114,12 @@ function webmailTextAround(body) {
 function updateOpenedVerdict(body) {
     const st = openedStates.get(body);
     if (!st || !st.base || !st.nameEl.isConnected) return;
-    const signals = [...displayNameAnomalies(st.name), ...(st.info && st.info.fh === addressFingerprint(st.address) ? st.info.an : []), ...emailContentSignals(body),
+    const hdr = st.info && st.info.fh === addressFingerprint(st.address) ? st.info : null;
+    const signals = [...displayNameAnomalies(st.name), ...(hdr ? hdr.an : []), ...emailContentSignals(body),
                      ...serviceWarningSigns(webmailTextAround(body), SITE.name),
-                     ...(lastSettings.enableLookalikeCheck !== false && st.base.status !== 'trusted' ? nameAddressSigns(st.name, st.address, ownOrgDomain(), loadColleagueHashes(), st.ownership) : []),
+                     // [5.99-1] With the subject, the email's text (read only for a colleague's name) and the headers' signs and reply domains.
+                     ...(lastSettings.enableLookalikeCheck !== false && st.base.status !== 'trusted' ? nameAddressSigns(st.name, st.address, ownOrgDomain(), loadColleagueHashes(), st.ownership,
+                         { subject: openedSubject(), text: () => body.innerText, signals: hdr ? hdr.an : [], replyTo: hdr ? replyToDomains(hdr.pl) : [] }) : []),
                      // [5.96-2] A colleague's name in Reply-To, Cc or To on an outside address.
                      ...(lastSettings.enableLookalikeCheck !== false && st.base.status !== 'trusted' && st.info && st.info.fh === addressFingerprint(st.address) ? colleagueLineSigns(st.info.pl, ownOrgDomain(), loadColleagueHashes(), '') : []),
                      ...(lastSettings.enableOwnNameCheck !== false && st.base.status !== 'trusted' ? ownNameSigns(st.name, st.address, accountAddress()) : []),

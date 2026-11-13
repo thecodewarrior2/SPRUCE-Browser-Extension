@@ -11,7 +11,7 @@
 Short notes on each version in the browser stores. Every detail is in the
 [full changelog](../CHANGELOG.md).
 
-## 5.98
+## 5.99
 
 Changes since 5.91.
 
@@ -31,6 +31,12 @@ Changes since 5.91.
   forwarding service; only forwarding by Google or by your own organization still counts.
 
 **Fewer false alarms**
+- Someone at a company you work with who happens to share a colleague's name is no longer cautioned
+  for a plain email from their company's address. A colleague's name from outside your organization
+  is now pointed out when the email pretends to come from inside: from a personal account, from an
+  address imitating your organization's, with a job title after the name, with replies going
+  elsewhere, or asking for what impersonators ask (a favor, a phone number, gift cards, payroll or
+  bank details, codes).
 - A newsletter's link that shows a well-known site (a podcast's Spotify link, say) but goes through the
   newsletter service that sent the email is now a caution instead of a danger, when that service checks
   out clean online. It no longer moves the email to Spam by itself.

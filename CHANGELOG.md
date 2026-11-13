@@ -1,5 +1,37 @@
 # Changelog
 
+## 5.99 — A colleague's name on an outside address counts only when the email claims to be from inside
+
+One change, on its own switch (`CHANGES_5_99` in `shared.js`: set it to `false` and rebuild, and the check
+works as in 5.98); every line of code it touches carries its tag. From S.P.R.U.C.E Mail Protection Service
+0.5.43, which uses the same rule:
+
+- **[5.99-1] `colleagueContext`.** A colleague's name on an outside address was amber whatever the email
+  said, so a vendor's employee who shares a name with someone in the organization, greeting the user from
+  the vendor's own address, was cautioned. It now counts (3, amber) only when the email claims to come from
+  inside the organization, and the reason says how (`colleagueNameSign`, at most three of):
+  - from a personal email account (`isPersonalMailDomain`);
+  - from an address imitating the organization's domain (`ownDomainLookalike`);
+  - a failed sender verification (the DMARC sign among the header signs, read emails);
+  - replies going to another domain than the sender's and the organization's (`replyToDomains`, read
+    emails);
+  - a title or the organization's name in the sender's name (`INSIDE_TITLE_RE`: principal,
+    superintendent, director, payroll, HR…; the words of the organization's domain);
+  - what impersonators ask, in the subject or, in an opened email, the text (`IMPERSONATOR_ASK_RE`: "are
+    you available?", a quick favor, "I'm in a meeting", a cell number, gift cards, direct deposit,
+    payroll, bank details, a wire transfer, W-2s, "keep this confidential"; `IMPERSONATOR_CODE_RE`: send
+    a password or a code). The text is read only when the name is a colleague's.
+
+  Otherwise it is a note (0) shown with the verdict: "The sender has the same name as someone in your
+  organization, writing from <domain>'s own address. Nothing in the email claims to be from inside your
+  organization, so it doesn't count (people share names)." A colleague's name with a title after it
+  ("Name, Principal", "Name - Maple Schools", "Name | Finance") is now recognized too
+  (`colleagueNameMatches`). `addressLinePeople` keeps a Reply-To address without a name as its domain
+  only, so `HEADER_SIGNS_VERSION` is 8 (read emails' header signs are worked out again). Personal accounts
+  are unaffected: colleagues' names are only learned from senders at the user's own organization.
+- Tests: a unit test (the vendor's greeting, each claim, the switch off); `test-lookalike.js` (the vendor's
+  greeting isn't amber; a titled name from outside is). Made-up people and addresses.
+
 ## 5.98 — Two more phishing lists: HaGeZi Threat Intelligence Feeds, and TweetFeed's researchers' reports as a caution
 
 One change, on its own switch (`CHANGES_5_98` in `shared.js`: set it to `false` and rebuild, and the lists
