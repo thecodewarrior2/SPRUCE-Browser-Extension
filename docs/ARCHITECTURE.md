@@ -143,6 +143,14 @@ touches carries its tag:
 
 With all of them off, every answer is 5.89's (a unit test checks it).
 
+### 5.101's change
+
+The same change as 5.101 on `testing` (5.94.22 here), with the same switch, `CHANGES_5_101` (`shared.js`), in the same way:
+
+| Change | What it does | Switch it off (set to `false`, rebuild) and |
+|---|---|---|
+| `[5.101-1]` `openedAvatars` | In an opened email from a company (not the organization's own domain, not a personal mail domain), `placeMessageAvatar` draws the inbox row's picture (`senderPicture`: the company's logo when its domain enforces DMARC, else its site's icon) over the box Gmail draws its own picture in (`MAIL.message.avatar.slot`, `.aCi`, or the parent of the image marked with the sender's address), at the size and place of Gmail's (`.unshortener-msg-avatar`; no clicks; hidden by `content.css` for a flagged or cautioned email). Looked for again after 0.5, 1.5 and 3 s, drawn again when Gmail redraws its picture or a logo is learned (`refreshMessageAvatars`). The collapsed messages of the conversation too (`scanThreadAvatars`: Gmail's pictures marked with an address in the thread view, on each scan and every 3 s), when the sender's own verdict (`senderResultsFor`, as in the list) isn't flagged or caution. Setting **Sender photos and company logos** | Gmail's own picture only, as in 5.94.21 |
+
 ### 5.100's changes
 
 The same changes as 5.100 on `testing` (5.94.21 here), with the same switches, `CHANGES_5_100` (`shared.js`), in the same way:

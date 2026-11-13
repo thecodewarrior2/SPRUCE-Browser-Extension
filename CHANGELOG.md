@@ -1,5 +1,30 @@
 # Changelog
 
+## 5.94.22 — EXPERIMENT (branch `llm_testing`): an opened email from a company shows the picture its inbox row shows, not Gmail's letter circle
+
+Not for release. The same change as 5.101 on `testing`, with the same switch (`CHANGES_5_101` in `shared.js`:
+set it to `false` and rebuild, and opened emails show Gmail's own picture only, as in 5.94.21) and tag:
+
+- **[5.101-1] `openedAvatars`.** The inbox list showed a company sender's logo (or its site's icon) in a
+  circle over the checkbox, but the opened email still showed Gmail's own picture beside the sender, often
+  a plain letter circle. Now, in an opened email from a company (not the user's own organization, not a
+  personal email service such as Gmail or Outlook.com), the inbox row's picture (`senderPicture`: the
+  company's logo when its domain enforces DMARC, else its site's icon) is drawn over Gmail's
+  (`placeMessageAvatar`), at its size and place, in the box Gmail draws it in (`MAIL.message.avatar.slot`,
+  `.aCi`, or the parent of the image Gmail marks with the sender's address). It takes no clicks, so Gmail's
+  hover card still opens; a flagged or cautioned email shows none of ours (`content.css`), so a forged
+  email can't borrow a company's logo; colleagues and personal accounts keep Gmail's own picture (their
+  photo). Looked for again after 0.5, 1.5 and 3 s (Gmail fills its picture in late), drawn again when
+  Gmail redraws its own or a logo is learned (`refreshMessageAvatars`). Setting **Sender photos and company
+  logos**.
+- The conversation's **collapsed** messages get the same (`scanThreadAvatars`, on each scan and every 3
+  seconds): Gmail marks the picture beside each with the sender's address. Their own email isn't read
+  until it's opened, so, as in the inbox list, the sender's own verdict decides: flagged or caution, none
+  of ours.
+- Tests: `test-msgavatar.js` (a company's logo over Gmail's letter circle, at its size, taking no clicks;
+  a colleague and a personal account keep Gmail's; a collapsed message, a company's and a personal
+  account's; a flagged email shows none; the setting off). Made-up senders.
+
 ## 5.94.21 — EXPERIMENT (branch `llm_testing`): Gmail's AI summary of a suspicious email is covered; hidden instructions to an AI flag the email
 
 Not for release. The same changes as 5.100 on `testing`, with the same switches (`CHANGES_5_100` in

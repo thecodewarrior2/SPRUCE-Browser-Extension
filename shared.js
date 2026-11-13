@@ -581,6 +581,18 @@ const CHANGES_5_99 = Object.freeze({ colleagueContext: true });
 // ---------------------------------------------------------------------------
 const CHANGES_5_100 = Object.freeze({ aiSummaryCover: true, hiddenAiInstructions: true });
 
+// ---------------------------------------------------------------------------
+// 5.101: a change that can be switched off on its own, in the same way (set to false and rebuild; what it
+// changed then works as in 5.100). Every place it touches carries its tag.
+//   [5.101-1] openedAvatars  in an opened email from a company (not the user's own organization, not a
+//                            personal email service), the picture beside the sender is the one the inbox
+//                            list shows for it: the company's logo, or else its site's icon, drawn over
+//                            Gmail's own (often a plain letter circle). Colleagues and personal accounts
+//                            keep Gmail's own picture; a flagged or cautioned email gets none of ours, as
+//                            in the list (setting "Sender photos and company logos")
+// ---------------------------------------------------------------------------
+const CHANGES_5_101 = Object.freeze({ openedAvatars: true });
+
 // Companies that own several domains, including their own short-link domains. Link text and destination
 // within one family are consistent (text "gmail.com" pointing to google.com, or Google's c.gle).
 // labels: the company's name, which it also uses under many endings (amazon.de, google.co.uk). Until
@@ -1500,7 +1512,9 @@ const WEBMAIL_SITES = [
                      // Gmail embeds a verified brand logo (BIMI) in the page itself as a data: image;
                      // it loads the picture of a Google account from googleusercontent.com, in any
                      // address format (the "/a/…" kind and the older "/-xxxx/AAAAAAAAAAI/…/photo.jpg").
-                     avatar: { scope: '.adn, [data-message-id]', img: 'img[data-hovercard-id]', addressAttr: 'data-hovercard-id',
+                     // [5.101-1] slot: the box Gmail draws the sender's picture in (a photo, or its letter
+                     // circle), for the picture the extension draws over it when no image marks the sender.
+                     avatar: { scope: '.adn, [data-message-id]', img: 'img[data-hovercard-id]', addressAttr: 'data-hovercard-id', slot: '.aCi',
                                // Google's profile-photo hosts only (lh3…lh6), never the image proxy
                                // (ci3.googleusercontent.com…) that pictures inside emails go through.
                                photoHost: /^https:\/\/lh\d+\.googleusercontent\.com\//,
@@ -1788,7 +1802,7 @@ const FEATURE_SUPPORT = [
     { name: 'Hidden instructions to an AI assistant caught (text only an AI summary reads)', needs: 'opened' },
     { name: 'The webmail\'s AI summary of a suspicious email covered (Gemini)', needs: 'aiSummary' },
     { name: 'Sender icon, country flag and label in the inbox list', needs: 'list' },
-    { name: 'Sender pictures over the checkbox: colleagues\' photos, BIMI and company logos, site icons', needs: 'avatars' },
+    { name: 'Sender pictures over the checkbox: colleagues\' photos, BIMI and company logos, site icons (and a company\'s in opened emails)', needs: 'avatars' },
     { name: 'The webmail\'s own warnings about a sender counted in the email\'s verdict', needs: 'opened' },
     { name: 'Signs of forgery in the headers (DMARC, forged delivery records…)', needs: 'headers' },
     { name: 'Phishing-simulation emails recognized by their headers', needs: 'headers' },

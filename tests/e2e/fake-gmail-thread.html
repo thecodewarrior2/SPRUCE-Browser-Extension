@@ -39,6 +39,8 @@ const LINKS = {
           '<div style="height:3000px"></div><p>Please remember to drop your regalia back to the regalia room. This is an archived section of the community. ' +
           'Thank you again, it has been a pleasure doing business with you. This change was done to make the forum easier to use and to keep only the most helpful content.</p>'
 };
+// [5.101] ?collapsed=<address>: a collapsed earlier message of the conversation from that sender, with Gmail's
+// picture beside it (test-msgavatar.js).
 // [5.100] ?plain=1: a short text with no link; ?hidden=<text>: text the reader can't see (zero size, white on
 // white), as in the attack on AI summaries; ?summary=1: Gmail's AI summary card above the conversation, with
 // its "Summarize this email" chip (test-aisummary.js).
@@ -52,7 +54,7 @@ const linkHtml = P.get('darktext') ? `<div style="color:#1e1e1e">${esc(P.get('da
   : LINKS[P.get('links')] || 'Please sign in at <a href="https://example.com/login">example.com</a> today.';
 setTimeout(() => {
   document.getElementById('main').innerHTML = `<h2 class="hP" data-thread-perm-id="thread-f:${tid}" data-legacy-thread-id="${Number(tid).toString(16)}">${P.get('subj') || 'Your password expires'}</h2>
-  ${summaryHtml}<div class="nH"><div class="adn ads" data-message-id="#msg-f:3001" data-legacy-message-id="${(3001).toString(16)}">
+  ${summaryHtml}<div class="nH">${P.get('collapsed') ? `<div class="kv" id="collapsed"><div class="aju"><div class="aCi"><img class="ajn" data-hovercard-id="${P.get('collapsed')}" src="${P.get('avatar') || ''}" width="40" height="40"></div></div><span>An earlier message of the conversation</span></div>` : ''}<div class="adn ads" data-message-id="#msg-f:3001" data-legacy-message-id="${(3001).toString(16)}">
     <div class="aju"><div class="aCi">${P.get('avatar') ? `<img class="ajn" data-hovercard-id="${sender}" src="${P.get('avatar')}" width="40" height="40">` : ''}</div></div>
     <div class="gs">
     <h3 class="iw"><span class="qu"><span class="gD" email="${sender}" name="${sname}">${sname}</span> <span class="go">&lt;${sender.replace(/</g,'&lt;')}&gt;</span></span></h3>
