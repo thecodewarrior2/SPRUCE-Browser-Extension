@@ -1212,8 +1212,8 @@ test('QR scanner: Chrome asks its offscreen document; Firefox and Safari call th
 // shared.js alone, with some switches turned off (as a maintainer rolling one back would).
 function loadShared(off = []) {
   let src = fs.readFileSync(path.join(EXT, 'shared.js'), 'utf8');
-  // The switches: 5.90's COMPANY_MATCHING, 5.95's CHANGES_5_95, 5.96's CHANGES_5_96 and 5.97's CHANGES_5_97.
-  const decls = [/const COMPANY_MATCHING = Object\.freeze\(\{([^}]*)\}\);/, /const CHANGES_5_95 = Object\.freeze\(\{([^}]*)\}\);/, /const CHANGES_5_96 = Object\.freeze\(\{([^}]*)\}\);/, /const CHANGES_5_97 = Object\.freeze\(\{([^}]*)\}\);/];
+  // The switches: 5.90's COMPANY_MATCHING, and 5.95's to 5.98's CHANGES_5_9x.
+  const decls = [/const COMPANY_MATCHING = Object\.freeze\(\{([^}]*)\}\);/, /const CHANGES_5_95 = Object\.freeze\(\{([^}]*)\}\);/, /const CHANGES_5_96 = Object\.freeze\(\{([^}]*)\}\);/, /const CHANGES_5_97 = Object\.freeze\(\{([^}]*)\}\);/, /const CHANGES_5_98 = Object\.freeze\(\{([^}]*)\}\);/];
   for (const decl of decls) assert.ok(decl.test(src), `switches found: ${decl}`);
   for (const k of off) {
     const decl = decls.find(d => new RegExp(`\\b${k}: true\\b`).test(src.match(d)[1]));
@@ -1845,4 +1845,53 @@ test('[5.97-1] the background\'s domain age for the page: unknown offline, and o
   assert.deepEqual(await ask(off, 42), null, 'not a domain');
   const stranger = await new Promise(res => off.chrome.runtime.onMessage.fire({ action: 'domainAgeDays', domain: 'a.example' }, { id: 'someone-else' }, res));
   assert.equal(stranger, null, 'only the extension\'s own pages');
+});
+
+// --- 5.98: two more phishing lists, one of them community reports (CHANGES_5_98 in shared.js) -------------
+// Made-up list contents only.
+test('[5.98-1] HaGeZi and TweetFeed: downloaded with the others, read in their formats; off: as in 5.97', () => {
+  const R = loadShared();
+  assert.deepEqual(R('PHISH_FEEDS.map(f => f.id)'), ['openphish', 'phishingarmy', 'hagezitif', 'tweetfeed', 'sefinekemails']);
+  assert.match(R('PHISH_FEEDS.find(f => f.id === "openphish").url'), /^https:\/\/raw\.githubusercontent\.com\/openphish\//, 'OpenPhish\'s new address');
+  for (const u of R('PHISH_FEEDS.map(f => f.url)')) assert.match(u, /^https:\/\/(raw\.githubusercontent\.com|phishing\.army)\//, 'no host the extension may not reach');
+  assert.equal(R('feedConfidence("TweetFeed (researchers\' reports)")'), 'report');
+  assert.equal(R('feedConfidence("HaGeZi Threat Intelligence Feeds")'), 'list');
+  assert.equal(R('feedConfidence("Phishing Army (extended)")'), 'list');
+  // The sender: a list's entry flags it; a community report is a caution, never moved.
+  const sender = (domainFeed) => R(`combineSenderVerdictInner(${JSON.stringify({ address: 'billing@invoice-desk.example', ownDomain: 'school.org', domainFeed, dns: { verdict: 'safe' }, dnsChecked: true })})`);
+  assert.deepEqual([sender('HaGeZi Threat Intelligence Feeds').status, sender('HaGeZi Threat Intelligence Feeds').move], ['flagged', true]);
+  const rep = sender('TweetFeed (researchers\' reports)');
+  assert.deepEqual([rep.status, rep.move], ['caution', false]);
+  assert.match(rep.reasons[0], /reported as phishing or malware by TweetFeed \(researchers' reports\) \(community reports: a sign, not proof\)/);
+  // The Link Inspector: a report is "caution", never two services agreeing.
+  const c = R(`threatConsensus([{ name: "TweetFeed (researchers' reports)", status: 'caution', security: true }, { name: 'Phishing Army (extended)', status: 'clean', security: true }])`);
+  assert.equal(c.level, 'caution');
+  assert.match(c.text, /reported this site \(community reports/);
+  // Off: only the 5.97 lists.
+  const Off = loadShared(['moreLists']);
+  assert.deepEqual(Off('PHISH_FEEDS.map(f => f.id)'), ['openphish', 'phishingarmy', 'sefinekemails']);
+});
+
+test('[5.98-1] the background reads HaGeZi\'s "*.domain" lines and TweetFeed\'s CSV; a reported link is no "unsafe"', async () => {
+  const b = loadBackground({});
+  const feed = (id) => `PHISH_FEEDS.find(f => f.id === ${JSON.stringify(id)})`;
+  const hag = vm.runInContext(`[...sanitizeFeed(${feed('hagezitif')}, "# Title: HaGeZi\\n*.tif-listed.example\\n*.paypal.com\\n*.storage.googleapis.com\\n")]`, b);
+  assert.deepEqual(hag, ['tif-listed.example'], 'never a protected brand\'s domain or a cloud-storage host');
+  const csv = ['2026-11-01 00:00:00,researcher,domain,reported-site.example,#phishing,https://x.com/r/1', '2026-11-01 00:00:00,researcher,url,https://not-a-domain.example/x,#phishing,https://x.com/r/2',
+    '2026-11-01 00:00:00,researcher,domain,google.com,#phishing,https://x.com/r/3', '2026-11-01 00:00:00,researcher,ip,203.0.113.5,#C2,https://x.com/r/4'].join('\n');
+  assert.deepEqual(vm.runInContext(`[...sanitizeFeed(${feed('tweetfeed')}, ${JSON.stringify(csv)})]`, b), ['reported-site.example']);
+  // Stored, then matched: a list's entry makes a link unsafe; a report keeps it "safe" with who reported it.
+  const run = (code) => vm.runInContext(code, b);
+  const pack = async (t) => run(`packText(${JSON.stringify(t)})`);
+  const b2 = loadBackground({ enablePhishingFeeds: true, enableDnsThreatCheck: false,
+    feed_hagezitif: { updated: Date.now(), count: 1, gz: await pack('tif-listed.example') }, feed_tweetfeed: { updated: Date.now(), count: 1, gz: await pack('reported-site.example') } });
+  const R2 = (code) => vm.runInContext(code, b2);
+  assert.equal(await R2('feedHit("https://login.tif-listed.example/x")'), 'HaGeZi Threat Intelligence Feeds');
+  const listed = await R2('getConfig().then(cfg => assessSafety("https://login.tif-listed.example/x", "https://login.tif-listed.example/x", cfg))');
+  assert.deepEqual([listed.verdict, listed.reason], ['unsafe', 'Listed as phishing by HaGeZi Threat Intelligence Feeds']);
+  const reported = await R2('getConfig().then(cfg => assessSafety("https://reported-site.example/invoice", "https://reported-site.example/invoice", cfg))');
+  assert.equal(reported.isSafe, true);
+  assert.equal(reported.reported, 'TweetFeed (researchers\' reports)');
+  // The webmail page turns that into a caution saying who reported it.
+  assert.match(fs.readFileSync(path.join(EXT, 'content.js'), 'utf8'), /if \(!problem && response\.isSafe && response\.reported\) problem = `reported as phishing or malware by \$\{response\.reported\} \(community reports\)`;/);
 });

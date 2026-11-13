@@ -87,7 +87,7 @@ const { launch, until, optionsReady, check, done } = require('./harness');
   check('architecture lists the scam-sender list state', /Sefinek scam-sender list/.test(arch));
   // Every downloaded list is in the deep dive, and every list and online service is credited.
   const lists = await until(() => page.evaluate(() => [...document.querySelectorAll('#archAllLists tbody tr')].map(r => r.cells[0].textContent)), l => l.length >= 7, 8000);
-  check('architecture: all seven downloaded lists, with their state', lists.length === 7 && ['url-shorteners', 'OpenPhish', 'Phishing Army', 'Sefinek', 'Chrome UX Report', 'Tranco'].every(n => lists.some(l => l.includes(n))), lists);
+  check('architecture: all nine downloaded lists, with their state', lists.length === 9 && ['url-shorteners', 'OpenPhish', 'Phishing Army', 'HaGeZi', 'TweetFeed', 'Sefinek', 'Chrome UX Report', 'Tranco'].every(n => lists.some(l => l.includes(n))), lists);
   const layout = await page.evaluate(() => ({
     columns: [...document.querySelectorAll('#archAllLists thead th')].map(th => th.textContent),
     safeguards: [...document.querySelectorAll('#archLists thead th')].map(th => th.textContent),

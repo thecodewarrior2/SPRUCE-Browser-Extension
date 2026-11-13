@@ -626,6 +626,17 @@ const CHANGES_5_96 = Object.freeze({ toLineByPerson: true, colleagueLines: true 
 // ---------------------------------------------------------------------------
 const CHANGES_5_97 = Object.freeze({ sendingServiceLinks: true });
 
+// ---------------------------------------------------------------------------
+// 5.98: a change that can be switched off on its own, in the same way (set to false and rebuild; what it
+// changed then works as in 5.97). Every place it touches carries its tag.
+//   [5.98-1] moreLists   two more phishing lists, downloaded once a day like the others: HaGeZi's Threat
+//                        Intelligence Feeds (medium) and TweetFeed (domains security researchers reported in
+//                        the last 30 days). TweetFeed is a community report: a reported link is amber and a
+//                        reported sender "caution", never red or moved for it alone (from S.P.R.U.C.E Mail
+//                        Protection Service 0.5.21)
+// ---------------------------------------------------------------------------
+const CHANGES_5_98 = Object.freeze({ moreLists: true });
+
 // Companies that own several domains, including their own short-link domains. Link text and destination
 // within one family are consistent (text "gmail.com" pointing to google.com, or Google's c.gle).
 // labels: the company's name, which it also uses under many endings (amazon.de, google.co.uk). Until
@@ -1269,12 +1280,22 @@ const WIRE_DNS_PROVIDERS = [
 // OpenPhish: exact phishing URLs. Phishing Army: phishing hostnames (CC BY-NC 4.0). Sefinek: scam and
 // phishing sender addresses (MIT).
 // ---------------------------------------------------------------------------
+// [5.98-1] confidence 'report': community reports, not a curated list (a match is a caution, never "listed as
+// phishing"); format: how a download is read ('lines' when not said); change: the switch an entry belongs to.
 const PHISH_FEEDS = [
-    { id: 'openphish',    name: 'OpenPhish community feed', url: 'https://openphish.com/feed.txt', kind: 'url', license: 'OpenPhish Terms of Use', home: 'https://openphish.com' },
+    // (OpenPhish moved its community feed to GitHub in 2026; its old address redirects there. [5.98-1])
+    { id: 'openphish',    name: 'OpenPhish community feed', url: 'https://raw.githubusercontent.com/openphish/public_feed/refs/heads/main/feed.txt', kind: 'url', license: 'OpenPhish Terms of Use', home: 'https://openphish.com' },
     { id: 'phishingarmy', name: 'Phishing Army (extended)', url: 'https://phishing.army/download/phishing_army_blocklist_extended.txt', kind: 'domain', license: 'CC BY-NC 4.0', home: 'https://phishing.army' },
+    // [5.98-1] HaGeZi's Threat Intelligence Feeds, medium version (about 366,000 phishing, malware and scam
+    // domains; "*.domain": the domain and every name under it), and TweetFeed's domains from its GitHub copy
+    // (date,user,type,value,tags,tweet; the domain rows).
+    { id: 'hagezitif',    name: 'HaGeZi Threat Intelligence Feeds', url: 'https://raw.githubusercontent.com/hagezi/dns-blocklists/main/wildcard/tif.medium.txt', kind: 'domain', license: 'GPL-3.0', home: 'https://github.com/hagezi/dns-blocklists', change: 'moreLists' },
+    { id: 'tweetfeed',    name: 'TweetFeed (researchers\' reports)', url: 'https://raw.githubusercontent.com/0xDanielLopez/TweetFeed/master/month.csv', kind: 'domain', format: 'tweetfeed-csv', confidence: 'report', license: 'CC0 1.0', home: 'https://tweetfeed.live', change: 'moreLists' },
     // Sender addresses used for scams and phishing (exact addresses only), for the sender checks (Gmail).
     { id: 'sefinekemails', name: 'Sefinek scam-sender list', url: 'https://raw.githubusercontent.com/sefinek/Blacklisted-Emails/main/blacklist/LIST.txt', kind: 'address', license: 'MIT', home: 'https://github.com/sefinek/Blacklisted-Emails', requires: 'enableSenderAddressCheck' }
-];
+].filter(f => !f.change || CHANGES_5_98[f.change]);
+// [5.98-1] How sure a list is: 'report' for community reports, else 'list'.
+function feedConfidence(name) { const f = PHISH_FEEDS.find(x => x.name === name); return (f && f.confidence) || 'list'; }
 // Every third-party list (shortener lists and phishing lists) is downloaded at most once a day, even
 // when "Update now" is clicked, out of respect for the projects that publish them for free.
 const THIRD_PARTY_LIST_MIN_INTERVAL_MS = 24 * 60 * 60 * 1000;
@@ -2668,7 +2689,9 @@ function combineSenderVerdictInner({ address, ownDomain, allowlisted, trustedHit
             : `The sender's domain ${listHit.entry} is listed as a phishing or scam sender by ${who}.`);
     }
     if (allowlisted) return { status: 'trusted', reasons: ['The sender\'s domain is on your trusted sites list.'], move: false };
-    if (domainFeed && !sharedDomain) reasons.push(`The sender's domain ${domain} is listed as phishing by ${domainFeed}.`);
+    // [5.98-1] A community report (TweetFeed) is a caution, below; a list's entry flags it.
+    const reportedOnly = !!domainFeed && feedConfidence(domainFeed) === 'report';
+    if (domainFeed && !sharedDomain && !reportedOnly) reasons.push(`The sender's domain ${domain} is listed as phishing by ${domainFeed}.`);
     const dnsFlag = !sharedDomain && dns && dns.verdict === 'unsafe';
     const securityFlag = dnsFlag && !SENDER_DNS_NOT_SECURITY.has(dns.scanner);
     if (securityFlag) reasons.push(`The sender's domain ${domain} is flagged by a security service: ${dns.reason || dns.scanner}.`);
@@ -2676,6 +2699,7 @@ function combineSenderVerdictInner({ address, ownDomain, allowlisted, trustedHit
     // hit colleagues); it is still flagged so the warning shows.
     if (reasons.length) return { status: 'flagged', reasons, move: !own };
     if (dnsFlag) return { status: 'caution', reasons: [`The sender's domain ${domain} is blocked by ${dns.scanner}: ${dns.reason || 'filtered'}.`], move: false };
+    if (reportedOnly && !sharedDomain) return { status: 'caution', reasons: [`The sender's domain ${domain} was reported as phishing or malware by ${domainFeed} (community reports: a sign, not proof).`], move: false };
     // Never green by default: your own domain and big shared providers can't be judged by domain
     // checks (anyone can sign up at gmail.com, and an own-domain From can be forged), so they stay
     // "not verified" unless something flags them or you trust them.
@@ -3088,14 +3112,18 @@ const THREAT_SERVICE_INFO = {
     'Custom Resolver':     { what: 'Your organization\'s own threat service (Settings → Your own services).' },
     'OpenPhish community feed': { what: 'A list of web addresses seen in active phishing campaigns in the last days, matched on this device.', home: 'https://openphish.com' },
     'Phishing Army (extended)': { what: 'A community list of domains reported for phishing, matched on this device.', home: 'https://phishing.army' },
+    // [5.98-1]
+    'HaGeZi Threat Intelligence Feeds': { what: 'Domains used for phishing, malware and scams, gathered from many threat-intelligence feeds, matched on this device.', home: 'https://github.com/hagezi/dns-blocklists' },
+    'TweetFeed (researchers\' reports)': { what: 'Domains security researchers reported on X in the last 30 days, matched on this device. Community reports: a sign, not proof.', home: 'https://tweetfeed.live' },
     'Blocklist':           { what: 'Your own or your organization\'s blocklist.' }
 };
 
 // Summary of the services' answers: { level, text } for the Inspector.
-// services: [{ name, status: 'flagged'|'clean'|'no answer', security: bool }]
+// services: [{ name, status: 'flagged'|'caution'|'clean'|'no answer', security: bool }] (caution: a community
+// report, [5.98-1])
 function threatConsensus(services) {
     // One entry per service, its worst answer (the link's own host and the destination are both asked).
-    const rank = { flagged: 3, clean: 2, 'no answer': 1, off: 0 };
+    const rank = { flagged: 3, caution: 2.5, clean: 2, 'no answer': 1, off: 0 };
     const byName = new Map();
     for (const s of services || []) {
         const prev = byName.get(s.name);
@@ -3112,6 +3140,8 @@ function threatConsensus(services) {
     if (flagged.length === 1) {
         return { level: 'caution', text: `Only 1 of ${answered.length} security services (${flagged[0].name}) flags this site; the others found nothing. That can be a false positive or a detection the others haven't made yet. Look at the red flags below and get a second opinion before trusting it. If the site is genuine, report the false positive to ${flagged[0].name}.` };
     }
+    const reported = sec.filter(s => s.status === 'caution');   // [5.98-1]
+    if (reported.length) return { level: 'caution', text: `${reported.map(s => s.name).join(', ')} reported this site (community reports: a sign, not proof); no list or security service flags it. Be careful with it.` };
     if (content.length) return { level: 'caution', text: `No security service flags this site; it was blocked only by ${content.map(s => s.name).join(', ')}, which is a content filter, not a sign of malware or phishing.` };
     if (!answered.length) return { level: 'info', text: 'No security service could be asked, so nothing is known about this site.' };
     return { level: 'safe', text: `None of the ${answered.length} security services that answered flags this site. That means no one has reported it yet, not that it is safe: new phishing sites are often days old.` };

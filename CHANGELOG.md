@@ -1,5 +1,30 @@
 # Changelog
 
+## 5.98 — Two more phishing lists: HaGeZi Threat Intelligence Feeds, and TweetFeed's researchers' reports as a caution
+
+One change, on its own switch (`CHANGES_5_98` in `shared.js`: set it to `false` and rebuild, and the lists
+are 5.97's); every line of code it touches carries its tag. From S.P.R.U.C.E Mail Protection Service 0.5.21,
+which downloads the same lists:
+
+- **[5.98-1] `moreLists`.** `PHISH_FEEDS` gains two lists, downloaded at most once a day with the others
+  (setting **Check links against phishing lists**), each tracked on its own and cleaned like the others
+  (never a major site, never shared cloud storage):
+  - **HaGeZi Threat Intelligence Feeds** (medium; GPL-3.0; about 370,000 phishing, malware and scam
+    domains, `*.domain` lines) from `raw.githubusercontent.com/hagezi/dns-blocklists`. Like OpenPhish and
+    Phishing Army: a link on it is red ("Listed as phishing by HaGeZi Threat Intelligence Feeds"), a
+    sender's domain on it flags the email.
+  - **TweetFeed** (CC0; the last month of indicators security researchers post publicly) from its GitHub
+    copy, `month.csv`: only its domain rows are read (`feedLines` in `background.js`). Anyone can post
+    one, so it is a **report**, not a list (`confidence: 'report'`, `feedConfidence`): a link on it stays
+    "safe" with `reported` (amber in the email: "reported as phishing or malware by TweetFeed (community
+    reports)"; "Reported" in the Link Inspector, whose summary says it's a sign, not proof), and a
+    sender's domain on it is a caution that never moves the email.
+- **OpenPhish** now comes from its GitHub copy (`openphish.com/feed.txt` redirects there), so
+  `openphish.com` left `host_permissions` (removing a permission never makes Chrome disable the
+  extension on update). Not on the switch.
+- **Not added: URLhaus (abuse.ch).** Since October 2026 its downloads need a personal abuse.ch key
+  (free for non-commercial use), which the extension can't ship in its code.
+
 ## 5.97 — A newsletter's link through the mail service that sent it is amber, not red
 
 One change, on its own switch (`CHANGES_5_97` in `shared.js`: set it to `false` and rebuild, and links work

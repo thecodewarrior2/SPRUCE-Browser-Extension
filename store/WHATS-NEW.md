@@ -11,11 +11,14 @@
 Short notes on each version in the browser stores. Every detail is in the
 [full changelog](../CHANGELOG.md).
 
-## 5.97
+## 5.98
 
 Changes since 5.91.
 
 **Stronger against phishing**
+- Two more public phishing lists, updated daily on your device: HaGeZi's threat list, and the sites
+  security researchers reported in the last month (TweetFeed). A researcher's report is a caution, not
+  proof, so it never moves an email by itself.
 - A scam that uses a colleague's name for its reply address, so your answer goes to someone outside
   your organization, is now pointed out. So is an email that copies in a colleague at an address that
   imitates your organization's.
