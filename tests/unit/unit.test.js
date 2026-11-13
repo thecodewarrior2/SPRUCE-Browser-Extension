@@ -1235,8 +1235,8 @@ test('QR scanner: a scan that never ends is given up, and Chrome\'s stuck scanne
 // shared.js alone, with some switches turned off (as a maintainer rolling one back would).
 function loadShared(off = []) {
   let src = fs.readFileSync(path.join(EXT, 'shared.js'), 'utf8');
-  // The switches: 5.90's COMPANY_MATCHING and CHANGES_5_96 (the same as 5.96 on testing).
-  const decls = [/const COMPANY_MATCHING = Object\.freeze\(\{([^}]*)\}\);/, /const CHANGES_5_96 = Object\.freeze\(\{([^}]*)\}\);/];
+  // The switches: 5.90's COMPANY_MATCHING, CHANGES_5_96 and CHANGES_5_97 (the same as 5.96 and 5.97 on testing).
+  const decls = [/const COMPANY_MATCHING = Object\.freeze\(\{([^}]*)\}\);/, /const CHANGES_5_96 = Object\.freeze\(\{([^}]*)\}\);/, /const CHANGES_5_97 = Object\.freeze\(\{([^}]*)\}\);/];
   for (const decl of decls) assert.ok(decl.test(src), `switches found: ${decl}`);
   for (const k of off) {
     const decl = decls.find(d => new RegExp(`\\b${k}: true\\b`).test(src.match(d)[1]));
@@ -2230,4 +2230,40 @@ test('[5.96-2] colleagues\' names in Reply-To, Cc and To (kept as fingerprints a
   assert.match(content, /const pl = CHANGES_5_96\.colleagueLines \? addressLinePeople\(headers, parsed && parsed\.address\) : \[\];/);
   assert.equal((content.match(/colleagueLineSigns\((info|st\.info)\.pl, /g) || []).length, 2, 'the inbox list and the opened email');
   assert.equal(R('HEADER_SIGNS_VERSION'), 7, 'results saved by 5.95 are worked out again');
+});
+
+// --- 5.97: a link through the mail service that sent the email (CHANGES_5_97 in shared.js) ----------------
+// Made-up senders and services only.
+test('[5.97-1] a brand-text link through the mail service that sent the email (its verified DKIM signer): amber, not red; off: as in 5.96', () => {
+  const R = loadShared();
+  const facts = (host, text = 'open.spotify.com') => ({ textHost: text, host, textDomain: text, destDomain: host });
+  const auth = (dkimDomains, headerFrom = 'news.podcast-show.example') => ({ dmarc: 'pass', headerFrom, dkimDomains });
+  const ask = (f, a, inQuote = false, Rx = R) => Rx(`sendingServiceLinkProblem(${JSON.stringify(f)}, ${JSON.stringify(a)}, ${inQuote})`);
+  const amber = ask(facts('link.mail.newsletter-service.example'), auth(['mail.newsletter-service.example']));
+  assert.equal(amber, 'link text shows open.spotify.com but the link goes to link.mail.newsletter-service.example, the click tracker of newsletter-service.example, the mail service that sent this email (its signature verified on delivery); where it leads isn\'t known until it\'s clicked');
+  assert.equal(R(`linkProblemSeverity(${JSON.stringify(amber)})`), 'caution');
+  // Not: a domain that didn't sign this email; the sender's own domain (a scammer signing its own mail); a quoted part.
+  assert.equal(ask(facts('link.mail.newsletter-service.example'), auth(['news.podcast-show.example'])), null);
+  assert.equal(ask(facts('login.paypa1-secure.example', 'www.paypal.com'), auth(['paypa1-secure.example'], 'paypa1-secure.example')), null);
+  assert.equal(ask(facts('link.mail.newsletter-service.example'), auth(['mail.newsletter-service.example']), true), null);
+  assert.equal(ask(facts('newsletter-service.example.evil.example'), auth(['mail.newsletter-service.example'])), null, 'only the signer\'s own domain');
+  assert.equal(R('MAIL_SERVICE_MIN_AGE_DAYS'), 180);
+  // Off: red, as in 5.96.
+  const Off = loadShared(['sendingServiceLinks']);
+  assert.equal(ask(facts('link.mail.newsletter-service.example'), auth(['mail.newsletter-service.example']), false, Off), null);
+  // The webmail page asks only for a link the lookups checked clean, then for its domain's age; the background answers it.
+  const content = fs.readFileSync(path.join(EXT, 'content.js'), 'utf8'), background = fs.readFileSync(path.join(EXT, 'background.js'), 'utf8');
+  assert.match(content, /const service = wantsSender && !d\.isUnknown \? sendingServiceLinkProblem\(facts, auth, inQuotedSection\(el\)\) : null;/);
+  assert.match(content, /days !== null && days < MAIL_SERVICE_MIN_AGE_DAYS/);
+  assert.match(background, /domainAgeDays: +\{ from: 'any'/, 'in the message rules');
+  assert.match(background, /domainAgeDays\(request, sender, sendResponse\) \{/, 'and its handler');
+});
+
+test('[5.97-1] the background\'s domain age for the page: unknown offline, and only for a domain name', async () => {
+  const off = loadBackground({ enableDnsThreatCheck: false });
+  const ask = (b, domain) => new Promise(res => b.chrome.runtime.onMessage.fire({ action: 'domainAgeDays', domain }, { id: 'x' }, res));
+  assert.deepEqual(await ask(off, 'link.mail.newsletter-service.example'), { days: null }, 'Offline only: nothing looked up');
+  assert.deepEqual(await ask(off, 42), null, 'not a domain');
+  const stranger = await new Promise(res => off.chrome.runtime.onMessage.fire({ action: 'domainAgeDays', domain: 'a.example' }, { id: 'someone-else' }, res));
+  assert.equal(stranger, null, 'only the extension\'s own pages');
 });

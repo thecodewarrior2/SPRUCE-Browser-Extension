@@ -143,6 +143,14 @@ touches carries its tag:
 
 With all of them off, every answer is 5.89's (a unit test checks it).
 
+### 5.97's change
+
+The same change as 5.97 on `testing` (5.94.18 here), with the same switch, `CHANGES_5_97` (`shared.js`), in the same way:
+
+| Change | What it does | Switch it off (set to `false`, rebuild) and |
+|---|---|---|
+| `[5.97-1]` `sendingServiceLinks` | A red "text shows another site" link in an opened email (Gmail) is looked at again once the headers are read (`reviewLinkProblem`): when its domain is a DKIM signer Gmail verified on this email and not the sender's own (`sendingServiceLinkProblem`), the online checks found the link clean, and its registry date isn't under 180 days (`domainAgeDays` message to the background, online only), it becomes amber | such links stay red, as before |
+
 ### 5.96's changes
 
 The same changes as 5.96 on `testing` (5.94.16 here), with the same switches, `CHANGES_5_96` (`shared.js`), in the same way:

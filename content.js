@@ -1531,10 +1531,12 @@ chrome.storage.onChanged.addListener((changes, area) => {
 // (a red link asks before opening from the start); then:
 //   [5.90-4] when every domain that carries a company's name under another ending is shown to be the
 //            company's (companyDomainEvidence in the background), the link is consistent: unmarked;
-//   [5.90-3] when the text shows the site of the email's verified sender, red becomes amber.
+//   [5.90-3] when the text shows the site of the email's verified sender, red becomes amber;
+//   [5.97-1] when it goes through the mail service that sent the email (its verified DKIM signer, not the
+//            sender's own domain), checked clean by the lookups and not new, red becomes amber.
 function reviewLinkProblem(el, d, facts) {
     const wantsProof = !!(facts.unproven && facts.unproven.length);
-    const wantsSender = COMPANY_MATCHING.verifiedSender && d.severity === 'danger' && senderChecksActive();
+    const wantsSender = (COMPANY_MATCHING.verifiedSender || CHANGES_5_97.sendingServiceLinks) && d.severity === 'danger' && senderChecksActive();
     if (!wantsProof && !wantsSender) return;
     const body = containerOf(el) || el;
     const proofP = wantsProof ? Promise.all(facts.unproven.map(dom => brandOwnershipFor(dom, facts.company, lastSettings))) : Promise.resolve(null);
@@ -1546,11 +1548,23 @@ function reviewLinkProblem(el, d, facts) {
             reportEvent('info', `A link's text shows ${facts.textHost} and it goes to ${facts.host}: ${facts.unproven.map((x, i) => ownershipNote(evidence[i], x, facts.company)).join('; ')}. It is the same company, so the link isn't marked.`);
             return;
         }
-        const amber = wantsSender ? verifiedSenderLinkProblem(facts, auth, inQuotedSection(el)) : null;
+        const amber = wantsSender && COMPANY_MATCHING.verifiedSender ? verifiedSenderLinkProblem(facts, auth, inQuotedSection(el)) : null;
         if (amber) {
             settleLinkProblem(el, d, amber);
             reportEvent('info', `A link's text shows ${facts.textHost}, the site of this email's verified sender (DMARC pass), but it goes to ${facts.host}: marked for caution instead of danger, since the sender chose where its own link goes.`);
+            return;
         }
+        // [5.97-1] Through the mail service that sent the email: only a link the lookups checked clean
+        // (not "unknown"), and only when its domain isn't new (the background's registry date, online only).
+        const service = wantsSender && !d.isUnknown ? sendingServiceLinkProblem(facts, auth, inQuotedSection(el)) : null;
+        if (!service) return;
+        const dest = registrableDomain(facts.host);
+        trackWork(new Promise(resolve => safeSend({ action: 'domainAgeDays', domain: dest }, (r) => resolve(r && typeof r.days === 'number' ? r.days : null)))
+            .then(days => guarded('Looking again at a link through a mail service', () => {
+                if (!el.isConnected || processedLinksMap.get(el) !== d || d.isSafe || (days !== null && days < MAIL_SERVICE_MIN_AGE_DAYS)) return;
+                settleLinkProblem(el, d, service);
+                reportEvent('info', `A link's text shows ${facts.textHost} but it goes to ${facts.host}, the click tracker of ${dest}, which sent this email (its signature verified), checked clean${days !== null ? ` and registered ${days} days ago` : ''}: marked for caution instead of danger.`);
+            })));
     })));   // counted as work in progress until it has looked again
 }
 // Gives a checked link a new finding (or none) and redraws what depends on it.

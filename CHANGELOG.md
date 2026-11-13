@@ -1,5 +1,26 @@
 # Changelog
 
+## 5.94.18 — EXPERIMENT (branch `llm_testing`): a newsletter's link through the mail service that sent it is amber, not red
+
+Not for release. The same change as 5.97 on `testing`, with the same switch (`CHANGES_5_97` in `shared.js`:
+set it to `false` and rebuild, and links work as before) and tag; its background message is in the message
+tables (`MESSAGE_RULES`, `MESSAGE_HANDLERS`). From S.P.R.U.C.E Mail Protection Service
+0.5.18–0.5.19, which uses the same rule:
+
+- **[5.97-1] `sendingServiceLinks`.** A newsletter's "Listen on open.spotify.com" link that goes through
+  the click tracker of the service that sent it (link.mail.beehiiv.com/v2/c/…) was red: "text shows a
+  well-known brand, link goes elsewhere", and with it the email could be moved to Spam. Now, in an opened
+  email (Gmail), such a red link is looked at again once the headers are read (`reviewLinkProblem`, as for
+  [5.90-3]): when the link's domain is one whose DKIM signature Gmail's own receiving server verified on
+  this email, and isn't the sender's own domain (`sendingServiceLinkProblem`: the mail service that sent
+  it; no list of services), and the online checks found the link clean (`verdict` "safe", not "unknown"),
+  and its registry date isn't recent (`domainAgeDays` in the background, a new message answered only
+  online; 180 days, `MAIL_SERVICE_MIN_AGE_DAYS`; unknown is allowed), it becomes amber, saying which
+  service and that where it leads isn't known until it's clicked. Not checked (Offline only, a lookup that
+  didn't answer), recent, a link to a service that didn't sign this email, a scammer's domain signing its
+  own mail, or a quoted part: red, as before.
+- Tests: two unit tests; `test-companies.js` (with the lookups off, the link stays red). Made-up senders.
+
 ## 5.94.17 — EXPERIMENT (branch `llm_testing`): the AI says when it can't read an email (English only)
 
 Not for release. The model, phish-tiny, was trained on English only (its card says so), so on an email in

@@ -3609,6 +3609,7 @@ const MESSAGE_RULES = Object.freeze({
     unwrapLinksOffline:    { from: 'any',  refuse: null,  fields: { urls: MSG_ARR(20000) } },
     getCompanyEndings:     { from: 'any',  refuse: null },
     brandOwnership:        { from: 'any',  refuse: null,  fields: { domain: MSG_STR(1000), brand: MSG_STR(1000) } },
+    domainAgeDays:         { from: 'any',  refuse: null,  fields: { domain: MSG_STR(1000) } },
     checkSenders:          { from: 'any',  refuse: [],    fields: { senders: MSG_ARR(20000), ownDomain: MSG_STR(1000) } },
     senderCountry:         { from: 'any',  refuse: null,  fields: { ip: MSG_STR(64) } },
     senderIcon:            { from: 'any',  refuse: '',    fields: { site: MSG_STR(253), address: MSG_STR(1000), domain: MSG_STR(1000) } },
@@ -3692,6 +3693,16 @@ const MESSAGE_HANDLERS = {
     // [5.90-2] The single-company endings, for the link checks in the webmail page.
     getCompanyEndings(request, sender, sendResponse) {
         ensureCompanyEndings().then(d => sendResponse(d ? { operators: d.operators, endings: d.endings } : null)).catch(() => sendResponse(null));
+        return true;
+    },
+    // [5.97-1] How old a link's domain is (the registry's public date), for a link through the mail service
+    // that sent an email; only online (Offline only: unknown), remembered 30 days (domainRegistration).
+    domainAgeDays(request, sender, sendResponse) {
+        if (typeof request.domain !== 'string') { sendResponse(null); return false; }
+        const reg = registrableDomain(request.domain.slice(0, 253).toLowerCase());
+        getConfig().then(cfg => (cfg.values.enableDnsThreatCheck && reg && SENDER_DOMAIN_RE.test(reg) ? domainAgeDays(reg) : null))
+            .then(days => sendResponse({ days: typeof days === 'number' ? days : null }))
+            .catch(() => sendResponse({ days: null }));
         return true;
     },
     // Sender checks for the inbox list and opened emails (Gmail).
