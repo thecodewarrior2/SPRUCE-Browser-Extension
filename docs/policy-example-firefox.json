@@ -23,6 +23,7 @@
           "managedEnableLookalikeCheck": true,
           "managedEnableOwnNameCheck": true,
           "managedEnableCallbackScamCheck": true,
+          "managedEnableAiSummaryCover": true,
           "managedEnableRowHighlighter": true,
           "managedRowHighlightColor": "yellow",
           "managedRowHighlightStyle": "both",

@@ -98,6 +98,13 @@ settings can't be locked). What leaves your device, and to whom, is in the [priv
   make is flagged red and moved to Spam, even when the email really comes from a company's own system
   (attackers type the text into names that Microsoft's, PayPal's or Apple's systems mail out). In an
   opened email, on every webmail, such text is a caution.
+- **Gmail's AI summary of a suspicious email.** Gemini's "Summarize this email" and "AI Overview"
+  retell what an email asks in calm, ordinary words and don't check who sent it, so an impersonation
+  ("Principal Smith requires your personal contact information") comes out harmless ("Benda is
+  seeking this information from you"). While an opened email is flagged or marked Caution, the summary
+  is covered by a note saying why, with a button that shows it anyway (then with a warning above it).
+  Text hidden in an email that gives an AI instructions (a fake "your password was compromised, call
+  this number" line meant for the summary) flags the email, on every webmail.
 - **Threat checks.** DNS-over-HTTPS threat filters (Cloudflare Security and Family, Quad9,
   Control D; AdGuard as a backup), community shortener lists, and local phishing lists (OpenPhish,
   Phishing Army, HaGeZi Threat Intelligence Feeds; TweetFeed's researchers' reports as a caution), downloaded at most once a day.
@@ -255,6 +262,8 @@ sign-in, an app registration or an administrator-approved API.
 | Look-alike senders caught in the inbox list (nothing opened) | ✓ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
 | Senders using your own name or address as theirs, caught in the inbox list | ✓ | — | — | — | — | — | — | — | — |
 | "Call this number" scams caught, even in emails genuinely sent by a company | ✓ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
+| Hidden instructions to an AI assistant caught (text only an AI summary reads) | ✓ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
+| The webmail's AI summary of a suspicious email covered (Gemini) | ✓ | — | — | — | — | — | — | — | — |
 | Sender icon, country flag and label in the inbox list | ✓ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
 | Sender pictures over the checkbox: colleagues' photos, BIMI and company logos, site icons | ✓ | — | — | — | — | — | — | — | — |
 | The webmail's own warnings about a sender counted in the email's verdict | ✓ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |

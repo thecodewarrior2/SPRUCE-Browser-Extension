@@ -11,11 +11,16 @@
 Short notes on each version in the browser stores. Every detail is in the
 [full changelog](../CHANGELOG.md).
 
-## 5.99
+## 5.100
 
 Changes since 5.91.
 
 **Stronger against phishing**
+- Gmail's AI summary can make a scam sound harmless: it retells what an email asks in calm, ordinary
+  words and doesn't check who sent it. While an email is marked dangerous or Caution, its AI summary
+  is now covered, with a note saying why and a button to show it anyway.
+- An email that hides text only an AI reads, telling Gmail's summary what to say (such as a fake
+  "your password was compromised, call this number" warning), is now marked dangerous.
 - Two more public phishing lists, updated daily on your device: HaGeZi's threat list, and the sites
   security researchers reported in the last month (TweetFeed). A researcher's report is a caution, not
   proof, so it never moves an email by itself.

@@ -41,6 +41,9 @@
   "managedEnableCallbackScamCheck": {
     "Value": true
   },
+  "managedEnableAiSummaryCover": {
+    "Value": true
+  },
   "managedEnableRowHighlighter": {
     "Value": true
   },

@@ -1776,6 +1776,12 @@ function refreshEmailBanner(body) {
         cautionLinks.forEach(el => entries.push(el));
     }
 
+    // [5.100-1] A line about its sender (flagged or cautioned) or a dangerous link: its AI summary is covered.
+    const suspicious = st.sender.size > 0 || lines.some(l => l.severity === 'danger');
+    if (suspicious !== suspiciousBodies.has(body)) {
+        if (suspicious) suspiciousBodies.add(body); else suspiciousBodies.delete(body);
+        if (MAIL && MAIL.aiSummary) scheduleAiSummaryCover();
+    }
     if (!lines.length) { if (st.el) { st.el.remove(); st.el = null; } return; }
     if (!st.el || !st.el.isConnected) {
         st.el = document.createElement('div');
@@ -1867,6 +1873,141 @@ function showSenderFindings(body, findings) {
     const st = bannerState(body);
     for (const f of findings) st.sender.set(`sender|${f.message}`, f);
     if (findings.length) scheduleBannerRefresh(body);
+}
+
+// ---------------------------------------------------------------------------
+// [5.100-1] Gmail's AI summary (Gemini) of a suspicious email. A summary retells what an email asks in calm,
+// neutral words ("Benda is seeking this information from you. Please fill out the form"), without what gives
+// an impersonation away, and doesn't check who really sent it. While an opened email is flagged or cautioned
+// (a line about its sender in its banner, or a dangerous link), the summary chip and card are hidden behind
+// a note saying why, with a button that shows the summary anyway (then with a warning above it). The summary
+// is of the whole conversation, so one suspicious email in it is enough. Gmail still writes the summary; it
+// is only kept out of sight.
+const suspiciousBodies = new Set();
+let aiCoverTimer = null, aiShownThread = '';
+function aiSummaryCoverOn() { return CHANGES_5_100.aiSummaryCover && !!(MAIL && MAIL.aiSummary) && lastSettings.enableAiSummaryCover !== false; }
+function scheduleAiSummaryCover() {
+    if (aiCoverTimer) return;
+    aiCoverTimer = setTimeout(() => { aiCoverTimer = null; guarded('Covering the AI summary', coverAiSummaries); }, 120);
+}
+function openThreadKey() {
+    const h = MAIL && MAIL.openThread ? document.querySelector(MAIL.openThread) : null;
+    return (h && (h.getAttribute('data-thread-perm-id') || h.getAttribute('data-legacy-thread-id'))) || location.hash;
+}
+// The summary's chip and card in the opened conversation: never an email itself, nor anything holding one.
+function aiSummaryElements() {
+    const sel = MAIL.aiSummary;
+    const scope = document.querySelector('[role="main"]') || document.body;
+    const found = new Set(scope.querySelectorAll(`${sel.card}, ${sel.chip}`));
+    for (const b of scope.querySelectorAll('button, [role="button"]')) {
+        if (sel.chipText.test(b.getAttribute('aria-label') || '') || (b.textContent.length < 40 && sel.chipText.test(b.textContent))) found.add(b);
+    }
+    const holdsEmail = (el) => el.matches(SITE.body) || !!el.querySelector(`${SITE.body}, ${MAIL.message.container}`) || !!el.closest(SITE.body);
+    const list = [...found].filter(el => !holdsEmail(el) && !el.closest('[class*="unshortener-"]'));
+    return list.filter(el => !list.some(o => o !== el && o.contains(el)));   // a chip inside a card: the card
+}
+function coverAiSummaries() {
+    for (const b of [...suspiciousBodies]) if (!b.isConnected) suspiciousBodies.delete(b);
+    const found = aiSummaryCoverOn() && suspiciousBodies.size ? aiSummaryElements() : [];
+    for (const el of document.querySelectorAll('[data-unshortener-ai-covered]')) if (!found.includes(el)) uncoverAiSummary(el);
+    for (const n of document.querySelectorAll('.unshortener-ai-cover')) if (!n.nextElementSibling || !found.includes(n.nextElementSibling)) n.remove();
+    for (const el of found) coverAiSummary(el);
+}
+function coverAiSummary(el) {
+    const shown = aiShownThread && aiShownThread === openThreadKey();
+    if (!el.hasAttribute('data-unshortener-ai-covered')) {
+        el.setAttribute('data-unshortener-ai-covered', el.style.getPropertyValue('display') || '');
+    }
+    if (shown) el.style.removeProperty('display'); else el.style.setProperty('display', 'none', 'important');
+    let note = el.previousElementSibling;
+    if (!note || !note.classList.contains('unshortener-ai-cover')) {
+        note = document.createElement('div');
+        note.className = 'unshortener-ai-cover';
+        note.setAttribute('role', 'note');
+        el.parentElement.insertBefore(note, el);
+    }
+    if (note.dataset.shown === String(!!shown)) return;
+    note.dataset.shown = String(!!shown);
+    styleNotice(note, el.parentElement, shown ? 'caution' : 'danger');
+    note.textContent = '';
+    const text = document.createElement('span');
+    text.textContent = shown
+        ? '⚠️ Gmail\'s AI summary below is of an email that shows signs of phishing. A summary retells what the email asks in calm words and doesn\'t check who really sent it.'
+        : '🛡️ S.P.R.U.C.E+ covered Gmail\'s AI summary: this email shows signs of phishing (see the warning on the email). A summary retells what an email asks in calm, neutral words and doesn\'t check who really sent it.';
+    const b = noticeButton(shown ? 'Cover it again' : 'Show the summary anyway', () => {
+        aiShownThread = shown ? '' : openThreadKey();
+        coverAiSummaries();
+    });
+    note.append(text, b);
+}
+function uncoverAiSummary(el) {
+    const display = el.getAttribute('data-unshortener-ai-covered');
+    el.removeAttribute('data-unshortener-ai-covered');
+    if (display) el.style.setProperty('display', display); else el.style.removeProperty('display');
+    const note = el.previousElementSibling;
+    if (note && note.classList.contains('unshortener-ai-cover')) note.remove();
+}
+
+// [5.100-2] The text of an opened email that its reader can't see: hidden (display, visibility, opacity), too
+// small to read (under 2 px), the color of what is behind it, transparent, placed off-screen, or inside a box
+// of no size that hides what overflows. Read once per email (and again if the email changes), for
+// aiInstructionSigns. A message Gmail itself keeps closed or collapsed isn't read until it's shown.
+const hiddenTextCache = new WeakMap();
+const rgbaOf = (c) => { const m = /rgba?\(\s*([\d.]+)[ ,]+([\d.]+)[ ,]+([\d.]+)(?:[ ,/]+([\d.]+%?))?/.exec(String(c || '')); if (!m) return null; const a = m[4] === undefined ? 1 : (m[4].endsWith('%') ? parseFloat(m[4]) / 100 : parseFloat(m[4])); return [+m[1], +m[2], +m[3], a]; };
+const luminanceOf = ([r, g, b]) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+function textHiddenIn(el, bodyRect) {
+    if (typeof el.checkVisibility === 'function' && !el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) return true;
+    const cs = getComputedStyle(el);
+    if (parseFloat(cs.fontSize) < 2) return true;
+    const color = rgbaOf(cs.color);
+    if (color && color[3] < 0.1) return true;
+    const r = el.getBoundingClientRect();
+    if ((cs.position === 'absolute' || cs.position === 'fixed') && (r.right < bodyRect.left || r.bottom < bodyRect.top || r.left > bodyRect.right + 500)) return true;
+    let back = null;
+    for (let a = el, depth = 0; a && depth < 40; a = a.parentElement, depth++) {
+        const s = a === el ? cs : getComputedStyle(a);
+        if (a !== el && depth < 12 && /hidden|clip/.test(s.overflow + s.overflowX + s.overflowY)) {
+            const ar = a.getBoundingClientRect();
+            if (ar.width < 2 || ar.height < 2) return true;
+        }
+        if (!back) {
+            if (s.backgroundImage && s.backgroundImage !== 'none') break;   // a picture behind: can't tell
+            const bg = rgbaOf(s.backgroundColor);
+            if (bg && bg[3] > 0.5) back = bg;
+        }
+        if (back && depth >= 12) break;
+    }
+    if (color && back) {
+        const l1 = luminanceOf(color), l2 = luminanceOf(back);
+        if ((Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05) < 1.12) return 'color';
+    }
+    return false;
+}
+function hiddenEmailText(body) {
+    if (!body.isConnected || (typeof body.checkVisibility === 'function' && !body.checkVisibility())) return '';
+    const size = body.textContent.length;
+    const cached = hiddenTextCache.get(body);
+    if (cached && cached.size === size) return cached.text;
+    const bodyRect = body.getBoundingClientRect();
+    const seen = new Map(), parts = [];
+    const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
+    let n = 0, total = 0, all = 0, byColor = 0;
+    for (let t = walker.nextNode(); t && n < 4000 && total < 5000; t = walker.nextNode(), n++) {
+        const s = t.nodeValue.replace(/\s+/g, ' ').trim();
+        if (s.length < 4) continue;
+        const el = t.parentElement;
+        if (!el || el.closest('[class*="unshortener-"]')) continue;
+        all += s.length;
+        let hidden = seen.get(el);
+        if (hidden === undefined) { hidden = textHiddenIn(el, bodyRect); seen.set(el, hidden); }
+        if (hidden) { parts.push({ s, color: hidden === 'color' }); total += s.length; if (hidden === 'color') byColor += s.length; }
+    }
+    // Most of the email "the color of its background": a theme the webmail draws (a dark theme behind the
+    // sender's dark text), not hiding. Only the other ways of hiding count then.
+    const colorTrusted = byColor <= all * 0.5;
+    const text = parts.filter(p => colorTrusted || !p.color).map(p => p.s).join(' ').slice(0, 5000);
+    hiddenTextCache.set(body, { size, text });
+    return text;
 }
 
 // ---------------------------------------------------------------------------
@@ -3116,6 +3257,8 @@ function updateOpenedVerdict(body) {
     if (!st || !st.base || !st.nameEl.isConnected) return;
     const hdr = st.info && st.info.fh === addressFingerprint(st.address) ? st.info : null;
     const signals = [...displayNameAnomalies(st.name), ...(hdr ? hdr.an : []), ...emailContentSignals(body),
+                     // [5.100-2] Hidden text written for an AI assistant.
+                     ...(CHANGES_5_100.hiddenAiInstructions ? aiInstructionSigns(hiddenEmailText(body)) : []),
                      ...serviceWarningSigns(webmailTextAround(body), SITE.name),
                      // [5.99-1] With the subject, the email's text (read only for a colleague's name) and the headers' signs and reply domains.
                      ...(lastSettings.enableLookalikeCheck !== false && st.base.status !== 'trusted' ? nameAddressSigns(st.name, st.address, ownOrgDomain(), loadColleagueHashes(), st.ownership,
@@ -3994,6 +4137,8 @@ function scanSenderIdentity() {
         lastSettings = cfg.values;
         lastPolicy = cfg.policy || {};
         lastLocked = cfg.locked || {};
+        // [5.100-1] The setting (or its policy) may have changed: covered or shown again.
+        if (suspiciousBodies.size || document.querySelector('[data-unshortener-ai-covered]')) scheduleAiSummaryCover();
         const S = cfg.values;
         if (MAIL_CAN.opened === true) addCopyButtons(S);
         applyRowHighlighter(S);
@@ -4028,6 +4173,8 @@ function rowLostDecorations(target) {
 function avatarLost(row) { return row.dataset.unshortenerAvatar === '1' && !row.querySelector('.unshortener-row-avatar'); }
 const observer = new MutationObserver((mutations) => {
     scheduleBadgeUpdate();                     // opening, closing or switching views can change the state
+    // [5.100-1] Gmail adds its AI summary after the email is shown (or when "Summarize this email" is clicked).
+    if (suspiciousBodies.size) scheduleAiSummaryCover();
     let emailOpened = false;
     outer:
     for (const mutation of mutations) {
@@ -4071,7 +4218,7 @@ window.addEventListener('hashchange', () => { scheduleBadgeUpdate(); if (MAIL) s
 window.addEventListener('popstate', scheduleBadgeUpdate);
 // Coming back to the tab: the webmail may have refreshed the list while it was hidden.
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { lastReported = ''; scheduleBadgeUpdate(); if (MAIL) scheduleScan(); if (spamQueue.size) scheduleSpamMoves(); } });
-const SENDER_SETTING_KEYS = ['enableLookalikeCheck', 'enableOwnNameCheck', 'enableCallbackScamCheck', 'enableAutoSpamInSearch', 'enableSpamFolderFlags', 'enableCopyAddress', 'senderPictureSize', 'enableSenderBimi', 'enableRowHighlighter', 'rowHighlightColor', 'rowHighlightStyle', 'rowHighlightSelected', 'rowHighlightSelectedColor', 'enableConflictWarnings',
+const SENDER_SETTING_KEYS = ['enableAiSummaryCover', 'enableLookalikeCheck', 'enableOwnNameCheck', 'enableCallbackScamCheck', 'enableAutoSpamInSearch', 'enableSpamFolderFlags', 'enableCopyAddress', 'senderPictureSize', 'enableSenderBimi', 'enableRowHighlighter', 'rowHighlightColor', 'rowHighlightStyle', 'rowHighlightSelected', 'rowHighlightSelectedColor', 'enableConflictWarnings',
     'enableSenderIdentity', 'enableSenderAvatars', 'enableSenderIconFallback', 'enableSenderCountry', 'enableSenderDomainCheck', 'enableSenderAddressCheck', 'enableAutoSpam', 'customTrustedSenders', 'customAllowlist', 'enableDnsThreatCheck'];
 // Turning protection on or off in Settings or the popup takes effect on the icon immediately.
 chrome.storage.onChanged.addListener((changes, area) => {

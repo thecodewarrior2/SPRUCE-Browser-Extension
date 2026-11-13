@@ -27,15 +27,24 @@ const LINKS = {
   // ?links=allred: every link shows the company's main site and goes to a domain not known as its own.
   allred: 'Offers: <a id="r1" href="https://www.aexp.com/offers">americanexpress.com/offers</a> and <a id="r2" href="https://www.aexp.com/travel">americanexpress.com/travel</a>.'
 };
-const linkHtml = cloud ? [1,2,3,4].map(i => `<a href="https://oyl6s96s2xyr5tq6mj36.blob.core.windows.net/oyl6s96s2xyr5tq6mj36/link.html#qs=r-${i}ageikagdefbjkd">Message ${i}</a>`).join(' ')
+// [5.100] ?plain=1: a short text with no link; ?hidden=<text>: text the reader can't see (zero size, white on
+// white), as in the attack on AI summaries; ?summary=1: Gmail's AI summary card above the conversation, with
+// its "Summarize this email" chip (test-aisummary.js).
+const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+const hiddenHtml = P.get('hidden') ? `<span style="font-size:0px;color:#ffffff">${esc(P.get('hidden'))}</span>` : '';
+const summaryHtml = P.get('summary') ? `<div class="eJPjde" id="aiSummary"><div role="button" aria-label="Summarize this email">Summarize this email</div>
+  <div class="aiText">AI Overview: Benda is seeking this information from you. Please click the link and fill out the form.</div></div>` : '';
+// ?darktext=<text>: the email's own dark text on a dark theme the webmail draws (not hiding anything).
+if (P.get('darktext')) document.getElementById('main').style.background = '#202124';
+const linkHtml = P.get('darktext') ? `<div style="color:#1e1e1e">${esc(P.get('darktext'))}</div>` : P.get('plain') ? 'See you at the spring open house on Friday.' : cloud ? [1,2,3,4].map(i => `<a href="https://oyl6s96s2xyr5tq6mj36.blob.core.windows.net/oyl6s96s2xyr5tq6mj36/link.html#qs=r-${i}ageikagdefbjkd">Message ${i}</a>`).join(' ')
   : LINKS[P.get('links')] || 'Please sign in at <a href="https://example.com/login">example.com</a> today.';
 setTimeout(() => {
   document.getElementById('main').innerHTML = `<h2 class="hP" data-thread-perm-id="thread-f:${tid}" data-legacy-thread-id="${Number(tid).toString(16)}">${P.get('subj') || 'Your password expires'}</h2>
-  <div class="nH"><div class="adn ads" data-message-id="#msg-f:3001" data-legacy-message-id="${(3001).toString(16)}">
+  ${summaryHtml}<div class="nH"><div class="adn ads" data-message-id="#msg-f:3001" data-legacy-message-id="${(3001).toString(16)}">
     <div class="aju"><div class="aCi">${P.get('avatar') ? `<img class="ajn" data-hovercard-id="${sender}" src="${P.get('avatar')}" width="40" height="40">` : ''}</div></div>
     <div class="gs">
     <h3 class="iw"><span class="qu"><span class="gD" email="${sender}" name="${sname}">${sname}</span> <span class="go">&lt;${sender.replace(/</g,'&lt;')}&gt;</span></span></h3>
-    <div class="a3s aiL"><div class="ii gt"><div>${linkHtml}</div></div></div>
+    <div class="a3s aiL"><div class="ii gt"><div>${linkHtml}${hiddenHtml}</div></div></div>
   </div></div>${P.get('with') ? `<div class="adn ads" data-message-id="#msg-f:3002" data-legacy-message-id="${(3002).toString(16)}">
     <h3 class="iw"><span class="qu"><span class="gD" email="${P.get('with')}" name="Colleague">Colleague</span> <span class="go">&lt;${P.get('with')}&gt;</span></span></h3>
     <div class="a3s aiL"><div class="ii gt"><div>My reply.</div></div></div></div>` : ''}</div>`;

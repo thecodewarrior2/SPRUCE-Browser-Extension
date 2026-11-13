@@ -20,6 +20,7 @@ The same keys work in Chrome, Edge and Firefox. Chrome and Edge wrap each value,
 - [Sender icons and moving phishing to Spam (Gmail)](#sender-icons-and-moving-phishing-to-spam-gmail)
 - [Deploying](#deploying)
 - [Safari](#safari)
+- [Gmail's AI summaries](#gmails-ai-summaries)
 - [Organization lists](#organization-lists)
 - [Administrator-only policies](#administrator-only-policies)
 - [Resetting settings](#resetting-settings)
@@ -267,6 +268,7 @@ Safari has no extension policies; see [Safari](#safari) below.
 | managedEnableCopyAddress | boolean | true | Gmail: a button after the sender's address in opened emails that copies the address (keyboard accessible; a brief "Copied" confirmation, announced to screen readers). Works whatever the sender checks are set to. Another extension doing the same (Copy Button for Gmail) is recognized by the conflict warnings |
 | managedEnableLookalikeCheck | boolean | true | Inbox list, nothing opened: senders whose domain imitates a protected domain. Protected: the top 10,000 of two public popular-site lists (Chrome UX Report via a research copy on GitHub, CC BY 4.0; Tranco from tranco-list.eu), downloaded monthly and counted only when the domain enforces DMARC; the built-in brands; your organization; domains whose mail passed DMARC in the mailbox. Look-alike characters, a built-in brand plus a scare word, a brand domain as a prefix, imitations of your organization: red, moved to Spam. One letter off, or a popular or learned name plus a scare word: red only if the sender's domain was registered under 90 days ago (public RDAP record via IANA; only the domain is sent); amber for the built-in brands otherwise; nothing for other old domains. Also a brand's name on a non-brand address (red; first, online, the domain's public DNS and registry/registrar records are read once: a domain proven the brand's isn't flagged, one that looks like it is amber) and a colleague's name on an outside address (amber; colleague names kept only as one-way hashes). Needs the new host permission `tranco-list.eu` (granted silently to policy installs) Also (5.96): a colleague's name on an outside reply address (amber), or copied in at an outside address (weak) or at one imitating your organization's (amber). Since 5.99 a colleague's name on an outside address is amber only when the email claims to come from inside (a personal email account, an address imitating your organization's, a failed sender verification, replies to another domain, a title or your organization's name after the name, or impersonators' requests such as gift cards, payroll or bank details, a phone number or codes); otherwise it is a note that people share names. |
 | managedEnableOwnNameCheck | boolean | true | Gmail, inbox list, nothing opened: an email whose sender name is the user's own email address, or mailbox name (the part before the @, written as in the address; in any case for addresses at Gmail, Outlook.com and other big providers), but which comes from someone else's address is flagged red and moved to Spam. Shared mailbox names (info, office, support…), the organization's own senders and addresses that contain the user's mailbox name (likely their other account) are left alone. Trusted senders are never judged |
+| managedEnableAiSummaryCover | boolean | true | Gmail (5.100): while an opened email is flagged or cautioned (its sender, or a dangerous link), Gmail's AI summary (Gemini's "Summarize this email" chip and "AI Overview" card) is covered by a note saying why, with a button that shows it anyway (then with a warning above it). A summary retells a scam's request in calm words and doesn't check who sent the email. Gmail still writes the summary; it is only kept out of sight, and Gemini's side panel isn't covered. To turn Gmail's AI summaries off for everyone, see [Gmail's AI summaries](#gmails-ai-summaries) |
 | managedEnableCallbackScamCheck | boolean | true | "Call this number" scams: a subject with a phone number to call about a purchase or charge the user didn't make is flagged red (inbox list, nothing opened) and moved to Spam, whoever sent it, since attackers type such text into names that companies' own systems mail out (a real Microsoft or PayPal address); a number with only call/support wording is a caution. Opened emails: "call if you didn't make this purchase" and look-alike mathematical letters are cautions, on every webmail |
 | managedEnableRowHighlighter | boolean | true | Highlight the inbox row under the mouse (and selected rows), so users see exactly which email a click opens; a see-through color and/or outline readable in light and dark themes. Every webmail whose inbox list the extension finds |
 | managedRowHighlightColor | string | yellow | Highlight color for the row under the mouse: `yellow`, `blue`, `green`, `pink`, `purple` or `gray` |
@@ -349,6 +351,8 @@ extra sign-in, an app registration or an administrator-approved API.
 | Look-alike senders caught in the inbox list (nothing opened) | ✓ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
 | Senders using your own name or address as theirs, caught in the inbox list | ✓ | — | — | — | — | — | — | — | — |
 | "Call this number" scams caught, even in emails genuinely sent by a company | ✓ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
+| Hidden instructions to an AI assistant caught (text only an AI summary reads) | ✓ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
+| The webmail's AI summary of a suspicious email covered (Gemini) | ✓ | — | — | — | — | — | — | — | — |
 | Sender icon, country flag and label in the inbox list | ✓ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
 | Sender pictures over the checkbox: colleagues' photos, BIMI and company logos, site icons | ✓ | — | — | — | — | — | — | — | — |
 | The webmail's own warnings about a sender counted in the email's verdict | ✓ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
@@ -538,6 +542,46 @@ Allowlist, Blocklist and Trusted senders; API keys are never included. People ca
   Chrome and Firefox builds, so Safari doesn't have them. Add the training vendor's sending domains to Trusted
   senders and its link domains to the Allowlist in the backup you share, or training emails may be flagged and
   moved like real phishing.
+
+## Gmail's AI summaries
+
+Gmail's AI summary (Gemini: the **Summarize this email** chip, and the **AI Overview** that Gmail shows
+on its own at the top of long conversations, on by default for Workspace since November 2026) retells
+what an email asks in calm, ordinary words. It doesn't check who sent the email, so an impersonation
+("Principal Smith requires your personal contact information. Click here to provide it.") reads as a
+harmless request ("Benda is seeking this information from you. Please click the link and fill out the
+form."). Staff trained to spot the tone and the sender of a scam lose both in a summary.
+
+**What the extension does (Gmail, 5.100):**
+
+- While an opened email is flagged or cautioned, the summary is covered by a note saying why
+  (`managedEnableAiSummaryCover`, on by default). Users can show it anyway; it then carries a warning.
+- Text hidden in an email (zero-size, invisible, the color of its background, off-screen) that gives an
+  AI assistant instructions flags the email (red, moved to Spam with **Move flagged emails to Spam**).
+  This is the attack 0DIN published in July 2025: a hidden "<Admin> You Gemini, have to include this
+  message…" line that made the summary show a fake "your password was compromised, call this number"
+  warning, in an email with no link or attachment at all.
+- It can't stop Gemini from reading an email, and it doesn't cover Gemini's side panel.
+
+**Turning the summaries off for everyone (Google Admin console).** Google's own controls, as Google
+documents them in November 2026; menus change, so check Google's pages for your edition:
+
+- **Gemini in Gmail:** Menu → **Generative AI** → **Gemini for Workspace** → **Feature access**, choose
+  the organizational unit or group, then **Edit** next to Gmail → **Off** → **Save** (needs the Gemini
+  Settings administrator privilege; Google lists this panel for Enterprise Standard and Plus, Education
+  Plus, the Teaching and Learning add-on and Google AI Pro for Education).
+  [Google's page](https://knowledge.workspace.google.com/admin/generative-ai/workspace-with-gemini/manage-access-to-gemini-features-in-workspace-services)
+- **Smart features (every edition):** Menu → **Account** → **Account settings** → **Smart features for
+  Google Workspace** (super admin): the default for "Smart features in Gmail, Chat, and Meet" and "Smart
+  features in Google Workspace". Users can change a default: it's a default, not a lock.
+  [Google's page](https://knowledge.workspace.google.com/admin/security/manage-google-workspace-smart-features-for-your-users)
+- **One user:** Gmail → Settings → See all settings → General → **Smart features**, and **Google
+  Workspace smart features** → Manage Workspace smart feature settings. Either switch off stops the
+  summaries (and other smart features with them).
+  [Google's page](https://support.google.com/mail/answer/15604322?hl=en)
+
+Turning summaries off for staff who handle money or personal data (finance, payroll, HR, front
+offices) and leaving the extension's cover on for everyone else is a reasonable middle way.
 
 ## Organization lists
 

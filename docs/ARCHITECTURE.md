@@ -154,6 +154,15 @@ With all of them off, every answer is 5.89's (a unit test checks it).
 | `[5.95-3]` (no switch) | List downloads give up waiting for an answer after 25 seconds (`LIST_ANSWER_TIMEOUT_MS`), before Chrome stops a service worker whose request takes 30 | — |
 | `[5.95-4]` `arcKnownForwarders` | A failed DMARC check is only a strong sign (not a flag on its own) for a real mailing list, or for a forwarding chain (ARC) that Gmail checked and that Google or the reader's own organization sealed (`arcFromKnownForwarder`, the sealer from the `ARC-Seal` of the instance Gmail names); anyone can add a seal that checks out | any intact chain softens it, as in 5.94 |
 
+### 5.100's changes
+
+5.100's changes have their switches in `CHANGES_5_100` (`shared.js`), in the same way:
+
+| Change | What it does | Switch it off (set to `false`, rebuild) and |
+|---|---|---|
+| `[5.100-1]` `aiSummaryCover` | Gmail's AI summary (Gemini: `MAIL.aiSummary`, the `.eJPjde` card filter lists use, and the "Summarize this email" chip by its name) is covered while an opened email of the conversation is suspicious: `refreshEmailBanner` keeps `suspiciousBodies` (a line about the sender, flagged or cautioned, or a dangerous link), and `coverAiSummaries` (on every banner change, on the page's mutations while one is suspicious, and after the settings are read) hides each summary element (`display: none`; never one that is or holds an email, `holdsEmail`) behind a note (`.unshortener-ai-cover`) with **Show the summary anyway** (per conversation, `aiShownThread`: shown with a warning above it) and **Cover it again**. Setting **Cover Gmail's AI summary of suspicious emails** (`enableAiSummaryCover`, policy `managedEnableAiSummaryCover`); capability `aiSummary` in `mailCapabilities` | the summary is never covered |
+| `[5.100-2]` `hiddenAiInstructions` | `hiddenEmailText` (content script) collects an opened email's text its reader can't see (`checkVisibility` with opacity and visibility, a font under 2 px, a transparent color or one with a contrast under 1.12:1 against the background behind it, off-screen positioning, a zero-size box that hides overflow; read once per email, `hiddenTextCache`; color alone isn't trusted when more than half the email's text reads that way, a dark theme), and `aiInstructionSigns` (`shared.js`) weighs it: an AI role tag (`<Admin>`), overriding the AI's instructions, or speaking to it directly, with an instruction about what the reader or the summary is told: 5; an AI's name with such an instruction: 3. Counted in `updateOpenedVerdict` | hidden text isn't read |
+
 ### 5.99's change
 
 5.99's change has its switch in `CHANGES_5_99` (`shared.js`), in the same way:
