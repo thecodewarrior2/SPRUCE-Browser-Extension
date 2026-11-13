@@ -90,7 +90,8 @@ Kept in your browser's storage for this extension, never uploaded:
   with the logs;
 - names of people in your organization, only as one-way codes (hashes) that can't be read back, to
   spot outsiders using a colleague's name; and, for emails already read, the same kind of code for each
-  name in their Reply-To, Cc and To lines with its domain (never the name or the address), deleted
+  name in their Reply-To, Cc and To lines with its domain, and the domain of a Reply-To address
+  without a name (never the name or the address), deleted
   with the other results after 30 days by default.
 
 You can delete all of it in Settings (Data on this device) and in Logging. Uninstalling the extension

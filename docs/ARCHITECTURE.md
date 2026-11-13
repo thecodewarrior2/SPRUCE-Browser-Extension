@@ -143,6 +143,14 @@ touches carries its tag:
 
 With all of them off, every answer is 5.89's (a unit test checks it).
 
+### 5.99's change
+
+The same change as 5.99 on `testing` (5.94.20 here), with the same switch, `CHANGES_5_99` (`shared.js`), in the same way:
+
+| Change | What it does | Switch it off (set to `false`, rebuild) and |
+|---|---|---|
+| `[5.99-1]` `colleagueContext` | A colleague's name on an outside address (`nameAddressSigns` → `colleagueNameSign`) counts 3 only when the email claims to come from inside the organization: a personal mail domain, a domain imitating the organization's (`ownDomainLookalike`), a failed DMARC sign among the header signs, a Reply-To domain other than the sender's and the organization's (`replyToDomains`), a title or the organization's name in the display name (`INSIDE_TITLE_RE`), or impersonators' asks in the subject or, in an opened email, the text (`IMPERSONATOR_ASK_RE`, `IMPERSONATOR_CODE_RE`; read only when the name is a colleague's). Otherwise a 0 note ("people share names"). A colleague's name with a title after it ("Name, Principal", "Name - Maple Schools") is matched too (`colleagueNameMatches`). `addressLinePeople` keeps a Reply-To address without a name as its domain (`HEADER_SIGNS_VERSION` 8). From S.P.R.U.C.E Mail Protection Service 0.5.43 | any colleague's name outside counts 3, as in 5.94.19 |
+
 ### 5.98's change
 
 The same change as 5.98 on `testing` (5.94.19 here), with the same switch, `CHANGES_5_98` (`shared.js`), in the same way:
@@ -217,7 +225,7 @@ weights add up: **5 or more is red** (flagged, and moved to Spam), **3 or 4 is a
 flowchart TD
   subgraph Row["Inbox list, nothing opened"]
     A1["Sender's address verdict"]
-    A2["Name vs address:<br/>a brand's name on another address (5;<br/>3 if records say probably the brand's,<br/>0 if they prove it)<br/>a colleague's name outside (3)<br/>your own name or address (5)"]
+    A2["Name vs address:<br/>a brand's name on another address (5;<br/>3 if records say probably the brand's,<br/>0 if they prove it)<br/>a colleague's name outside (3 when the<br/>email claims the inside, else a note)<br/>your own name or address (5)"]
     A3["Look-alike domain:<br/>pаypal, paypal-billing,<br/>your-school-support (5)"]
     A4["Subject: 'call this number' scam (5)"]
   end

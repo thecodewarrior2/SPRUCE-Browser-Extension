@@ -1235,8 +1235,8 @@ test('QR scanner: a scan that never ends is given up, and Chrome\'s stuck scanne
 // shared.js alone, with some switches turned off (as a maintainer rolling one back would).
 function loadShared(off = []) {
   let src = fs.readFileSync(path.join(EXT, 'shared.js'), 'utf8');
-  // The switches: 5.90's COMPANY_MATCHING, CHANGES_5_96, CHANGES_5_97 and CHANGES_5_98 (the same as 5.96 to 5.98 on testing).
-  const decls = [/const COMPANY_MATCHING = Object\.freeze\(\{([^}]*)\}\);/, /const CHANGES_5_96 = Object\.freeze\(\{([^}]*)\}\);/, /const CHANGES_5_97 = Object\.freeze\(\{([^}]*)\}\);/, /const CHANGES_5_98 = Object\.freeze\(\{([^}]*)\}\);/];
+  // The switches: 5.90's COMPANY_MATCHING, CHANGES_5_96 to CHANGES_5_99 (the same as 5.96 to 5.99 on testing).
+  const decls = [/const COMPANY_MATCHING = Object\.freeze\(\{([^}]*)\}\);/, /const CHANGES_5_96 = Object\.freeze\(\{([^}]*)\}\);/, /const CHANGES_5_97 = Object\.freeze\(\{([^}]*)\}\);/, /const CHANGES_5_98 = Object\.freeze\(\{([^}]*)\}\);/, /const CHANGES_5_99 = Object\.freeze\(\{([^}]*)\}\);/];
   for (const decl of decls) assert.ok(decl.test(src), `switches found: ${decl}`);
   for (const k of off) {
     const decl = decls.find(d => new RegExp(`\\b${k}: true\\b`).test(src.match(d)[1]));
@@ -2229,7 +2229,7 @@ test('[5.96-2] colleagues\' names in Reply-To, Cc and To (kept as fingerprints a
   const content = fs.readFileSync(path.join(EXT, 'content.js'), 'utf8');
   assert.match(content, /const pl = CHANGES_5_96\.colleagueLines \? addressLinePeople\(headers, parsed && parsed\.address\) : \[\];/);
   assert.equal((content.match(/colleagueLineSigns\((info|st\.info)\.pl, /g) || []).length, 2, 'the inbox list and the opened email');
-  assert.equal(R('HEADER_SIGNS_VERSION'), 7, 'results saved by 5.95 are worked out again');
+  assert.ok(R('HEADER_SIGNS_VERSION') >= 7, 'results saved by 5.95 are worked out again');
 });
 
 // --- 5.97: a link through the mail service that sent the email (CHANGES_5_97 in shared.js) ----------------
@@ -2315,4 +2315,76 @@ test('[5.98-1] the background reads HaGeZi\'s "*.domain" lines and TweetFeed\'s 
   assert.equal(reported.reported, 'TweetFeed (researchers\' reports)');
   // The webmail page turns that into a caution saying who reported it.
   assert.match(fs.readFileSync(path.join(EXT, 'content.js'), 'utf8'), /if \(!problem && response\.isSafe && response\.reported\) problem = `reported as phishing or malware by \$\{response\.reported\} \(community reports\)`;/);
+});
+
+// --- 5.99: a colleague's name counts only when the email claims to be from inside (CHANGES_5_99 in shared.js) --
+// Made-up people, addresses and emails only.
+test('[5.99-1] a colleague\'s name on an outside address: amber only when the email claims the inside, a note otherwise; off: as in 5.98', () => {
+  const R = loadShared();
+  R(`var __c = new Set(['Misty Hollins'].map(colleagueNameHash))`);
+  const ORG = 'maple-schools.example', VENDOR = 'misty.hollins@learnbridge-vendor.example';
+  const sign = (name, address, context = {}, Rx = R) => {
+    const all = Rx(`nameAddressSigns(${JSON.stringify(name)}, ${JSON.stringify(address)}, ${JSON.stringify(ORG)}, __c, null, ${JSON.stringify(context)})`);
+    return all.find(x => /in your organization/.test(x.text)) || null;
+  };
+  // A vendor's employee who shares a colleague's name, greeting from her company's own address: shown, not counted.
+  const greet = { subject: 'Hello from LearnBridge', text: 'Hi Pat, I hope your week is going well. It was nice meeting you at the conference. Talk soon, Misty' };
+  let s = sign('Misty Hollins', VENDOR, greet);
+  assert.deepEqual([s.kind, s.weight], ['sender-name-shared', 0]);
+  assert.equal(s.text, 'The sender has the same name as someone in your organization, writing from learnbridge-vendor.example\'s own address. Nothing in the email claims to be from inside your organization, so it doesn\'t count (people share names).');
+  R(`var __note = ${JSON.stringify(s)}`);
+  const noted = R(`applyEmailSignals({ status: 'clean', reasons: ['Checked: no problems found.'] }, [__note])`);
+  assert.equal(noted.status, 'clean', 'the note changes nothing');
+  assert.ok(noted.reasons.includes(s.text), 'but it is shown');
+  // It counts (3: amber) when the email claims to be from inside, and says how.
+  const dmarc = { weight: 3, text: 'It failed its sender\'s verification (DMARC), so it may not have been sent by learnbridge-vendor.example.' };
+  const cases = [
+    ['Misty Hollins', 'misty.hollins.1975@gmail.com', greet, /from a personal email account/],
+    ['Misty Hollins', 'misty@maple-schools-k12.example', greet, /from an address imitating your organization's domain/],
+    ['Misty Hollins', VENDOR, Object.assign({ signals: [dmarc] }, greet), /and it failed its sender's verification \(DMARC\)/],
+    ['Misty Hollins', VENDOR, Object.assign({ replyTo: ['quickmail-box.example'] }, greet), /with replies going to another domain \(quickmail-box\.example\)/],
+    ['Misty Hollins, Principal', VENDOR, greet, /with a title or your organization's name in the sender's name \(“Misty Hollins, Principal”\)/],
+    ['Misty Hollins - Maple Schools', VENDOR, greet, /title or your organization's name/],
+    ['Misty Hollins (Superintendent)', VENDOR, greet, /title or your organization's name/],
+    ['Hollins, Misty', VENDOR, { subject: 'Quick favor', text: 'Are you available? I am in a meeting and need a quick favor. Text me your cell number.' }, /asking for what impersonators ask/],
+    ['Misty Hollins', VENDOR, { subject: 'Update', text: 'Please update my direct deposit to the new bank account before Friday.' }, /asking for what impersonators ask/],
+    ['Misty Hollins', VENDOR, { subject: 'Login', text: 'Please send me the verification code you just received.' }, /asking for what impersonators ask/]
+  ];
+  for (const [name, address, context, re] of cases) {
+    s = sign(name, address, context);
+    assert.deepEqual([s.kind, s.weight], ['sender-colleague-name', 3], name + ' ' + address + ' ' + JSON.stringify(context));
+    assert.ok(s.text.startsWith(`The sender uses the name of someone in your organization, but writes from an outside address (${address}), `), s.text);
+    assert.match(s.text, re);
+  }
+  // Not a claim: replies to the sender's own domain or the organization's; the text is read only for a colleague's name.
+  assert.equal(sign('Misty Hollins', VENDOR, Object.assign({ replyTo: ['learnbridge-vendor.example', ORG] }, greet)).weight, 0);
+  R('var __read = 0');
+  R(`nameAddressSigns('Jordan Lee', 'jordan.lee@learnbridge-vendor.example', ${JSON.stringify(ORG)}, __c, null, { text: () => { __read++; return ''; } })`);
+  assert.equal(R('__read'), 0, 'a stranger\'s email isn\'t read');
+  R(`nameAddressSigns('Misty Hollins', ${JSON.stringify(VENDOR)}, ${JSON.stringify(ORG)}, __c, null, { text: () => { __read++; return 'Can you buy gift cards for the staff?'; } })`);
+  assert.equal(R('__read'), 1);
+  // Strangers, the colleague's own address, and no colleagues known (a personal account): nothing.
+  assert.equal(sign('Jordan Lee', 'jordan.lee@gmail.com', greet), null);
+  assert.equal(sign('Misty Hollins', `misty.hollins@${ORG}`, greet), null);
+  assert.deepEqual(R(`nameAddressSigns('Misty Hollins', 'misty.hollins.1975@gmail.com', '', new Set(), null, {})`), []);
+  // A Reply-To address without a name is kept as its domain only, and reaches the check.
+  const raw = ['From: Misty Hollins <misty.hollins@learnbridge-vendor.example>', 'Reply-To: misty.h@quickmail-box.example', `To: pat.reyes@${ORG}`, 'Subject: Hello', '', 'Hi.'].join('\r\n');
+  const people = R(`addressLinePeople(parseRawHeaders(${JSON.stringify(raw)}), ${JSON.stringify(VENDOR)})`);
+  assert.deepEqual(JSON.parse(JSON.stringify(people)), [{ line: 'reply-to', h: '', domain: 'quickmail-box.example', fromSame: false }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(R(`replyToDomains(${JSON.stringify(people)})`))), ['quickmail-box.example']);
+  R(`var __p = ${JSON.stringify(people)}`);
+  assert.deepEqual(JSON.parse(JSON.stringify(R(`colleagueLineSigns(__p, ${JSON.stringify(ORG)}, __c, '')`))), [], 'no name: no Reply-To colleague sign');
+  assert.equal(R('HEADER_SIGNS_VERSION'), 8, 'results saved by 5.98 are worked out again');
+  // Off: any colleague's name outside is amber, as in 5.98; a title after it isn't recognized; a bare Reply-To isn't kept.
+  const Off = loadShared(['colleagueContext']);
+  Off(`var __c = new Set(['Misty Hollins'].map(colleagueNameHash))`);
+  s = sign('Misty Hollins', VENDOR, greet, Off);
+  assert.deepEqual([s.weight, s.text], [3, 'The sender uses the name of someone in your organization, but writes from an outside address (misty.hollins@learnbridge-vendor.example).']);
+  assert.equal(sign('Misty Hollins, Principal', VENDOR, greet, Off), null);
+  assert.equal(Off(`addressLinePeople(parseRawHeaders(${JSON.stringify(raw)}), ${JSON.stringify(VENDOR)})`).length, 0);
+  // The webmail page passes what the email says, in the inbox list and in the opened email.
+  const content = fs.readFileSync(path.join(EXT, 'content.js'), 'utf8');
+  assert.equal((content.match(/signals: hdr \? hdr\.an : \[\], replyTo: hdr \? replyToDomains\(hdr\.pl\) : \[\] \}/g) || []).length, 2);
+  assert.match(content, /\{ subject: subjectText, signals: hdr/);
+  assert.match(content, /\{ subject: openedSubject\(\), text: \(\) => body\.innerText, signals: hdr/);
 });
