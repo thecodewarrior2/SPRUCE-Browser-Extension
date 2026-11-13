@@ -154,6 +154,14 @@ With all of them off, every answer is 5.89's (a unit test checks it).
 | `[5.95-3]` (no switch) | List downloads give up waiting for an answer after 25 seconds (`LIST_ANSWER_TIMEOUT_MS`), before Chrome stops a service worker whose request takes 30 | — |
 | `[5.95-4]` `arcKnownForwarders` | A failed DMARC check is only a strong sign (not a flag on its own) for a real mailing list, or for a forwarding chain (ARC) that Gmail checked and that Google or the reader's own organization sealed (`arcFromKnownForwarder`, the sealer from the `ARC-Seal` of the instance Gmail names); anyone can add a seal that checks out | any intact chain softens it, as in 5.94 |
 
+### 5.101's change
+
+5.101's change has its switch in `CHANGES_5_101` (`shared.js`), in the same way:
+
+| Change | What it does | Switch it off (set to `false`, rebuild) and |
+|---|---|---|
+| `[5.101-1]` `openedAvatars` | In an opened email from a company (not the organization's own domain, not a personal mail domain), `placeMessageAvatar` draws the inbox row's picture (`senderPicture`: the company's logo when its domain enforces DMARC, else its site's icon) over the box Gmail draws its own picture in (`MAIL.message.avatar.slot`, `.aCi`, or the parent of the image marked with the sender's address), at the size and place of Gmail's (`.unshortener-msg-avatar`; no clicks; hidden by `content.css` for a flagged or cautioned email). Looked for again after 0.5, 1.5 and 3 s, drawn again when Gmail redraws its picture or a logo is learned (`refreshMessageAvatars`). The collapsed messages of the conversation too (`scanThreadAvatars`: Gmail's pictures marked with an address in the thread view, on each scan and every 3 s), when the sender's own verdict (`senderResultsFor`, as in the list) isn't flagged or caution. Setting **Sender photos and company logos** | Gmail's own picture only, as in 5.100 |
+
 ### 5.100's changes
 
 5.100's changes have their switches in `CHANGES_5_100` (`shared.js`), in the same way:

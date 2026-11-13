@@ -11,7 +11,7 @@
 Short notes on each version in the browser stores. Every detail is in the
 [full changelog](../CHANGELOG.md).
 
-## 5.100
+## 5.101
 
 Changes since 5.91.
 
@@ -34,6 +34,10 @@ Changes since 5.91.
   like those in PDFs and pictures (Gmail).
 - An email that fails its sender's verification is no longer excused just because it was passed through a
   forwarding service; only forwarding by Google or by your own organization still counts.
+
+**Easier to see who wrote**
+- An opened email from a company now shows the same logo or site icon as its row in the inbox, instead
+  of Gmail's plain letter circle (Gmail).
 
 **Fewer false alarms**
 - Someone at a company you work with who happens to share a colleague's name is no longer cautioned

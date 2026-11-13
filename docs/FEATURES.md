@@ -265,7 +265,7 @@ sign-in, an app registration or an administrator-approved API.
 | Hidden instructions to an AI assistant caught (text only an AI summary reads) | ✓ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
 | The webmail's AI summary of a suspicious email covered (Gemini) | ✓ | — | — | — | — | — | — | — | — |
 | Sender icon, country flag and label in the inbox list | ✓ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
-| Sender pictures over the checkbox: colleagues' photos, BIMI and company logos, site icons | ✓ | — | — | — | — | — | — | — | — |
+| Sender pictures over the checkbox: colleagues' photos, BIMI and company logos, site icons (and a company's in opened emails) | ✓ | — | — | — | — | — | — | — | — |
 | The webmail's own warnings about a sender counted in the email's verdict | ✓ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ | ◐ |
 | Signs of forgery in the headers (DMARC, forged delivery records…) | ✓ | — | — | — | — | — | — | — | — |
 | Phishing-simulation emails recognized by their headers | ✓ | — | — | — | — | — | — | — | — |

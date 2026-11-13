@@ -1212,8 +1212,8 @@ test('QR scanner: Chrome asks its offscreen document; Firefox and Safari call th
 // shared.js alone, with some switches turned off (as a maintainer rolling one back would).
 function loadShared(off = []) {
   let src = fs.readFileSync(path.join(EXT, 'shared.js'), 'utf8');
-  // The switches: 5.90's COMPANY_MATCHING, 5.95's to 5.99's CHANGES_5_9x, and 5.100's CHANGES_5_100.
-  const decls = [/const CHANGES_5_100 = Object\.freeze\(\{([^}]*)\}\);/, /const COMPANY_MATCHING = Object\.freeze\(\{([^}]*)\}\);/, /const CHANGES_5_95 = Object\.freeze\(\{([^}]*)\}\);/, /const CHANGES_5_96 = Object\.freeze\(\{([^}]*)\}\);/, /const CHANGES_5_97 = Object\.freeze\(\{([^}]*)\}\);/, /const CHANGES_5_98 = Object\.freeze\(\{([^}]*)\}\);/, /const CHANGES_5_99 = Object\.freeze\(\{([^}]*)\}\);/];
+  // The switches: 5.90's COMPANY_MATCHING, 5.95's to 5.99's CHANGES_5_9x, and 5.100's and 5.101's.
+  const decls = [/const CHANGES_5_101 = Object\.freeze\(\{([^}]*)\}\);/, /const CHANGES_5_100 = Object\.freeze\(\{([^}]*)\}\);/, /const COMPANY_MATCHING = Object\.freeze\(\{([^}]*)\}\);/, /const CHANGES_5_95 = Object\.freeze\(\{([^}]*)\}\);/, /const CHANGES_5_96 = Object\.freeze\(\{([^}]*)\}\);/, /const CHANGES_5_97 = Object\.freeze\(\{([^}]*)\}\);/, /const CHANGES_5_98 = Object\.freeze\(\{([^}]*)\}\);/, /const CHANGES_5_99 = Object\.freeze\(\{([^}]*)\}\);/];
   for (const decl of decls) assert.ok(decl.test(src), `switches found: ${decl}`);
   for (const k of off) {
     const decl = decls.find(d => new RegExp(`\\b${k}: true\\b`).test(src.match(d)[1]));
@@ -2006,4 +2006,17 @@ test('[5.100-1] Gmail\'s AI summary: a setting on by default with a policy key; 
   assert.match(content, /CHANGES_5_100\.hiddenAiInstructions \? aiInstructionSigns\(hiddenEmailText\(body\)\) : \[\]/);
   const Off = loadShared(['aiSummaryCover']);
   assert.equal(Off('CHANGES_5_100.aiSummaryCover'), false);
+});
+
+// --- 5.101: an opened email from a company shows the inbox row's picture (CHANGES_5_101 in shared.js) ---------
+test('[5.101-1] opened emails: Gmail\'s picture box is known; only company senders get our picture; flagged or cautioned: none; off: Gmail\'s only', () => {
+  const R = loadShared();
+  assert.equal(R('WEBMAIL_SITES.find(w => w.id === "gmail").mail.message.avatar.slot'), '.aCi');
+  assert.equal(R('CHANGES_5_101.openedAvatars'), true);
+  const content = fs.readFileSync(path.join(EXT, 'content.js'), 'utf8');
+  assert.match(content, /if \(!d \|\| \(org && \(d === org \|\| d\.endsWith\('\.' \+ org\)\)\) \|\| isPersonalMailDomain\(reg\)\) return '';/, 'colleagues and personal accounts keep Gmail\'s picture');
+  assert.match(content, /if \(!r \|\| !slot\.isConnected \|\| r\.status === 'flagged' \|\| r\.status === 'caution' \|\| messageAvatarSlots\.has\(slot\)\) return;/, 'collapsed messages: the sender\'s own verdict decides, as in the list');
+  assert.match(fs.readFileSync(path.join(EXT, 'content.css'), 'utf8'), /\[data-status="flagged"\], \[data-status="caution"\]\)\) \.unshortener-msg-avatar \{\s*display: none;/, 'none for a flagged or cautioned email');
+  const Off = loadShared(['openedAvatars']);
+  assert.equal(Off('CHANGES_5_101.openedAvatars'), false);
 });

@@ -63,6 +63,35 @@ tr:has(.unshortener-sender-chip[data-status="flagged"]) .unshortener-sender-icon
 tr:has(.unshortener-sender-chip[data-status="caution"]) .unshortener-sender-icon img.unshortener-flag-size {
     display: none;
 }
+/* [5.101-1] An opened email's sender picture (a company's logo or its site's icon), drawn over the box Gmail
+   draws its own picture in: the same circle, never taking clicks (Gmail's hover card still opens). A
+   flagged or caution email gets none of ours, as in the list. */
+.unshortener-msg-avatar-slot {
+    position: relative;
+}
+.unshortener-msg-avatar {
+    position: absolute;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: #fff;
+    pointer-events: none;
+    z-index: 1;
+}
+.unshortener-msg-avatar.unshortener-msg-icon {
+    box-sizing: border-box;
+    padding: 17%;
+    object-fit: contain;
+    background-color: #f1f3f4;
+}
+.unshortener-msg-avatar.unshortener-msg-icon.unshortener-msg-icon-fitted {
+    padding: 0;
+    object-fit: cover;
+}
+:is(.adn, [data-message-id]):has(:is(.unshortener-sender-chip, .unshortener-sender-address):is([data-status="flagged"], [data-status="caution"])) .unshortener-msg-avatar {
+    display: none;
+}
 /* Sizes follow Gmail's display density (content.js applyPictureMode): 36 px circles for Default,
    32 px for Comfortable. Compact has no circles (the icon goes in line with the flag). */
 html[data-unshortener-pictures="medium"] .unshortener-row-avatar {

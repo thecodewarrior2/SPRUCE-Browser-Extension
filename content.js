@@ -2686,6 +2686,7 @@ function setDensityWatch() {
     if (on && !densityTimer) densityTimer = setInterval(() => guarded('Following Gmail\'s density', () => {
         if (!lastSettings.enableSenderIdentity) return;
         harvestPagePhotos(lastSettings);
+        scanThreadAvatars(lastSettings);                // [5.101-1] collapsed messages, whose pictures Gmail fills in late
         const before = document.documentElement.dataset.unshortenerPictures;
         // …and a picture Gmail took away while redrawing a row (coming back from an email) is put back.
         if (applyPictureMode(lastSettings) !== before || listRows().some(r => isShown(r) && avatarLost(r))) scheduleScan();
@@ -2717,18 +2718,7 @@ function fillSenderIcon(wrap, S) {
         Promise.resolve().then(() => { if (slot.isConnected && circles()) { slot.remove(); initial(); } });
         return;
     }
-    const key = `${site}|${domain}|${avatars ? address : ''}`;
-    if (!senderIcons.has(key)) {
-        if (senderIcons.size >= SENDER_RESULTS_MAX) senderIcons.delete(senderIcons.keys().next().value);
-        senderIcons.set(key, new Promise(resolve => safeSend({ action: 'senderIcon', site, domain, address: avatars ? address : '' },
-            (r) => {
-                const img = (v) => typeof v === 'string' && v.startsWith('data:image/') ? v : '';
-                // A BIMI logo whose server allows no download comes as its https: address.
-                const pic = (v) => img(v) || (typeof v === 'string' && /^https:\/\/[^\s"'<>]+$/i.test(v) ? v : '');
-                resolve({ d: img(r && r.d), a: pic(r && r.a), k: r && typeof r.k === 'string' ? r.k : '' });
-            })));
-    }
-    senderIcons.get(key).then(r => {
+    senderPicture(site, domain, avatars ? address : '').then(r => {
         if (!slot.isConnected) return;
         if (circles()) {
             slot.remove();
@@ -2754,6 +2744,126 @@ function fillSenderIcon(wrap, S) {
         });
     });
 }
+// What the background holds for a sender: { d: the site's icon, a: their photo or company logo, k: its kind },
+// each a data: URL (a BIMI logo whose server allows no download: its https: address), asked once per page.
+function senderPicture(site, domain, address) {
+    const key = `${site}|${domain}|${address || ''}`;
+    if (!senderIcons.has(key)) {
+        if (senderIcons.size >= SENDER_RESULTS_MAX) senderIcons.delete(senderIcons.keys().next().value);
+        senderIcons.set(key, new Promise(resolve => safeSend({ action: 'senderIcon', site, domain, address: address || '' },
+            (r) => {
+                const img = (v) => typeof v === 'string' && v.startsWith('data:image/') ? v : '';
+                const pic = (v) => img(v) || (typeof v === 'string' && /^https:\/\/[^\s"'<>]+$/i.test(v) ? v : '');
+                resolve({ d: img(r && r.d), a: pic(r && r.a), k: r && typeof r.k === 'string' ? r.k : '' });
+            })));
+    }
+    return senderIcons.get(key);
+}
+
+// [5.101-1] The sender's picture in an opened email from a company: the one its inbox row shows (the
+// company's logo, else its site's icon), drawn over the box Gmail draws its own picture in (often a plain
+// letter circle there, while the list shows the logo). Colleagues and personal accounts keep Gmail's own
+// picture (a colleague's photo, a person's Google photo); with nothing to show, Gmail's stays too. It takes
+// no clicks (Gmail's hover card still opens), and a flagged or cautioned email shows none (content.css), so a
+// forged email can't borrow a company's logo. Gmail fills its picture in late, so the box is looked for
+// again after 0.5, 1.5 and 3 s. The collapsed messages of the conversation get the same (scanThreadAvatars).
+const messageAvatarSlots = new WeakMap();   // slot of an expanded message → { body, who }
+function messageAvatarsOn(S) {
+    const A = MAIL_CAN.avatars ? MAIL.message.avatar : null;
+    return CHANGES_5_101.openedAvatars && A && A.slot && S.enableSenderIdentity && S.enableSenderAvatars ? A : null;
+}
+// The site whose picture a sender gets, or '' for the organization's own senders and personal accounts.
+function companyPictureSite(domain) {
+    const org = ownOrgDomain(), d = String(domain || '').toLowerCase(), reg = registrableDomain(d) || d;
+    if (!d || (org && (d === org || d.endsWith('.' + org))) || isPersonalMailDomain(reg)) return '';
+    const site = siteOfSender(d);
+    return SENDER_DOMAIN_RE.test(site) ? site : '';
+}
+function placeMessageAvatar(body, who, S, n = 0) {
+    const A = messageAvatarsOn(S);
+    if (!A || !who || !who.address) return;
+    const site = companyPictureSite(who.domain);
+    if (!site) return;
+    const scope = A.scope ? body.closest(A.scope) : null;
+    const { img } = avatarImagesFor(body, A, who.address);
+    const slot = (img && img.parentElement && !img.parentElement.closest(SITE.body) ? img.parentElement : null)
+        || (scope ? [...scope.querySelectorAll(A.slot)].find(s => !s.closest(SITE.body) && !s.contains(body)) : null);
+    if (!slot) {
+        if (n < 3) setTimeout(() => guarded('Showing a sender photo', () => { if (body.isConnected) placeMessageAvatar(body, who, lastSettings, n + 1); }), [500, 1500, 3000][n]);
+        return;
+    }
+    messageAvatarSlots.set(slot, { body, who });
+    drawAvatarOver(slot, who.address, who.domain, site);
+}
+// The sender's picture drawn over a box of Gmail's, as large as Gmail's own picture and where it is (40 px
+// when there is none to measure).
+function drawAvatarOver(slot, address, domain, site) {
+    const mine = slot.querySelector(':scope > .unshortener-msg-avatar');
+    if (mine && mine.dataset.address === address) return;
+    senderPicture(site, domain, address).then(r => guarded('Showing a sender photo', () => {
+        const url = r.a || r.d;
+        if (!url || !slot.isConnected) return;
+        slot.querySelectorAll(':scope > .unshortener-msg-avatar').forEach(e => e.remove());
+        slot.classList.add('unshortener-msg-avatar-slot');
+        const ref = [...slot.children].find(c => !c.classList.contains('unshortener-msg-avatar') && c.offsetWidth >= 16);
+        const size = ref ? Math.min(ref.offsetWidth, ref.offsetHeight || ref.offsetWidth) : 40;
+        const pic = document.createElement('img');
+        pic.className = 'unshortener-msg-avatar' + (r.a ? '' : ' unshortener-msg-icon');
+        pic.dataset.address = address;
+        pic.dataset.site = site;
+        pic.alt = '';
+        pic.setAttribute('aria-hidden', 'true');
+        pic.style.width = pic.style.height = `${size}px`;
+        pic.style.left = `${ref ? ref.offsetLeft : 0}px`;
+        pic.style.top = `${ref ? ref.offsetTop : 0}px`;
+        pic.addEventListener('error', () => pic.remove(), { once: true });   // Gmail's own picture shows again
+        if (/^https:/i.test(url)) pic.referrerPolicy = 'no-referrer';
+        pic.src = url;
+        slot.appendChild(pic);
+        if (!r.a) iconLook(url).then(async look => {
+            if (!pic.isConnected) return;
+            pic.style.backgroundColor = cssRgb(iconCircleColor(look, isDarkSurface(slot)));
+            const fitted = await fittedIcon(url, iconFillScale(look));
+            if (fitted && pic.isConnected && pic.src === url) { pic.src = fitted; pic.classList.add('unshortener-msg-icon-fitted'); }
+        });
+        else iconLook(url).then(look => {
+            const bg = contrastingBackground(look, ICON_SURFACE.light, [[60, 64, 67], ICON_MID_GREY]);
+            if (pic.isConnected && bg !== ICON_SURFACE.light) pic.style.backgroundColor = cssRgb(bg);
+        });
+    }));
+}
+// [5.101-1] The collapsed messages of the open conversation: Gmail's picture beside each is marked with the
+// sender's address, as everywhere. Their own email isn't read until it's opened, so, as in the inbox list,
+// the sender's own verdict decides: flagged or caution, none of ours. On each scan and every 3 seconds.
+function scanThreadAvatars(S) {
+    const A = messageAvatarsOn(S);
+    if (!A || !MAIL.openThread || !document.querySelector(MAIL.openThread)) return;
+    const main = document.querySelector('[role="main"]') || document.body;
+    for (const img of main.querySelectorAll(A.img)) {
+        const slot = img.parentElement;
+        if (!slot || img.closest(SITE.body) || img.closest('[class*="unshortener-"]') || messageAvatarSlots.has(slot)) continue;
+        const address = (img.getAttribute(A.addressAttr) || '').trim().toLowerCase();
+        if (!/^[^@\s]+@[^@\s]+$/.test(address)) continue;
+        const mine = slot.querySelector(':scope > .unshortener-msg-avatar');
+        if (mine && mine.dataset.address === address) continue;
+        const domain = domainOfAddress(address), site = companyPictureSite(domain);
+        if (!site) continue;
+        senderResultsFor([address]).then(([r]) => guarded('Showing a sender photo', () => {
+            if (!r || !slot.isConnected || r.status === 'flagged' || r.status === 'caution' || messageAvatarSlots.has(slot)) return;
+            drawAvatarOver(slot, address, domain, site);
+        }));
+    }
+}
+// [5.101-1] A company's logo or a sender's photo was learned or changed: the opened emails' pictures for it are drawn again.
+function refreshMessageAvatars(matches) {
+    for (const pic of document.querySelectorAll('.unshortener-msg-avatar')) {
+        if (!matches(pic)) continue;
+        const slot = pic.parentElement, info = slot && messageAvatarSlots.get(slot);
+        pic.remove();
+        if (info && info.body.isConnected) placeMessageAvatar(info.body, info.who, lastSettings);
+    }
+}
+
 // The sender's picture in an inbox row: a circle over the row's checkbox (as Gmail's own avatars and
 // Simplify Gmail draw it). kind 'photo' or 'logo' fills the circle; 'icon' (a site's small icon) sits
 // in the middle of a plain circle. It never takes clicks, and it steps aside while the row is under
@@ -2977,6 +3087,7 @@ function harvestAvatar(body, who, auth) {
             document.querySelectorAll('.unshortener-sender-icon').forEach(w => {
                 if (request.kind === 'logo' ? (registrableDomain(w.dataset.site || '') || w.dataset.site) === site : w.dataset.address === who.address) fillSenderIcon(w, lastSettings);
             });
+            refreshMessageAvatars(p => request.kind === 'logo' ? (registrableDomain(p.dataset.site || '') || p.dataset.site) === site : p.dataset.address === who.address);   // [5.101-1]
         }));
     };
     attempt(0);
@@ -3047,7 +3158,7 @@ function unmarkAddress(el) {
 }
 function removeSenderDecorations(root = document) {
     root.querySelectorAll('.unshortener-sender-address').forEach(unmarkAddress);
-    root.querySelectorAll('.unshortener-sender-icon, .unshortener-sender-chip, .unshortener-row-avatar').forEach(e => e.remove());
+    root.querySelectorAll('.unshortener-sender-icon, .unshortener-sender-chip, .unshortener-row-avatar, .unshortener-msg-avatar').forEach(e => e.remove());
     root.querySelectorAll('[data-unshortener-avatar]').forEach(r => { delete r.dataset.unshortenerAvatar; });
     root.querySelectorAll('[data-unshortener-sender]').forEach(e => { delete e.dataset.unshortenerSender; e.unshortenerSpam = null; });
 }
@@ -3311,13 +3422,17 @@ function scanOpenedSenders(S) {
         if (!who || who.address === accountAddress()) continue;
         const key = `${who.raw}|${S.enableSenderIdentity ? 'id' : ''}|${S.enableSenderCountry ? 'cc' : ''}`;
         const holder = nameEl.parentElement;
-        if (nameEl.dataset.unshortenerSender === key && (!S.enableSenderIdentity || !holder || holder.querySelector('.unshortener-sender-chip, .unshortener-sender-address'))) continue;
+        if (nameEl.dataset.unshortenerSender === key && (!S.enableSenderIdentity || !holder || holder.querySelector('.unshortener-sender-chip, .unshortener-sender-address'))) {
+            if (S.enableSenderIdentity) placeMessageAvatar(body, who, S);   // [5.101-1] Gmail redrew its picture: ours again
+            continue;
+        }
         if (holder) { holder.querySelectorAll('.unshortener-sender-icon, .unshortener-sender-chip').forEach(e => e.remove()); holder.querySelectorAll('.unshortener-sender-address').forEach(unmarkAddress); }
         nameEl.dataset.unshortenerSender = key;
         let icon = null, chip = null;
         if (S.enableSenderIdentity && holder) {
             icon = senderIconEl(who.domain, S, who.address);
             nameEl.insertAdjacentElement('beforebegin', icon);
+            placeMessageAvatar(body, who, S);                               // [5.101-1]
             // The webmail's own "<address>" beside the sender's name carries the label (its colors and
             // explanation), so no extra label is drawn there; elsewhere a label goes after the name.
             const addressEl = MAIL.message.senderAfter && holder.querySelector(MAIL.message.senderAfter);
@@ -3345,6 +3460,7 @@ function scanOpenedSenders(S) {
             updateOpenedVerdict(body);
         }));
     }
+    scanThreadAvatars(S);                               // [5.101-1] the conversation's collapsed messages
 }
 
 // --- Row highlighter ------------------------------------------------------------------------------
