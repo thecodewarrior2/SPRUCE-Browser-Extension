@@ -1,5 +1,25 @@
 # Changelog
 
+## 5.97 — A newsletter's link through the mail service that sent it is amber, not red
+
+One change, on its own switch (`CHANGES_5_97` in `shared.js`: set it to `false` and rebuild, and links work
+as in 5.96); every line of code it touches carries its tag. From S.P.R.U.C.E Mail Protection Service
+0.5.18–0.5.19, which uses the same rule:
+
+- **[5.97-1] `sendingServiceLinks`.** A newsletter's "Listen on open.spotify.com" link that goes through
+  the click tracker of the service that sent it (link.mail.beehiiv.com/v2/c/…) was red: "text shows a
+  well-known brand, link goes elsewhere", and with it the email could be moved to Spam. Now, in an opened
+  email (Gmail), such a red link is looked at again once the headers are read (`reviewLinkProblem`, as for
+  [5.90-3]): when the link's domain is one whose DKIM signature Gmail's own receiving server verified on
+  this email, and isn't the sender's own domain (`sendingServiceLinkProblem`: the mail service that sent
+  it; no list of services), and the online checks found the link clean (`verdict` "safe", not "unknown"),
+  and its registry date isn't recent (`domainAgeDays` in the background, a new message answered only
+  online; 180 days, `MAIL_SERVICE_MIN_AGE_DAYS`; unknown is allowed), it becomes amber, saying which
+  service and that where it leads isn't known until it's clicked. Not checked (Offline only, a lookup that
+  didn't answer), recent, a link to a service that didn't sign this email, a scammer's domain signing its
+  own mail, or a quoted part: red, as before.
+- Tests: two unit tests; `test-companies.js` (with the lookups off, the link stays red). Made-up senders.
+
 ## 5.96 — The "To" line person by person; colleagues' names in Reply-To, Cc and To
 
 Two changes, each with its own switch (`CHANGES_5_96` in `shared.js`: set one to `false` and rebuild, and

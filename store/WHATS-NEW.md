@@ -11,7 +11,7 @@
 Short notes on each version in the browser stores. Every detail is in the
 [full changelog](../CHANGELOG.md).
 
-## 5.96
+## 5.97
 
 Changes since 5.91.
 
@@ -28,6 +28,9 @@ Changes since 5.91.
   forwarding service; only forwarding by Google or by your own organization still counts.
 
 **Fewer false alarms**
+- A newsletter's link that shows a well-known site (a podcast's Spotify link, say) but goes through the
+  newsletter service that sent the email is now a caution instead of a danger, when that service checks
+  out clean online. It no longer moves the email to Spam by itself.
 - Calendar invitations and other emails addressed to several people are no longer taken for a scam
   that disguises who an email is addressed to.
 - A legal notice about a company, such as a class-action settlement administrator writing about an

@@ -83,4 +83,21 @@ part('name', async () => {
   await ctx.close();
 });
 
+// [5.97-1] A newsletter's brand-text link through the mail service that sent it (its DKIM signer, not the
+// sender's own domain). With the lookups off (as here: no network), it isn't checked clean, so it stays red:
+// the amber needs the lookups (the unit tests check the rule itself). Moving to Spam is off here, so the
+// email stays on the page to be looked at (with it on, a red link moves it, as in 5.96).
+part('service', async () => {
+  const raw = ['Delivered-To: teacher@school.org',
+    'Received: from mail.newsletter-service.example (mail.newsletter-service.example. [203.0.113.9]) by mx.google.com with ESMTPS id y; Thu, 29 Oct 2026 08:00:00 -0700',
+    'Authentication-Results: mx.google.com; dkim=pass header.i=@mail.newsletter-service.example; spf=pass smtp.mailfrom=bounce@mail.newsletter-service.example; dmarc=pass (p=NONE sp=NONE dis=NONE) header.from=news.podcast-show.example',
+    'From: Podcast Show <episodes@news.podcast-show.example>', 'To: teacher@school.org', 'Subject: New episode', '', 'body'].join('\r\n');
+  const { ctx, page } = await open('service', raw, 'episodes@news.podcast-show.example', 'Podcast Show', { enableAutoSpam: false });
+  const svc = await until(() => linkState(page, 'svc'), s => s && s.checked === 'true' && s.look !== 'none', 15000);
+  await settled(page);
+  const after = await linkState(page, 'svc');
+  check('[5.97-1] lookups off: the link through the sending service isn\'t checked clean, so it stays red', svc && after && after.look === 'red', after);
+  await ctx.close();
+});
+
 runParts();

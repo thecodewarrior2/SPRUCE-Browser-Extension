@@ -3430,6 +3430,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         return true;
     }
 
+    // [5.97-1] How old a link's domain is (the registry's public date), for a link through the mail service
+    // that sent an email; only online (Offline only: unknown), remembered 30 days (domainRegistration).
+    if (request.action === 'domainAgeDays') {
+        if (!sender || sender.id !== chrome.runtime.id || typeof request.domain !== 'string') { sendResponse(null); return false; }
+        const reg = registrableDomain(request.domain.slice(0, 253).toLowerCase());
+        getConfig().then(cfg => (cfg.values.enableDnsThreatCheck && reg && SENDER_DOMAIN_RE.test(reg) ? domainAgeDays(reg) : null))
+            .then(days => sendResponse({ days: typeof days === 'number' ? days : null }))
+            .catch(() => sendResponse({ days: null }));
+        return true;
+    }
+
     // Sender checks for the inbox list and opened emails (Gmail).
     // Whether an address's domain is the brand's its sender name claims (public records; see brandOwnership).
     if (request.action === 'brandOwnership') {

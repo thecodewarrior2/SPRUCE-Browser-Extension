@@ -615,6 +615,17 @@ const CHANGES_5_95 = Object.freeze({ privateSuffixes: true, wordAttachments: tru
 // ---------------------------------------------------------------------------
 const CHANGES_5_96 = Object.freeze({ toLineByPerson: true, colleagueLines: true });
 
+// ---------------------------------------------------------------------------
+// 5.97: a change that can be switched off on its own, in the same way (set to false and rebuild; what it
+// changed then works as in 5.96). Every place it touches carries its tag.
+//   [5.97-1] sendingServiceLinks  a link whose text shows another site but which goes through the mail
+//                                 service that sent the email (the third party whose DKIM signature the
+//                                 webmail verified: a newsletter's click tracker, link.mail.beehiiv.com) is
+//                                 amber, not red, when the lookups checked it clean and its domain isn't new
+//                                 (from S.P.R.U.C.E Mail Protection Service 0.5.18–0.5.19; no list of services)
+// ---------------------------------------------------------------------------
+const CHANGES_5_97 = Object.freeze({ sendingServiceLinks: true });
+
 // Companies that own several domains, including their own short-link domains. Link text and destination
 // within one family are consistent (text "gmail.com" pointing to google.com, or Google's c.gle).
 // labels: the company's name, which it also uses under many endings (amazon.de, google.co.uk). Until
@@ -843,6 +854,22 @@ function verifiedSenderLinkProblem(facts, auth, inQuote) {
     const fromCompany = brandOfDomain(from);
     if (from !== facts.textDomain && !(fromCompany && fromCompany === brandOfDomain(facts.textDomain)) && !sameCompanyByEnding(from, facts.textDomain)) return null;
     return `link text shows ${facts.textHost}, the site of this email's verified sender (${from}), but the link goes to ${facts.host}`;
+}
+// [5.97-1] A red "link text shows another site" finding, looked at again once the email's signatures are
+// known: when the link goes to a domain whose DKIM signature the webmail's own receiving server verified on
+// this email, and which isn't the sender's own domain, it goes through the mail service that sent the email
+// (a newsletter's click tracker): amber, since where it leads isn't known until it's clicked, but no imitation.
+// The caller asks this only for a link the lookups checked clean, and then for its domain's age (not under
+// MAIL_SERVICE_MIN_AGE_DAYS). Not for links in a quoted or forwarded part. Returns the new finding, or null.
+const MAIL_SERVICE_MIN_AGE_DAYS = 180;
+function sendingServiceLinkProblem(facts, auth, inQuote) {
+    if (!CHANGES_5_97.sendingServiceLinks || !facts || !facts.textHost || !facts.host || inQuote || !auth) return null;
+    const dest = registrableDomain(String(facts.host).toLowerCase());
+    const from = registrableDomain(domainOfAddress(auth.headerFrom || auth.fromAddress || ''));
+    if (!dest || !from || dest === from) return null;
+    const signers = (auth.dkimDomains || []).map(d => registrableDomain(String(d).toLowerCase())).filter(Boolean);
+    if (!signers.includes(dest)) return null;
+    return `link text shows ${facts.textHost} but the link goes to ${facts.host}, the click tracker of ${dest}, the mail service that sent this email (its signature verified on delivery); where it leads isn't known until it's clicked`;
 }
 // [5.90-4] Whether the evidence for every domain that carries a company's name under another ending
 // (facts.unproven) shows it is the company's: then the link is consistent after all.

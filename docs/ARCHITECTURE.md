@@ -154,6 +154,14 @@ With all of them off, every answer is 5.89's (a unit test checks it).
 | `[5.95-3]` (no switch) | List downloads give up waiting for an answer after 25 seconds (`LIST_ANSWER_TIMEOUT_MS`), before Chrome stops a service worker whose request takes 30 | — |
 | `[5.95-4]` `arcKnownForwarders` | A failed DMARC check is only a strong sign (not a flag on its own) for a real mailing list, or for a forwarding chain (ARC) that Gmail checked and that Google or the reader's own organization sealed (`arcFromKnownForwarder`, the sealer from the `ARC-Seal` of the instance Gmail names); anyone can add a seal that checks out | any intact chain softens it, as in 5.94 |
 
+### 5.97's change
+
+5.97's change has its switch in `CHANGES_5_97` (`shared.js`), in the same way:
+
+| Change | What it does | Switch it off (set to `false`, rebuild) and |
+|---|---|---|
+| `[5.97-1]` `sendingServiceLinks` | A red "text shows another site" link in an opened email (Gmail) is looked at again once the headers are read (`reviewLinkProblem`): when its domain is a DKIM signer Gmail verified on this email and not the sender's own (`sendingServiceLinkProblem`), the online checks found the link clean, and its registry date isn't under 180 days (`domainAgeDays` message to the background, online only), it becomes amber | such links stay red, as in 5.96 |
+
 ### 5.96's changes
 
 5.96's changes have their switches in `CHANGES_5_96` (`shared.js`), in the same way:
