@@ -80,6 +80,11 @@
       "description": "Flag (red, moved to Spam) an email whose subject gives a phone number to call about a purchase or charge the user didn't make, whoever sent it (attackers put such text into names that companies' own systems mail out); a number with only call or support wording is a caution. In opened emails, 'call this number if you didn't make this purchase' and look-alike mathematical letters are cautions. Also works in opened emails on the other webmail sites.",
       "type": "boolean"
     },
+    "managedEnableAiSummaryCover": {
+      "title": "Cover Gmail's AI Summary of Suspicious Emails",
+      "description": "Gmail: while an opened email is flagged or cautioned (its sender, or a dangerous link), hide Gmail's AI summary (Gemini's \"Summarize this email\" and \"AI Overview\") behind a note saying why, with a button that shows it anyway (then with a warning above it). A summary retells a scam's request in calm, neutral words and doesn't check who sent the email. Gmail still writes the summary; it is only kept out of sight.",
+      "type": "boolean"
+    },
     "managedEnableRowHighlighter": {
       "title": "Row Highlighter",
       "description": "Highlight the inbox row under the mouse (and selected rows) in Gmail and the other supported webmail, so users can see exactly which email a click opens. A see-through color and/or an outline, readable in light and dark themes. Inspired by Row Highlighter for Gmail.",
