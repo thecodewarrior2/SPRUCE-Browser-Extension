@@ -1,5 +1,29 @@
 # Changelog
 
+## 5.94.23 — EXPERIMENT (branch `llm_testing`): the AI model's facts carry what the sender checks found
+
+Not for release. Nothing the model reads changes yet: phish-tiny 0.13.0 reads input format 1, which leaves
+these facts out. They are for input format 2 (phish-tiny 0.16.0, trained in TinyPhishLLM_Private_Training),
+which tells the model what the extension's own checks found, so it judges an email's words in context
+instead of on its own: a calm "PayPal" notice from a domain that isn't PayPal's read as genuine to 0.13.0.
+When that model is synced (`tools/sync-model.js`), `modelInputParts` in `ai.js` takes format 2's lines.
+
+- **`aiFactsFor`** (`content.js`) now gives, besides what it gave:
+  - `identity`: **`aiSenderIdentity`** (`shared.js`): the brand the sender's name claims (`displayNameBrand`)
+    and whether the domain is that brand's (`senderDomainOwnedBy`, with the same ownership lookup as the
+    sender check, `brandOwnershipFor`): yes, no, not known to be, or a personal mailbox; whether the domain
+    imitates a well-known brand (`lookalikeOf`); whether the name is a colleague's on an outside address
+    (`colleagueNameHash`). Mail from the organization's own domains gets none.
+  - `replyTo`: **`aiReplyToDomains`**: the Reply-To domains that aren't the sender's (`replyToDomains`, from
+    the headers the header checks already read).
+  - `attachments` (was always empty): the opened message's own attachment cards (`messageAttachments`),
+    through **`aiAttachmentFacts`**: only each file name's last endings and the MIME type, never the name.
+  - `auth` already carried SPF and DKIM; format 2 says them when they fail.
+- The Settings page's **Try the AI** reads a pasted Reply-To line and gives the same identity.
+- Tests: `unit.test.js` (the identity for a brand's own domain, another domain, a personal mailbox, the
+  organization's own staff, proven and likely ownership, a look-alike; attachments keep no names; Reply-To
+  only other domains). Made-up senders.
+
 ## 5.94.22 — EXPERIMENT (branch `llm_testing`): an opened email from a company shows the picture its inbox row shows, not Gmail's letter circle
 
 Not for release. The same change as 5.101 on `testing`, with the same switch (`CHANGES_5_101` in `shared.js`:

@@ -2115,6 +2115,51 @@ function ownDomainLookalike(domain, own) {
         || flat(label).includes(flat(ownLabel));
 }
 
+// [AI input format 2] Who an email's sender claims to be, for the AI model (the identity line of
+// modelInputParts once the model reads input format 2): the brand or agency its name claims and whether the
+// sending domain is that brand's ('yes', 'no', 'unsure': not known to be, 'personal': a free mailbox),
+// whether the domain imitates a well-known brand, and whether the name is a colleague's on an outside
+// address. The same checks as the sender warnings (displayNameBrand, senderDomainOwnedBy, lookalikeOf,
+// colleagueNameHash), so the model is told what they found. Mail from the organization's own domains isn't
+// judged by a brand its name mentions ("Microsoft 365 Support" from the district's IT). null: nothing to say.
+// ownership: brandOwnership's answer for the domain and the claimed brand, when it was looked up.
+function aiSenderIdentity(displayName, address, { own = [], colleagues = null, ownership = null } = {}) {
+    const domain = String(domainOfAddress(address) || '').toLowerCase();
+    if (!domain || !/\./.test(domain)) return null;
+    const inside = [].concat(own || []).some(o => o && isOwnDomain(domain, String(o).toLowerCase()));
+    if (inside) return null;
+    const out = {};
+    const claimed = displayNameBrand(displayName);
+    if (claimed) {
+        const reg = registrableDomain(domain) || domain;
+        out.brand = claimed.name;
+        out.owner = senderDomainOwnedBy(claimed, domain) || (ownership && ownership.state === 'owned') ? 'yes'
+            : isPersonalMailDomain(domain) ? 'personal'
+            : (ownership && ownership.state === 'likely') || nameOnOtherEnding(claimed, reg) || nameSpeaksAboutBrand(displayName) ? 'unsure' : 'no';
+    }
+    if (!isPersonalMailDomain(domain) && lookalikeOf(domain)) out.lookalike = true;
+    const h = colleagues && colleagues.size ? colleagueNameHash(displayName) : '';
+    if (h && colleagues.has(h)) out.colleague = true;
+    return Object.keys(out).length ? out : null;
+}
+
+// [AI input format 2] The attachments, for the AI model: only what their kind is read from (the file name's
+// last endings, kept with any text-direction characters, and the MIME type), never the name itself.
+function aiAttachmentFacts(files) {
+    return [].concat(files || []).filter(f => f && (f.name || f.type)).slice(0, 20).map(f => {
+        const name = String(f.name || '');
+        const ending = (name.match(/(\.[A-Za-z0-9]{1,5}\s*){1,2}$/) || [''])[0];
+        return { name: `file${/[‪-‮⁦-⁩]/.test(name) ? '‮' : ''}${ending}`, type: String(f.type || '').toLowerCase().slice(0, 100) };
+    });
+}
+
+// [AI input format 2] Where replies go, for the AI model: domains only, and only those that aren't the
+// sender's (replyToDomains).
+function aiReplyToDomains(addresses, senderAddress) {
+    const own = String(domainOfAddress(senderAddress) || '').toLowerCase();
+    return [...new Set([].concat(addresses || []).map(a => String(domainOfAddress(a) || '').toLowerCase()).filter(d => d && d !== own && !d.endsWith('.' + own) && !own.endsWith('.' + d)))].slice(0, 5);
+}
+
 // [5.96-2] Signs in the other address lines (Reply-To, Cc, To) that use the name of someone in the user's own
 // organization (colleagues: Set of colleagueNameHash values) on an address outside it:
 //   - replies under a colleague's name go to an outside address: 3 (amber);

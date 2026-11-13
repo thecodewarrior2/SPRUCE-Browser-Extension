@@ -3570,11 +3570,30 @@ function emailLayout(body) {
     return { text: text.trim(), layout };
 }
 
+// [AI input format 2] The files attached to one opened message (the attachment cards in its own container).
+function messageAttachments(body) {
+    const box = messageContainerOf(body);
+    if (!box) return [];
+    try { return findAttachments().filter(a => box.contains(a.el)).map(a => ({ name: a.name, type: a.mime })); } catch (e) { return []; }
+}
+
 async function aiFactsFor(body) {
     const sender = openedSenderOf(body) || {};
     let auth = null;
     try { auth = senderChecksActive() ? await getMessageAuth(body) : null; } catch (e) { auth = null; }
     const st = openedStates.get(body);
+    // [AI input format 2] What the sender checks found, so the model reads the words in context: who the
+    // sender's name claims to be and whether the domain is theirs (with the ownership lookup the sender
+    // check uses), where replies go (from the headers already read for the header checks) and what is attached.
+    const hdr = st && st.info && st.info.fh === addressFingerprint(st.address) ? st.info : null;
+    let identity = null;
+    try {
+        const claimed = sender.name ? displayNameBrand(sender.name) : null;
+        const domain = domainOfAddress(sender.address || '');
+        const ownership = claimed && domain && !isPersonalMailDomain(domain) && !senderDomainOwnedBy(claimed, domain) ? await brandOwnershipFor(domain, claimed.name, lastSettings) : null;
+        identity = sender.address ? aiSenderIdentity(sender.name || '', sender.address, { own: ownOrgDomain() ? [ownOrgDomain()] : [], ownership,
+            colleagues: lastSettings.enableLookalikeCheck !== false ? loadColleagueHashes() : null }) : null;
+    } catch (e) { identity = null; }
     const shown = emailLayout(body);
     const links = [], seen = new Set();
     for (const a of body.querySelectorAll('a[href]')) {
@@ -3591,10 +3610,11 @@ async function aiFactsFor(body) {
         subject: openedSubject(), senderName: sender.name || '', senderAddress: sender.address || '',
         org: ownOrgDomain() && sender.address ? (isOwnDomain(String(domainOfAddress(sender.address) || '').toLowerCase(), ownOrgDomain()) ? 'inside' : 'outside') : undefined,
         auth: auth ? { dmarc: auth.dmarc, spf: auth.spf, dkim: auth.dkim, headerFrom: auth.headerFrom } : null,
-        links, attachments: [],
+        links, attachments: aiAttachmentFacts(messageAttachments(body)),
+        identity, replyTo: hdr ? aiReplyToDomains(replyToDomains(hdr.pl), sender.address || '') : [],
         verdict: st && st.final ? { status: st.final.status, reasons: st.final.reasons || [] } : null,
         recipient: String(accountAddress() || '').split('@')[0] || '',
-        mailChecks: st && st.info && st.info.fh === addressFingerprint(st.address) ? (st.info.an || []).map(x => x.kind).filter(Boolean) : [],
+        mailChecks: hdr ? (hdr.an || []).map(x => x.kind).filter(Boolean) : [],
         layout: shown.layout,
         bodyText: shown.text.slice(0, 8000)
     };

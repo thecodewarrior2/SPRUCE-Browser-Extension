@@ -485,20 +485,24 @@ document.addEventListener('DOMContentLoaded', () => {
             showAiStatus(r.ready && h ? `${r.text} On ${h.n} hand-written test emails it was right ${Math.round(h.accuracy * 100)}% of the time.` : r.text, !!r.ready);
         });
     });
-    // A pasted email: "From:" and "Subject:" lines are read if present; the rest is the text.
+    // A pasted email: "From:", "Reply-To:" and "Subject:" lines are read if present; the rest is the text.
     function factsFromPaste(text) {
         const lines = String(text || '').split(/\r?\n/);
         const facts = { subject: '', senderName: '', senderAddress: '', auth: null, links: [], attachments: [], verdict: null, bodyText: '' };
         let i = 0;
         for (; i < lines.length; i++) {
-            const m = /^(from|subject|to|date):\s*(.*)$/i.exec(lines[i]);
+            const m = /^(from|subject|to|date|reply-to|cc):\s*(.*)$/i.exec(lines[i]);
             if (!m) break;
             if (/^from$/i.test(m[1])) {
                 const a = /^(.*?)\s*<([^>]+)>\s*$/.exec(m[2]);
                 facts.senderName = a ? a[1].replace(/^"|"$/g, '') : '';
                 facts.senderAddress = a ? a[2] : m[2].trim();
             } else if (/^subject$/i.test(m[1])) facts.subject = m[2];
+            else if (/^reply-to$/i.test(m[1])) facts.replyTo = (m[2].match(/[^\s<>,"]+@[^\s<>,"]+/g) || []);
         }
+        // [AI input format 2] What the sender checks would say (who the name claims to be, where replies go).
+        try { facts.identity = aiSenderIdentity(facts.senderName, facts.senderAddress); } catch (e) { facts.identity = null; }
+        try { facts.replyTo = aiReplyToDomains(facts.replyTo || [], facts.senderAddress); } catch (e) { facts.replyTo = []; }
         facts.bodyText = lines.slice(i).join('\n').trim();
         for (const u of facts.bodyText.match(/https?:\/\/[^\s<>"')]+/g) || []) {
             try { facts.links.push({ text: u, host: new URL(u).hostname, destHost: '', finding: '' }); } catch (e) { /* not a link */ }

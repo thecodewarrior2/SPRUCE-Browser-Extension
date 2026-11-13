@@ -2441,3 +2441,26 @@ test('[5.101-1] opened emails: Gmail\'s picture box is known; only company sende
   const Off = loadShared(['openedAvatars']);
   assert.equal(Off('CHANGES_5_101.openedAvatars'), false);
 });
+
+// [AI input format 2] What the sender checks tell the AI model: who the sender's name claims to be, where
+// replies go, what is attached (kinds only, never a file's name).
+test('AI facts: the sender identity says what the sender checks found', () => {
+  const id = (name, addr, opts) => JSON.parse(S(`JSON.stringify(aiSenderIdentity(${JSON.stringify(name)}, ${JSON.stringify(addr)}, ${JSON.stringify(opts || {})}))`));
+  assert.deepEqual(id('PayPal', 'service@paypal.com'), { brand: 'PayPal', owner: 'yes' });
+  assert.deepEqual(id('PayPal Service', 'service@paypal-review.example'), { brand: 'PayPal', owner: 'no' });
+  assert.deepEqual(id('IRS Refunds', 'irs.refunds@gmail.com'), { brand: 'IRS', owner: 'personal' });
+  assert.equal(id('Jordan Rivera', 'jordan@maple-schools.example'), null);
+  // The organization's own staff aren't judged by a brand their name mentions.
+  assert.equal(id('Microsoft 365 Support', 'it@maple-schools.example', { own: ['maple-schools.example'] }), null);
+  // Proven ownership (the DNS lookup) makes the domain the brand's; a likely one leaves it unsure.
+  assert.equal(id('PayPal', 'notice@paypal-corp.example', { ownership: { state: 'owned', how: 'x' } }).owner, 'yes');
+  assert.equal(id('PayPal', 'notice@paypal-corp.example', { ownership: { state: 'likely', how: 'x' } }).owner, 'unsure');
+  assert.equal(id('Alex', 'alex@paypa1.com').lookalike, true);
+});
+
+test('AI facts: attachments keep only their endings and type; reply-to only other domains', () => {
+  const att = JSON.parse(S(`JSON.stringify(aiAttachmentFacts([{ name: 'Jane Doe W-2.pdf.exe', type: 'Application/X-Msdownload' }, { name: 'Statement.pdf      .html' }, { name: 'notes' }, null]))`));
+  assert.deepEqual(att, [{ name: 'file.pdf.exe', type: 'application/x-msdownload' }, { name: 'file.pdf      .html', type: '' }, { name: 'file', type: '' }]);
+  assert.ok(!JSON.stringify(att).includes('Jane'));
+  assert.deepEqual(JSON.parse(S(`JSON.stringify(aiReplyToDomains(['x@gmail.com', 'a@mail.vendor.example', 'Y@Vendor.Example', 'gmail.com'], 'b@vendor.example'))`)), ['gmail.com']);
+});
