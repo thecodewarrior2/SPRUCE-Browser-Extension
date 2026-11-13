@@ -138,7 +138,7 @@ Requested only when the user clicks "Turn it off" on a warning that another inst
 mail.google.com: reads an email's original source (its headers) from Gmail, with the user's own session, to check the sender's verification and find forged headers.
 security.cloudflare-dns.com, family.cloudflare-dns.com, 1.1.1.1, dns.quad9.net, freedns.controld.com, protective.joindns4.eu, dns.adguard-dns.com: DNS-over-HTTPS security services that say whether a website is known to be dangerous. Only the website's name is sent. 1.1.1.1 is also used to read companies' published email-logo (BIMI) and DMARC records.
 unshorten.me: expands public short links (such as bit.ly) so the user sees where they lead. Can be turned off.
-raw.githubusercontent.com, openphish.com, phishing.army, tranco-list.eu: daily or monthly downloads of public lists (short-link services, phishing sites, scam senders, popular sites). Nothing about the user is sent.
+raw.githubusercontent.com, phishing.army, tranco-list.eu: daily or monthly downloads of public lists (short-link services, phishing sites, scam senders, popular sites). Nothing about the user is sent.
 *.googleusercontent.com: fetches email images through Gmail's own image proxy to decode QR codes, and the sender photos Gmail already shows.
 www.google.com/s2, *.gstatic.com, icons.duckduckgo.com: sender website icons shown beside each email (only the website's name is sent).
 api.country.is: the country of the server that delivered an email, shown as a flag.

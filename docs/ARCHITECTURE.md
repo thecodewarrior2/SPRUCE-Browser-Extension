@@ -143,6 +143,14 @@ touches carries its tag:
 
 With all of them off, every answer is 5.89's (a unit test checks it).
 
+### 5.98's change
+
+The same change as 5.98 on `testing` (5.94.19 here), with the same switch, `CHANGES_5_98` (`shared.js`), in the same way:
+
+| Change | What it does | Switch it off (set to `false`, rebuild) and |
+|---|---|---|
+| `[5.98-1]` `moreLists` | Two more phishing lists in `PHISH_FEEDS`: HaGeZi Threat Intelligence Feeds (medium, `*.domain` lines) and TweetFeed's month of researchers' reports (`month.csv`, its domain rows: `feedLines` in `background.js`; `confidence: 'report'`). A report (`feedConfidence`) is no "listed": a link on it stays safe with `reported` (an amber "reported as phishing or malware by …" in the email, "Reported" in the Link Inspector, `threatConsensus` "caution"), and a sender's domain on it is a caution that never moves the email. OpenPhish now comes from its GitHub copy (`openphish.com` redirected there), so `openphish.com` left the host permissions | only the 5.97 lists (OpenPhish from its GitHub copy all the same) |
+
 ### 5.97's change
 
 The same change as 5.97 on `testing` (5.94.18 here), with the same switch, `CHANGES_5_97` (`shared.js`), in the same way:
@@ -327,7 +335,7 @@ flowchart LR
   D -- "sender's site name" --> IC["Google / DuckDuckGo<br/>icon services"]
   D -- "sending server's IP" --> CI["country.is"]
   D -- "look-alike domain's name,<br/>or a brand's name on an unknown domain" --> RD["Domain registry and registrar (RDAP)"]
-  LS["openphish.com · phishing.army ·<br/>GitHub · tranco-list.eu"] -- "plain list downloads<br/>(nothing about you sent)" --> D
+  LS["phishing.army · GitHub ·<br/>tranco-list.eu"] -- "plain list downloads<br/>(nothing about you sent)" --> D
 ```
 
 Email text, subjects, attachments, recipients and your address never leave the device. The complete
@@ -335,7 +343,7 @@ list, with who receives what, is in [PRIVACY.md](../PRIVACY.md).
 
 ### Downloaded lists
 
-Seven public lists, downloaded as plain files (nothing about you is sent) and matched on the device.
+Nine public lists, downloaded as plain files (nothing about you is sent) and matched on the device.
 Each is tracked on its own, so one failing to update never removes another's entries. Their state on
 your computer is in Settings → Help → Architecture deep dive → Downloaded lists.
 
@@ -343,8 +351,10 @@ your computer is in Settings → Help → Architecture deep dive → Downloaded 
 |---|---|---|---|
 | [PeterDaveHello/url-shorteners](https://github.com/PeterDaveHello/url-shorteners) | which sites are link shorteners | daily | see the project |
 | [boutetnico/url-shorteners](https://github.com/boutetnico/url-shorteners) | which sites are link shorteners | daily | see the project |
-| [OpenPhish community feed](https://openphish.com) | known phishing links | daily | OpenPhish Terms of Use |
+| [OpenPhish community feed](https://openphish.com) (its GitHub copy) | known phishing links | daily | OpenPhish Terms of Use |
 | [Phishing Army](https://phishing.army) (extended) | known phishing sites | daily | CC BY-NC 4.0 |
+| [HaGeZi Threat Intelligence Feeds](https://github.com/hagezi/dns-blocklists) (medium) | known phishing and malware sites | daily | GPL-3.0 |
+| [TweetFeed](https://tweetfeed.live) (last month, domain rows) | sites security researchers reported: a caution, never "listed" | daily | CC0 1.0 |
 | [Sefinek Blacklisted-Emails](https://github.com/sefinek/Blacklisted-Emails) | known scam sender addresses (Gmail) | daily | MIT |
 | [Chrome UX Report top list](https://github.com/zakird/crux-top-lists) (copy by Zakir Durumeric) | popular sites protected from look-alike senders (top 10,000) | monthly | data by Google, CC BY 4.0 |
 | [Tranco](https://tranco-list.eu) | popular sites protected from look-alike senders (top 10,000) | monthly | free research list (KU Leuven and others) |

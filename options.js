@@ -1610,7 +1610,7 @@ document.addEventListener('DOMContentLoaded', () => {
         info:    { icon: 'ℹ️', color: 'var(--text-2)',      badge: 'badge-info', label: 'Note' },
         safe:    { icon: '✓',  color: 'var(--success-text)', badge: 'badge-safe', label: 'OK' }
     };
-    const STATUS_TEXT = { flagged: ['Flagged', 'badge-unsafe'], clean: ['Nothing found', 'badge-safe'], 'no answer': ['No answer', 'badge-neutral'], off: ['Off', 'badge-neutral'] };
+    const STATUS_TEXT = { flagged: ['Flagged', 'badge-unsafe'], caution: ['Reported', 'badge-warning'], clean: ['Nothing found', 'badge-safe'], 'no answer': ['No answer', 'badge-neutral'], off: ['Off', 'badge-neutral'] };   // caution: [5.98-1]
 
     function section(title, intro) {
         const box = node('div', { className: 'card', style: 'margin-top: 15px;' }, node('h4', null, title));

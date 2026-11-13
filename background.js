@@ -1086,14 +1086,22 @@ function blocklistHit(urls, cfg) {
 //  - the link's own host (originalUrl), which is where the click goes whenever the href is NOT
 //    rewritten (visual overrides off, or a wrapper that only claims to point elsewhere).
 // The worst result wins.
+// [5.98-1] A link a community feed (TweetFeed) reported is no "unsafe": the answer says who reported it
+// (reported), and the webmail page marks the link for caution.
 async function assessSafety(originalUrl, finalUrl, cfg, opts = {}) {
+    const result = await assessSafetyCore(originalUrl, finalUrl, cfg, opts);
+    if (!result || !result.isSafe || !cfg.values.enablePhishingFeeds) return result;
+    const listed = (await feedHit(finalUrl)) || (finalUrl !== originalUrl ? await feedHit(originalUrl) : null);
+    return listed && feedConfidence(listed) === 'report' ? Object.assign({}, result, { reported: listed }) : result;
+}
+async function assessSafetyCore(originalUrl, finalUrl, cfg, opts = {}) {
     const S = cfg.values;
     const blocked = blocklistHit([originalUrl, finalUrl], cfg);
     if (blocked) return verdictResult('unsafe', { reason: blocked, scanner: 'Blocklist', source: 'blocklist' });
 
     if (S.enablePhishingFeeds) {
         const listed = (await feedHit(finalUrl)) || (finalUrl !== originalUrl ? await feedHit(originalUrl) : null);
-        if (listed) return verdictResult('unsafe', { reason: `Listed as phishing by ${listed}`, scanner: listed, source: 'feed' });
+        if (listed && feedConfidence(listed) !== 'report') return verdictResult('unsafe', { reason: `Listed as phishing by ${listed}`, scanner: listed, source: 'feed' });   // [5.98-1]
     }
 
     const origHost = hostOf(originalUrl);
@@ -1287,9 +1295,14 @@ async function unpackText(b64) {
 // ---------------------------------------------------------------------------
 let feedSets = null;            // Promise of { url, domain, address } lookups, loaded once and shared; reset when a list changes
 
+// [5.98-1] A download as lines: plain text as it is; TweetFeed's CSV as the values of its domain rows.
+function feedLines(feed, text) {
+    if (feed.format !== 'tweetfeed-csv') return String(text).split('\n');
+    return String(text).split('\n').map(l => l.split(',')).filter(c => c.length >= 4 && c[2] === 'domain').map(c => c[3]);
+}
 function sanitizeFeed(feed, text) {
     const out = new Set();
-    for (const raw of text.split('\n')) {
+    for (const raw of feedLines(feed, text)) {
         const line = raw.trim();
         if (!line || line.startsWith('#') || line.startsWith('!')) continue;
         if (feed.kind === 'url') {
@@ -3318,8 +3331,9 @@ async function inspectorServices(inputUrl, finalUrl, cfg, oneTime) {
             let listed = null, loaded = false;
             try { const sets = await loadFeedSets(); loaded = !!(sets.url.size || sets.domain.size); listed = await feedHit(url); } catch (e) { /* not loaded */ }
             for (const f of PHISH_FEEDS.filter(f => f.kind !== 'address')) {
-                services.push({ name: f.name, status: !loaded ? 'no answer' : listed === f.name ? 'flagged' : 'clean', security: true,
-                                reason: listed === f.name ? `Listed as phishing by ${f.name}` : (!loaded ? 'list not downloaded yet' : null) });
+                const report = f.confidence === 'report';   // [5.98-1]
+                services.push({ name: f.name, status: !loaded ? 'no answer' : listed === f.name ? (report ? 'caution' : 'flagged') : 'clean', security: true,
+                                reason: listed === f.name ? (report ? `Reported as phishing or malware by ${f.name} (community reports)` : `Listed as phishing by ${f.name}`) : (!loaded ? 'list not downloaded yet' : null) });
             }
         }
         let dns = null;

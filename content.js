@@ -941,6 +941,8 @@ function unshortenLinks() {
                                 problem = `${brand ? `${brand} short link (${shortHost})` : `short link (${shortHost})`}: its destination couldn't be looked up` +
                                           (response.shortLinkWhy ? ` (${response.shortLinkWhy})` : '');
                             }
+                            // [5.98-1] Its site reported by a community feed (TweetFeed): caution, saying who.
+                            if (!problem && response.isSafe && response.reported) problem = `reported as phishing or malware by ${response.reported} (community reports)`;
                             const flagged = !response.isSafe || !!problem;
                             const reason = !response.isSafe
                                 ? response.reason

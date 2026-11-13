@@ -85,7 +85,7 @@
              onOff(S.enableRemoteListSync) + lock('enableRemoteListSync')],
             ['Checking links before sending', 'When you press Send: the site names of the links you wrote (to the threat-check services above), and one request to each linked website to see that it answers, as when your reader clicks it. Never for one-time links; nothing about your email itself.',
              'Cloudflare 1.1.1.1 and the threat-check services; the websites you link to', onOff(S.enableSendCheck) + lock('enableSendCheck')],
-            ['Phishing list update', 'Plain downloads of the public phishing lists (at most once a day), including a list of scam senders\' addresses. Links and senders are matched on this computer; nothing about you is sent.', 'openphish.com, phishing.army and raw.githubusercontent.com (they see your IP address)',
+            ['Phishing list update', 'Plain downloads of the public phishing lists (at most once a day), including a list of scam senders\' addresses. Links and senders are matched on this computer; nothing about you is sent.', 'phishing.army and raw.githubusercontent.com (they see your IP address)',
              onOff(S.enablePhishingFeeds) + lock('enablePhishingFeeds')],
             ['Sender checks (Gmail)', 'Only the domain of each sender (e.g. example.com), never the address or anything about the email. Gmail, Outlook.com and other big providers\' domains and your own organization\'s are never sent.', 'the threat-check services above',
              onOff(S.enableSenderDomainCheck && S.enableDnsThreatCheck) + lock('enableSenderDomainCheck')],
@@ -317,7 +317,7 @@
             ['Your own unshortener', 'eligible short links, and links you reveal with 🔍', 'the full link', 'Your own services', own(S.customUnshortenerEndpoint)],
             [code('unshorten.me'), 'eligible short links, and links you reveal with 🔍' + (S.customUnshortenerEndpoint ? ', if your own unshortener gives no answer' : ''), 'the full link', 'Look up short links online',
                 onOff(S.enableThirdPartyResolution && (!S.customUnshortenerEndpoint || S.useUnshortenMeFallback))],
-            [code('openphish.com, phishing.army'), 'phishing lists: once a day', 'nothing (plain download)', 'Check links against phishing lists', onOff(S.enablePhishingFeeds)],
+            [code('phishing.army, raw.githubusercontent.com'), 'phishing lists: once a day', 'nothing (plain download)', 'Check links against phishing lists', onOff(S.enablePhishingFeeds)],
             [code('freedns.controld.com'), 'each threat check', 'hostname (DNS wire format)', 'Threat-check services → Control D', onOff(S.enableDnsThreatCheck && S.dnsControlD)],
             [code('protective.joindns4.eu'), 'each threat check (if enabled)', 'hostname (DNS wire format)', 'Threat-check services → DNS4EU', onOff(S.enableDnsThreatCheck && S.dnsDns4eu)],
             [code('raw.githubusercontent.com'), 'once a day', 'nothing (plain download)', 'Keep the shortener list up to date', onOff(S.enableRemoteListSync)],
@@ -372,7 +372,7 @@
                 if (!S.enableRemoteListSync) return [...row, 'off (Keep the shortener list up to date)', '—', '—'];
                 return [...row, src && src.lastSuccess ? `${(src.active || []).length.toLocaleString()} domains` : 'the bundled snapshot meanwhile',
                     src ? Object.keys(src.pending || {}).length.toLocaleString() : '0', when(src && src.lastSuccess)]; };
-            const feedUse = { openphish: 'known phishing links', phishingarmy: 'known phishing sites', sefinekemails: 'known scam and phishing sender addresses (Gmail)' };
+            const feedUse = { openphish: 'known phishing links', phishingarmy: 'known phishing sites', hagezitif: 'known phishing and malware sites', tweetfeed: 'sites researchers reported (a caution, not proof)', sefinekemails: 'known scam and phishing sender addresses (Gmail)' };
             fill('archAllLists', table(['List', 'Used for', 'Downloaded', 'License or terms', 'In use', 'New entries on hold', 'Last update'], [
                 shortenerRow('PeterDaveHello/url-shorteners', 'https://github.com/PeterDaveHello/url-shorteners', REMOTE_LIST_URLS[0]),
                 shortenerRow('boutetnico/url-shorteners', 'https://github.com/boutetnico/url-shorteners', REMOTE_LIST_URLS[1]),

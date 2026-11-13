@@ -1,5 +1,21 @@
 # Changelog
 
+## 5.94.19 — EXPERIMENT (branch `llm_testing`): two more phishing lists, HaGeZi and TweetFeed's researchers' reports (a caution)
+
+Not for release. The same change as 5.98 on `testing`, with the same switch (`CHANGES_5_98` in `shared.js`:
+set it to `false` and rebuild, and the lists are 5.94.18's) and tag. From S.P.R.U.C.E Mail Protection
+Service 0.5.21, which downloads the same lists:
+
+- **[5.98-1] `moreLists`.** `PHISH_FEEDS` gains **HaGeZi Threat Intelligence Feeds** (medium; GPL-3.0;
+  `*.domain` lines; a list like OpenPhish and Phishing Army: red link, flagged sender domain) and
+  **TweetFeed** (CC0; the last month of researchers' reports, its GitHub `month.csv`, only the domain rows:
+  `feedLines` in `background.js`). TweetFeed is a **report** (`confidence: 'report'`, `feedConfidence`):
+  a link on it stays "safe" with `reported` (amber in the email, "Reported" in the Link Inspector), and a
+  sender's domain on it is a caution that never moves the email.
+- **OpenPhish** comes from its GitHub copy (`openphish.com/feed.txt` redirects there); `openphish.com`
+  left `host_permissions`. Not on the switch.
+- **Not added: URLhaus (abuse.ch)**: its downloads need a personal abuse.ch key since October 2026.
+
 ## 5.94.18 — EXPERIMENT (branch `llm_testing`): a newsletter's link through the mail service that sent it is amber, not red
 
 Not for release. The same change as 5.97 on `testing`, with the same switch (`CHANGES_5_97` in `shared.js`:

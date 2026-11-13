@@ -250,7 +250,7 @@ Safari has no extension policies; see [Safari](#safari) below.
 | Key | Type | Default | Purpose |
 |---|---|---|---|
 | managedEnableLinkUnmasking | boolean | true | Scan and unmask links |
-| managedEnablePhishingFeeds | boolean | true | Download the OpenPhish community feed and Phishing Army (CC BY-NC 4.0) lists (at most once a day) and match links on the device |
+| managedEnablePhishingFeeds | boolean | true | Download the OpenPhish community feed, Phishing Army (CC BY-NC 4.0), HaGeZi Threat Intelligence Feeds (GPL-3.0) and TweetFeed (CC0, researchers' reports: a caution only) lists (at most once a day) and match links on the device |
 | managedDnsControlD / managedDnsDns4eu | boolean | true / false | Additional free security resolvers (Control D malware; DNS4EU Protective, EU) |
 | managedEnableSenderChecks | boolean | true | Gmail: read Gmail's sender verification when needed; trust company-only links (c.gle…) only in mail verified as from that company directly to the user; warn about brand impersonation |
 | managedHidePopupSettingsButton | boolean | false | Administrator only (no setting in the extension): remove "Open Settings" from the toolbar popup; Settings stays reachable at chrome-extension://<ID>/options.html (Firefox: about:addons → the add-on → Options) |
@@ -368,7 +368,7 @@ All of this is on by default and every part has its own key above. In short:
 
 - **What decides "flagged":** the exact address is on
   the community scam-sender list (exact addresses only, never addresses at major companies' own domains); or
-  the sender's domain is on a phishing list (OpenPhish, Phishing Army) or blocked by a **security** resolver
+  the sender's domain is on a phishing list (OpenPhish, Phishing Army, HaGeZi; a TweetFeed report is only a caution) or blocked by a **security** resolver
   (Quad9, Cloudflare Security, Control D, DNS4EU, your own resolver). A block by the Cloudflare Family content
   filter or by the AdGuard backup alone only shows **caution**. Gmail.com, Outlook.com and other personal-mail
   providers, major companies' domains (`PROTECTED_DOMAINS`) and your own organization's domain are never judged

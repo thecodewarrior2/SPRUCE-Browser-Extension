@@ -95,7 +95,7 @@ settings can't be locked). What leaves your device, and to whom, is in the [priv
   opened email, on every webmail, such text is a caution.
 - **Threat checks.** DNS-over-HTTPS threat filters (Cloudflare Security and Family, Quad9,
   Control D; AdGuard as a backup), community shortener lists, and local phishing lists (OpenPhish,
-  Phishing Army), downloaded at most once a day.
+  Phishing Army, HaGeZi Threat Intelligence Feeds; TweetFeed's researchers' reports as a caution), downloaded at most once a day.
 - **QR codes** in email images and image/PDF attachments are decoded on-device and their
   destination is checked like a link; QR codes drawn with HTML tables or block characters are
   caught too.
@@ -148,7 +148,7 @@ Settings your organization set by policy show a 🔒 and can't be changed; the r
   Store extensions and their Firefox counterparts).
 - **Lookups & threat checks**: online short-link lookups (unshorten.me), site-name threat checks with
   DNS security filters, the daily public shortener lists, and the public phishing lists (OpenPhish
-  community feed and Phishing Army), each with its own switch.
+  community feed, Phishing Army, HaGeZi, TweetFeed), each with its own switch.
 - **Custom threat resolver** and **Custom unshortener**: optional services of your own (method,
   body, headers and result field), each with a **Test** button. Saving asks the browser for
   permission to contact that one host.
