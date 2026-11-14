@@ -37,7 +37,15 @@ const LINKS = {
   // ?links=filler: the lure, then a huge blank spacer and unrelated text for spam filters (test-ai.js).
   filler: 'Your photos and videos will be deleted! <a href="https://storage.example/renew">Update my payment information</a>.' +
           '<div style="height:3000px"></div><p>Please remember to drop your regalia back to the regalia room. This is an archived section of the community. ' +
-          'Thank you again, it has been a pleasure doing business with you. This change was done to make the forum easier to use and to keep only the most helpful content.</p>'
+          'Thank you again, it has been a pleasure doing business with you. This change was done to make the forum easier to use and to keep only the most helpful content.</p>',
+  // [5.102] ?links=share: a Google Docs share notification's text, its sharer at another district naming the reader's
+  // superintendent (made up; test-platformshare.js); ?links=shareinside: a colleague's own share.
+  share: 'Robin Castillo shared a document<br>Robin Castillo (rcastillo@ridgeview-ufsd.example) has invited you to <b>edit</b> the following document:<br>' +
+         'FWD: Dr. Dana Whitfield, sent request to view a file.<br>Maple County School<br>District Dr. Dana Whitfield<br>Superintendent<br>' +
+         '<a id="doc" href="https://docs.google.com/document/d/1AbCdEfGhIjKlMnOp/edit?usp=sharing_eil">Dana Whitfield-Official Notification (1) .docx</a><br>Robin Castillo is outside your organization.',
+  shareinside: 'Casey Tanaka shared a document<br>Casey Tanaka (ctanaka@school.org) has invited you to <b>edit</b> the following document:<br>' +
+         'Please add your notes before the leadership meeting. Dana Whitfield asked for them by Thursday.<br>' +
+         '<a id="doc" href="https://docs.google.com/document/d/1QrStUvWxYz012345/edit?usp=sharing_eil">Leadership team notes</a>'
 };
 // [5.101] ?collapsed=<address>: a collapsed earlier message of the conversation from that sender, with Gmail's
 // picture beside it (test-msgavatar.js).

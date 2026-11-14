@@ -145,6 +145,14 @@ touches carries its tag:
 
 With all of them off, every answer is 5.89's (a unit test checks it).
 
+### 5.102's change
+
+5.102's change has its switch in `CHANGES_5_102` (`shared.js`), in the same way:
+
+| Change | What it does | Switch it off (set to `false`, rebuild) and |
+|---|---|---|
+| `[5.102-1]` `platformShares` | An opened email is a platform's own share notification (`platformNotificationOf`) only when its domain is the platform's (`PLATFORM_SENDERS`: Google, Microsoft, DocuSign, Dropbox, Adobe, Box), Gmail's DMARC check passed for that domain, it comes from a notification mailbox, and the platform named after "via" belongs to the same company; "via Dropbox" from google.com, or a platform named on a domain that isn't any platform's, is red (5). A proven one is judged by the person who shared it (`platformShareSigns`: the platform's Reply-To, else "Name (address)" in the text): from outside 1; a learned colleague named in it 2 (`colleagueNamedIn`); 10 or more of the organization's addresses in To and Cc 2 (`recipientDomainCounts`, kept as `rc` with the header signs, `HEADER_SIGNS_VERSION` 9); the sharer using a colleague's name 5 (3 from a personal account). Counted in `updateOpenedVerdict` | a platform's notification is judged by the platform's domain and sender check, as before |
+
 ### 5.101's change
 
 The same change as 5.101 on `testing` (5.94.22 here), with the same switch, `CHANGES_5_101` (`shared.js`), in the same way:

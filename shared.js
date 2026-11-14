@@ -595,6 +595,14 @@ const CHANGES_5_100 = Object.freeze({ aiSummaryCover: true, hiddenAiInstructions
 //                            in the list (setting "Sender photos and company logos")
 // ---------------------------------------------------------------------------
 const CHANGES_5_101 = Object.freeze({ openedAvatars: true });
+// [5.102] Shares sent through a platform (Google Docs and Drive, OneDrive and SharePoint, DocuSign, Dropbox,
+// Adobe, Box) are judged by the person who shared them: an email is the platform's own notification only when
+// its domain is the platform's, the receiver's DMARC check passed for that domain, it comes from a notification
+// mailbox, and the platform its name says it comes "via" belongs to the same company; a name naming another
+// platform is red. From an account outside the organization: a colleague named in it, many of the
+// organization's people copied, or the sharer using a colleague's name count (platformShareSigns).
+// Set false and rebuild: as 5.101.
+const CHANGES_5_102 = Object.freeze({ platformShares: true });
 
 // Companies that own several domains, including their own short-link domains. Link text and destination
 // within one family are consistent (text "gmail.com" pointing to google.com, or Google's c.gle).
@@ -2197,6 +2205,126 @@ function colleagueLineSigns(people, own, colleagues, fromAddress) {
     return out;
 }
 
+// [5.102] PLATFORM SHARES. A file shared through a platform arrives as the platform's own notification:
+// "Dana Morales (via Google Docs)" <drive-shares-dm-noreply@google.com>, "Dana Morales via Docusign"
+// <dse@docusign.net>. Its domain and sender check are the platform's for a colleague's share as much as for a
+// stranger's, so once proven the platform's it is judged by the person who shared it: the Reply-To the platform
+// sets, or the "Name (address)" it writes in the text. Proven means all of: the domain is one of the platform's
+// (PLATFORM_SENDERS), the receiver's DMARC check passed with that domain as the From domain (auth.headerFrom),
+// the mailbox is a notification one, and the platform the name says it comes "via" belongs to the same company
+// ("via Dropbox" from google.com is not Google's notification, it is a mismatch: red).
+const PLATFORM_SENDERS = [
+    { owner: 'Google', domains: ['google.com'], names: /\b(google(\s+(docs?|drive|sheets|slides|forms|sites|classroom|calendar|meet|chat|keep|photos))?|classroom|docs|drive|sheets|slides|forms)\b/i },
+    { owner: 'Microsoft', domains: ['sharepointonline.com', 'microsoft.com', 'microsoftonline.com'], names: /\b(onedrive|one drive|sharepoint|microsoft(\s+(365|teams|forms|office|onedrive|sharepoint|stream|loop))?|teams|office\s*365)\b/i },
+    { owner: 'DocuSign', domains: ['docusign.net', 'docusign.com'], names: /\bdocu\s?sign\b/i },
+    { owner: 'Dropbox', domains: ['dropbox.com', 'dropboxmail.com'], names: /\bdropbox\b/i },
+    { owner: 'Adobe', domains: ['adobe.com', 'adobesign.com', 'echosign.com'], names: /\b(adobe(\s+(acrobat(\s+sign)?|sign|document cloud))?|acrobat(\s+sign)?|echosign)\b/i },
+    { owner: 'Box', domains: ['box.com'], names: /^box(\s+notifications?)?$/i }
+];
+const PLATFORM_NOTIFICATION_MAILBOX = /(^|[-_.])(no-?reply|noreply|notifications?|drive-shares|shares|comments|receipts|calendar|classroom|dse|message)([-_.]|$)|^dse(_[a-z0-9]+)?$/i;
+const onDomain = (d, of) => d === of || d.endsWith(`.${of}`);
+// What an email's sender says and is about a platform: { name: the person's name, via: the platform named,
+// claimed: the company it belongs to, owner: the company the sending domain belongs to, proven: the platform's
+// own notification (see above) } or null when neither the name nor the domain is a platform's.
+function platformNotificationOf(displayName, address, auth) {
+    const shown = String(displayName || '').trim();
+    const m = /^(.*?)\s*\((?:via\s+)?([^()]{2,40})\)\s*$/i.exec(shown) || /^(.*?)\s+via\s+(.{2,40})$/i.exec(shown);
+    const via = m ? m[2].trim() : '';
+    const claimed = via ? PLATFORM_SENDERS.find(p => p.names.test(via)) : null;
+    const addr = String(address || '').toLowerCase(), domain = domainOfAddress(addr), local = addr.split('@')[0] || '';
+    const sentBy = domain ? PLATFORM_SENDERS.find(p => p.domains.some(d => onDomain(domain, d))) : null;
+    if (!claimed && !sentBy) return null;
+    const a = auth || {}, hf = String(a.headerFrom || '').toLowerCase();
+    const matches = !claimed || (!!sentBy && claimed.owner === sentBy.owner);
+    const proven = !!sentBy && matches && a.dmarc === 'pass' && !!hf && onDomain(domain, hf) && sentBy.domains.some(d => onDomain(hf, d)) && PLATFORM_NOTIFICATION_MAILBOX.test(local);
+    return { name: (m ? m[1] : '').trim().replace(/^["']+|["']+$/g, ''), via: via || (sentBy ? sentBy.owner : ''), claimed: claimed ? claimed.owner : null, owner: sentBy ? sentBy.owner : null, domain, proven };
+}
+// The person who shared it, from a proven notification: the first Reply-To domain that isn't a platform's, else
+// the domain of "Name (address)" in its text.
+function platformSharerDomain(pn, replyToDomains, text) {
+    const notPlatform = (d) => d && !PLATFORM_SENDERS.some(p => p.domains.some(x => onDomain(d, x)));
+    const reply = [].concat(replyToDomains || []).map(d => String(d || '').toLowerCase()).find(notPlatform);
+    if (reply) return reply;
+    if (!pn.name) return '';
+    let t = '';
+    try { t = String((typeof text === 'function' ? text() : text) || '').slice(0, 20000); } catch (e) { t = ''; }
+    const esc = pn.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const hit = new RegExp(`${esc}\\s*\\(\\s*[A-Za-z0-9._%+'-]+@([A-Za-z0-9.-]+\\.[A-Za-z]{2,})\\s*\\)`, 'i').exec(t);
+    return hit && notPlatform(hit[1].toLowerCase()) ? hit[1].toLowerCase() : '';
+}
+// A colleague's name (two or three capitalized words whose fingerprint is a learned colleague's) in a share's
+// subject or text, other than the sharer's own name and the reader's, not after a greeting, and not a quotation of
+// the colleague's own email (followed by an address in your domains, or "wrote:").
+const SHARE_GREETINGS = new Set(['hi', 'hello', 'dear', 'hey', 'morning', 'afternoon', 'evening', 'greetings', 'attn', 'attention']);
+function colleagueNamedIn(subject, text, colleagues, skipHashes, owns) {
+    if (!colleagues || !colleagues.size) return false;
+    const skip = new Set([].concat(skipHashes || []).filter(Boolean));
+    let t = '';
+    try { t = String((typeof text === 'function' ? text() : text) || '').slice(0, 20000); } catch (e) { t = ''; }
+    const quoting = (after) => { const a = /^[\s"']*(?:<|\()?\s*[A-Za-z0-9._%+'-]+@([A-Za-z0-9.-]+)/.exec(after); return (a && owns.some(o => isOwnDomain(a[1].toLowerCase(), o))) || /^[^\n.!?]{0,80}\bwrote:/i.test(after); };
+    for (const part of [String(subject || ''), t]) {
+        const words = [...part.matchAll(/[\p{L}][\p{L}'’-]*/gu)];
+        for (let i = 0; i < words.length - 1; i++) {
+            if (!/^\p{Lu}/u.test(words[i][0]) || !/^\p{Lu}/u.test(words[i + 1][0])) continue;
+            if (i > 0 && SHARE_GREETINGS.has(words[i - 1][0].toLowerCase())) continue;
+            for (const n of [2, 3]) {
+                if (i + n > words.length || !words.slice(i, i + n).every(w => /^\p{Lu}/u.test(w[0]))) continue;
+                const h = colleagueNameHash(words.slice(i, i + n).map(w => w[0]).join(' '));
+                const last = words[i + n - 1], end = last.index + last[0].length;
+                if (h && colleagues.has(h) && !skip.has(h) && !quoting(part.slice(end, end + 160))) return true;
+            }
+        }
+    }
+    return false;
+}
+// The signs of a platform share (opened emails). context: { own: the organization's domain(s), colleagues: the
+// learned names' fingerprints, replyTo: Reply-To domains, text: the email's text (or a function giving it),
+// subject, recipients: [[domain, count]] of its To and Cc lines (recipientDomainCounts), self: the reader's address }.
+function platformShareSigns(pn, context) {
+    if (!CHANGES_5_102.platformShares || !pn) return [];
+    const c = context || {};
+    const owns = [].concat(c.own || []).map(d => String(d).toLowerCase()).filter(Boolean);
+    if (pn.claimed && pn.owner && pn.claimed !== pn.owner) {
+        return [{ weight: 5, kind: 'platform-mismatch', text: `The sender's name says it comes via ${pn.via} (${pn.claimed}'s), but it was sent from ${pn.domain}, which is ${pn.owner}'s: the platform named and the one that sent it don't match.` }];
+    }
+    // A platform named on a domain that isn't any platform's: the brand check (nameAddressSigns) says so for
+    // the brands it knows; this covers the rest (Box).
+    if (pn.claimed && !pn.owner) {
+        if (displayNameBrand(pn.name ? `${pn.name} ${pn.via}` : pn.via) || owns.some(o => isOwnDomain(pn.domain, o))) return [];
+        return [{ weight: 5, kind: 'platform-claim', text: `The sender's name says it comes via ${pn.via}, but ${pn.domain} isn't ${pn.claimed}'s.` }];
+    }
+    if (!pn.proven) return [];
+    const sharer = platformSharerDomain(pn, c.replyTo, c.text);
+    if (!sharer || owns.some(o => isOwnDomain(sharer, o))) return [];
+    const out = [{ weight: 1, kind: 'platform-share-outside', text: `${pn.via} sent it for someone outside your organization (${sharer}): it is judged by them, not by ${pn.owner}.` }];
+    const personal = isPersonalMailDomain(sharer);
+    const nameHash = pn.name ? colleagueNameHash(pn.name) : '';
+    if (nameHash && c.colleagues && c.colleagues.has(nameHash)) {
+        out.push(personal
+            ? { weight: 3, kind: 'platform-share-colleague-personal', text: `${pn.via} sent it for someone using the name of a person in your organization, from a personal account (${sharer}).` }
+            : { weight: 5, kind: 'platform-share-colleague-outside', text: `${pn.via} sent it for someone using the name of a person in your organization, but from an account at another organization (${sharer}).` });
+    } else if (colleagueNamedIn(c.subject, c.text, c.colleagues, [nameHash, c.self ? colleagueNameHash(String(c.self).split('@')[0].replace(/[._]+/g, ' ')) : ''], owns)) {
+        out.push({ weight: 2, kind: 'platform-share-names-colleague', text: 'It names someone in your organization as the one it comes from or asks for it, but it was shared from outside: accounts taken over at other organizations send such shares.' });
+    }
+    const ours = [].concat(c.recipients || []).filter(([d]) => d && owns.some(o => isOwnDomain(String(d).toLowerCase(), o))).reduce((n, [, k]) => n + (Number(k) || 0), 0);
+    if (ours >= PLATFORM_SHARE_MASS) out.push({ weight: 2, kind: 'platform-share-mass', text: `It was shared from outside with ${ours} people of your organization at once (its To and Cc lines).` });
+    return out;
+}
+const PLATFORM_SHARE_MASS = 10;
+// [5.102] How many addresses an email's To and Cc lines have at each domain (headers: parseRawHeaders):
+// [[domain, count]], the largest first, at most 8; domains and counts only, never an address.
+function recipientDomainCounts(headers) {
+    const n = new Map();
+    for (const line of ['to', 'cc']) {
+        for (const entry of (headers || []).filter(([h]) => h === line).map(([, v]) => v).flatMap(addressList).slice(0, 500)) {
+            const m = /<([^>]*)>\s*$/.exec(entry);
+            const d = domainOfAddress(String(m ? m[1] : entry).trim().toLowerCase());
+            if (d && /\./.test(d)) n.set(d, (n.get(d) || 0) + 1);
+        }
+    }
+    return [...n.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
+}
+
 // [5.96-2] The people in an email's Reply-To, Cc and To lines (headers: parseRawHeaders), each kept only as
 // the fingerprint of their name (colleagueNameHash) and their domain, never the name or the address, for
 // colleagueLineSigns when the email is shown: [{ line, h, domain, fromSame }]. A bare address has no name.
@@ -2874,7 +3002,7 @@ const ESP_HEADER_MARKERS = [
 ];
 // Bumped whenever headerAnomalies learns new signs, so results saved by an older version are worked
 // out again (see messageInfo in content.js).
-const HEADER_SIGNS_VERSION = 8;   // 7: [5.96-1] the To line person by person, [5.96-2] the people of Reply-To, Cc and To kept (as fingerprints); 8: [5.99-1] every Reply-To's domain kept
+const HEADER_SIGNS_VERSION = 9;   // 9: [5.102] the To and Cc lines' domain counts (rc); 7: [5.96-1] the To line person by person, [5.96-2] the people of Reply-To, Cc and To kept (as fingerprints); 8: [5.99-1] every Reply-To's domain kept
 // receiver: the webmail's receiving mail system, whose own records can be trusted:
 // { host: 'mx.google.com', name: 'Gmail' } (see the `mail.headers` entry of WEBMAIL_SITES).
 function headerAnomalies(raw, accountAddress, receiver = {}) {

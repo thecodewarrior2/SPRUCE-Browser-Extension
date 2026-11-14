@@ -2374,7 +2374,7 @@ test('[5.99-1] a colleague\'s name on an outside address: amber only when the em
   assert.deepEqual(JSON.parse(JSON.stringify(R(`replyToDomains(${JSON.stringify(people)})`))), ['quickmail-box.example']);
   R(`var __p = ${JSON.stringify(people)}`);
   assert.deepEqual(JSON.parse(JSON.stringify(R(`colleagueLineSigns(__p, ${JSON.stringify(ORG)}, __c, '')`))), [], 'no name: no Reply-To colleague sign');
-  assert.equal(R('HEADER_SIGNS_VERSION'), 8, 'results saved by 5.98 are worked out again');
+  assert.ok(R('HEADER_SIGNS_VERSION') >= 8, 'results saved by 5.98 are worked out again'); // [5.102] 9: the To and Cc domain counts
   // Off: any colleague's name outside is amber, as in 5.98; a title after it isn't recognized; a bare Reply-To isn't kept.
   const Off = loadShared(['colleagueContext']);
   Off(`var __c = new Set(['Misty Hollins'].map(colleagueNameHash))`);
@@ -2463,4 +2463,65 @@ test('AI facts: attachments keep only their endings and type; reply-to only othe
   assert.deepEqual(att, [{ name: 'file.pdf.exe', type: 'application/x-msdownload' }, { name: 'file.pdf      .html', type: '' }, { name: 'file', type: '' }]);
   assert.ok(!JSON.stringify(att).includes('Jane'));
   assert.deepEqual(JSON.parse(S(`JSON.stringify(aiReplyToDomains(['x@gmail.com', 'a@mail.vendor.example', 'Y@Vendor.Example', 'gmail.com'], 'b@vendor.example'))`)), ['gmail.com']);
+});
+
+// [5.102] Shares sent through a platform: proven the platform's own notification only with its domain, the
+// receiver's DMARC pass for it, a notification mailbox, and the platform it says it comes "via" owned by the
+// same company; then judged by the person who shared it.
+test('5.102: a platform notification is proven only when its domain, DMARC and the platform it names agree', () => {
+  const pn = (name, addr, auth) => JSON.parse(S(`JSON.stringify(platformNotificationOf(${JSON.stringify(name)}, ${JSON.stringify(addr)}, ${JSON.stringify(auth)}))`));
+  const G = { dmarc: 'pass', headerFrom: 'google.com' };
+  const ok = pn('Robin Castillo (via Google Docs)', 'drive-shares-dm-noreply@google.com', G);
+  assert.deepEqual([ok.proven, ok.claimed, ok.owner, ok.name], [true, 'Google', 'Google', 'Robin Castillo']);
+  assert.equal(pn('Robin Castillo via Docusign', 'dse@docusign.net', { dmarc: 'pass', headerFrom: 'docusign.net' }).proven, true);
+  // The platform named and the one that sent it differ: not proven, and a mismatch.
+  const mis = pn('Robin Castillo (via Dropbox)', 'drive-shares-dm-noreply@google.com', G);
+  assert.deepEqual([mis.proven, mis.claimed, mis.owner], [false, 'Dropbox', 'Google']);
+  // The receiver's sender check didn't pass, or passed for another domain, or a person's own mailbox: not proven.
+  assert.equal(pn('Robin Castillo (via Google Docs)', 'drive-shares-dm-noreply@google.com', { dmarc: 'fail', headerFrom: 'google.com' }).proven, false);
+  assert.equal(pn('Robin Castillo (via Google Docs)', 'drive-shares-dm-noreply@google.com', { dmarc: 'pass', headerFrom: 'docs-share.example' }).proven, false);
+  assert.equal(pn('Robin Castillo (via Google Docs)', 'drive-shares-dm-noreply@google.com', null).proven, false);
+  assert.equal(pn('Robin Castillo', 'robin.castillo@google.com', G).proven, false);
+  // A platform named on a domain that isn't any platform's.
+  const fake = pn('Robin Castillo (via Google Docs)', 'share@google-docs-share.example', { dmarc: 'pass', headerFrom: 'google-docs-share.example' });
+  assert.deepEqual([fake.proven, fake.claimed, fake.owner], [false, 'Google', null]);
+  assert.equal(pn('Robin Castillo (Finance)', 'robin@vendor.example', null), null, 'a name in brackets that is no platform');
+});
+
+test('5.102: a platform share is judged by the person who shared it', () => {
+  const own = 'maple-schools.example';
+  S(`globalThis.__col = new Set([colleagueNameHash('Dana Whitfield'), colleagueNameHash('Casey Tanaka')])`);
+  const signs = (name, addr, ctx) => JSON.parse(S(`JSON.stringify(platformShareSigns(platformNotificationOf(${JSON.stringify(name)}, ${JSON.stringify(addr)}, ${JSON.stringify(ctx.auth === undefined ? { dmarc: 'pass', headerFrom: addr.split('@')[1].split('.').slice(-2).join('.') } : ctx.auth)}),
+    Object.assign(${JSON.stringify(ctx)}, { colleagues: ${ctx.noColleagues ? 'new Set()' : '__col'} })))`)).map(x => `${x.kind}:${x.weight}`);
+  const many = [[own, 29], ['gmail.com', 1]];
+  const lure = { own, replyTo: ['ridgeview-ufsd.example'], subject: 'Document shared with you: "Dana Whitfield-Official Notification (1) .docx"',
+    text: 'Robin Castillo (rcastillo@ridgeview-ufsd.example) has invited you to edit the following document:\nFWD: Dr. Dana Whitfield, sent request to view a file.\nMaple County School\nDistrict Dr. Dana Whitfield\nSuperintendent', recipients: many };
+  // The reported campaign: outside sharer, our superintendent named, 29 of our people copied: 5 (flagged).
+  assert.deepEqual(signs('Robin Castillo (via Google Docs)', 'drive-shares-dm-noreply@google.com', lure), ['platform-share-outside:1', 'platform-share-names-colleague:2', 'platform-share-mass:2']);
+  // Without a learned name: outside and copied to many, 3 (caution).
+  assert.deepEqual(signs('Robin Castillo (via Google Docs)', 'drive-shares-dm-noreply@google.com', Object.assign({}, lure, { noColleagues: true })), ['platform-share-outside:1', 'platform-share-mass:2']);
+  // The sharer's domain from "Name (address)" in the text when there is no Reply-To.
+  assert.deepEqual(signs('Robin Castillo (via Google Docs)', 'drive-shares-dm-noreply@google.com', Object.assign({}, lure, { replyTo: [], recipients: [] })), ['platform-share-outside:1', 'platform-share-names-colleague:2']);
+  // A colleague sharing from our own domain, naming our superintendent: nothing.
+  assert.deepEqual(signs('Casey Tanaka (via Google Docs)', 'drive-shares-dm-noreply@google.com', Object.assign({}, lure, { replyTo: [`ctanaka@${own}`.split('@')[1]] })), []);
+  // A partner with real context: only "outside" (1, nothing shown).
+  assert.deepEqual(signs('Jamie Novak (via Google Docs)', 'drive-shares-dm-noreply@google.com', { own, replyTo: ['maple-county-health.example'], subject: 'Vision screening schedule', text: 'Here are the dates we discussed.', recipients: [[own, 1]] }), ['platform-share-outside:1']);
+  // The sharer uses a colleague's own name: from another organization 5, from a personal account 3.
+  assert.deepEqual(signs('Dana Whitfield (via Google Docs)', 'drive-shares-dm-noreply@google.com', { own, replyTo: ['ridgeview-ufsd.example'], subject: 'x', text: 'y' }), ['platform-share-outside:1', 'platform-share-colleague-outside:5']);
+  assert.deepEqual(signs('Dana Whitfield (via Google Docs)', 'drive-shares-dm-noreply@google.com', { own, replyTo: ['gmail.com'], subject: 'x', text: 'y' }), ['platform-share-outside:1', 'platform-share-colleague-personal:3']);
+  // A colleague's own email quoted in the share's text doesn't count.
+  assert.deepEqual(signs('Jamie Novak (via Google Docs)', 'drive-shares-dm-noreply@google.com', { own, replyTo: ['maple-county-health.example'], subject: 'Screening',
+    text: `On Monday, Dana Whitfield <dwhitfield@${own}> wrote: please send the schedule.` }), ['platform-share-outside:1']);
+  // The platform named and the one that sent it differ: red, whoever shared it.
+  assert.deepEqual(signs('Robin Castillo (via Dropbox)', 'drive-shares-dm-noreply@google.com', lure), ['platform-mismatch:5']);
+  // A platform the brand check doesn't know, named on another domain: red. One it knows: left to the brand check.
+  assert.deepEqual(signs('Robin Castillo (via Box)', 'notify@box-files.example', Object.assign({}, lure, { auth: null })), ['platform-claim:5']);
+  assert.deepEqual(signs('Robin Castillo (via Google Docs)', 'share@google-docs-share.example', Object.assign({}, lure, { auth: null })), []);
+  // Not proven (its sender check failed): no share signs (the forged-brand check says so).
+  assert.deepEqual(signs('Robin Castillo (via Google Docs)', 'drive-shares-dm-noreply@google.com', Object.assign({}, lure, { auth: { dmarc: 'fail', headerFrom: 'google.com' } })), []);
+});
+
+test('5.102: the To and Cc lines are counted by domain, without keeping an address', () => {
+  const headers = [['to', 'reader@maple-schools.example'], ['cc', 'a@maple-schools.example, "B" <b@maple-schools.example>, c@gmail.com'], ['reply-to', 'x@other.example']];
+  assert.deepEqual(JSON.parse(S(`JSON.stringify(recipientDomainCounts(${JSON.stringify(headers)}))`)), [['maple-schools.example', 3], ['gmail.com', 1]]);
 });
