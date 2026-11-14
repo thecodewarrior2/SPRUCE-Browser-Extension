@@ -25,6 +25,10 @@ fs.mkdirSync(LOGS, { recursive: true });
 if (!process.env.EXT && fs.existsSync(path.join(__dirname, '..', 'models', 'phish-tiny', 'SOURCE.json'))) {
     require('child_process').execFileSync(process.execPath, [path.join(__dirname, '..', 'tools', 'fetch-model.js'), '--quiet'], { stdio: 'inherit' });
 }
+// EXPERIMENT (llm_testing): ONNX Runtime Web's files (not in the repository either), from the tarball lib/ort/SOURCE.json pins.
+if (!process.env.EXT && fs.existsSync(path.join(__dirname, '..', 'lib', 'ort', 'SOURCE.json'))) {
+    require('child_process').execFileSync(process.execPath, [path.join(__dirname, '..', 'tools', 'fetch-ort.js'), '--quiet'], { stdio: 'inherit' });
+}
 let timings = {};
 try { timings = JSON.parse(fs.readFileSync(TIMINGS, 'utf8')); } catch (e) { /* first run */ }
 

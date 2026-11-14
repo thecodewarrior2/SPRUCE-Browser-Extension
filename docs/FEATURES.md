@@ -218,7 +218,9 @@ the Inspector explains that no tool can read them offline.
   the build adds it to the package from there, checked byte for byte; it learned from synthetic emails and from
   phishing, spear-phishing and scam examples that schools and agencies published, paraphrased without
   personal data). It runs inside the extension on the
-  computer, in plain JavaScript; nothing is sent anywhere. It says how likely the email is phishing and
+  computer: since 5.94.25 in ONNX Runtime Web, on the graphics card (WebGPU) when the browser gives one,
+  else in WebAssembly, and in the extension's own JavaScript runtime when neither can run (or the setting
+  **AI engine** says so); all three give the same numbers. Nothing is sent anywhere. It says how likely the email is phishing and
   which sentences, on their own, read most like phishing. Email addresses keep only their domain and
   numbers are hidden before it sees the text. The automatic run waits (up to 3 seconds) for the email's
   own verdict, so the model sees it; when it finds nothing suspicious it shows one short line with

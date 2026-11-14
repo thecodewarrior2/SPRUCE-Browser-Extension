@@ -401,6 +401,12 @@
       "description": "true: every opened email is analyzed as it opens (a one-line note when the model sees nothing suspicious). false: only when the person clicks \"Ask the AI\". On by default.",
       "type": "boolean"
     },
+    "managedAiEngine": {
+      "title": "AI Engine (experimental)",
+      "description": "Which runtime gives the AI's opinion, all on the computer: \"auto\" (ONNX Runtime on the graphics card, else in WebAssembly; the default) or \"javascript\" (the extension's own JavaScript runtime only, for troubleshooting).",
+      "type": "string",
+      "enum": ["auto", "javascript"]
+    },
     "managedAllowlist": {
       "title": "Managed Allowlist",
       "description": "Trusted domains that bypass scanning. Redirect wrappers on these domains (for example google.com/url?q=) are still unwrapped and the destination is scanned unless it is also allowlisted.",

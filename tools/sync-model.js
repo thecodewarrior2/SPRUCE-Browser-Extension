@@ -18,8 +18,8 @@
 //        model/reference/ai-vectors.json        -> tests/fixtures/ai-vectors.json
 //        model/reference/input-format.jsonl     -> tests/fixtures/ai-input-format.jsonl
 //      and the model's files into models/phish-tiny/ (ignored by git), so the tests run:
-//        model/phish-tiny/{model.bin,model.json,vocab.txt,MODEL_CARD.md} (model.onnx is not needed: the
-//        extension runs model.bin in plain JavaScript).
+//        model/phish-tiny/{model.bin,model.onnx,model.json,vocab.txt,MODEL_CARD.md} (model.onnx for the
+//        ONNX Runtime engine, ai-engine.js; model.bin for the JavaScript runtime it falls back to).
 // Then run the tests (cd tests && node run-all.js) and follow CLAUDE.md for the version and changelog.
 const fs = require('fs');
 const path = require('path');
@@ -33,6 +33,7 @@ const FILES = [
     ['model/phish-tiny/model.bin', 'models/phish-tiny/model.bin'],
     ['model/phish-tiny/model.json', 'models/phish-tiny/model.json'],
     ['model/phish-tiny/vocab.txt', 'models/phish-tiny/vocab.txt'],
+    ['model/phish-tiny/model.onnx', 'models/phish-tiny/model.onnx'],
     ['model/phish-tiny/MODEL_CARD.md', 'models/phish-tiny/MODEL_CARD.md'],
     ['model/reference/ai-vectors.json', 'tests/fixtures/ai-vectors.json'],
     ['model/reference/input-format.jsonl', 'tests/fixtures/ai-input-format.jsonl']

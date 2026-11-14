@@ -2833,6 +2833,13 @@ chrome.tabs.onRemoved.addListener((tabId) => tabFrames.delete(tabId));
 // ---------------------------------------------------------------------------
 const SCANNER_OFFSCREEN = !!(chrome.offscreen && chrome.offscreen.createDocument);
 const SCANNER_IDLE_MS = 60 * 1000;
+// EXPERIMENT (llm_testing): the AI engine (ai-engine.js: the model in ONNX Runtime Web, WebGPU or
+// WebAssembly) lives in the same document. Its session takes a moment to load, so the document stays
+// while the AI has been used in the last AI_ENGINE_IDLE_MS (then it closes as for the scanner, and loads
+// again on the next opened email).
+const AI_ENGINE_IDLE_MS = 5 * 60 * 1000;
+const AI_ENGINE_LIMIT_MS = 60 * 1000;
+let aiEngineLastUsed = 0, aiEngineWarned = false;
 const SCANNER_PARALLEL = 2;
 const SCAN_JOB_LIMIT_MS = 30 * 1000;     // see scanForQr; the scanner's own limit is 20 s
 const QR_RESULT_CACHE_MAX = 300;
@@ -2844,6 +2851,18 @@ const qrResults = new Map();      // image URL → result (session memory, bound
 let resolveLocalScanner;
 const localScanner = new Promise(r => { resolveLocalScanner = r; });
 globalThis.registerLocalScanner = (fn) => resolveLocalScanner(fn);
+// Firefox, Safari: ai-engine.js runs in this page and hands its functions over (analyze, status) as the
+// page loads. Where there is no page (Chrome's service worker, which asks the offscreen document instead;
+// the unit tests' harness), nothing ever registers: the engine is "not here" at once, not after a wait.
+const AI_ENGINE_REGISTER_MS = 5 * 1000;
+let resolveLocalAiEngine;
+const localAiEngine = new Promise((resolve, reject) => {
+    resolveLocalAiEngine = resolve;
+    if (typeof document === 'undefined') reject(new Error('no AI engine in this context'));
+    else setTimeout(() => reject(new Error('ai-engine.js did not register in this page')), AI_ENGINE_REGISTER_MS);
+});
+localAiEngine.catch(() => {});
+globalThis.registerLocalAiEngine = (api) => resolveLocalAiEngine(api);
 
 function ensureScanner() {
     if (!scannerReady) {
@@ -2863,14 +2882,46 @@ function ensureScanner() {
 
 function scheduleScannerClose() {
     clearTimeout(scannerIdleTimer);
+    const keepAi = aiEngineLastUsed + AI_ENGINE_IDLE_MS - Date.now();
     scannerIdleTimer = setTimeout(() => {
-        if (scansRunning) return scheduleScannerClose();
+        if (scansRunning || aiEngineLastUsed + AI_ENGINE_IDLE_MS > Date.now()) return scheduleScannerClose();
         // scannerReady is cleared BEFORE the close starts, so a scan arriving during the teardown
         // recreates the document (ensureScanner waits for scannerClosing) instead of messaging it.
         scannerReady = null;
         scannerClosing = (async () => { try { await chrome.offscreen.closeDocument(); } catch (e) { /* already closed */ } })()
             .finally(() => { scannerClosing = null; });
-    }, SCANNER_IDLE_MS);
+    }, Math.max(SCANNER_IDLE_MS, keepAi));
+}
+
+// The AI engine's answer (ai-engine.js): Chrome's offscreen document, asked through a message; Firefox's
+// and Safari's background page, called directly. Throws when it can't answer (the caller then uses the
+// JavaScript runtime). A document that doesn't answer in AI_ENGINE_LIMIT_MS is closed, as for a scan.
+async function askAiEngine(msg) {
+    aiEngineLastUsed = Date.now();
+    let limit = null;
+    const tooLong = new Promise((resolve, reject) => { limit = setTimeout(() => reject(new Error('the AI engine took too long')), AI_ENGINE_LIMIT_MS); });
+    try {
+        let res;
+        if (SCANNER_OFFSCREEN) {
+            await ensureScanner();
+            res = await Promise.race([chrome.runtime.sendMessage(Object.assign({ target: 'ai' }, msg)), tooLong]);
+        } else {
+            const api = await Promise.race([localAiEngine, tooLong]);
+            res = await Promise.race([msg.action === 'status' ? api.status() : api.analyze(msg.facts), tooLong]);
+        }
+        if (!res || !res.ok) throw new Error(res && res.error ? res.error : 'no answer from the AI engine');
+        return res;
+    } catch (e) {
+        if (SCANNER_OFFSCREEN && /took too long/.test(errorText(e))) {
+            scannerReady = null;
+            scannerClosing = (async () => { try { await chrome.offscreen.closeDocument(); } catch (x) { /* already closed */ } })().finally(() => { scannerClosing = null; });
+        }
+        throw e;
+    } finally {
+        clearTimeout(limit);
+        aiEngineLastUsed = Date.now();
+        if (SCANNER_OFFSCREEN) scheduleScannerClose();
+    }
 }
 
 async function scanForQr(req) {
@@ -3372,8 +3423,16 @@ async function aiModelStatus() {
     const t0 = Date.now();
     try {
         const m = await loadPhishModel();
-        return { ready: true, name: m.meta.name, version: m.meta.version, trained: m.meta.trained, metrics: m.meta.metrics, loadMs: Date.now() - t0,
-                 text: `${m.meta.name} ${m.meta.version} is ready (trained ${m.meta.trained}; runs on this computer).` };
+        // The engine the opinions come from: ONNX Runtime Web on WebGPU or in WebAssembly (ai-engine.js), else
+        // the JavaScript runtime here (the setting aiEngine, or the engine not answering).
+        let engine = { engine: 'JavaScript', runtime: 'the extension\'s own JavaScript runtime' };
+        const cfg = await getConfig();
+        if (cfg.values.aiEngine !== 'javascript') {
+            try { const r = await askAiEngine({ action: 'status' }); engine = { engine: r.engine, runtime: r.runtime, loadMs: r.loadMs, tried: r.tried }; }
+            catch (e) { engine.fallback = errorText(e); }
+        }
+        return { ready: true, name: m.meta.name, version: m.meta.version, trained: m.meta.trained, metrics: m.meta.metrics, loadMs: Date.now() - t0, engine: engine.engine, runtime: engine.runtime, tried: engine.tried, fallback: engine.fallback,
+                 text: `${m.meta.name} ${m.meta.version} is ready (trained ${m.meta.trained}; runs on this computer: ${engine.engine}, ${engine.runtime}${engine.fallback ? `; the ONNX engine couldn't run: ${engine.fallback}` : ''}).` };
     } catch (e) {
         return { ready: false, text: `The model couldn't be loaded: ${errorText(e)}` };
     }
@@ -3393,18 +3452,29 @@ async function aiAnalyzeEmail(facts, auto = false) {
         if (!auto) logInfo(`AI analysis: not run (the email looks like it is in ${language.name}; the model reads English only).`, 'AI analysis');
         return { result: { probability: null, reasons: [], skipped: 'language' }, skipped: 'language', language: language.name, vouching, advice, ms: Date.now() - t0 };
     }
-    let result;
-    try { result = (await loadPhishModel()).analyze(f); }
-    catch (e) {
-        logWarning(`AI analysis failed: ${errorText(e)}`, 'AI analysis');
-        return { error: `The model couldn't run: ${errorText(e)}` };
+    // The engine (ONNX Runtime Web: WebGPU, else WebAssembly; ai-engine.js) gives the opinion; when it can't
+    // (the setting aiEngine is "javascript", no runtime in this browser, the document not answering), the
+    // JavaScript runtime in ai.js does, which reads the same text and gives the same numbers.
+    let result = null;
+    if (cfg.values.aiEngine !== 'javascript') {
+        try { result = (await askAiEngine({ action: 'analyze', facts: f })).result; }
+        catch (e) {
+            if (!aiEngineWarned) { aiEngineWarned = true; logWarning(`The AI engine (ONNX Runtime) couldn't answer: ${errorText(e)}. The JavaScript runtime gives the opinions instead.`, 'AI analysis'); }
+        }
+    }
+    if (!result) {
+        try { result = Object.assign((await loadPhishModel()).analyze(f), { engine: 'JavaScript' }); }
+        catch (e) {
+            logWarning(`AI analysis failed: ${errorText(e)}`, 'AI analysis');
+            return { error: `The model couldn't run: ${errorText(e)}` };
+        }
     }
     const vouching = selfVouchingSigns(`${f.subject || ''}\n${f.bodyText || ''}`);
     const status = f.verdict ? f.verdict.status : null;
     const ms = Date.now() - t0;
     const advice = aiAdvice(result, status, vouching);
     // Automatic runs (every opened email) are logged only when they warn, so the log isn't flooded.
-    if (!auto || advice.level !== 'info') logInfo(`AI analysis (${result.model} ${result.version}${auto ? ', automatic' : ''}): ${Math.round(result.probability * 100)}% phishing in ${(ms / 1000).toFixed(1)} s.`, 'AI analysis');
+    if (!auto || advice.level !== 'info') logInfo(`AI analysis (${result.model} ${result.version}, ${result.engine || 'JavaScript'}${auto ? ', automatic' : ''}): ${Math.round(result.probability * 100)}% phishing in ${(ms / 1000).toFixed(1)} s.`, 'AI analysis');
     return { result, vouching, advice, ms };
 }
 

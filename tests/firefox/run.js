@@ -46,13 +46,21 @@ const settings = (page) => openExt(page, 'options.html', () => document.querySel
   // EXPERIMENT (llm_testing): the extension's own AI model loads and answers in Firefox's background page.
   const ai = await opt.evaluate(async () => {
     await chrome.storage.local.set({ enableAiAnalysis: true });
-    const r = await chrome.runtime.sendMessage({ action: 'aiAnalyze', facts: { subject: 'Your password expires today', senderName: 'Microsoft Security',
+    const facts = { subject: 'Your password expires today', senderName: 'Microsoft Security',
       senderAddress: 'no-reply@ms-verify.example', auth: { dmarc: 'fail' }, links: [{ text: 'Keep my password', host: 'ms-verify.example', destHost: '', finding: '' }],
-      bodyText: 'Dear user, your password expires in 2 hours. Click below to keep your current password.' } });
-    await chrome.storage.local.set({ enableAiAnalysis: false });
-    return r && r.result ? { p: r.result.probability, level: r.advice.level, ms: r.ms } : r;
+      bodyText: 'Dear user, your password expires in 2 hours. Click below to keep your current password.' };
+    const r = await chrome.runtime.sendMessage({ action: 'aiAnalyze', facts });
+    // 5.94.25: the engine (ai-engine.js in this page: ONNX Runtime Web, WebGPU else WebAssembly) and the JavaScript runtime agree.
+    const status = await chrome.runtime.sendMessage({ action: 'aiStatus' });
+    await chrome.storage.local.set({ aiEngine: 'javascript' });
+    const j = await chrome.runtime.sendMessage({ action: 'aiAnalyze', facts });
+    await chrome.storage.local.set({ aiEngine: 'auto', enableAiAnalysis: false });
+    return r && r.result ? { p: r.result.probability, level: r.advice.level, ms: r.ms, engine: r.result.engine, statusEngine: status && status.engine, runtime: status && status.runtime,
+      jsEngine: j && j.result && j.result.engine, diff: j && j.result ? Math.abs(r.result.probability - j.result.probability) : null } : r;
   });
   check('[llm_testing] the AI model runs in the background page: a password phish is likely phishing', ai && ai.p > 0.9 && ai.level === 'danger', ai);
+  check('[5.94.25] ONNX Runtime Web answers in the background page (WebGPU or WebAssembly), and the JavaScript runtime gives the same opinion to 0.001',
+    ai && /^(WebGPU|WebAssembly)$/.test(ai.engine) && ai.statusEngine === ai.engine && /ONNX Runtime Web/.test(ai.runtime) && ai.jsEngine === 'JavaScript' && ai.diff < 1e-3, ai);
   check('[5.90-2] background page hands out the single-company endings (ICANN\'s list: .amex, not .app)', bg.endings && /American Express/.test(bg.endings.amex) && !bg.endings.app && bg.endings.count >= 100, bg.endings);
   const variants = await opt.evaluate(() => ({
     browser: document.documentElement.dataset.browser,

@@ -3675,7 +3675,7 @@ function showAiResult(body, box, res, auto = false) {
         // Another language: the model wasn't run (it reads English only); asking again would say the same.
         foot.textContent = 'S.P.R.U.C.E+\'s own small AI model wasn\'t run on this email: it was trained on English only. The extension\'s own checks ran as usual.';
     } else {
-        foot.textContent = `The opinion of S.P.R.U.C.E+'s own small AI model (${result ? `${result.model} ${result.version}` : 'model'}, ${(res.ms / 1000).toFixed(1)} s, on this computer). It can be wrong and never changes the extension's own checks. `;
+        foot.textContent = `The opinion of S.P.R.U.C.E+'s own small AI model (${result ? `${result.model} ${result.version}, ${result.engine || 'JavaScript'}` : 'model'}, ${(res.ms / 1000).toFixed(1)} s, on this computer). It can be wrong and never changes the extension's own checks. `;
         foot.appendChild(noticeButton('Ask again', () => runAiAnalysis(body, box)));
     }
     box.appendChild(foot);

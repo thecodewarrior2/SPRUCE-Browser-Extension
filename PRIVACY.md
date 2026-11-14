@@ -58,7 +58,8 @@ it first saw it, never the address itself. Logging → Senders → Clear sender 
 is sent anywhere.
 
 **AI analysis (experimental, on by default):** the extension's own small AI model runs inside the
-extension on your computer. It reads each email as you open it (or only when you click **Ask the AI**,
+extension on your computer (on your graphics card or in WebAssembly through ONNX Runtime, which is part of
+the extension, or in the extension's own code; nothing is downloaded for it). It reads each email as you open it (or only when you click **Ask the AI**,
 if you turn automatic analysis off in Settings → AI analysis), after email
 addresses and phone and long numbers are hidden from it. It is also told what the extension's own checks
 found (who the sender claims to be, where replies go, what kind of files are attached: never their names). Nothing is sent anywhere, and its answers

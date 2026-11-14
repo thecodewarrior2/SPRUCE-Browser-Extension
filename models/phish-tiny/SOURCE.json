@@ -2,7 +2,7 @@
   "repository": "https://github.com/thecodewarrior2/TinyPhishLLM",
   "commit": "78706ea4a989b0813104d3640651f294ca78676b",
   "model": "phish-tiny 0.16.0",
-  "synced": "2026-11-13",
+  "synced": "2026-11-14",
   "note": "Pinned by tools/sync-model.js. The model's files (models/phish-tiny/*) are not in this repository: tools/build.js adds them to every package from TinyPhishLLM at this commit (tools/fetch-model.js) and only with these SHA-256. Don't edit them here: change the model in TinyPhishLLM and sync again.",
   "files": {
     "models/phish-tiny/model.bin": {
@@ -16,6 +16,10 @@
     "models/phish-tiny/vocab.txt": {
       "from": "model/phish-tiny/vocab.txt",
       "sha256": "07eced375cec144d27c900241f3e339478dec958f92fddbc551f295c992038a3"
+    },
+    "models/phish-tiny/model.onnx": {
+      "from": "model/phish-tiny/model.onnx",
+      "sha256": "7692c4814ceff391d042e127335d3002a9295e5fb05adb78380a053e11beb3c9"
     },
     "models/phish-tiny/MODEL_CARD.md": {
       "from": "model/phish-tiny/MODEL_CARD.md",

@@ -1,0 +1,22 @@
+{
+  "package": "onnxruntime-web",
+  "version": "1.23.2",
+  "license": "MIT",
+  "tarball": "https://registry.npmjs.org/onnxruntime-web/-/onnxruntime-web-1.23.2.tgz",
+  "integrity": "sha512-T09JUtMn+CZLk3mFwqiH0lgQf+4S7+oYHHtk6uhaYAAJI95bTcKi5bOOZYwORXfS/RLZCjDDEXGWIuOCAFlEjg==",
+  "note": "Pinned by hand (tools/fetch-ort.js reads this). The three files below (the WebGPU/WebAssembly build: the loader, the WebAssembly module's factory and the module) are not in this repository: tools/fetch-ort.js takes them from this tarball (npm's registry), checks the tarball's integrity and each file's SHA-256, and puts them in lib/ort/ (ignored by git); tools/build.js adds them to every package. The whole runtime is in the package: nothing is loaded from the web when the extension runs.",
+  "files": {
+    "lib/ort/ort.webgpu.bundle.min.mjs": {
+      "from": "package/dist/ort.webgpu.bundle.min.mjs",
+      "sha256": "84b7de59dab2a4c81e48a3f8bdb7bcdf6024f532495a0e3679a7bea70444d62c"
+    },
+    "lib/ort/ort-wasm-simd-threaded.asyncify.mjs": {
+      "from": "package/dist/ort-wasm-simd-threaded.asyncify.mjs",
+      "sha256": "249b4dc791f081d33bd11760bfd669fe85f97289e679bbeb291b874272125dff"
+    },
+    "lib/ort/ort-wasm-simd-threaded.asyncify.wasm": {
+      "from": "package/dist/ort-wasm-simd-threaded.asyncify.wasm",
+      "sha256": "babec0bbddb6d3082623b99b7e1391b75e0729bcca076ff8424d7753af97fada"
+    }
+  }
+}

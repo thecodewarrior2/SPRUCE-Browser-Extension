@@ -160,7 +160,10 @@ const SETTING_DEFS = [
     // TinyPhishLLM) gives its opinion of opened emails: automatically when one is opened (aiAutoAnalyze),
     // or only when the person clicks "Ask the AI".
     { key: 'enableAiAnalysis',            managedKey: 'managedEnableAiAnalysis',            def: true, type: 'boolean' },
-    { key: 'aiAutoAnalyze',               managedKey: 'managedAiAutoAnalyze',               def: true, type: 'boolean' }
+    { key: 'aiAutoAnalyze',               managedKey: 'managedAiAutoAnalyze',               def: true, type: 'boolean' },
+    // Which runtime gives the opinion: auto (ONNX Runtime Web on WebGPU, else WebAssembly; ai-engine.js, in
+    // the package) or the extension's own JavaScript runtime only (ai.js), for troubleshooting.
+    { key: 'aiEngine',                    managedKey: 'managedAiEngine',                    def: 'auto', type: 'enum', values: ['auto', 'javascript'] }
 ];
 // secret: true => may hold API keys; never written to exported backups.
 

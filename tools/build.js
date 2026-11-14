@@ -167,11 +167,19 @@ function addModel(dir) {
     return source;
 }
 
+// EXPERIMENT (llm_testing): ONNX Runtime Web (the AI engine's runtime, lib/ort/) isn't in the repository
+// either: lib/ort/SOURCE.json pins its npm tarball and each file's SHA-256 (tools/fetch-ort.js).
+function addOrt(dir) {
+    if (!fs.existsSync(path.join(dir, 'lib', 'ort', 'SOURCE.json'))) return;
+    execFileSync(process.execPath, [path.join(ROOT, 'tools', 'fetch-ort.js'), '--root', dir, '--quiet'], { stdio: ['ignore', 'inherit', 'inherit'] });
+}
+
 function build(browsers, workingTree) {
     const src = sourceFiles(workingTree);
     try {
         checkPinnedFiles(src);
         const model = addModel(src);
+        addOrt(src);
         const chromeManifest = JSON.parse(fs.readFileSync(path.join(src, 'manifest.json'), 'utf8'));
         const version = chromeManifest.version;
         fs.mkdirSync(OUT, { recursive: true });

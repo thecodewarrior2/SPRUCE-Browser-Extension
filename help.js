@@ -173,6 +173,7 @@
                 : [code('scanner.js'), 'background page', 'Decodes QR codes in images and PDF pages and lists PDF links.'],
             [code('compat.js'), 'scanner', 'Small shims for JavaScript features pdf.js uses that older browsers lack.'],
             [code('lib/pdf.min.mjs, lib/pdf.worker.min.mjs'), 'scanner', 'pdf.js (Mozilla, Apache-2.0) for rendering PDF attachments.'],
+            [code('ai-engine.js, lib/ort/'), 'scanner', 'The AI model in ONNX Runtime Web (Microsoft, MIT), on the graphics card (WebGPU) or in WebAssembly; the extension\'s own JavaScript runtime (ai.js) when neither can run.'],
             [code('content.css'), 'Gmail tab', 'Shows the 🔍 on email tracking links only while the link is hovered or focused; styles the sender icons, domain labels, the moved-to-Spam notice and the "Moving to Spam…" row guard.'],
             [code('background.js'), bg, 'Link pipeline, threat checks, lookups, list sync and safeguards, logging, cleanup, message API, badge.'],
             [code('decoders.js'), `${bg}, Options`, 'All offline decoders and the unwrapping loop.'],
@@ -235,7 +236,7 @@
             el('p', null, el('b', null, 'Web platform: '),
                'fetch with AbortController timeouts, MutationObserver, URL and URLSearchParams, atob/btoa (base64), DataView (DNS wire format, RFC 8484), BigInt (Flickr base-58), the Clipboard API.'),
             el('p', null, el('b', null, 'Third-party code: '),
-               'only pdf.js (Mozilla, bundled in lib/) for PDF attachments. No frameworks, build tools, remote scripts or analytics; Manifest V3 forbids remote code in any case.'));
+               'only pdf.js (Mozilla, bundled in lib/) for PDF attachments and ONNX Runtime Web (Microsoft, bundled in lib/ort/) to run the AI model. No frameworks, build tools, remote scripts or analytics; Manifest V3 forbids remote code in any case.'));
     }
 
     async function renderLive(cfg) {

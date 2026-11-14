@@ -13,3 +13,7 @@ tools/ai/data/
 # (tools/fetch-model.js; tools/build.js adds them to every package): never committed here.
 models/phish-tiny/*
 !models/phish-tiny/SOURCE.json
+# EXPERIMENT (llm_testing): ONNX Runtime Web's files come from the npm tarball lib/ort/SOURCE.json pins
+# (tools/fetch-ort.js; tools/build.js adds them to every package): never committed here.
+lib/ort/*.mjs
+lib/ort/*.wasm

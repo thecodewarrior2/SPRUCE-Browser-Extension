@@ -45,6 +45,8 @@ const { launch, servePage, until, optionsReady, check, done } = require('./harne
   const box = await until(() => aiBox(page), b => b && (b.state === 'done' || b.state === 'error'), 30000);
   check('clicked: the full answer, from the extension\'s own model on this computer',
     box.state === 'done' && /\(\d+%\)/.test(box.text) && /own small AI model \(phish-tiny/.test(box.text) && /on this computer/.test(box.text) && !/\bis safe\b/.test(box.text), box);
+  // 5.94.25: the answer names its engine: ONNX Runtime Web on WebGPU or in WebAssembly (in the offscreen document).
+  check('the answer names the engine that gave it (WebGPU or WebAssembly)', /phish-tiny [\d.]+, (WebGPU|WebAssembly), \d+\.\d s, on this computer/.test(box.text), box.text);
   const logAfter = await sw.evaluate(async () => ((await chrome.storage.local.get('errorLogs')).errorLogs || []).filter(e => e.source === 'AI analysis').length);
   check('a clicked analysis is logged (automatic ones only when they warn)', logAfter >= logBefore, { logBefore, logAfter });
   const statusAfter = await page.$eval('.unshortener-sender-address', e => e.dataset.status || '');
@@ -96,6 +98,18 @@ const { launch, servePage, until, optionsReady, check, done } = require('./harne
   await opt.click('#aiCheckBtn');
   const st = await until(() => opt.$eval('#aiStatus', e => e.textContent), t => /ready|couldn't/.test(t), 15000);
   check('the model status shows its name, version and hand-written score', /phish-tiny .* is ready/.test(st) && /hand-written/.test(st), st);
+  // 5.94.25: the engine (ai-engine.js: ONNX Runtime Web, WebGPU else WebAssembly) and the JavaScript runtime
+  // (ai.js, the fallback and the setting "javascript") read the same text and give the same opinion.
+  check('the model status names the engine (ONNX Runtime Web on WebGPU or in WebAssembly)', /runs on this computer: (WebGPU|WebAssembly), ONNX Runtime Web \d/.test(st), st);
+  const FACTS = { subject: 'Your password expires today', senderName: 'Microsoft Security', senderAddress: 'no-reply@ms-verify.example', auth: { dmarc: 'fail' },
+    links: [{ text: 'Keep my password', host: 'ms-verify.example', destHost: '', finding: '' }], bodyText: 'Dear user, your password expires in 2 hours. Click below to keep your current password. Act now to avoid losing access to your mailbox.' };
+  const askEngine = async (engine) => { await opt.evaluate((e) => chrome.storage.local.set({ aiEngine: e }), engine); return opt.evaluate((f) => chrome.runtime.sendMessage({ action: 'aiAnalyze', facts: f }), FACTS); };
+  const onnx = await askEngine('auto'), js = await askEngine('javascript');
+  const same = onnx.result && js.result && Math.abs(onnx.result.probability - js.result.probability) < 1e-3 && JSON.stringify(onnx.result.reasons.map(r => r.sentence)) === JSON.stringify(js.result.reasons.map(r => r.sentence));
+  check('ONNX Runtime (WebGPU or WebAssembly) and the JavaScript runtime give the same opinion to 0.001, with the same reasons',
+    onnx.result && /^(WebGPU|WebAssembly)$/.test(onnx.result.engine) && js.result && js.result.engine === 'JavaScript' && same,
+    { onnx: onnx.result ? { engine: onnx.result.engine, p: onnx.result.probability } : onnx, js: js.result ? { engine: js.result.engine, p: js.result.probability } : js });
+  await opt.evaluate(() => chrome.storage.local.set({ aiEngine: 'auto' }));
   const ask = async (text) => {
     await opt.fill('#aiTryText', text);
     await opt.click('#aiTryBtn');

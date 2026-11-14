@@ -38,7 +38,7 @@ flowchart LR
   end
   subgraph Ext["Extension"]
     SW["Background<br/>background.js + decoders.js<br/>+ custom-endpoints.js + shared.js<br/>• link pipeline<br/>• threat checks and lookups<br/>• sender verdicts<br/>• list downloads, logging, cleanup"]
-    OFF["Hidden scanner page<br/>scanner.js + qr-decoder.js + pdf.js<br/>QR codes in images and PDFs"]
+    OFF["Hidden scanner page<br/>scanner.js + qr-decoder.js + pdf.js<br/>QR codes in images and PDFs<br/>ai-engine.js + ONNX Runtime (llm_testing)<br/>the AI model, WebGPU or WebAssembly"]
     UI["Settings and popup<br/>options.js + help.js + popup.js"]
     ST[("Browser storage<br/>local: settings, caches, logs<br/>managed: administrator policy<br/>IndexedDB: sender pictures")]
   end
@@ -55,7 +55,9 @@ flowchart LR
   sends email content anywhere, and asks the background for every verdict.
 - **The background** (a service worker in Chrome, a background page in Firefox and Safari) does all
   network work and keeps the caches, so one website is looked up once however many emails link to it.
-- **The hidden scanner page** exists only while an image or attachment is being read, then closes.
+- **The hidden scanner page** exists only while an image or attachment is being read, then closes. On
+  `llm_testing` it also hosts the AI engine (`ai-engine.js`: the model in ONNX Runtime Web, on WebGPU or in
+  WebAssembly; a service worker can't), and stays while the AI has been used in the last 5 minutes.
 - **Settings and the popup** are extension pages; the popup shows the current tab's counts.
 
 ## 2. Design rules
@@ -425,6 +427,7 @@ by the build, so a permission or a site added for one browser is added for all o
 |---|---|---|---|
 | Background | `background.js` as a service worker | `background.html` (event page) | `background.html` (non-persistent page) |
 | QR scanner | offscreen document (`scanner.html`) | `scanner.js` in the background page | `scanner.js` in the background page |
+| AI engine (`llm_testing`) | `ai-engine.js` in the offscreen document | `ai-engine.js` in the background page | `ai-engine.js` in the background page |
 | Policy | managed storage (`schema.json`) | `policies.json` → `3rdparty` | none |
 | Managing other extensions | yes (asked first) | only when installed by policy | no |
 | Package | `node tools/build.js chrome` | `node tools/build.js firefox` | `tools/build-safari.sh` (Xcode app, on a Mac) |
@@ -456,5 +459,6 @@ each browser its own deployment steps.
 | `decoders.js` | offline decoders for link wrappers and redirects |
 | `custom-endpoints.js` | your organization's own threat-check and short-link services |
 | `scanner.js`, `qr-decoder.js`, `lib/pdf*.mjs` | QR codes in images and PDFs |
+| `ai.js`, `ai-engine.js`, `lib/ort/*` (`llm_testing`) | the AI model's input text and tokenizer, its JavaScript runtime; the model in ONNX Runtime Web (WebGPU, else WebAssembly) |
 | `icon-store.js` | sender pictures in IndexedDB |
 | `options.js`, `help.js`, `popup.js` | Settings, Help (including live architecture tables), popup |

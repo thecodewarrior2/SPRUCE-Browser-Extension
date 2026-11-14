@@ -3,9 +3,12 @@
 //
 // The model (models/phish-tiny/) is a BERT-tiny classifier (2 layers, 4.4 million parameters, about
 // 4.5 MB with 8-bit weights) that WE train, in TinyPhishLLM, the model's own repository (shared with
-// S.P.R.U.C.E Mail Protection Service); tools/sync-model.js copies it here (models/phish-tiny/SOURCE.json). It runs right here, in plain JavaScript (no WebAssembly, no download, nothing
-// sent anywhere), in Chrome's service worker, Firefox's and Safari's background page, and in Node for
-// the tests, which check it against PyTorch's own numbers (tests/fixtures/ai-vectors.json).
+// S.P.R.U.C.E Mail Protection Service); tools/sync-model.js copies it here (models/phish-tiny/SOURCE.json). Since 5.94.25 the
+// opinion comes from ONNX Runtime Web (ai-engine.js: WebGPU, else WebAssembly; in Chrome's offscreen
+// document, in Firefox's and Safari's background page), and this file's own runtime, in plain JavaScript
+// (no WebAssembly, no download, nothing sent anywhere), answers when that can't: in Chrome's service
+// worker, the background page, and in Node for the tests, which check it against PyTorch's own numbers
+// (tests/fixtures/ai-vectors.json). The input text and the tokenizer here serve both.
 //
 // Ground rules, enforced here and in the callers:
 //   - ADVISORY ONLY. The model's opinion can add a warning, never remove one: it never makes an email or

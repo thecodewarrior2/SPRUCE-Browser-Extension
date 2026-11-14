@@ -1,5 +1,44 @@
 # Changelog
 
+## 5.94.25 — EXPERIMENT (branch `llm_testing`): the AI model runs in ONNX Runtime, on the graphics card or in WebAssembly
+
+Not for release. The AI's opinion now comes from **ONNX Runtime Web** (`ai-engine.js`, MIT, pinned in
+`lib/ort/SOURCE.json`): on the graphics card through **WebGPU** when the browser gives one, else in
+**WebAssembly**; when neither can run (a browser without them, the engine not answering, or the setting
+**AI engine** set to *JavaScript*), the extension's own JavaScript runtime in `ai.js` answers as before. All
+three read exactly the same text (`modelInputParts`, `WordPiece` in `ai.js`) and give the same numbers: the
+e2e tests hold ONNX Runtime to the JavaScript runtime to 0.001 (which the unit tests hold to PyTorch's).
+Everything is in the package: nothing is loaded from the web when the extension runs, and the email never
+leaves the computer.
+
+- **Where it runs.** Chrome and Edge: the hidden offscreen document (`scanner.html`, the QR scanner's), because
+  a service worker can't load WebAssembly modules or use WebGPU; the document now stays while the AI has been
+  used in the last 5 minutes (`AI_ENGINE_IDLE_MS`), then closes as before and loads again on the next opened
+  email. Firefox and Safari: the background page itself (`background.html`). `background.js` asks it
+  (`askAiEngine`, 60 s limit; a document that doesn't answer is closed, as for a scan) and falls back to
+  `loadPhishModel()`; the fallback is logged once.
+- **Speed** (measured here, WebAssembly, one thread): the engine loads in 1.5–3 s the first time, then an
+  email with its explanation (up to 27 passes) takes about 130 ms, and a repeated sentence costs nothing
+  (its margin is remembered); the JavaScript runtime took about 1.4 s for the same. WebGPU couldn't be
+  tried on this machine (no adapter, even with Chromium's software renderer): it is the first choice in the
+  code and falls back to WebAssembly when `navigator.gpu` has no adapter or the session can't be made.
+- **The package grows by about 30 MB**: ONNX Runtime Web's loader, WebAssembly factory and module
+  (`lib/ort/`, 25.7 MB; the WebGPU build) and `model.onnx` (4.6 MB, now synced too: `tools/sync-model.js`,
+  `models/phish-tiny/SOURCE.json`). Neither is committed: `tools/fetch-ort.js` takes the runtime's three
+  files from the pinned npm tarball (its SHA-512 integrity and each file's SHA-256 are checked; a
+  different byte is never used) and `tools/fetch-model.js` the model's, and `tools/build.js` adds both to
+  every package. The tests fetch them before loading the extension (`tests/run-all.js`; the Firefox suite
+  builds with `tools/build.js`).
+- `manifest.json`: `content_security_policy.extension_pages` allows `'wasm-unsafe-eval'` (the extension's own
+  pages only; the content scripts' policy is the webmail page's). Setting **AI engine** (`aiEngine`: `auto`,
+  `javascript`; policy key `managedAiEngine`). The answer's footer and the log line name the engine
+  ("phish-tiny 0.16.0, WebAssembly, 0.1 s"); the Settings card's model check names the engine and runtime.
+- Tests: `test-ai.js` (the answer names its engine; ONNX Runtime and the JavaScript runtime agree to 0.001
+  with the same reasons; the model status names the engine), the Firefox suite (ONNX Runtime Web answers in
+  the background page and agrees with the JavaScript runtime), the unit tests (the harness has no page, so
+  the engine is "not here" at once and the JavaScript runtime answers).
+- Docs: `docs/FEATURES.md`, `docs/ARCHITECTURE.md`, `docs/DEVELOPMENT.md`, `PRIVACY.md`, `lib/ort/LICENSE`.
+
 ## 5.94.24 — EXPERIMENT (branch `llm_testing`): phish-tiny 0.16.0, which reads what the sender checks found
 
 Not for release. The AI model is now **phish-tiny 0.16.0** (TinyPhishLLM `78706ea`, `models/phish-tiny/SOURCE.json`;

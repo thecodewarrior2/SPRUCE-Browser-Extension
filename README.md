@@ -80,4 +80,4 @@ development with a donation:
 ## License
 
 [Apache License 2.0](LICENSE). Bundled third-party components keep their own licenses
-(`lib/PDFJS-LICENSE`, credits in the extension's Help → About).
+(`lib/PDFJS-LICENSE`, `lib/ort/LICENSE` on `llm_testing`, credits in the extension's Help → About).
