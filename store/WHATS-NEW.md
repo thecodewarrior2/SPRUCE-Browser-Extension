@@ -11,11 +11,16 @@
 Short notes on each version in the browser stores. Every detail is in the
 [full changelog](../CHANGELOG.md).
 
-## 5.101
+## 5.102
 
 Changes since 5.91.
 
 **Stronger against phishing**
+- A file shared through Google Docs, OneDrive, DocuSign, Dropbox, Adobe or Box is now judged by the person who
+  shared it, not by the platform that delivered it. A share from an account at another school or company that
+  names one of your leaders, or that was sent to many of your colleagues at once, is now pointed out: accounts
+  taken over elsewhere send such shares "from" your own superintendent. An email whose name says it comes
+  through one platform but was sent by another is marked dangerous.
 - Gmail's AI summary can make a scam sound harmless: it retells what an email asks in calm, ordinary
   words and doesn't check who sent it. While an email is marked dangerous or Caution, its AI summary
   is now covered, with a note saying why and a button to show it anyway.

@@ -63,6 +63,16 @@ settings can't be locked). What leaves your device, and to whom, is in the [priv
   the case is about. Names with legal-proceeding words (settlement, litigation, class action, lawsuit,
   legal notice, claims administrator, "in re", "v.") get a caution that explains this, and the email is
   never moved to Spam for it. Other names with a brand ("Amazon Support") stay red.
+- **A file shared through a platform is judged by the person who shared it (5.102, opened emails).** An
+  email counts as a Google Docs, OneDrive, DocuSign, Dropbox, Adobe or Box notification only when it really
+  comes from that platform: its domain is the platform's, Gmail's sender check (DMARC) passed for that
+  domain, it comes from the platform's notification mailbox, and the platform its name says it comes "via"
+  belongs to the same company. "Via Dropbox" sent from google.com, or a platform named on a domain that isn't
+  any platform's, is red. A proven share is then judged by the person who shared it (the reply address the
+  platform sets, or the address it prints): from outside your organization it is weighed, a colleague's name
+  in it (learned from your own colleagues' emails, kept only as fingerprints) or ten or more of your
+  organization's addresses in its To and Cc lines make it amber, and both make it red; a sharer using a
+  colleague's own name is red (amber from a personal account). A colleague's own share isn't warned about.
 - **A brand's name on an unknown address is double-checked before it counts (Gmail).** Companies send
   from more domains than their main one (Amazon Music from amazonmusic.com, Facebook from
   facebookmail.com). When a sender's name claims a well-known brand on a domain not known as the

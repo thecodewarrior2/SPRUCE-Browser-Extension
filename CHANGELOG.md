@@ -1,5 +1,34 @@
 # Changelog
 
+## 5.102: a share sent through Google Docs, OneDrive, DocuSign or Dropbox is judged by the person who shared it
+
+A file shared through a platform arrives as the platform's own notification ("Name (via Google Docs)"
+<drive-shares-dm-noreply@google.com>), so its domain and sender check were the platform's, and a share from an
+account taken over at another school district read like Google's own mail (reported: a Google Docs share from
+another district naming the reader's superintendent, copied to about 30 staff, passed every check). The switch is
+`CHANGES_5_102` in `shared.js` (set it to `false` and rebuild: as 5.101), tag:
+
+- **[5.102-1] `platformShares`.** `platformNotificationOf` decides whether an email is a platform's own
+  notification. All of: its domain is one of the platform's (`PLATFORM_SENDERS`: Google, Microsoft for OneDrive
+  and SharePoint, DocuSign, Dropbox, Adobe, Box), Gmail's DMARC check passed with that domain as the From domain,
+  it comes from a notification mailbox (no-reply, drive-shares, dse…), and the platform its name says it comes
+  "via" belongs to the same company. A name naming one platform on another platform's domain ("via Dropbox" from
+  google.com) is red (`platform-mismatch`, 5); a platform named on a domain that isn't any platform's is red too
+  (`platform-claim`, for Box; the brand check already says so for the others). A proven notification is judged
+  by the person who shared it (`platformShareSigns`): the Reply-To the platform sets, else the "Name (address)" in
+  its text (`platformSharerDomain`). From outside the organization: 1 (`platform-share-outside`, nothing shown on
+  its own); a learned colleague named in its subject or text, not quoted from their own email, not after a
+  greeting (`colleagueNamedIn`): 2; ten or more of the organization's addresses in its To and Cc lines
+  (`recipientDomainCounts`, domains and counts only, kept with the header signs as `rc`; `HEADER_SIGNS_VERSION`
+  9): 2; the sharer using a learned colleague's own name: 5 from another organization, 3 from a personal account.
+  A colleague's own share from the organization's domain gets none of these. The reported campaign is flagged
+  (1 + 2 + 2) once the named leader has written to the reader, and cautioned (1 + 2) before. Opened emails only.
+- Tests: `unit.test.js` (proven only with the domain, DMARC, a notification mailbox and the same company; the
+  mismatch; the sharer from Reply-To or the text; the campaign with and without a learned name; a colleague's own
+  share; a partner's; a quoted colleague; the counts), `test-platformshare.js` (in an opened Gmail email: the
+  campaign flagged with its three reasons, cautioned without a learned name, a colleague's own share not warned,
+  "via Dropbox" from google.com flagged). Made-up people, districts and addresses.
+
 ## 5.101 — An opened email from a company shows the picture its inbox row shows, not Gmail's letter circle
 
 One change, on its own switch (`CHANGES_5_101` in `shared.js`: set it to `false` and rebuild, and opened

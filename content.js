@@ -2616,7 +2616,9 @@ function messageInfo(msgId) {
             // [5.96-2] The people of Reply-To, Cc and To, as name fingerprints and domains only (never a name
             // or an address), judged against the colleagues' names whenever the email is shown.
             const pl = CHANGES_5_96.colleagueLines ? addressLinePeople(headers, parsed && parsed.address) : [];
-            const info = { fh: parsed ? addressFingerprint(parsed.address) : '', ip: deliveringIp(headers, receiver.host) || '', an, pl, v: HEADER_SIGNS_VERSION, t: Date.now() };
+            // [5.102] How many of the To and Cc lines' addresses are at each domain (counts and domains only).
+            const rc = CHANGES_5_102.platformShares ? recipientDomainCounts(headers) : [];
+            const info = { fh: parsed ? addressFingerprint(parsed.address) : '', ip: deliveringIp(headers, receiver.host) || '', an, pl, rc, v: HEADER_SIGNS_VERSION, t: Date.now() };
             cache[msgId] = info;
             saveSenderMessageCache();
             return info;
@@ -3376,6 +3378,10 @@ function updateOpenedVerdict(body) {
                          { subject: openedSubject(), text: () => body.innerText, signals: hdr ? hdr.an : [], replyTo: hdr ? replyToDomains(hdr.pl) : [] }) : []),
                      // [5.96-2] A colleague's name in Reply-To, Cc or To on an outside address.
                      ...(lastSettings.enableLookalikeCheck !== false && st.base.status !== 'trusted' && st.info && st.info.fh === addressFingerprint(st.address) ? colleagueLineSigns(st.info.pl, ownOrgDomain(), loadColleagueHashes(), '') : []),
+                     // [5.102] A share sent through a platform, judged by the person who shared it.
+                     ...(CHANGES_5_102.platformShares && lastSettings.enableLookalikeCheck !== false && st.base.status !== 'trusted'
+                         ? platformShareSigns(platformNotificationOf(st.name, st.address, st.auth), { own: ownOrgDomain(), colleagues: loadColleagueHashes(), replyTo: hdr ? replyToDomains(hdr.pl) : [],
+                             text: () => body.innerText, subject: openedSubject(), recipients: hdr ? hdr.rc : [], self: accountAddress() }) : []),
                      ...(lastSettings.enableOwnNameCheck !== false && st.base.status !== 'trusted' ? ownNameSigns(st.name, st.address, accountAddress()) : []),
                      ...(lastSettings.enableCallbackScamCheck !== false && st.base.status !== 'trusted' ? [...subjectScamSigns(openedSubject()), ...bodyScamSigns(body.innerText)] : [])];
     const final = applyEmailSignals(st.base, signals);
@@ -3444,13 +3450,14 @@ function scanOpenedSenders(S) {
             }
         }
         const msgId = messageIdOf(body);
-        const st = { nameEl, chip, icon, address: who.address, domain: who.domain, name: who.name, msgId, thread: currentThreadKey(), base: null, info: null, authLine: [], ownership: null };
+        const st = { nameEl, chip, icon, address: who.address, domain: who.domain, name: who.name, msgId, thread: currentThreadKey(), base: null, info: null, authLine: [], ownership: null, auth: null };
         openedStates.set(body, st);
         Promise.all([senderResultsFor([who.raw]), messageInfo(msgId), getMessageAuth(body), ownershipsFor([who], S)]).then(([[r], info, auth, [owned]]) => guarded('Showing who sent an email', () => {
             if (!nameEl.isConnected || nameEl.dataset.unshortenerSender !== key || !r || openedStates.get(body) !== st) return;
             st.base = r;
             st.info = info;
             st.ownership = owned;
+            st.auth = auth;                                  // [5.102] the platform check reads it
             harvestAvatar(body, who, auth);
             st.authLine = auth ? [`${SITE.name}'s sender verification: DMARC ${auth.dmarc}, SPF ${auth.spf}, DKIM ${auth.dkim}.`] : [];
             if (icon && S.enableSenderCountry) {

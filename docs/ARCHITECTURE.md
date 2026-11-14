@@ -154,6 +154,14 @@ With all of them off, every answer is 5.89's (a unit test checks it).
 | `[5.95-3]` (no switch) | List downloads give up waiting for an answer after 25 seconds (`LIST_ANSWER_TIMEOUT_MS`), before Chrome stops a service worker whose request takes 30 | — |
 | `[5.95-4]` `arcKnownForwarders` | A failed DMARC check is only a strong sign (not a flag on its own) for a real mailing list, or for a forwarding chain (ARC) that Gmail checked and that Google or the reader's own organization sealed (`arcFromKnownForwarder`, the sealer from the `ARC-Seal` of the instance Gmail names); anyone can add a seal that checks out | any intact chain softens it, as in 5.94 |
 
+### 5.102's change
+
+5.102's change has its switch in `CHANGES_5_102` (`shared.js`), in the same way:
+
+| Change | What it does | Switch it off (set to `false`, rebuild) and |
+|---|---|---|
+| `[5.102-1]` `platformShares` | An opened email is a platform's own share notification (`platformNotificationOf`) only when its domain is the platform's (`PLATFORM_SENDERS`: Google, Microsoft, DocuSign, Dropbox, Adobe, Box), Gmail's DMARC check passed for that domain, it comes from a notification mailbox, and the platform named after "via" belongs to the same company; "via Dropbox" from google.com, or a platform named on a domain that isn't any platform's, is red (5). A proven one is judged by the person who shared it (`platformShareSigns`: the platform's Reply-To, else "Name (address)" in the text): from outside 1; a learned colleague named in it 2 (`colleagueNamedIn`); 10 or more of the organization's addresses in To and Cc 2 (`recipientDomainCounts`, kept as `rc` with the header signs, `HEADER_SIGNS_VERSION` 9); the sharer using a colleague's name 5 (3 from a personal account). Counted in `updateOpenedVerdict` | a platform's notification is judged by the platform's domain and sender check, as before |
+
 ### 5.101's change
 
 5.101's change has its switch in `CHANGES_5_101` (`shared.js`), in the same way:
