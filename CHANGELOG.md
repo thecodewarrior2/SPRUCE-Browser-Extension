@@ -1,5 +1,28 @@
 # Changelog
 
+## 5.94.24 — EXPERIMENT (branch `llm_testing`): phish-tiny 0.16.0, which reads what the sender checks found
+
+Not for release. The AI model is now **phish-tiny 0.16.0** (TinyPhishLLM `78706ea`, `models/phish-tiny/SOURCE.json`;
+was 0.13.0), the first that reads **input format 2**: besides the email, the facts 5.94.23 started giving it
+(who the sender's name claims to be and whether the domain is theirs, other Reply-To domains, the attached
+files' kinds, failing SPF/DKIM) and a subject or text in capitals.
+
+- **`ai.js`**: the input section is TinyPhishLLM's `tools/model-input.js` at that commit (format 2: `identityLine`,
+  `replyToLine`, `attachmentsLine`, `capitalsLayout`; `modelInputParts(facts, format)`), and `analyze` builds the
+  format the loaded model names (`model.json` `inputFormat`; 1 for one that names none).
+- **What changes for the reader:** against 0.14.0 on the training repository's held-out published emails, 0.16.0
+  misses fewer phishing emails (13 instead of 19 of 681 variants at 50%; 24 instead of 25 at 95%) and calls far
+  fewer genuine ones phishing (20 instead of 33 of 705 at 50%; 10 instead of 16 at 95%); genuine look-alikes
+  (a DocuSign envelope, a phone system's voicemail) are now right. It still trusts routine sign-in wording from
+  a calm impostor more than it should; the extension's own sender warnings flag those senders whatever it says.
+  Its full scores: TinyPhishLLM's `CHANGELOG.md`.
+- Tests: the unit tests check the JavaScript runtime against 0.16.0's own numbers (`tests/fixtures/ai-vectors.json`)
+  and the input format on its 94 made-up cases (`ai-input-format.jsonl`, 12 new for format 2).
+  `test-domsink.js` runs with automatic moving off: its flagged email was sometimes moved to Spam (which clears the
+  page) while the AI was still reading it, a race the suite's load decided; the test checks what the extension
+  and the AI write into the page.
+- Docs: `docs/FEATURES.md` (what the AI sees), `PRIVACY.md`.
+
 ## 5.94.23 — EXPERIMENT (branch `llm_testing`): the AI model's facts carry what the sender checks found
 
 Not for release. Nothing the model reads changes yet: phish-tiny 0.13.0 reads input format 1, which leaves

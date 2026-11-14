@@ -5,6 +5,10 @@
 const { launch, servePage, until, check, done, logMessages } = require('./harness');
 (async () => {
   const { ctx, sw } = await launch();
+  // Automatic moving off: this flagged email would otherwise be moved to Spam (which clears the page) while
+  // the AI is still reading it, a race the suite's load decides; what is checked here is what the extension
+  // and the AI write into the page, which the move takes away.
+  await sw.evaluate(() => chrome.storage.local.set({ enableAutoSpam: false }));
   await servePage(ctx, 'fake-gmail-thread.html');
   const errors = [];
   const page = await ctx.newPage();

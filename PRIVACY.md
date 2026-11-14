@@ -60,7 +60,8 @@ is sent anywhere.
 **AI analysis (experimental, on by default):** the extension's own small AI model runs inside the
 extension on your computer. It reads each email as you open it (or only when you click **Ask the AI**,
 if you turn automatic analysis off in Settings → AI analysis), after email
-addresses and phone and long numbers are hidden from it. Nothing is sent anywhere, and its answers
+addresses and phone and long numbers are hidden from it. It is also told what the extension's own checks
+found (who the sender claims to be, where replies go, what kind of files are attached: never their names). Nothing is sent anywhere, and its answers
 aren't stored.
 
 **Second-opinion links (Link Inspector):** the Inspector shows links to VirusTotal, urlscan.io, Google

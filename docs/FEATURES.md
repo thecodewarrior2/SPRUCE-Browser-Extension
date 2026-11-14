@@ -252,7 +252,12 @@ the Inspector explains that no tool can read them offline.
 - **What the AI sees** besides the text: the reader's own mailbox name is replaced by "your name" (so
   "YOURNAME! Apply…" or a sender named after you show as tricks without the model ever seeing the
   name), how the email hides its text, and what the mail systems already found in its headers (already
-  marked as spam, a home-made bulk-mail tool, a broken To line…).
+  marked as spam, a home-made bulk-mail tool, a broken To line…). Since phish-tiny 0.16.0 (5.94.24) also
+  what the extension's own sender checks found, so it judges the words in context: who the sender's name
+  claims to be and whether the address is theirs (a "PayPal" sender on a domain that isn't PayPal's, an
+  agency writing from a free mailbox, a look-alike domain, a colleague's name on an outside address),
+  where replies go when that isn't the sender's domain, what kind of files are attached (never their
+  names), failing SPF/DKIM, and a subject or text written in capitals.
 - **Try it** (Settings → AI analysis): paste an email to see the model's opinion.
 - **New and outside senders** (Settings → Senders → Weigh new and outside senders, on by default): two
   small weights in every email's verdict, which only count together with other warning signs: from
