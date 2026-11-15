@@ -1505,9 +1505,7 @@ const WEBMAIL_SITES = [
                   // paperclip instead of chips is Comfortable.
                   density: { navItem: '[role="navigation"] .TN, .aqn.aIH .TN, .TN, .bzz', compactNavMax: 28, compactRowMax: 35,
                              chips: '.brd .brc', paperclip: '.yf img' },
-                  sender: '.yW [email], .yX [email]', nameCell: '.yW, .yX', subjectCell: '.xT, .y6', subject: '.bog',
-                  // [5.94.28] "No messages matched your search" (Settings → Re-check's search came back empty).
-                  empty: 'td.TC' },
+                  sender: '.yW [email], .yX [email]', nameCell: '.yW, .yX', subjectCell: '.xT, .y6', subject: '.bog' },
           senderAttrs: { address: 'email', name: 'name' },
           ids: {
               thread: [{ attr: 'data-thread-perm-id', match: /^#?(thread-f:\d+)$/ }, { attr: 'data-thread-id', match: /^#?(thread-f:\d+)$/ },
@@ -2385,82 +2383,6 @@ function parseRawHeaders(raw) {
 }
 
 const EMAIL_IN_TEXT_RE = /[A-Za-z0-9._%+'-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
-
-// [5.94.28] EXPERIMENT (llm_testing): an email's original source read as a mail program reads it, for the
-// re-check of past mail (Settings → Re-check): its headers, subject, sender and date, its text and HTML bodies
-// (multipart, base64, quoted-printable, charsets) and its attachments' names, types and sizes (never their
-// contents). Best effort, never throws. The source comes from the webmail's "original message" page as text:
-// a 7bit/8bit part is already characters; a base64 or quoted-printable part is decoded in its own charset.
-const MIME_MAX_PARTS = 80, MIME_MAX_DEPTH = 8, MIME_MAX_TEXT = 400000;
-function parseMimeMessage(raw) {
-    const out = { headers: [], subject: '', from: { name: '', address: '' }, date: '', messageId: '', text: '', html: '', attachments: [] };
-    try {
-        const src = String(raw || '').replace(/\r\n/g, '\n');
-        const split = (p) => { const i = p.indexOf('\n\n'); return i >= 0 ? [p.slice(0, i), p.slice(i + 2)] : [p, '']; };
-        const header = (hs, n) => ((hs.find(([k]) => k === n) || [])[1] || '');
-        const param = (v, name) => {
-            const star = new RegExp(`(?:^|;)\\s*${name}\\*=\\s*(?:"([^"]*)"|([^;\\s]*))`, 'i').exec(v || '');
-            if (star) { const x = star[1] !== undefined ? star[1] : star[2]; const m = /^([^']*)'[^']*'(.*)$/.exec(x); try { return decodeURIComponent(m ? m[2] : x); } catch (e) { return m ? m[2] : x; } }
-            const m = new RegExp(`(?:^|;)\\s*${name}=\\s*(?:"([^"]*)"|([^;\\s]*))`, 'i').exec(v || '');
-            return m ? decodeEncodedWords(m[1] !== undefined ? m[1] : m[2]) : '';
-        };
-        const bytesOf = (t) => Uint8Array.from(t, c => c.charCodeAt(0) & 255);
-        const decodeText = (bytes, charset) => { try { return new TextDecoder(charset || 'utf-8').decode(bytes); } catch (e) { return new TextDecoder('utf-8').decode(bytes); } };
-        const bodyText = (body, cte, charset) => {
-            cte = String(cte || '').toLowerCase().trim();
-            if (cte === 'base64') { try { return decodeText(bytesOf(atob(body.replace(/[^A-Za-z0-9+/=]/g, ''))), charset); } catch (e) { return ''; } }
-            if (cte === 'quoted-printable') {
-                // Soft line breaks out; =XX bytes decoded in the part's charset; characters already decoded kept.
-                const t = body.replace(/=\n/g, '');
-                if (/[^\x00-\xff]/.test(t)) return t.replace(/=([0-9A-Fa-f]{2})/g, (m, h) => String.fromCharCode(parseInt(h, 16)));
-                return decodeText(bytesOf(t.replace(/=([0-9A-Fa-f]{2})/g, (m, h) => String.fromCharCode(parseInt(h, 16)))), charset);
-            }
-            return body;
-        };
-        let parts = 0;
-        const walk = (part, depth, top) => {
-            if (++parts > MIME_MAX_PARTS || depth > MIME_MAX_DEPTH) return;
-            const [h, body] = split(part);
-            const hs = parseRawHeaders(h + '\n\n');
-            if (top) out.headers = hs;
-            const ct = header(hs, 'content-type') || 'text/plain';
-            const type = ct.split(';')[0].trim().toLowerCase();
-            const disp = header(hs, 'content-disposition');
-            if (/^multipart\//.test(type)) {
-                const b = param(ct, 'boundary');
-                if (!b) return;
-                const pieces = ('\n' + body).split(`\n--${b}`);
-                for (const piece of pieces.slice(1)) {
-                    if (piece.startsWith('--')) break;                    // the closing boundary
-                    walk(piece.slice(piece.indexOf('\n') + 1), depth + 1, false);
-                }
-                return;
-            }
-            if (type === 'message/rfc822' && !/attachment/i.test(disp)) { walk(body, depth + 1, false); return; }
-            const name = param(disp, 'filename') || param(ct, 'name');
-            const textual = type === 'text/plain' || type === 'text/html';
-            if (textual && !/attachment/i.test(disp) && !name) {
-                const t = bodyText(body, header(hs, 'content-transfer-encoding'), param(ct, 'charset'));
-                if (type === 'text/html') out.html = (out.html + t).slice(0, MIME_MAX_TEXT);
-                else out.text = (out.text + (out.text ? '\n' : '') + t).slice(0, MIME_MAX_TEXT);
-                return;
-            }
-            const b64 = /base64/i.test(header(hs, 'content-transfer-encoding'));
-            out.attachments.push({ name: String(name || '').slice(0, 200), type, size: b64 ? (() => { const t = body.replace(/\s/g, ''); return Math.max(0, Math.floor(t.length * 3 / 4) - ((/=+$/.exec(t) || [''])[0].length)); })() : body.length, inline: /^inline/i.test(disp) || !!header(hs, 'content-id') });
-        };
-        walk(src, 0, true);
-        out.subject = decodeEncodedWords(header(out.headers, 'subject')).slice(0, 500);
-        const from = header(out.headers, 'from');
-        const fm = /^(.*?)<([^<>]*)>\s*$/.exec(from);
-        out.from = { name: decodeEncodedWords(fm ? fm[1] : '').trim().replace(/^"(.*)"$/, '$1').replace(/\\"/g, '"').slice(0, 200),
-                     address: String(fm ? fm[2] : ((from.match(EMAIL_IN_TEXT_RE) || [])[0] || '')).trim().toLowerCase() };
-        out.date = header(out.headers, 'date');
-        out.messageId = header(out.headers, 'message-id').replace(/^<|>$/g, '');
-    } catch (e) { /* best effort */ }
-    return out;
-}
-
-
 
 // [5.96-1] The entries of an address line ("ann@x.org, Bob Lee <bob@y.org>, \"Lee, Bob\" <bob@y.org>"),
 // one by one: split at the commas outside quotes and outside <…>.

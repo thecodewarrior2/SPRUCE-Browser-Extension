@@ -12,7 +12,6 @@
         .container { max-width: 1400px; margin: 25px auto; padding: 0 20px; }
         
         .nav-tabs { display: flex; border-bottom: 2px solid var(--border-subtle); margin-bottom: 20px; gap: 10px; }
-        .tab-btn[hidden] { display: none; }
         .tab-btn { background: none; border: none; padding: 10px 20px; font-size: 14px; font-weight: 600; color: var(--text-muted); cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -2px; }
         .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
         
@@ -38,21 +37,6 @@
         .btn-primary:hover { background: var(--accent-solid-hover); }
         .btn-secondary { background: var(--success-solid); color: var(--on-solid); border: none; padding: 6px 12px; border-radius: 4px; font-size: 12px; cursor: pointer; font-weight: bold; }
         .btn-secondary:hover { background: var(--success-solid); }
-        /* [5.94.28] Settings → Re-check */
-        .recheck-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 12px 0 4px; font-size: 13px; }
-        .recheck-row input[type=number] { width: 80px; padding: 5px 8px; }
-        .recheck-estimate { border: 1px solid var(--warn-border, var(--control-border)); background: var(--warn-bg); color: var(--warn-text); border-radius: 6px; padding: 12px 14px; margin: 12px 0; font-size: 13px; }
-        .recheck-estimate ul { margin: 6px 0 10px 18px; padding: 0; }
-        .recheck-progress { margin: 12px 0; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
-        .recheck-progress progress { width: 100%; height: 14px; }
-        .recheck-results-head { display: flex; justify-content: space-between; align-items: center; }
-        .recheck-item { border: 1px solid var(--control-border); border-left: 4px solid var(--warn-solid); border-radius: 6px; padding: 10px 12px; margin: 10px 0; font-size: 13px; }
-        .recheck-item.flagged { border-left-color: var(--danger-solid); }
-        .recheck-item .rc-subject { font-weight: bold; font-size: 14px; word-break: break-word; }
-        .recheck-item .rc-meta { color: var(--text-muted); margin: 2px 0 6px; word-break: break-all; }
-        .recheck-item ul { margin: 4px 0 8px 18px; padding: 0; }
-        .recheck-item .rc-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-        .recheck-item .rc-done { font-weight: bold; }
         .btn-warning { background: var(--warn-solid); color: var(--on-warn); border: none; padding: 6px 12px; border-radius: 4px; font-size: 12px; cursor: pointer; font-weight: bold; }
         .btn-warning:hover { filter: brightness(0.92); }
 
@@ -252,7 +236,6 @@
         <div class="nav-tabs" role="tablist" aria-label="Sections">
             <button class="tab-btn active" data-tab="settings">⚙️ Settings</button>
             <button class="tab-btn" data-tab="tester">🔍 Link Inspector</button>
-            <button class="tab-btn" data-tab="recheck" hidden disabled title="Gmail only">🔁 Re-check</button>
             <button class="tab-btn" data-tab="logging">📋 Logging</button>
             <button class="tab-btn" data-tab="help">❓ Help</button>
         </div>
@@ -688,39 +671,6 @@
             </div>
         </div>
 
-
-        <!-- ===================================================== RE-CHECK (5.94.28, EXPERIMENT llm_testing) -->
-        <div id="tab-recheck" class="tab-content">
-            <h2 class="sr-only">Re-check</h2>
-            <div class="card">
-                <div class="card-header">
-                    <h3>Re-check past email <span class="badge badge-warning">Experimental</span> <span class="badge badge-neutral">Gmail only</span></h3>
-                </div>
-                <p class="setting-desc"><b>Gmail only.</b> This tab is shown only when the email you use in this browser is Gmail: the other webmail the extension supports don't let it find past email and read each one's original from the page (Proton Mail, for one, keeps every email encrypted). Checks the Gmail email you received over the last days again, with today's checks, phishing lists and AI model: phishing that looked harmless when it arrived may be caught now. Each email is read from its original (as the sender checks already do), in a Gmail window that opens minimized (in your taskbar) for the re-check and closes when it ends. Nothing is marked read or moved, and the emails never leave this computer; their links are looked up as when you open an email. Emails you sent, drafts, chats, Spam and Trash are left out; in a conversation, its newest email is checked.</p>
-                <div class="recheck-row">
-                    <label for="recheckDays">Re-check the last</label>
-                    <input type="number" id="recheckDays" min="1" max="365" step="1" value="30" aria-describedby="recheckDaysNote">
-                    <span>days</span>
-                    <button type="button" id="recheckCountBtn" class="btn-primary">Count the emails</button>
-                </div>
-                <p class="setting-desc" id="recheckDaysNote">1 to 365 days. Counting first tells you how many emails there are and about how long it will take; nothing is checked yet.</p>
-                <div id="recheckEstimate" class="recheck-estimate" hidden></div>
-                <div id="recheckProgressBox" class="recheck-progress" hidden>
-                    <progress id="recheckProgress" max="1" value="0" aria-label="Re-check progress"></progress>
-                    <div id="recheckProgressText" class="setting-desc" role="status" aria-live="polite"></div>
-                    <button type="button" id="recheckCancelBtn" class="del-btn">Cancel</button>
-                </div>
-            </div>
-            <div class="card">
-                <div class="card-header recheck-results-head">
-                    <h3>Found on the re-check</h3>
-                    <button type="button" id="recheckClearBtn" class="link-btn">Clear the results</button>
-                </div>
-                <p class="setting-desc" id="recheckSummary">No re-check yet.</p>
-                <div id="recheckResults"></div>
-            </div>
-        </div>
-
         <!-- TAB 3: DNS Resolvers & Security Chain -->
 
 
@@ -1085,7 +1035,6 @@
 <tr><td>The Link Inspector won't follow a link "into a private network"</td><td>Following a link never contacts devices inside your own network (routers, printers, school servers) or names only your network knows. A link from an email that leads there is suspicious in itself.</td></tr>
 <tr><td>An email is marked because it "hides a block of unrelated text far below the message"</td><td>Spam and phishing add text from other emails or old web pages far below the message, after a huge blank space, so spam filters judge that text instead of the message (experimental). Genuine mail has no reason to. The AI also reads only the part you can see.</td></tr>
 <tr><td>A sender's label says "outside your organization" or "the first email you've received"</td><td>Two small weights (experimental, <b>Settings → Senders → Weigh new and outside senders</b>): an email from outside your organization (when your account has its own domain, such as a school's) and the first email from an address. They are never amber on their own; together with another warning sign they can tip an email to amber or red, because phishing usually comes from someone outside who has never written to you before. A sender counts as new only after the extension has been learning for 14 days. Addresses are remembered on this computer only as scrambled codes; <b>Logging → Senders → Clear sender data</b> forgets them and starts learning again.</td></tr>
-<tr><td>Can I check email I already received again? (experimental)</td><td>Yes, in <b>Gmail only</b>: the <b>🔁 Re-check</b> tab at the top of this page, shown when the email you last used in this browser is Gmail (it's hidden while you use Outlook, Yahoo or another webmail, which don't let the extension read past email's originals). Choose how many days back (30 by default), press <b>Count the emails</b> to see how many there are and about how long it takes, then start the re-check. Gmail opens in a minimized window (in your taskbar) and reads each email's original with today's checks, phishing lists and AI model; leave it there. Nothing is marked read, moved or sent anywhere. What is flagged or needs caution is listed with why; <b>Open in Gmail</b> shows the whole conversation, and <b>Mark as phishing: move to Spam</b> reports it to Gmail as spam. Emails you sent, drafts, chats, Spam and Trash are left out, and in a conversation its newest email is checked.</td></tr>
 <tr><td>What is the 🤖 line above an email? (experimental)</td><td>S.P.R.U.C.E+'s own small AI model reads each email as you open it, on this computer (nothing is sent anywhere), and says how likely it is phishing. When it sees nothing suspicious it shows one short line (click <b>Why?</b> for more); when it does, it shows which sentences weighed most. To have it run only when you click <b>Ask the AI</b>, turn off <b>Settings → AI analysis → Analyze opened emails automatically</b>; to remove it, turn off <b>AI opinion in opened emails</b>. It's an opinion: it can add a warning but never clears one or moves email, so trust the extension's own red and amber marks over it. It reads <b>English only</b>: for an email in another language it says it can't read it (and which language it looks like) and gives no opinion; the extension's own checks work in any language.</td></tr>
 <tr><td>A SendGrid (or other tracking) link can't be revealed with 🔍</td><td>SendGrid encrypts the destination, so nothing can decode it, and its links are too long for unshorten.me (100 characters at most). Paste it into the <b>Link Inspector</b> and click <b>Follow it to reveal the destination</b>: it follows the link once, without your cookies and without opening the page, and shows where it ends. The sender counts that as your click. A link ending in <code>/wf/open</code> is an open-tracking pixel, not a link: it leads nowhere.</td></tr>
 <tr><td>A site you trust is flagged as dangerous</td><td>Paste the link into the <b>Link Inspector</b>. Under <b>Who checked it</b> you see which service flagged it; if only one of several does and the address has no red flags, it is probably a false positive (or a detection the others haven't made yet). Get a second opinion from the links shown, report the false positive to the service that flagged it, and if you're sure, add the site to your Allowlist.</td></tr>

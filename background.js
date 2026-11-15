@@ -23,7 +23,7 @@ function getConfig() {
 const NON_CONFIG_KEYS = new Set(['errorLogs', 'recentActivity', 'resolutionHistory', 'lastSyncTime', 'listState', 'cacheSchema', 'welcomeDismissed', 'uiTheme',
     'detectedConflicts', 'ignoredConflicts', 'keptConflictFeatures', 'popularDomains', 'verifiedDomains', 'colleagueNameHashes', 'rdapBootstrap',
     'senderDomainCache', 'geoCache', 'spamMovedThreads', 'spamRescuedThreads', 'senderMessageCache', 'senderResultCache', 'faviconCache', 'spamMoveLog', 'spamUnreadHeadersOff',
-    'seenSenders', 'seenSendersSince', 'recheckState', 'recheckResults', 'webmailInUse']);   // [5.94.28] Settings → Re-check's job and findings   // llm_testing: the first-time-sender history is data, not settings
+    'seenSenders', 'seenSendersSince']);   // llm_testing: the first-time-sender history is data, not settings
 function invalidateConfig() {
     configPromise = null;
     domainSafetyCache.clear();      // e.g. a resolver was switched off: don't reuse its verdicts
@@ -605,6 +605,8 @@ chrome.runtime.onInstalled.addListener(async (details) => {
     try {
         // A new version may judge senders differently (a rule fixed), so their cached verdicts go.
         if (details && details.reason === 'update') { purgeOneTimeEntries(); clearSenderDomainCache(); }
+        // (5.94.31) Settings → Re-check (5.94.28–5.94.30, llm_testing) was removed: what it kept goes.
+        if (details && details.reason === 'update') chrome.storage.local.remove(['recheckState', 'recheckResults', 'webmailInUse']).catch(() => {});
         await migrateStoredData();
         await ensureListState();      // bundled snapshot on a fresh install: coverage before any download
         await ensureCompanyEndings(); // [5.90-2] the same for the company endings
@@ -3726,21 +3728,7 @@ const MESSAGE_RULES = Object.freeze({
     testResolver:          { from: 'page', refuse: { success: false, message: NOT_ALLOWED }, fields: { url: MSG_STR(2048) } },
     getTabState:           { from: 'page', refuse: null,  fields: { tabId: MSG_NUM } },
     // Webmail again (kept apart: added in 5.94.6).
-    linkDomainAges:        { from: 'any',  refuse: {},    fields: { domains: MSG_ARR(10) } },
-    // [5.94.28] Settings → Re-check: the re-check window's content script, and the extension's own pages.
-    recheckSleep:          { from: 'any',  refuse: false, fields: { ms: MSG_NUM } },
-    webmailSeen:           { from: 'any',  refuse: false },
-    recheckAvailable:      { from: 'page', refuse: null },
-    recheckProgress:       { from: 'any',  refuse: false, fields: { id: MSG_STR(40), phase: MSG_STR(20), total: MSG_NUM, done: MSG_NUM, page: MSG_NUM, failed: MSG_NUM, result: MSG_OBJ(20000) } },
-    recheckDone:           { from: 'any',  refuse: false, fields: { id: MSG_STR(40) } },
-    recheckShowWindow:     { from: 'any',  refuse: false, fields: { id: MSG_STR(40) } },
-    recheckSpamPending:    { from: 'any',  refuse: null,  fields: { thread: MSG_STR(100) } },
-    recheckSpamDone:       { from: 'any',  refuse: false, fields: { thread: MSG_STR(100) } },
-    recheckStart:          { from: 'page', refuse: { error: NOT_ALLOWED }, fields: { days: MSG_NUM, mode: MSG_STR(10) } },
-    recheckCancel:         { from: 'page', refuse: false },
-    recheckOpen:           { from: 'page', refuse: false, fields: { thread: MSG_STR(100), legacy: MSG_STR(40) } },
-    recheckSpam:           { from: 'page', refuse: false, fields: { thread: MSG_STR(100), legacy: MSG_STR(40), address: MSG_STR(1000) } },
-    recheckClear:          { from: 'page', refuse: false }
+    linkDomainAges:        { from: 'any',  refuse: {},    fields: { domains: MSG_ARR(10) } }
 });
 // Every message carries the mailbox it came from (accountLabel); its own size is capped too.
 const MESSAGE_COMMON_FIELDS = { mailbox: MSG_OBJ(2000) };
@@ -3762,221 +3750,7 @@ function messageRefusal(request, sender) {
     return null;
 }
 
-
-// ---------------------------------------------------------------------------
-// [5.94.28] RE-CHECK OF PAST MAIL — EXPERIMENT (llm_testing): Settings → Re-check. The job runs in a small Gmail
-// window opened here (its content script does the work: content.js recheckRun); this keeps its state and
-// findings in storage.local (recheckState, recheckResults: subjects, senders and reasons of the emails found,
-// on this computer only, until cleared or the next re-check), closes the window when it ends, and opens a
-// conversation in Gmail for "Open in Gmail" and "Mark as phishing: move to Spam" (that tab's content script
-// presses Report spam once the conversation is shown: recheckSpamPending).
-// ---------------------------------------------------------------------------
-const RECHECK_RESULTS_MAX = 1000, RECHECK_SPAM_WAIT_MS = 10 * 60 * 1000;
-// Settings → Re-check works with Gmail only (only Gmail lets the extension find past mail and read each email's
-// original from the page: see docs/FEATURES.md). It is offered when the webmail the user last had in front of
-// them was Gmail (webmailInUse, said by the webmail tabs' content scripts: webmailSeen), or, before any was
-// seen, when a Gmail tab is open.
-async function recheckAvailability() {
-    const seen = (await storageGet('local', { webmailInUse: null })).webmailInUse;
-    let gmailOpen = false;
-    try { gmailOpen = (await chrome.tabs.query({ url: 'https://mail.google.com/*' })).length > 0; } catch (e) { /* unknown */ }
-    const site = seen && seen.site ? seen.site : (gmailOpen ? 'gmail' : '');
-    return { available: site === 'gmail', site, name: seen && seen.name ? seen.name : (gmailOpen ? 'Gmail' : ''), at: seen ? seen.at : null };
-}
-let recheckRunning = null;            // { id, mode, days, windowId, tabId, account }
-const recheckSpamPending = new Map(); // thread → { address, at }
-let recheckWrites = Promise.resolve();
-function recheckSave(fn) {
-    recheckWrites = recheckWrites.then(async () => {
-        const r = await storageGet('local', { recheckState: null, recheckResults: [] });
-        const out = fn(Object.assign({}, r.recheckState || {}), Array.isArray(r.recheckResults) ? r.recheckResults : []);
-        if (out) await chrome.storage.local.set(out);
-    }).catch((e) => logWarning(`Re-check: couldn't save its progress (${errorText(e)}).`, 'Re-check'));
-    return recheckWrites;
-}
-// The job that is running (also after the background was restarted: it's in recheckState).
-async function recheckCurrent() {
-    if (recheckRunning) return recheckRunning;
-    const st = (await storageGet('local', { recheckState: null })).recheckState;
-    if (st && st.id && st.tabId && !st.finishedAt) recheckRunning = { id: st.id, mode: st.mode, days: st.days, windowId: st.windowId, tabId: st.tabId, account: st.account };
-    return recheckRunning;
-}
-// The Gmail account (/mail/u/N/) of an open Gmail tab, else the first.
-async function gmailAccountNumber() {
-    try { for (const t of await chrome.tabs.query({ url: 'https://mail.google.com/*' })) { const m = /\/mail\/u\/(\d+)/.exec(t.url || ''); if (m) return m[1]; } } catch (e) { /* none */ }
-    return '0';
-}
-const recheckResultOf = (r) => ({
-    thread: String(r.thread || '').slice(0, 100), legacy: String(r.legacy || '').replace(/[^0-9a-f]/gi, '').slice(0, 40), msgId: String(r.msgId || '').slice(0, 100),
-    subject: String(r.subject || '').slice(0, 300), name: String(r.name || '').slice(0, 200), address: String(r.address || '').slice(0, 300), date: String(r.date || '').slice(0, 100),
-    status: String(r.status || '').slice(0, 20), reasons: (Array.isArray(r.reasons) ? r.reasons : []).slice(0, 8).map(x => String(x).slice(0, 600)),
-    ai: r.ai && typeof r.ai === 'object' ? { level: String(r.ai.level || '').slice(0, 20), headline: String(r.ai.headline || '').slice(0, 300), probability: typeof r.ai.probability === 'number' ? r.ai.probability : null } : null,
-    attachments: (Array.isArray(r.attachments) ? r.attachments : []).slice(0, 10).map(x => String(x).slice(0, 200)), foundAt: Date.now()
-});
-async function recheckStart(days, mode) {
-    if (await recheckCurrent()) return { error: 'A re-check is already running.' };
-    const av = await recheckAvailability();
-    if (!av.available) return { error: `Re-check works with Gmail only${av.name ? `, and the email you last used is ${av.name}` : ''}. Open Gmail, then try again.` };
-    days = Math.max(1, Math.min(365, Math.round(Number(days) || 30)));
-    mode = mode === 'count' ? 'count' : 'check';
-    const id = String(Date.now()), account = await gmailAccountNumber();
-    const url = `https://mail.google.com/mail/u/${account}/#inbox`;
-    let windowId = null, tabId = null;
-    // (5.94.30) Minimized, in the taskbar, out of the way (it can't be a hidden page: Gmail reads an email's original only
-    // for its own pages, and refuses to be loaded in a frame). Its waits go through the background, whose timers a
-    // minimized window doesn't slow down. Where a minimized window can't be made, a small one behind the others.
-    const opened = (w) => { windowId = w.id; tabId = w.tabs && w.tabs[0] && w.tabs[0].id; };
-    try { opened(await chrome.windows.create({ url, type: 'normal', state: 'minimized', focused: false })); }
-    catch (e) {
-        try { opened(await chrome.windows.create({ url, type: 'popup', width: 560, height: 720, focused: false })); }
-        catch (e2) { const t = await chrome.tabs.create({ url, active: false }); windowId = t.windowId; tabId = t.id; }
-    }
-    if (tabId == null) return { error: 'The re-check window couldn\'t be opened.' };
-    recheckRunning = { id, mode, days, windowId, tabId, account };
-    const state = { id, mode, days, windowId, tabId, account, phase: 'starting', total: 0, done: 0, found: 0, failed: 0, startedAt: Date.now() };
-    await chrome.storage.local.set(Object.assign({ recheckState: state }, mode === 'check' ? { recheckResults: [] } : {}));
-    logInfo(mode === 'count' ? `Re-check: counting the emails of the last ${days} days.` : `Re-check of the last ${days} days' email started.`, 'Re-check');
-    // The window's content script, once Gmail has loaded: asked every 2 seconds, for 90 seconds.
-    (async () => {
-        for (let i = 0; i < 45; i++) {
-            await new Promise(r => setTimeout(r, 2000));
-            if (!recheckRunning || recheckRunning.id !== id) return;
-            try { const r = await chrome.tabs.sendMessage(tabId, { action: 'recheckRun', job: { id, days, mode } }); if (r && r.ok) return; } catch (e) { /* not loaded yet */ }
-        }
-        if (recheckRunning && recheckRunning.id === id) recheckFinish(id, { error: 'Gmail didn\'t open in the re-check window. Are you signed in to Gmail in this browser?' });
-    })();
-    return { ok: true, id };
-}
-async function recheckFinish(id, { cancelled = false, error = '' } = {}) {
-    const run = await recheckCurrent();
-    if (!run || run.id !== id) return;
-    recheckRunning = null;
-    await recheckSave((st, results) => {
-        if (st.id !== id) return null;
-        st.phase = error ? 'error' : cancelled ? 'cancelled' : st.mode === 'count' ? 'counted' : 'done';
-        st.finishedAt = Date.now();
-        if (error) st.error = error;
-        return { recheckState: st };
-    });
-    const st = (await storageGet('local', { recheckState: null })).recheckState || {};
-    logInfo(error ? `Re-check stopped: ${error}` : st.mode === 'count' ? `Re-check: ${st.total || 0} emails in the last ${st.days} days.`
-        : `Re-check ${cancelled ? 'cancelled' : 'finished'}: ${st.done || 0} of ${st.total || 0} emails checked, ${st.found || 0} found suspicious${st.failed ? `, ${st.failed} couldn't be read` : ''}.`, 'Re-check');
-    if (run.windowId != null) chrome.windows.remove(run.windowId).catch(() => chrome.tabs.remove(run.tabId).catch(() => {}));
-}
-if (chrome.windows && chrome.windows.onRemoved) chrome.windows.onRemoved.addListener((windowId) => {
-    recheckCurrent().then(run => { if (run && run.windowId === windowId) recheckFinish(run.id, { cancelled: true }); });
-});
-
 const MESSAGE_HANDLERS = {
-    // [5.94.28] Settings → Re-check (see recheckStart).
-    webmailSeen(request, sender, sendResponse) {
-        const site = sender && sender.tab && sender.url ? webmailSiteFor(sender.url) : null;
-        if (!site) { sendResponse(false); return false; }
-        storageGet('local', { webmailInUse: null }).then(r => {
-            const old = r.webmailInUse;
-            // Written when the webmail changes, and at most every 10 minutes otherwise.
-            if (old && old.site === site.id && Date.now() - (old.at || 0) < 10 * 60 * 1000) return;
-            return chrome.storage.local.set({ webmailInUse: { site: site.id, name: site.name, at: Date.now() } });
-        }).then(() => sendResponse(true), () => sendResponse(false));
-        return true;
-    },
-    recheckAvailable(request, sender, sendResponse) {
-        recheckAvailability().then(sendResponse, () => sendResponse(null));
-        return true;
-    },
-    recheckSleep(request, sender, sendResponse) {
-        setTimeout(() => sendResponse(true), Math.max(0, Math.min(5000, Number(request.ms) || 0)));
-        return true;
-    },
-    recheckProgress(request, sender, sendResponse) {
-        recheckCurrent().then(run => {
-            if (!run || run.id !== request.id || !sender.tab || sender.tab.id !== run.tabId) return sendResponse(false);
-            recheckSave((st, results) => {
-                if (st.id !== request.id) return null;
-                Object.assign(st, { phase: String(request.phase || st.phase), total: Number(request.total) || 0, done: Number(request.done) || 0, updatedAt: Date.now() });
-                if (request.page) st.pages = request.page;
-                if (request.failed) st.failed = (st.failed || 0) + Number(request.failed);
-                const out = { recheckState: st };
-                if (request.result) {
-                    const r = recheckResultOf(request.result);
-                    out.recheckResults = results.filter(x => x.thread !== r.thread).concat([r]).slice(-RECHECK_RESULTS_MAX);
-                    st.found = out.recheckResults.length;
-                }
-                return out;
-            }).then(() => sendResponse(true));
-        });
-        return true;
-    },
-    // (5.94.30) The minimized window didn't draw Gmail's list: shown, behind the others, without taking the focus.
-    recheckShowWindow(request, sender, sendResponse) {
-        recheckCurrent().then(async run => {
-            if (!run || run.id !== request.id || !sender.tab || sender.tab.id !== run.tabId || run.windowId == null) return sendResponse(false);
-            try { const w = await chrome.windows.get(run.windowId); if (w.state !== 'minimized') return sendResponse(false); await chrome.windows.update(run.windowId, { state: 'normal', focused: false }); }
-            catch (e) { return sendResponse(false); }
-            logInfo('Re-check: Gmail didn\'t show its search results in a minimized window, so the window was shown (behind the others).', 'Re-check');
-            sendResponse(true);
-        });
-        return true;
-    },
-    recheckDone(request, sender, sendResponse) {
-        recheckCurrent().then(run => {
-            if (!run || run.id !== request.id || !sender.tab || sender.tab.id !== run.tabId) return sendResponse(false);
-            recheckFinish(request.id, { cancelled: !!request.cancelled }).then(() => sendResponse(true));
-        });
-        return true;
-    },
-    recheckStart(request, sender, sendResponse) {
-        recheckStart(request.days, request.mode).then(sendResponse).catch(e => sendResponse({ error: errorText(e) }));
-        return true;
-    },
-    recheckCancel(request, sender, sendResponse) {
-        recheckCurrent().then(async run => {
-            if (!run) return sendResponse(false);
-            try { await chrome.tabs.sendMessage(run.tabId, { action: 'recheckCancel', id: run.id }); } catch (e) { /* the window is gone */ }
-            // The window stops after the email it is checking; if it doesn't answer, it's closed anyway.
-            setTimeout(() => { if (recheckRunning && recheckRunning.id === run.id) recheckFinish(run.id, { cancelled: true }); }, 15000);
-            sendResponse(true);
-        });
-        return true;
-    },
-    recheckClear(request, sender, sendResponse) {
-        recheckCurrent().then(run => {
-            if (run) return sendResponse(false);
-            chrome.storage.local.remove(['recheckState', 'recheckResults']).then(() => sendResponse(true), () => sendResponse(false));
-        });
-        return true;
-    },
-    recheckOpen(request, sender, sendResponse) {
-        const legacy = String(request.legacy || '').replace(/[^0-9a-f]/gi, '');
-        if (!legacy) { sendResponse(false); return false; }
-        storageGet('local', { recheckState: null }).then(async r => {
-            const account = (r.recheckState && r.recheckState.account) || await gmailAccountNumber();
-            await chrome.tabs.create({ url: `https://mail.google.com/mail/u/${account}/#all/${legacy}`, active: true });
-            sendResponse(true);
-        }).catch(() => sendResponse(false));
-        return true;
-    },
-    recheckSpam(request, sender, sendResponse) {
-        const legacy = String(request.legacy || '').replace(/[^0-9a-f]/gi, ''), thread = String(request.thread || '');
-        if (!legacy || !/^thread-f:\d+$/.test(thread)) { sendResponse(false); return false; }
-        recheckSpamPending.set(thread, { address: String(request.address || '').slice(0, 300), at: Date.now() });
-        recheckSave((st, results) => ({ recheckResults: results.map(x => x.thread === thread ? Object.assign({}, x, { spam: 'asked', spamAt: Date.now() }) : x) }));
-        MESSAGE_HANDLERS.recheckOpen({ legacy }, sender, sendResponse);
-        return true;
-    },
-    recheckSpamPending(request, sender, sendResponse) {
-        const p = recheckSpamPending.get(String(request.thread || ''));
-        if (!p || Date.now() - p.at > RECHECK_SPAM_WAIT_MS) { sendResponse({ pending: false }); return false; }
-        recheckSpamPending.delete(String(request.thread));
-        sendResponse({ pending: true, address: p.address });
-        return false;
-    },
-    recheckSpamDone(request, sender, sendResponse) {
-        const thread = String(request.thread || '');
-        recheckSave((st, results) => ({ recheckResults: results.map(x => x.thread === thread ? Object.assign({}, x, { spam: request.moved ? 'moved' : 'failed', spamAt: Date.now() }) : x) }))
-            .then(() => sendResponse(true));
-        return true;
-    },
     // A QR code drawn with an HTML table or text characters: the Gmail tab sends the module grid.
     decodeQrMatrix(request, sender, sendResponse) {
         if (!Array.isArray(request.grid)) { sendResponse(null); return false; }

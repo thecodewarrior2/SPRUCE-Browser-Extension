@@ -1,5 +1,20 @@
 # Changelog
 
+## 5.94.31 — EXPERIMENT (branch `llm_testing`): Settings → Re-check removed
+
+Not for release. The re-check of past Gmail email (5.94.28–5.94.30) is removed: running it in a Gmail window of
+its own was too clunky for users (a window to leave open, one Gmail account at a time), and it could only ever work
+with Gmail, not the other webmail the extension supports. Everything it added is gone: the tab, its messages in the
+background, the runner and the email-source reader in the content script and `shared.js` (`parseMimeMessage`), the
+Gmail-only detection (`webmailSeen`), the change that let a move the user asked for bypass the automatic-move
+setting, its tests and docs. What it kept on a computer where it was tried (`recheckState`, `recheckResults`,
+`webmailInUse`) is deleted when the extension updates. Every other check works as in 5.94.27.
+
+Kept from 5.94.29: **ONNX Runtime's notes no longer show as errors.** On the graphics card (WebGPU) the runtime logged
+that "some nodes were not assigned to the preferred execution providers" (shape steps it keeps on the processor on
+purpose) to the console's error stream, and Chrome listed them on the extension's Errors page though nothing was
+wrong. Its sessions now log errors only (`logSeverityLevel: 3` in `ai-engine.js`).
+
 ## 5.94.30 — EXPERIMENT (branch `llm_testing`): Re-check's Gmail search works, and its window opens minimized
 
 Not for release.

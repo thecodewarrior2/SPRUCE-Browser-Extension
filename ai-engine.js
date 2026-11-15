@@ -19,7 +19,7 @@ ort.env.wasm.wasmPaths = chrome.runtime.getURL('lib/ort/');
 ort.env.wasm.numThreads = 1;      // extension pages aren't cross-origin isolated: no SharedArrayBuffer, one thread
 ort.env.wasm.proxy = false;
 ort.env.logLevel = 'error';
-// (5.94.28) The runtime's own messages too: errors only (3). At its default (2, warnings), the WebGPU session's notes that
+// (5.94.29) The runtime's own messages too: errors only (3). At its default (2, warnings), the WebGPU session's notes that
 // "some nodes were not assigned to the preferred execution providers" (shape steps it keeps on the processor on purpose)
 // went to the console's error stream, and Chrome listed them on the extension's Errors page though nothing was wrong.
 
