@@ -2014,3 +2014,101 @@ document.addEventListener('DOMContentLoaded', () => {
         setTimeout(() => document.getElementById('conflicts').scrollIntoView({ behavior: 'smooth', block: 'start' }), 300);
     }
 })();
+
+// ---------------------------------------------------------------------------
+// [5.94.28] Settings → Re-check (EXPERIMENT, llm_testing): past Gmail email checked again (content.js recheckRun,
+// background.js recheckStart). Counting first says how many emails there are and about how long checking them
+// takes; the findings are listed with why, with "Open in Gmail" and "Mark as phishing: move to Spam".
+// ---------------------------------------------------------------------------
+(function recheckTab() {
+    const $ = (id) => document.getElementById(id);
+    if (!$('tab-recheck')) return;
+    const SECONDS_PER_EMAIL = 1.5;                 // measured on a fast computer; the running rate replaces it
+    const el = (tag, props = {}, ...kids) => { const e = document.createElement(tag); Object.assign(e, props); for (const k of kids) if (k != null) e.append(k); return e; };
+    const send = (msg) => new Promise(r => chrome.runtime.sendMessage(msg, (x) => { void chrome.runtime.lastError; r(x); }));
+    const minutes = (s) => s < 90 ? `${Math.max(1, Math.round(s))} seconds` : s < 5400 ? `${Math.round(s / 60)} minutes` : `${(s / 3600).toFixed(1)} hours`;
+    const days = () => Math.max(1, Math.min(365, Math.round(Number($('recheckDays').value) || 30)));
+    let state = null, results = [];
+
+    function estimate(st) {
+        const box = $('recheckEstimate');
+        box.textContent = '';
+        if (!st || st.phase !== 'counted' || st.days !== days()) { box.hidden = true; return; }
+        box.hidden = false;
+        const n = st.total || 0;
+        if (!n) { box.append(el('div', { textContent: `No emails in the last ${st.days} days to re-check (your own sent mail, drafts, chats, Spam and Trash are left out).` })); return; }
+        box.append(el('strong', { textContent: `${n.toLocaleString()} email${n === 1 ? '' : 's'} in the last ${st.days} days${n >= 5000 ? ' (the most a re-check takes: the newest 5,000)' : ''}.` }),
+            el('ul', {}, el('li', { textContent: `It will take about ${minutes(n * SECONDS_PER_EMAIL)}${n > 400 ? ', longer on a slower computer' : ''}. You can cancel at any time; what was found until then is kept.` }),
+                el('li', { textContent: 'A small Gmail window opens and does the work. Leave it open and not minimized; you can keep using the browser in other windows. Closing it cancels the re-check.' }),
+                el('li', { textContent: 'Each email\'s original is read from Gmail with your own sign-in, and its links are looked up as when you open an email. Nothing is marked read, moved or sent anywhere.' }),
+                el('li', { textContent: 'Only what is flagged or needs caution is listed, with why; you decide what to move to Spam.' })),
+            el('button', { type: 'button', className: 'btn-warning', id: 'recheckStartBtn', textContent: `Re-check ${n.toLocaleString()} email${n === 1 ? '' : 's'}`, onclick: () => start('check') }));
+    }
+    function progress(st) {
+        const box = $('recheckProgressBox'), running = !!(st && !st.finishedAt && st.phase);
+        box.hidden = !running;
+        $('recheckCountBtn').disabled = running;
+        $('recheckDays').disabled = running;
+        $('recheckClearBtn').disabled = running;
+        if (!running) return;
+        const bar = $('recheckProgress'), text = $('recheckProgressText');
+        if (st.phase === 'starting') { bar.removeAttribute('value'); text.textContent = 'Opening Gmail in the re-check window…'; return; }
+        if (st.phase === 'count') { bar.removeAttribute('value'); text.textContent = `Finding the emails of the last ${st.days} days: ${(st.total || 0).toLocaleString()} so far…`; return; }
+        bar.max = Math.max(1, st.total || 1); bar.value = st.done || 0;
+        const elapsed = (Date.now() - (st.startedAt || Date.now())) / 1000, rate = st.done ? elapsed / st.done : SECONDS_PER_EMAIL;
+        text.textContent = `Checked ${(st.done || 0).toLocaleString()} of ${(st.total || 0).toLocaleString()}; ${(st.found || 0).toLocaleString()} found so far.`
+            + (st.done && st.total > st.done ? ` About ${minutes((st.total - st.done) * rate)} left.` : '');
+    }
+    function summary(st) {
+        const s = $('recheckSummary');
+        if (!st || !st.phase) { s.textContent = 'No re-check yet.'; return; }
+        if (st.phase === 'error') { s.textContent = `The re-check stopped: ${st.error || 'an error'}.`; return; }
+        if (st.mode === 'count' || st.phase === 'counted') { s.textContent = results.length ? `${results.length} found on the last re-check.` : 'No re-check yet.'; return; }
+        const when = st.finishedAt ? new Date(st.finishedAt).toLocaleString() : 'running';
+        s.textContent = `Re-check of the last ${st.days} days (${when}${st.phase === 'cancelled' ? ', cancelled' : ''}): ${(st.done || 0).toLocaleString()} of ${(st.total || 0).toLocaleString()} emails checked`
+            + `${st.failed ? `, ${st.failed} couldn't be read` : ''}; ${results.length ? `${results.length} flagged or needing caution` : 'nothing flagged'}.`;
+    }
+    function list() {
+        const box = $('recheckResults');
+        box.textContent = '';
+        const order = { flagged: 0, caution: 1 };
+        for (const r of [...results].sort((a, b) => (order[a.status] ?? 2) - (order[b.status] ?? 2) || (b.foundAt || 0) - (a.foundAt || 0))) {
+            const flagged = r.status === 'flagged';
+            const badge = el('span', { className: `badge ${flagged ? 'badge-unsafe' : 'badge-warning'}`, textContent: flagged ? 'Flagged' : r.status === 'caution' ? 'Be careful' : 'The AI warns' });
+            const reasons = el('ul');
+            for (const t of r.reasons || []) reasons.append(el('li', { textContent: t }));
+            if (r.ai && (r.ai.level === 'danger' || r.ai.level === 'caution')) reasons.append(el('li', { textContent: `🤖 ${r.ai.headline}` }));
+            if (r.attachments && r.attachments.length) reasons.append(el('li', { textContent: `Attachments: ${r.attachments.join(', ')}` }));
+            const actions = el('div', { className: 'rc-actions' },
+                el('button', { type: 'button', className: 'btn-primary', textContent: 'Open in Gmail', title: 'Opens the whole conversation in Gmail', onclick: () => send({ action: 'recheckOpen', thread: r.thread, legacy: r.legacy }) }));
+            if (r.spam === 'moved') actions.append(el('span', { className: 'rc-done', textContent: '✔ Marked as phishing and moved to Spam' }));
+            else {
+                if (r.spam === 'failed') actions.append(el('span', { className: 'setting-desc warning-text', textContent: 'It wasn\'t moved (was the conversation still open in Gmail?). Try again, or use Gmail\'s Report spam.' }));
+                actions.append(el('button', { type: 'button', className: 'del-btn', textContent: r.spam === 'asked' ? 'Mark as phishing: move to Spam (again)' : 'Mark as phishing: move to Spam',
+                    onclick: () => { if (confirm(`Move "${r.subject || 'this email'}" from ${r.address} to Spam and report it to Gmail as spam? Gmail opens the conversation and the extension presses Report spam.`)) send({ action: 'recheckSpam', thread: r.thread, legacy: r.legacy, address: r.address }); } }));
+            }
+            box.append(el('div', { className: `recheck-item${flagged ? ' flagged' : ''}` },
+                el('div', { className: 'rc-subject' }, badge, ' ', r.subject || '(no subject)'),
+                el('div', { className: 'rc-meta', textContent: `From ${r.name ? `${r.name} <${r.address}>` : r.address}${r.date ? ` · ${r.date}` : ''}` }),
+                reasons, actions));
+        }
+    }
+    function render() { estimate(state); progress(state); summary(state); list(); }
+    async function load() {
+        const r = await chrome.storage.local.get(['recheckState', 'recheckResults']);
+        state = r.recheckState || null; results = Array.isArray(r.recheckResults) ? r.recheckResults : [];
+        if (state && state.days && !state.finishedAt) $('recheckDays').value = state.days;
+        render();
+    }
+    async function start(mode) {
+        const r = await send({ action: 'recheckStart', days: days(), mode });
+        if (!r || r.error) alert(`The re-check couldn't start: ${(r && r.error) || 'no answer from the extension.'}`);
+    }
+    $('recheckCountBtn').addEventListener('click', () => start('count'));
+    $('recheckCancelBtn').addEventListener('click', () => send({ action: 'recheckCancel' }));
+    $('recheckClearBtn').addEventListener('click', () => { if (confirm('Clear the re-check results from this computer?')) send({ action: 'recheckClear' }); });
+    $('recheckDays').addEventListener('input', () => estimate(state));
+    chrome.storage.onChanged.addListener((changes, area) => { if (area === 'local' && (changes.recheckState || changes.recheckResults)) load(); });
+    setInterval(() => { if (state && !state.finishedAt) progress(state); }, 5000);
+    load();
+})();

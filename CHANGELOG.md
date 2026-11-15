@@ -1,5 +1,38 @@
 # Changelog
 
+## 5.94.28 — EXPERIMENT (branch `llm_testing`): Settings → Re-check checks past Gmail email again
+
+Not for release. A new tab, **🔁 Re-check**, checks the Gmail email received over the last days again (1 to 365;
+30 by default) with today's checks, lists and AI model, and lists what is flagged with why.
+
+- **Count, then check.** *Count the emails* searches Gmail (`newer_than:Nd -in:sent -in:drafts -in:chats -from:me`;
+  Spam and Trash are left out by Gmail) and says how many conversations there are (the newest 5,000 at most), about
+  how long checking them takes (about 1.5 s each) and what happens; *Re-check N emails* starts it, with progress,
+  the time left and Cancel (what was found until then is kept).
+- **How** (`content.js` `recheckRun`, `background.js` `recheckStart`): the background opens a small Gmail window
+  (`chrome.windows.create`, a popup; a tab if that fails) and tells its content script to run the job. It pages
+  through Gmail's search results (`#search/<query>/p<N>`, the rows' thread and newest-message ids), reads each
+  email's original (`view=om`, as the header checks do, at most 3 MB; nothing is marked read), parses it
+  (`parseMimeMessage` in `shared.js`: headers, multipart, base64, quoted-printable, charsets, RFC 2047 and 2231
+  names; attachments by name, type and size only) and shows it as a hidden Gmail-shaped email in that window, so
+  the extension's own checks judge it exactly as an opened one; then asks the AI. The HTML is rebuilt element by
+  element from a fixed list of tags and attributes (`recheckSafeNodes`): no scripts, event handlers, frames,
+  forms, style sheets, remote images, CSS `url()` or `javascript:` links. While it runs, that window never moves
+  anything to Spam (`queueSpamMove`), never records senders as first seen (`firstTimeSender`: old mail would make
+  them look new) and doesn't log each verdict. Its waits go through the background (`recheckSleep`), whose timers
+  aren't slowed when the window isn't in front. The window closes when the job ends; closing it cancels.
+- **Findings** (`recheckResults`, at most 1,000, on this computer): subject, sender, date, the verdict's reasons,
+  the AI's headline and attachment names, for each email flagged or needing caution or that the AI warns about.
+  **Open in Gmail** opens the conversation (`#all/<legacy id>`); **Mark as phishing: move to Spam** opens it and,
+  once it is shown, presses Gmail's Report spam (`reportSpamOpenThread`, which now takes a move the user asked
+  for whatever the automatic-move setting or the view). **Clear the results** removes them.
+- Limits: Gmail only; in a conversation, its newest email; attachments' contents and QR codes aren't read.
+- Docs: the Help tab, `docs/FEATURES.md`, `PRIVACY.md`, `docs/ARCHITECTURE.md`. Tests: `test-recheck.js` (counting
+  over three pages of results; the re-check flags the lure and lists it with why, and leaves the others; an email's
+  scripts, handlers, remote images and frames never run or load; Open in Gmail; Mark as phishing presses Report
+  spam with automatic moving off; Clear), `unit.test.js` (`parseMimeMessage`; the new messages are the extension's
+  own pages' only). Made-up senders and emails.
+
 ## 5.94.27 — EXPERIMENT (branch `llm_testing`): phish-tiny 0.18.0, an ELECTRA-small model
 
 Not for release. The AI model is now **phish-tiny 0.18.0** (TinyPhishLLM `2f596de`, `models/phish-tiny/SOURCE.json`;

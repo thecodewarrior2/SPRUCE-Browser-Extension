@@ -57,6 +57,12 @@ remembers, on your computer only, a scrambled code (a hash) of each sender addre
 it first saw it, never the address itself. Logging → Senders → Clear sender data forgets them. Nothing
 is sent anywhere.
 
+**Re-check of past email (experimental, Gmail, only when you start it):** Settings → Re-check reads the
+originals of the email you received over the days you choose, from Gmail with your own sign-in, in a Gmail window
+it opens for that, and checks them on this computer as when you open an email (their links are looked up the same
+way). Nothing is marked read, moved or sent anywhere. Only the emails found suspicious are kept, as a list on this
+computer (subject, sender, date and why), until you clear it or start another re-check.
+
 **AI analysis (experimental, on by default):** the extension's own small AI model runs inside the
 extension on your computer (on your graphics card or in WebAssembly through ONNX Runtime, which is part of
 the extension, or in the extension's own code; nothing is downloaded for it). It reads each email as you open it (or only when you click **Ask the AI**,

@@ -219,6 +219,28 @@ Decoded without any lookup, among many others: iContact (`icptrack.com`) click t
 click tracking in its older readable format. SendGrid's current links (`upn=u001.…`) are encrypted, so
 the Inspector explains that no tool can read them offline.
 
+## Re-check of past email (experimental, branch `llm_testing`, 5.94.28)
+
+- **Settings → 🔁 Re-check** checks the Gmail email received over the last days again (1 to 365; 30 by default),
+  with today's checks, phishing lists and AI model. **Count the emails** first searches Gmail for them (not Sent,
+  Drafts, Chats, Spam or Trash, not the user's own) and says how many there are (at most the newest 5,000) and
+  about how long checking them takes (about 1.5 seconds each), what happens and what doesn't; then the re-check
+  starts on the user's go, with progress, the time left and Cancel.
+- **How:** a small Gmail window opens for the job (the original source can only be read from a Gmail page, with
+  the user's own sign-in) and closes when it ends. It pages through Gmail's search results, takes each
+  conversation's newest email, reads its original (as the sender checks already do; nothing is marked read) and
+  shows it as an inert hidden email in that window, so the extension's own checks (sender, headers, links,
+  content, the AI) judge it as when it is opened. The email's HTML is rebuilt from a fixed list of tags and
+  attributes: no scripts, event handlers, frames, forms, style sheets, remote images or `javascript:` links.
+  While the window works it never moves anything to Spam, never records senders as first seen (so old mail
+  doesn't make senders look new) and doesn't log each verdict. Attachments are listed by name only (their
+  contents and QR codes aren't read in a re-check).
+- **Findings:** each email flagged or needing caution (or that the AI warns about) is listed with its subject,
+  sender, date and why, with **Open in Gmail** (the whole conversation) and **Mark as phishing: move to Spam**
+  (Gmail opens the conversation and the extension presses Report spam, whatever the automatic-move setting
+  says). The list stays on this computer (`recheckState`, `recheckResults` in the extension's storage) until
+  **Clear the results** or the next re-check.
+
 ## AI analysis (experimental, branch `llm_testing`)
 
 - **AI opinion of opened emails** (Settings → AI analysis, on by default): each email is analyzed as it

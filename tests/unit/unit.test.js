@@ -2055,7 +2055,7 @@ test('messages: every action says who may send it, and the background answers on
   }
   // Privileged actions: only the extension's own pages.
   assert.deepEqual(Object.keys(rules).filter(a => rules[a].from === 'page').sort(),
-    ['aiStatus', 'followLink', 'forceSync', 'getTabState', 'syncPhishFeeds', 'testCustomThreat', 'testCustomUnshortener', 'testResolver', 'testUnwrap', 'virusTotal']);
+    ['aiStatus', 'followLink', 'forceSync', 'getTabState', 'recheckCancel', 'recheckClear', 'recheckOpen', 'recheckSpam', 'recheckStart', 'syncPhishFeeds', 'testCustomThreat', 'testCustomUnshortener', 'testResolver', 'testUnwrap', 'virusTotal']);
   const gmail = { id: 'x', tab: { id: 7 }, url: 'https://mail.google.com/mail/u/0/' };
   const page = { id: 'x' };                    // the popup or another page of the extension's own (no tab)
   const why = (req, sender) => S('messageRefusal')(req, sender);
@@ -2524,4 +2524,30 @@ test('5.102: a platform share is judged by the person who shared it', () => {
 test('5.102: the To and Cc lines are counted by domain, without keeping an address', () => {
   const headers = [['to', 'reader@maple-schools.example'], ['cc', 'a@maple-schools.example, "B" <b@maple-schools.example>, c@gmail.com'], ['reply-to', 'x@other.example']];
   assert.deepEqual(JSON.parse(S(`JSON.stringify(recipientDomainCounts(${JSON.stringify(headers)}))`)), [['maple-schools.example', 3], ['gmail.com', 1]]);
+});
+
+test('5.94.28: an email\'s original source is read as a mail program reads it (Settings → Re-check)', () => {
+  const p = S('parseMimeMessage');
+  const b64 = (t) => Buffer.from(t, 'utf8').toString('base64');
+  const raw = ['From: =?UTF-8?B?' + b64('IT Support ✅') + '?= <Help@Evil.example>', 'Subject: =?utf-8?Q?Caf=C3=A9_menu?=', 'Date: Mon, 10 Nov 2026 09:00:00 +0000',
+    'Message-ID: <a1@evil.example>', 'MIME-Version: 1.0', 'Content-Type: multipart/mixed; boundary="XX"', '', 'preamble', '--XX',
+    'Content-Type: multipart/alternative; boundary=YY', '', '--YY', 'Content-Type: text/plain; charset=utf-8', 'Content-Transfer-Encoding: quoted-printable', '',
+    'Caf=C3=A9 is open=', ' today.', '--YY', 'Content-Type: text/html; charset=iso-8859-1', 'Content-Transfer-Encoding: base64', '',
+    Buffer.from('<p>Caf\xe9 <a href="https://x.example">go</a></p>', 'latin1').toString('base64'), '--YY--',
+    '--XX', 'Content-Type: image/png', 'Content-ID: <logo>', 'Content-Transfer-Encoding: base64', '', 'iVBORw0KGgo=',
+    '--XX', 'Content-Type: application/octet-stream; name="invoice.pdf.exe"', 'Content-Disposition: attachment; filename*=utf-8\'\'Rechnung%20%E2%82%AC.pdf.exe',
+    'Content-Transfer-Encoding: base64', '', 'QUJDREVGR0g=', '--XX--', ''].join('\r\n');
+  const m = p(raw);
+  assert.equal(m.subject, 'Café menu');
+  assert.deepEqual({ ...m.from }, { name: 'IT Support ✅', address: 'help@evil.example' });
+  assert.equal(m.messageId, 'a1@evil.example');
+  assert.equal(m.text, 'Café is open today.');
+  assert.equal(m.html, '<p>Café <a href="https://x.example">go</a></p>');
+  assert.equal(m.attachments.length, 2);
+  assert.deepEqual([m.attachments[0].type, m.attachments[0].inline], ['image/png', true]);
+  assert.deepEqual([m.attachments[1].name, m.attachments[1].inline, m.attachments[1].size], ['Rechnung €.pdf.exe', false, 8]);
+  // An 8bit body is already characters (the webmail's page decoded it); nothing breaks on junk.
+  assert.equal(p('From: a@b.example\nContent-Type: text/plain; charset=utf-8\nContent-Transfer-Encoding: 8bit\n\nGrüße').text, 'Grüße');
+  for (const junk of [null, '', 'no headers at all', 'Content-Type: multipart/mixed\n\n--', 'Content-Type: text/plain; charset=nonsense\nContent-Transfer-Encoding: base64\n\n!!!'])
+    assert.equal(typeof p(junk).text, 'string');
 });

@@ -467,6 +467,7 @@ each browser its own deployment steps.
 | `decoders.js` | offline decoders for link wrappers and redirects |
 | `custom-endpoints.js` | your organization's own threat-check and short-link services |
 | `scanner.js`, `qr-decoder.js`, `lib/pdf*.mjs` | QR codes in images and PDFs |
+| `content.js` `recheckRun`, `background.js` `recheckStart`, `options.js` `recheckTab` (`llm_testing`, 5.94.28) | Settings → Re-check: past Gmail email found through Gmail's search in a window opened for it, each original (`parseMimeMessage` in `shared.js`) shown as an inert hidden email so the usual checks judge it; findings in `recheckResults` |
 | `ai.js`, `ai-engine.js`, `lib/ort/*` (`llm_testing`) | the AI model's input text and tokenizer, its JavaScript runtime; the model in ONNX Runtime Web (WebGPU, else WebAssembly) |
 | `icon-store.js` | sender pictures in IndexedDB |
 | `options.js`, `help.js`, `popup.js` | Settings, Help (including live architecture tables), popup |

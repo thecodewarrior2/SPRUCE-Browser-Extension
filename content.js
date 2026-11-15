@@ -222,6 +222,10 @@ let pixelContext = null;
 // still on the page (see refreshCounts), so a conversation with several messages counts correctly.
 const pixelCounts = new Map();
 const processedLinksMap = new Map(); // Standard Map with explicit lifecycle clearing
+// [5.94.28] Settings → Re-check: this page is the re-check window, running a job (see recheckRun). Declared here:
+// functions that run while the script starts read it.
+let recheckActive = false;
+let recheckJob = null;                           // { id, days, mode: 'count'|'check', cancelled }
 
 // Sends an entry to the application log (via the background). Never includes link paths or queries.
 // Only this extension's own failures are reported, never Gmail's page errors.
@@ -2422,7 +2426,8 @@ function accountAddress() {
 // only a hash of the address is sent to the background (senderHistoryKey).
 const firstTimeAsks = new Map();
 function firstTimeSender(address) {
-    if (!lastSettings.weighSenderHistory || !address) return Promise.resolve(false);
+    // [5.94.28] A re-check reads past mail: asking would record its senders as first seen today.
+    if (recheckActive || !lastSettings.weighSenderHistory || !address) return Promise.resolve(false);
     const k = senderHistoryKey(address);
     if (!firstTimeAsks.has(k)) {
         if (firstTimeAsks.size >= 2000) firstTimeAsks.delete(firstTimeAsks.keys().next().value);
@@ -3178,6 +3183,7 @@ function removeSenderDecorations(root = document) {
 // Logs once per email when what's in the email itself (headers, links, attachments, name) changes the
 // sender's verdict, so the log says why an email was flagged although its sender looked fine.
 function logEmailVerdict(id, address, base, final) {
+    if (recheckActive) return;                       // [5.94.28] the re-check reports its own findings
     if (!final || final.status === base.status || loggedVerdicts.has(`${id}|${final.status}`)) return;
     loggedVerdicts.add(`${id}|${final.status}`);
     if (loggedVerdicts.size > 2000) loggedVerdicts.delete(loggedVerdicts.values().next().value);   // oldest first
@@ -3887,6 +3893,7 @@ function showConflictNotice(c) {
 
 // --- Moving to Spam --------------------------------------------------------------------------------
 function queueSpamMove(thread, item) {
+    if (recheckActive) return;                       // [5.94.28] the re-check window never moves anything on its own
     if (!MAIL_CAN.move || !thread || spamAttempted.has(thread) || spamQueue.has(thread)) return;
     spamQueue.set(thread, Object.assign({}, item, { since: Date.now() }));
     publishBusy();
@@ -4205,9 +4212,10 @@ async function reportSpamRows(items, urgent) {
     return { moved, ignored: items.filter(it => !moved.includes(it)), failed: [] };
 }
 
-async function reportSpamOpenThread(item) {
-    // The toolbar would act on a selection; and the conversation on screen must still be this one.
-    if (anySelection() || !mayActNow() || currentThreadKey() !== item.thread) return null;
+async function reportSpamOpenThread(item, userAsked = false) {
+    // The toolbar would act on a selection; and the conversation on screen must still be this one. [5.94.28] A move
+    // the user asked for (Settings → Re-check) doesn't depend on the automatic-move setting or the view.
+    if (anySelection() || !(userAsked ? !document.hidden && !userBusy() : mayActNow()) || currentThreadKey() !== item.thread) return null;
     const none = { moved: [], ignored: [item], failed: [] };
     const btn = reportSpamButton();
     if (!btn) return none;
@@ -4610,6 +4618,7 @@ function scheduleScan() {
         refreshCounts();                       // forget messages Gmail removed; keep those still shown
         guarded('Scanning an email', unshortenLinks);
         guarded('Checking senders', scanSenderIdentity);
+        guarded('Marking an email as phishing (Settings → Re-check)', recheckPendingSpam);   // [5.94.28]
         scheduleBadgeUpdate();
         mutationDebounceTimer = null;
         firstScanPending = false;
@@ -4655,12 +4664,261 @@ chrome.storage.onChanged.addListener((changes, area) => {
 });
 scheduleBadgeUpdate();
 
+
+// ---------------------------------------------------------------------------
+// [5.94.28] RE-CHECK OF PAST MAIL — EXPERIMENT (llm_testing). Settings → Re-check asks the background to open
+// a small Gmail window; the background tells this content script there to run the job (recheckRun). It
+// searches Gmail for the last N days' mail (not Sent, Drafts or Chats, not from the user), pages through the
+// results and collects each conversation's newest message, then reads each one's original source (as the
+// header checks already do: the user's own session, nothing marked read) and shows it, made inert, as a
+// hidden email in this window, so the extension's own checks (sender, headers, links, content) and the AI
+// judge it exactly as when it is opened. What is flagged or needs caution goes back to the background with
+// its reasons; the email itself never leaves the computer. While it runs, this window never moves anything
+// to Spam, never records senders as first seen and never logs each verdict.
+// The rendering is inert: the HTML is rebuilt element by element from a fixed list of tags and attributes
+// (no scripts, event handlers, frames, forms, styles sheets or remote images; only http(s) and mailto links).
+// ---------------------------------------------------------------------------
+const RECHECK_MAX_PAGES = 200, RECHECK_MAX_EMAILS = 5000, RECHECK_MAX_BYTES = 3 * 1024 * 1024;
+const RECHECK_TAGS = new Set(['A', 'ABBR', 'ADDRESS', 'ARTICLE', 'B', 'BIG', 'BLOCKQUOTE', 'BR', 'CAPTION', 'CENTER', 'CITE', 'CODE', 'COL', 'COLGROUP', 'DD', 'DEL',
+    'DIV', 'DL', 'DT', 'EM', 'FIGCAPTION', 'FIGURE', 'FONT', 'FOOTER', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'HEADER', 'HR', 'I', 'IMG', 'INS', 'LABEL', 'LI', 'MAIN',
+    'MARK', 'NAV', 'OL', 'P', 'PRE', 'Q', 'S', 'SECTION', 'SMALL', 'SPAN', 'STRIKE', 'STRONG', 'SUB', 'SUP', 'TABLE', 'TBODY', 'TD', 'TFOOT', 'TH', 'THEAD', 'TR',
+    'TT', 'U', 'UL']);
+const RECHECK_DROP = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'FRAME', 'FRAMESET', 'OBJECT', 'EMBED', 'APPLET', 'SVG', 'MATH', 'TEMPLATE', 'NOSCRIPT', 'HEAD', 'TITLE',
+    'META', 'LINK', 'BASE', 'INPUT', 'SELECT', 'TEXTAREA', 'BUTTON', 'OPTION', 'AUDIO', 'VIDEO', 'SOURCE', 'TRACK', 'CANVAS', 'MAP', 'AREA', 'PORTAL', 'DIALOG', 'FORM']);
+const RECHECK_ATTRS = new Set(['title', 'alt', 'width', 'height', 'align', 'valign', 'bgcolor', 'color', 'face', 'size', 'border', 'cellpadding', 'cellspacing',
+    'colspan', 'rowspan', 'dir', 'lang']);
+// A message to the background that doesn't count as the page's work (the runner waits for the page to be idle).
+const recheckSend = (msg) => new Promise(r => { try { chrome.runtime.sendMessage(msg, (x) => { void chrome.runtime.lastError; r(x); }); } catch (e) { r(null); } });
+// A pause kept by the background: a page in a window that isn't in front has its own timers slowed down.
+const recheckSleep = (ms) => recheckSend({ action: 'recheckSleep', ms });
+async function recheckUntil(fn, ms) {
+    const end = Date.now() + ms;
+    for (;;) { const v = fn(); if (v || Date.now() >= end || (recheckJob && recheckJob.cancelled)) return v; await recheckSleep(150); }
+}
+function recheckSafeStyle(v) {
+    return String(v || '').replace(/url\s*\([^)]*\)/gi, '').replace(/expression\s*\(/gi, '').replace(/@import|behavior\s*:|-moz-binding/gi, '')
+        .replace(/position\s*:\s*(fixed|absolute|sticky)/gi, '').slice(0, 2000);
+}
+// The email's body as inert nodes of this page (see above). Plain text: its web addresses become links, as
+// the webmail shows them.
+function recheckSafeNodes(html, text) {
+    const frag = document.createDocumentFragment();
+    if (!html) {
+        const div = document.createElement('div');
+        div.style.whiteSpace = 'pre-wrap';
+        const t = String(text || '').slice(0, 200000);
+        let last = 0;
+        for (const m of t.matchAll(/https?:\/\/[^\s<>"')\]]+/g)) {
+            div.appendChild(document.createTextNode(t.slice(last, m.index)));
+            const a = document.createElement('a');
+            a.href = m[0]; a.textContent = m[0]; a.rel = 'noreferrer noopener'; a.target = '_blank';
+            div.appendChild(a);
+            last = m.index + m[0].length;
+        }
+        div.appendChild(document.createTextNode(t.slice(last)));
+        frag.appendChild(div);
+        return frag;
+    }
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    let count = 0;
+    const copy = (src, dst, depth) => {
+        for (const n of src.childNodes) {
+            if (++count > 30000 || depth > 80) return;
+            if (n.nodeType === Node.TEXT_NODE) { dst.appendChild(document.createTextNode(n.nodeValue)); continue; }
+            if (n.nodeType !== Node.ELEMENT_NODE) continue;
+            const tag = n.tagName.toUpperCase();
+            if (RECHECK_DROP.has(tag)) continue;
+            if (!RECHECK_TAGS.has(tag)) { copy(n, dst, depth + 1); continue; }          // an unknown element: its content only
+            const el = document.createElement(tag.toLowerCase());
+            for (const a of n.attributes) {
+                const name = a.name.toLowerCase();
+                if (name === 'style') el.setAttribute('style', recheckSafeStyle(a.value));
+                else if (name === 'href' && tag === 'A') { const v = a.value.trim(); if (/^(https?:|mailto:)/i.test(v)) el.setAttribute('href', v); }
+                else if (RECHECK_ATTRS.has(name)) el.setAttribute(name, String(a.value).slice(0, 500));
+            }
+            if (tag === 'A') { el.setAttribute('rel', 'noreferrer noopener'); el.setAttribute('target', '_blank'); }
+            copy(n, el, depth + 1);
+            dst.appendChild(el);
+        }
+    };
+    copy(doc.body || doc.documentElement, frag, 0);
+    return frag;
+}
+// The original source, at most RECHECK_MAX_BYTES (a large attachment's end isn't needed).
+async function recheckSource(id) {
+    const r = await fetch(headersUrl(id), { credentials: 'include' });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    let text = '';
+    if (r.body && r.body.getReader) {
+        const reader = r.body.getReader(), decoder = new TextDecoder();
+        let bytes = 0;
+        try {
+            while (bytes < RECHECK_MAX_BYTES) { const { done, value } = await reader.read(); if (done) break; bytes += value.byteLength; text += decoder.decode(value, { stream: true }); }
+        } finally { reader.cancel().catch(() => {}); }
+    } else text = await r.text();
+    if (/<pre[\s>]/i.test(text)) {
+        const doc = new DOMParser().parseFromString(text, 'text/html');
+        const pre = firstMatch(doc, MAIL.headers.text || 'pre');
+        return pre ? pre.textContent : text;
+    }
+    return text;
+}
+function recheckHost() {
+    let host = document.getElementById('spruce-recheck-host');
+    if (!host) {
+        host = document.createElement('div');
+        host.id = 'spruce-recheck-host';
+        host.setAttribute('aria-hidden', 'true');
+        // Laid out (so hidden text and colors are judged as when shown), off screen, never clickable.
+        host.style.cssText = 'position:fixed;left:-30000px;top:0;width:900px;pointer-events:none;';
+        document.body.appendChild(host);
+    }
+    return host;
+}
+// The conversations of the last N days, from Gmail's own search: [{ thread, legacy, msgId, address, subject }].
+async function recheckCollect(job) {
+    const q = `newer_than:${job.days}d -in:sent -in:drafts -in:chats -from:me`;
+    const base = `#search/${encodeURIComponent(q).replace(/%20/g, '+')}`;
+    const sig = () => listRows().filter(isShown).map(rowThreadKey).join(',');
+    const found = new Map();
+    let prev = sig();
+    for (let page = 1; page <= RECHECK_MAX_PAGES && !job.cancelled; page++) {
+        location.hash = page > 1 ? `${base}/p${page}` : base;
+        const empty = () => { const e = MAIL.list.empty && document.querySelector(MAIL.list.empty); return !!(e && isShown(e)); };
+        const s = await recheckUntil(() => { const x = sig(); return (x && x !== prev) ? x : (empty() && !x ? 'empty' : null); }, 25000);
+        if (!s || s === 'empty') break;
+        await recheckSleep(500);                                   // the page's rows, all drawn
+        prev = sig();
+        let added = 0;
+        for (const row of listRows().filter(isShown)) {
+            const thread = rowThreadKey(row), msgId = rowLastMessageId(row);
+            if (!thread || !msgId || found.has(thread)) continue;
+            const holder = rowThreadElement(row);
+            const who = MAIL.list.sender && row.querySelector(MAIL.list.sender);
+            const subj = MAIL.list.subject && row.querySelector(MAIL.list.subject);
+            found.set(thread, { thread, legacy: holder ? (holder.getAttribute('data-legacy-thread-id') || '') : '', msgId,
+                                address: who ? String(who.getAttribute('email') || '').toLowerCase() : '', subject: subj ? subj.textContent.trim().slice(0, 300) : '' });
+            added++;
+            if (found.size >= RECHECK_MAX_EMAILS) break;
+        }
+        recheckSend({ action: 'recheckProgress', id: job.id, phase: 'count', total: found.size, page });
+        if (!added || found.size >= RECHECK_MAX_EMAILS) break;
+    }
+    return [...found.values()];
+}
+// One email: its source, shown as a hidden email, judged by the extension's own checks and the AI.
+async function recheckOne(item) {
+    const out = { thread: item.thread, legacy: item.legacy, msgId: item.msgId, subject: item.subject, address: item.address, name: '', date: '', status: 'not checked', reasons: [] };
+    let raw;
+    try { raw = await recheckSource(item.msgId); } catch (e) { out.error = `its original couldn't be read (${e.message})`; return out; }
+    const mail = parseMimeMessage(raw);
+    Object.assign(out, { subject: mail.subject || item.subject, address: mail.from.address || item.address, name: mail.from.name, date: mail.date });
+    if (!out.address || out.address === accountAddress()) { out.status = 'skipped'; return out; }
+    const auth = parseAuthResults(raw, MAIL.headers.receiver && MAIL.headers.receiver.host);
+    messageAuth.set(item.msgId, Promise.resolve({ raw, auth }));                // read once: the header checks use this copy
+    const dec = (/^msg-f:(\d+)$/.exec(item.msgId) || [])[1];
+    const msg = document.createElement('div');
+    msg.className = 'adn ads';
+    msg.setAttribute('data-message-id', `#${item.msgId}`);
+    if (dec) msg.setAttribute('data-legacy-message-id', BigInt(dec).toString(16));
+    const h2 = document.createElement('h2'); h2.className = 'hP'; h2.textContent = out.subject;
+    const gs = document.createElement('div'); gs.className = 'gs';
+    const h3 = document.createElement('h3'); h3.className = 'iw';
+    const qu = document.createElement('span'); qu.className = 'qu';
+    const gD = document.createElement('span'); gD.className = 'gD'; gD.setAttribute('email', out.address); gD.setAttribute('name', out.name || out.address); gD.textContent = out.name || out.address;
+    const go = document.createElement('span'); go.className = 'go'; go.textContent = `<${out.address}>`;
+    qu.append(gD, ' ', go); h3.appendChild(qu);
+    const a3s = document.createElement('div'); a3s.className = 'a3s aiL';
+    const body = document.createElement('div'); body.className = 'ii gt';
+    body.dataset.aiBox = '1';                                                     // the runner asks the AI itself
+    body.appendChild(recheckSafeNodes(mail.html, mail.text));
+    a3s.appendChild(body); gs.append(h3, a3s); msg.append(h2, gs);
+    const host = recheckHost();
+    host.textContent = '';
+    host.appendChild(msg);
+    try {
+        scheduleScan();
+        // The sender's verdict, then every link checked and the page idle twice in a row.
+        await recheckUntil(() => { const st = openedStates.get(body); return st && st.final; }, 30000);
+        let idle = 0;
+        await recheckUntil(() => { idle = document.documentElement.dataset.unshortenerBusy === '0' ? idle + 1 : 0; return idle >= 2; }, 45000);
+        const st = openedStates.get(body), final = st && st.final;
+        if (!final) { out.error = 'its checks didn\'t finish'; return out; }
+        out.status = final.status;
+        out.reasons = (final.reasons || []).slice(0, 8);
+        if (lastSettings.enableAiAnalysis) {
+            const facts = await aiFactsFor(body);
+            const res = await recheckSend({ action: 'aiAnalyze', facts, auto: true });
+            if (res && res.advice) out.ai = { level: res.advice.level, headline: String(res.advice.headline || '').slice(0, 300), probability: res.result ? res.result.probability : null };
+        }
+        if (mail.attachments.length) out.attachments = mail.attachments.filter(a => !a.inline).slice(0, 10).map(a => a.name || a.type);
+        return out;
+    } finally {
+        msg.remove();
+        messageAuth.delete(item.msgId);
+        for (const el of [...processedLinksMap.keys()]) if (!el.isConnected) processedLinksMap.delete(el);
+    }
+}
+async function recheckRun(job) {
+    recheckActive = true;
+    recheckJob = job;
+    spamQueue.clear();
+    try {
+        const items = await recheckCollect(job);
+        if (job.cancelled) return;
+        recheckSend({ action: 'recheckProgress', id: job.id, phase: job.mode === 'count' ? 'counted' : 'check', total: items.length, done: 0 });
+        if (job.mode === 'count') return;
+        let done = 0;
+        for (const item of items) {
+            if (job.cancelled) break;
+            const r = await guardedAsync(() => recheckOne(item));
+            done++;
+            const warn = r && (r.status === 'flagged' || r.status === 'caution' || (r.ai && (r.ai.level === 'danger' || r.ai.level === 'caution')));
+            recheckSend({ action: 'recheckProgress', id: job.id, phase: 'check', total: items.length, done, result: warn ? r : null, failed: r && r.error ? 1 : 0 });
+        }
+    } finally {
+        recheckSend({ action: 'recheckDone', id: job.id, cancelled: !!job.cancelled });
+        recheckJob = null;
+    }
+}
+async function guardedAsync(fn) { try { return await fn(); } catch (e) { reportEvent('error', `Re-check: ${e && e.message ? e.message : e}`); return null; } }
+
+// "Mark as phishing: move to Spam" from Settings → Re-check: the background opened the conversation in Gmail
+// and noted it (recheckPendingSpam); once it is shown here, Gmail's Report spam is pressed for it, as for the
+// extension's own moves (reportSpamOpenThread), whatever the automatic-move setting says: the user asked.
+let recheckSpamBusy = false;
+function recheckPendingSpam() {
+    if (recheckSpamBusy || recheckActive || !MAIL_CAN.move) return;
+    const open = currentThreadKey();
+    if (!open) return;
+    recheckSpamBusy = true;
+    recheckSend({ action: 'recheckSpamPending', thread: open }).then(async (p) => {
+        try {
+            if (!p || !p.pending) return;
+            await sleep(800);                                    // the conversation, fully shown
+            if (currentThreadKey() !== open) return;
+            const r = await reportSpamOpenThread({ thread: open, kind: 'thread', address: p.address || '', reason: 'Marked as phishing in Settings → Re-check', how: 'by you, from Settings → Re-check' }, true);
+            const moved = !!(r && r.moved && r.moved.length);
+            if (moved) reportEvent('warning', `An email from ${p.address || 'a sender'} was marked as phishing and moved to Spam from Settings → Re-check.`);
+            recheckSend({ action: 'recheckSpamDone', thread: open, moved });
+        } finally { recheckSpamBusy = false; }
+    });
+}
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'toggleVisuals') {
         visualOverridesActive = request.enabled;
         processedLinksMap.forEach((linkData, link) => guarded('Switching link highlights', () => applyLinkStyles(link, linkData)));
         sendResponse({ status: "Visuals toggled", active: visualOverridesActive });
     }
+
+    // [5.94.28] Settings → Re-check: this window runs the job (only a window the background opened for it).
+    if (request.action === 'recheckRun' && sender.id === chrome.runtime.id && request.job && !recheckJob) {
+        const job = { id: String(request.job.id), days: Math.max(1, Math.min(365, Math.round(Number(request.job.days) || 30))), mode: request.job.mode === 'count' ? 'count' : 'check', cancelled: false };
+        recheckRun(job);
+        sendResponse({ ok: true });
+    }
+    if (request.action === 'recheckCancel' && recheckJob && String(request.id) === recheckJob.id) { recheckJob.cancelled = true; sendResponse({ ok: true }); }
 
     // The background asks again after it restarted (it keeps the reports in memory only).
     if (request.action === 'reportState') {

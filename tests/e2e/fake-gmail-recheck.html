@@ -1,0 +1,70 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Inbox - teacher@school.org - Gmail</title>
+<style>body{font:14px Arial;background:#fff} tr.zA td{padding:4px;border-bottom:1px solid #eee} .yW{display:inline-block;width:220px;overflow:hidden;white-space:nowrap}
+[gh=mtb] [role=button]{display:inline-block;padding:4px 8px;border:1px solid #ccc;margin:2px;cursor:pointer}</style></head>
+<body>
+<!-- [5.94.28] Settings → Re-check (test-recheck.js): Gmail's search results, page by page (two conversations a page), and a
+     conversation opened by its legacy id (#all/<hex>) with Report spam. Made-up senders and emails; the originals are the
+     test's RAW_MESSAGES, by message id (msg-f:<decimal>). -->
+<div gh="mtb">
+  <div role="button" aria-label="Back to Inbox">Back</div>
+  <div role="button" aria-label="Report spam" data-tooltip="Report spam" act="9" id="spamBtn">Spam</div>
+</div>
+<div role="main" id="main"></div>
+<script>
+window.__spammed = [];
+window.__hashes = [];
+// Gmail's ids are long: 0x10000000 + a small number here.
+const ID = (n) => 0x10000000 + n;
+const ROWS = [
+  { t: ID(7001), m: ID(8001), email: 'no-reply@ms-verify.example', name: 'Microsoft Security', subj: 'Your password expires today' },
+  { t: ID(7002), m: ID(8002), email: 'principal@school.org', name: 'Pat Principal', subj: 'Staff meeting Friday' },
+  { t: ID(7003), m: ID(8003), email: 'events@xss-test.example', name: 'Events', subj: 'Spring fair' },
+  { t: ID(7004), m: ID(8004), email: 'billing@plain-vendor.example', name: 'Billing', subj: 'Invoice 2231' },
+  { t: ID(7005), m: ID(8005), email: 'news@school-news.example', name: 'School News', subj: 'November newsletter' }
+];
+const PER_PAGE = 2;
+const hex = (n) => Number(n).toString(16);
+function row(r) {
+  const tr = document.createElement('tr');
+  tr.className = 'zA yO';
+  tr.innerHTML = `<td class="oZ-x3"><div role="checkbox" aria-checked="false" tabindex="-1">☐</div></td>
+    <td class="yX xY"><div class="yW"><span class="bA4"><span class="yP" email="${r.email}" name="${r.name}">${r.name}</span></span></div></td>
+    <td class="xY a4W"><div class="xS"><div class="xT"><div class="y6"><span class="bog"><span data-thread-id="#thread-f:${r.t}" data-legacy-thread-id="${hex(r.t)}" data-legacy-last-message-id="${hex(r.m)}">${r.subj}</span></span></div></div></div></td>`;
+  return tr;
+}
+function show() {
+  const h = decodeURIComponent(location.hash);
+  window.__hashes.push(h);
+  const main = document.getElementById('main');
+  const all = /^#all\/([0-9a-f]+)$/.exec(location.hash);
+  if (all) {
+    const t = parseInt(all[1], 16), r = ROWS.find(x => x.t === t) || ROWS[0];
+    main.innerHTML = `<h2 class="hP" data-thread-perm-id="thread-f:${t}" data-legacy-thread-id="${hex(t)}">${r.subj}</h2>
+      <div class="adn ads" data-message-id="#msg-f:${r.m}" data-legacy-message-id="${hex(r.m)}"><div class="gs">
+      <h3 class="iw"><span class="qu"><span class="gD" email="${r.email}" name="${r.name}">${r.name}</span> <span class="go">&lt;${r.email}&gt;</span></span></h3>
+      <div class="a3s aiL"><div class="ii gt"><div>The email, as Gmail shows it.</div></div></div></div></div>`;
+    return;
+  }
+  const s = /^#search\/([^/]+)(?:\/p(\d+))?$/.exec(location.hash);
+  if (!s) { main.innerHTML = '<table class="F"><tbody id="list"></tbody></table>'; return; }
+  window.__query = decodeURIComponent(s[1].replace(/\+/g, ' '));
+  const page = Number(s[2] || 1), rows = ROWS.slice((page - 1) * PER_PAGE, page * PER_PAGE);
+  // Gmail draws the new page a moment later.
+  main.innerHTML = '';
+  setTimeout(() => {
+    main.innerHTML = rows.length ? '<table class="F"><tbody id="list"></tbody></table>' : '<table class="F"><tbody><tr><td class="TC">No messages matched your search.</td></tr></tbody></table>';
+    const list = document.getElementById('list');
+    if (list) rows.forEach(r => list.appendChild(row(r)));
+  }, 250);
+}
+window.addEventListener('hashchange', show);
+show();
+document.getElementById('spamBtn').addEventListener('click', () => {
+  const h = document.querySelector('h2[data-thread-perm-id]');
+  if (!h) return;
+  window.__spammed.push(h.getAttribute('data-thread-perm-id'));
+  document.getElementById('main').innerHTML = '<table class="F"><tbody id="list"></tbody></table>';
+  location.hash = '#inbox';
+});
+</script></body></html>
