@@ -93,9 +93,9 @@ global.RAW_MESSAGES = {
   check('counting finds the 5 conversations over the 3 pages of results', counted && counted.total === 5 && counted.days === 14, counted);
   const scanPage = pages.find(p => p.url().startsWith('https://mail.google.com/'));
   const query = scanPage && !scanPage.isClosed() ? await scanPage.evaluate(() => window.__query).catch(() => null) : null;
-  check('Gmail is searched for the last 14 days, without sent mail, drafts, chats or the user\'s own', !scanPage || query === null || query === 'newer_than:14d -in:sent -in:drafts -in:chats -from:me', query);
+  check('Gmail is searched for the last 14 days, without the user\'s own mail (no "in:chats": it sends Gmail\'s search to its Chat results)', !scanPage || query === null || query === 'newer_than:14d -from:me', query);
   const est = await until(() => opt.$eval('#recheckEstimate', e => e.hidden ? '' : e.textContent), t => /5 emails/.test(t), 10000);
-  check('the estimate says how many emails, about how long, and what happens', /5 emails in the last 14 days/.test(est) && /about \d+ seconds/.test(est) && /small Gmail window/.test(est) && /Nothing is marked read, moved or sent/.test(est), est);
+  check('the estimate says how many emails, about how long, and what happens', /5 emails in the last 14 days/.test(est) && /about \d+ seconds/.test(est) && /minimized window/.test(est) && /Nothing is marked read, moved or sent/.test(est), est);
   check('nothing was checked by counting', (await results()).length === 0);
   await until(() => Promise.resolve(scanPage ? scanPage.isClosed() : true), v => v, 20000);
   check('the counting window closed', !scanPage || scanPage.isClosed());

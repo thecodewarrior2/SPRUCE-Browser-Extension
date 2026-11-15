@@ -3733,6 +3733,7 @@ const MESSAGE_RULES = Object.freeze({
     recheckAvailable:      { from: 'page', refuse: null },
     recheckProgress:       { from: 'any',  refuse: false, fields: { id: MSG_STR(40), phase: MSG_STR(20), total: MSG_NUM, done: MSG_NUM, page: MSG_NUM, failed: MSG_NUM, result: MSG_OBJ(20000) } },
     recheckDone:           { from: 'any',  refuse: false, fields: { id: MSG_STR(40) } },
+    recheckShowWindow:     { from: 'any',  refuse: false, fields: { id: MSG_STR(40) } },
     recheckSpamPending:    { from: 'any',  refuse: null,  fields: { thread: MSG_STR(100) } },
     recheckSpamDone:       { from: 'any',  refuse: false, fields: { thread: MSG_STR(100) } },
     recheckStart:          { from: 'page', refuse: { error: NOT_ALLOWED }, fields: { days: MSG_NUM, mode: MSG_STR(10) } },
@@ -3821,8 +3822,15 @@ async function recheckStart(days, mode) {
     const id = String(Date.now()), account = await gmailAccountNumber();
     const url = `https://mail.google.com/mail/u/${account}/#inbox`;
     let windowId = null, tabId = null;
-    try { const w = await chrome.windows.create({ url, type: 'popup', width: 560, height: 720, focused: true }); windowId = w.id; tabId = w.tabs && w.tabs[0] && w.tabs[0].id; }
-    catch (e) { const t = await chrome.tabs.create({ url, active: true }); windowId = t.windowId; tabId = t.id; }
+    // (5.94.30) Minimized, in the taskbar, out of the way (it can't be a hidden page: Gmail reads an email's original only
+    // for its own pages, and refuses to be loaded in a frame). Its waits go through the background, whose timers a
+    // minimized window doesn't slow down. Where a minimized window can't be made, a small one behind the others.
+    const opened = (w) => { windowId = w.id; tabId = w.tabs && w.tabs[0] && w.tabs[0].id; };
+    try { opened(await chrome.windows.create({ url, type: 'normal', state: 'minimized', focused: false })); }
+    catch (e) {
+        try { opened(await chrome.windows.create({ url, type: 'popup', width: 560, height: 720, focused: false })); }
+        catch (e2) { const t = await chrome.tabs.create({ url, active: false }); windowId = t.windowId; tabId = t.id; }
+    }
     if (tabId == null) return { error: 'The re-check window couldn\'t be opened.' };
     recheckRunning = { id, mode, days, windowId, tabId, account };
     const state = { id, mode, days, windowId, tabId, account, phase: 'starting', total: 0, done: 0, found: 0, failed: 0, startedAt: Date.now() };
@@ -3896,6 +3904,17 @@ const MESSAGE_HANDLERS = {
                 }
                 return out;
             }).then(() => sendResponse(true));
+        });
+        return true;
+    },
+    // (5.94.30) The minimized window didn't draw Gmail's list: shown, behind the others, without taking the focus.
+    recheckShowWindow(request, sender, sendResponse) {
+        recheckCurrent().then(async run => {
+            if (!run || run.id !== request.id || !sender.tab || sender.tab.id !== run.tabId || run.windowId == null) return sendResponse(false);
+            try { const w = await chrome.windows.get(run.windowId); if (w.state !== 'minimized') return sendResponse(false); await chrome.windows.update(run.windowId, { state: 'normal', focused: false }); }
+            catch (e) { return sendResponse(false); }
+            logInfo('Re-check: Gmail didn\'t show its search results in a minimized window, so the window was shown (behind the others).', 'Re-check');
+            sendResponse(true);
         });
         return true;
     },

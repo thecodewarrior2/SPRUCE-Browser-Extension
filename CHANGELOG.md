@@ -1,5 +1,20 @@
 # Changelog
 
+## 5.94.30 — EXPERIMENT (branch `llm_testing`): Re-check's Gmail search works, and its window opens minimized
+
+Not for release.
+
+- **Gmail answered "Error retrieving search results".** The re-check's search left out `in:chats`, which in a Gmail
+  with Chat sends the search to Chat's results ("Conversations"), where it fails. It is now
+  `newer_than:Nd -from:me` (sent mail and drafts are the user's own, so they are still left out).
+- **The re-check window opens minimized**, in the taskbar, instead of a small window in front of everything
+  (`chrome.windows.create` with `state: 'minimized'`; where that can't be made, a small window behind the others).
+  It can't be a hidden page: Gmail gives an email's original only to its own pages and refuses to be loaded in a
+  frame. The job's waits already go through the background (`recheckSleep`), so a minimized window doesn't slow
+  them. Should Gmail not draw its search results while minimized (nothing after 25 seconds), the window is shown,
+  behind the others and without taking the focus, and the search asked again (`recheckShowWindow`). The tab, its
+  estimate and the Help say so.
+
 ## 5.94.29 — EXPERIMENT (branch `llm_testing`): the Re-check tab only for Gmail; no more runtime warnings on Chrome's Errors page
 
 Not for release.

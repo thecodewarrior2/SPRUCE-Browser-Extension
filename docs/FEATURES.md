@@ -226,7 +226,7 @@ the Inspector explains that no tool can read them offline.
   Drafts, Chats, Spam or Trash, not the user's own) and says how many there are (at most the newest 5,000) and
   about how long checking them takes (about 1.5 seconds each), what happens and what doesn't; then the re-check
   starts on the user's go, with progress, the time left and Cancel.
-- **How:** a small Gmail window opens for the job (the original source can only be read from a Gmail page, with
+- **How:** a Gmail window opens minimized, in the taskbar (5.94.30), for the job (the original source can only be read from a Gmail page, with
   the user's own sign-in) and closes when it ends. It pages through Gmail's search results, takes each
   conversation's newest email, reads its original (as the sender checks already do; nothing is marked read) and
   shows it as an inert hidden email in that window, so the extension's own checks (sender, headers, links,

@@ -4667,7 +4667,7 @@ scheduleBadgeUpdate();
 
 // ---------------------------------------------------------------------------
 // [5.94.28] RE-CHECK OF PAST MAIL — EXPERIMENT (llm_testing). Settings → Re-check asks the background to open
-// a small Gmail window; the background tells this content script there to run the job (recheckRun). It
+// a Gmail window, minimized (5.94.30); the background tells this content script there to run the job (recheckRun). It
 // searches Gmail for the last N days' mail (not Sent, Drafts or Chats, not from the user), pages through the
 // results and collects each conversation's newest message, then reads each one's original source (as the
 // header checks already do: the user's own session, nothing marked read) and shows it, made inert, as a
@@ -4777,7 +4777,9 @@ function recheckHost() {
 }
 // The conversations of the last N days, from Gmail's own search: [{ thread, legacy, msgId, address, subject }].
 async function recheckCollect(job) {
-    const q = `newer_than:${job.days}d -in:sent -in:drafts -in:chats -from:me`;
+    // (5.94.30) Only the user's own mail is left out (sent mail and drafts are theirs). "in:chats" sent Gmail's search to
+    // its Chat results ("Conversations"), which answered "Error retrieving search results".
+    const q = `newer_than:${job.days}d -from:me`;
     const base = `#search/${encodeURIComponent(q).replace(/%20/g, '+')}`;
     const sig = () => listRows().filter(isShown).map(rowThreadKey).join(',');
     const found = new Map();
@@ -4785,7 +4787,11 @@ async function recheckCollect(job) {
     for (let page = 1; page <= RECHECK_MAX_PAGES && !job.cancelled; page++) {
         location.hash = page > 1 ? `${base}/p${page}` : base;
         const empty = () => { const e = MAIL.list.empty && document.querySelector(MAIL.list.empty); return !!(e && isShown(e)); };
-        const s = await recheckUntil(() => { const x = sig(); return (x && x !== prev) ? x : (empty() && !x ? 'empty' : null); }, 25000);
+        const look = () => { const x = sig(); return (x && x !== prev) ? x : (empty() && !x ? 'empty' : null); };
+        let s = await recheckUntil(look, 25000);
+        // (5.94.30) Nothing drawn: a minimized window may not draw Gmail's list. The background shows it (behind the
+        // others, without taking the focus) and the page is asked again.
+        if (!s && page === 1 && !job.cancelled && await recheckSend({ action: 'recheckShowWindow', id: job.id })) { location.hash = '#inbox'; await recheckSleep(1500); location.hash = base; s = await recheckUntil(look, 25000); }
         if (!s || s === 'empty') break;
         await recheckSleep(500);                                   // the page's rows, all drawn
         prev = sig();

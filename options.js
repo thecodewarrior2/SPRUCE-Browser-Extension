@@ -2040,7 +2040,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!n) { box.append(el('div', { textContent: `No emails in the last ${st.days} days to re-check (your own sent mail, drafts, chats, Spam and Trash are left out).` })); return; }
         box.append(el('strong', { textContent: `${n.toLocaleString()} email${n === 1 ? '' : 's'} in the last ${st.days} days${n >= 5000 ? ' (the most a re-check takes: the newest 5,000)' : ''}.` }),
             el('ul', {}, el('li', { textContent: `It will take about ${minutes(n * SECONDS_PER_EMAIL)}${n > 400 ? ', longer on a slower computer' : ''}. You can cancel at any time; what was found until then is kept.` }),
-                el('li', { textContent: 'A small Gmail window opens and does the work. Leave it open and not minimized; you can keep using the browser in other windows. Closing it cancels the re-check.' }),
+                el('li', { textContent: 'Gmail opens in a minimized window (in your taskbar) that does the work and closes when it ends. Leave it there; you can keep using the browser. Closing it cancels the re-check.' }),
                 el('li', { textContent: 'Each email\'s original is read from Gmail with your own sign-in, and its links are looked up as when you open an email. Nothing is marked read, moved or sent anywhere.' }),
                 el('li', { textContent: 'Only what is flagged or needs caution is listed, with why; you decide what to move to Spam.' })),
             el('button', { type: 'button', className: 'btn-warning', id: 'recheckStartBtn', textContent: `Re-check ${n.toLocaleString()} email${n === 1 ? '' : 's'}`, onclick: () => start('check') }));
@@ -2053,7 +2053,7 @@ document.addEventListener('DOMContentLoaded', () => {
         $('recheckClearBtn').disabled = running;
         if (!running) return;
         const bar = $('recheckProgress'), text = $('recheckProgressText');
-        if (st.phase === 'starting') { bar.removeAttribute('value'); text.textContent = 'Opening Gmail in the re-check window…'; return; }
+        if (st.phase === 'starting') { bar.removeAttribute('value'); text.textContent = 'Opening Gmail in a minimized window (in your taskbar)…'; return; }
         if (st.phase === 'count') { bar.removeAttribute('value'); text.textContent = `Finding the emails of the last ${st.days} days: ${(st.total || 0).toLocaleString()} so far…`; return; }
         bar.max = Math.max(1, st.total || 1); bar.value = st.done || 0;
         const elapsed = (Date.now() - (st.startedAt || Date.now())) / 1000, rate = st.done ? elapsed / st.done : SECONDS_PER_EMAIL;
