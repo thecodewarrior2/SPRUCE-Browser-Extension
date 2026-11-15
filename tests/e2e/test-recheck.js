@@ -64,8 +64,21 @@ global.RAW_MESSAGES = {
   const opt = await ctx.newPage();
   opt.on('pageerror', e => errors.push(e.message));
   opt.on('dialog', d => d.accept());
+  // Gmail only: with Outlook the email last used (and no Gmail tab open), the tab isn't offered and can't start.
+  await sw.evaluate(() => chrome.storage.local.set({ webmailInUse: { site: 'outlook', name: 'Outlook on the web', at: Date.now() } }));
   await opt.goto(`chrome-extension://${ID}/options.html`);
   await optionsReady(opt);
+  const tabShown = () => opt.$eval('.tab-btn[data-tab="recheck"]', b => !b.hidden && !b.disabled && getComputedStyle(b).display !== 'none');
+  check('Outlook in use: the Re-check tab is hidden and off', !await until(tabShown, v => v === false, 5000));
+  const refused = await opt.evaluate(() => new Promise(r => chrome.runtime.sendMessage({ action: 'recheckStart', days: 30, mode: 'count' }, r)));
+  check('…and the background won\'t start one, saying why', refused && /Gmail only/.test(refused.error) && /Outlook on the web/.test(refused.error), refused);
+  // Back in Gmail (its tab says so when it comes into view): the tab is offered again, without reloading Settings.
+  const gmailTab = await ctx.newPage();
+  await gmailTab.goto('https://mail.google.com/mail/u/0/#inbox');
+  check('Gmail in use again: the Re-check tab is shown', await until(tabShown, v => v === true, 10000));
+  const inUse = await sw.evaluate(async () => (await chrome.storage.local.get('webmailInUse')).webmailInUse);
+  check('only which webmail and when is kept', inUse && inUse.site === 'gmail' && Object.keys(inUse).sort().join() === 'at,name,site', inUse);
+  await gmailTab.close();
   // (The made-up domains don't exist: that check is off here, as in the other suites.)
   await sw.evaluate(() => chrome.storage.local.set({ enableDnsThreatCheck: false }));
   await opt.click('.tab-btn[data-tab="recheck"]');

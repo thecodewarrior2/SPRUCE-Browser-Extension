@@ -1832,11 +1832,12 @@ document.addEventListener('DOMContentLoaded', () => {
     new MutationObserver(syncTabs).observe(tablist, { subtree: true, attributes: true, attributeFilter: ['class'] });
     tablist.addEventListener('keydown', (e) => {
         if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
-        let i = tabs.indexOf(document.activeElement);
+        const shown = tabs.filter(t => !t.hidden);          // [5.94.28] a hidden tab (Re-check, Gmail only) is skipped
+        let i = shown.indexOf(document.activeElement);
         if (i < 0) return;
-        i = e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1 : (i + (e.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
-        tabs[i].focus();
-        tabs[i].click();
+        i = e.key === 'Home' ? 0 : e.key === 'End' ? shown.length - 1 : (i + (e.key === 'ArrowRight' ? 1 : -1) + shown.length) % shown.length;
+        shown[i].focus();
+        shown[i].click();
         e.preventDefault();
     });
 
@@ -2047,7 +2048,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function progress(st) {
         const box = $('recheckProgressBox'), running = !!(st && !st.finishedAt && st.phase);
         box.hidden = !running;
-        $('recheckCountBtn').disabled = running;
+        $('recheckCountBtn').disabled = running || available === false;
         $('recheckDays').disabled = running;
         $('recheckClearBtn').disabled = running;
         if (!running) return;
@@ -2094,11 +2095,25 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     function render() { estimate(state); progress(state); summary(state); list(); }
+    // Gmail only: the tab is shown when the email last used is Gmail (or a re-check is running), else hidden and
+    // switched off (background.js recheckAvailability).
+    let available = null;
+    async function availability() {
+        const av = await send({ action: 'recheckAvailable' });
+        const running = !!(state && state.phase && !state.finishedAt);
+        available = !!(av && av.available) || running;
+        const btn = document.querySelector('.tab-btn[data-tab="recheck"]'), panel = $('tab-recheck');
+        btn.hidden = !available;
+        btn.disabled = !available;
+        if (!available && panel.classList.contains('active')) { const s = document.querySelector('.tab-btn[data-tab="settings"]'); if (s) s.click(); }
+        $('recheckCountBtn').disabled = !available || running;
+    }
     async function load() {
         const r = await chrome.storage.local.get(['recheckState', 'recheckResults']);
         state = r.recheckState || null; results = Array.isArray(r.recheckResults) ? r.recheckResults : [];
         if (state && state.days && !state.finishedAt) $('recheckDays').value = state.days;
         render();
+        await availability();
     }
     async function start(mode) {
         const r = await send({ action: 'recheckStart', days: days(), mode });
@@ -2108,7 +2123,11 @@ document.addEventListener('DOMContentLoaded', () => {
     $('recheckCancelBtn').addEventListener('click', () => send({ action: 'recheckCancel' }));
     $('recheckClearBtn').addEventListener('click', () => { if (confirm('Clear the re-check results from this computer?')) send({ action: 'recheckClear' }); });
     $('recheckDays').addEventListener('input', () => estimate(state));
-    chrome.storage.onChanged.addListener((changes, area) => { if (area === 'local' && (changes.recheckState || changes.recheckResults)) load(); });
+    chrome.storage.onChanged.addListener((changes, area) => {
+        if (area !== 'local') return;
+        if (changes.recheckState || changes.recheckResults) load();
+        else if (changes.webmailInUse) availability();
+    });
     setInterval(() => { if (state && !state.finishedAt) progress(state); }, 5000);
     load();
 })();

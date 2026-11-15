@@ -2055,7 +2055,7 @@ test('messages: every action says who may send it, and the background answers on
   }
   // Privileged actions: only the extension's own pages.
   assert.deepEqual(Object.keys(rules).filter(a => rules[a].from === 'page').sort(),
-    ['aiStatus', 'followLink', 'forceSync', 'getTabState', 'recheckCancel', 'recheckClear', 'recheckOpen', 'recheckSpam', 'recheckStart', 'syncPhishFeeds', 'testCustomThreat', 'testCustomUnshortener', 'testResolver', 'testUnwrap', 'virusTotal']);
+    ['aiStatus', 'followLink', 'forceSync', 'getTabState', 'recheckAvailable', 'recheckCancel', 'recheckClear', 'recheckOpen', 'recheckSpam', 'recheckStart', 'syncPhishFeeds', 'testCustomThreat', 'testCustomUnshortener', 'testResolver', 'testUnwrap', 'virusTotal']);
   const gmail = { id: 'x', tab: { id: 7 }, url: 'https://mail.google.com/mail/u/0/' };
   const page = { id: 'x' };                    // the popup or another page of the extension's own (no tab)
   const why = (req, sender) => S('messageRefusal')(req, sender);

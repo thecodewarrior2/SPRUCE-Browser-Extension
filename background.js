@@ -23,7 +23,7 @@ function getConfig() {
 const NON_CONFIG_KEYS = new Set(['errorLogs', 'recentActivity', 'resolutionHistory', 'lastSyncTime', 'listState', 'cacheSchema', 'welcomeDismissed', 'uiTheme',
     'detectedConflicts', 'ignoredConflicts', 'keptConflictFeatures', 'popularDomains', 'verifiedDomains', 'colleagueNameHashes', 'rdapBootstrap',
     'senderDomainCache', 'geoCache', 'spamMovedThreads', 'spamRescuedThreads', 'senderMessageCache', 'senderResultCache', 'faviconCache', 'spamMoveLog', 'spamUnreadHeadersOff',
-    'seenSenders', 'seenSendersSince', 'recheckState', 'recheckResults']);   // [5.94.28] Settings → Re-check's job and findings   // llm_testing: the first-time-sender history is data, not settings
+    'seenSenders', 'seenSendersSince', 'recheckState', 'recheckResults', 'webmailInUse']);   // [5.94.28] Settings → Re-check's job and findings   // llm_testing: the first-time-sender history is data, not settings
 function invalidateConfig() {
     configPromise = null;
     domainSafetyCache.clear();      // e.g. a resolver was switched off: don't reuse its verdicts
@@ -3729,6 +3729,8 @@ const MESSAGE_RULES = Object.freeze({
     linkDomainAges:        { from: 'any',  refuse: {},    fields: { domains: MSG_ARR(10) } },
     // [5.94.28] Settings → Re-check: the re-check window's content script, and the extension's own pages.
     recheckSleep:          { from: 'any',  refuse: false, fields: { ms: MSG_NUM } },
+    webmailSeen:           { from: 'any',  refuse: false },
+    recheckAvailable:      { from: 'page', refuse: null },
     recheckProgress:       { from: 'any',  refuse: false, fields: { id: MSG_STR(40), phase: MSG_STR(20), total: MSG_NUM, done: MSG_NUM, page: MSG_NUM, failed: MSG_NUM, result: MSG_OBJ(20000) } },
     recheckDone:           { from: 'any',  refuse: false, fields: { id: MSG_STR(40) } },
     recheckSpamPending:    { from: 'any',  refuse: null,  fields: { thread: MSG_STR(100) } },
@@ -3769,6 +3771,17 @@ function messageRefusal(request, sender) {
 // presses Report spam once the conversation is shown: recheckSpamPending).
 // ---------------------------------------------------------------------------
 const RECHECK_RESULTS_MAX = 1000, RECHECK_SPAM_WAIT_MS = 10 * 60 * 1000;
+// Settings → Re-check works with Gmail only (only Gmail lets the extension find past mail and read each email's
+// original from the page: see docs/FEATURES.md). It is offered when the webmail the user last had in front of
+// them was Gmail (webmailInUse, said by the webmail tabs' content scripts: webmailSeen), or, before any was
+// seen, when a Gmail tab is open.
+async function recheckAvailability() {
+    const seen = (await storageGet('local', { webmailInUse: null })).webmailInUse;
+    let gmailOpen = false;
+    try { gmailOpen = (await chrome.tabs.query({ url: 'https://mail.google.com/*' })).length > 0; } catch (e) { /* unknown */ }
+    const site = seen && seen.site ? seen.site : (gmailOpen ? 'gmail' : '');
+    return { available: site === 'gmail', site, name: seen && seen.name ? seen.name : (gmailOpen ? 'Gmail' : ''), at: seen ? seen.at : null };
+}
 let recheckRunning = null;            // { id, mode, days, windowId, tabId, account }
 const recheckSpamPending = new Map(); // thread → { address, at }
 let recheckWrites = Promise.resolve();
@@ -3801,6 +3814,8 @@ const recheckResultOf = (r) => ({
 });
 async function recheckStart(days, mode) {
     if (await recheckCurrent()) return { error: 'A re-check is already running.' };
+    const av = await recheckAvailability();
+    if (!av.available) return { error: `Re-check works with Gmail only${av.name ? `, and the email you last used is ${av.name}` : ''}. Open Gmail, then try again.` };
     days = Math.max(1, Math.min(365, Math.round(Number(days) || 30)));
     mode = mode === 'count' ? 'count' : 'check';
     const id = String(Date.now()), account = await gmailAccountNumber();
@@ -3846,6 +3861,21 @@ if (chrome.windows && chrome.windows.onRemoved) chrome.windows.onRemoved.addList
 
 const MESSAGE_HANDLERS = {
     // [5.94.28] Settings → Re-check (see recheckStart).
+    webmailSeen(request, sender, sendResponse) {
+        const site = sender && sender.tab && sender.url ? webmailSiteFor(sender.url) : null;
+        if (!site) { sendResponse(false); return false; }
+        storageGet('local', { webmailInUse: null }).then(r => {
+            const old = r.webmailInUse;
+            // Written when the webmail changes, and at most every 10 minutes otherwise.
+            if (old && old.site === site.id && Date.now() - (old.at || 0) < 10 * 60 * 1000) return;
+            return chrome.storage.local.set({ webmailInUse: { site: site.id, name: site.name, at: Date.now() } });
+        }).then(() => sendResponse(true), () => sendResponse(false));
+        return true;
+    },
+    recheckAvailable(request, sender, sendResponse) {
+        recheckAvailability().then(sendResponse, () => sendResponse(null));
+        return true;
+    },
     recheckSleep(request, sender, sendResponse) {
         setTimeout(() => sendResponse(true), Math.max(0, Math.min(5000, Number(request.ms) || 0)));
         return true;

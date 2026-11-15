@@ -219,7 +219,7 @@ Decoded without any lookup, among many others: iContact (`icptrack.com`) click t
 click tracking in its older readable format. SendGrid's current links (`upn=u001.…`) are encrypted, so
 the Inspector explains that no tool can read them offline.
 
-## Re-check of past email (experimental, branch `llm_testing`, 5.94.28)
+## Re-check of past email (experimental, branch `llm_testing`, 5.94.28) — Gmail only
 
 - **Settings → 🔁 Re-check** checks the Gmail email received over the last days again (1 to 365; 30 by default),
   with today's checks, phishing lists and AI model. **Count the emails** first searches Gmail for them (not Sent,
@@ -235,6 +235,18 @@ the Inspector explains that no tool can read them offline.
   While the window works it never moves anything to Spam, never records senders as first seen (so old mail
   doesn't make senders look new) and doesn't log each verdict. Attachments are listed by name only (their
   contents and QR codes aren't read in a re-check).
+- **Gmail only** (5.94.29). The tab is shown, and a re-check can start, only when the webmail the user last had in
+  front of them in this browser is Gmail (each supported webmail's page says so when it opens or comes into view:
+  `webmailInUse`, the site and the time only; before any was seen, when a Gmail tab is open); otherwise it is hidden.
+  The other supported webmail can't do it the same way, without an account of the extension's own with the mail
+  provider: Outlook on the web reaches past mail and originals only through undocumented internal calls (which the
+  new Outlook changed to need a sign-in token the page keeps to itself) or through Microsoft Graph (an app
+  registration, publisher verification and, in many districts, an administrator's consent); Yahoo and AOL show a
+  "raw message" but list mail only through undocumented calls, and their supported access needs a commercial
+  agreement; Zoho and Fastmail have documented APIs (Zoho Mail's API, Fastmail's JMAP), each needing a sign-in
+  registered with the provider; iCloud and GMX show headers but not the original; Proton Mail keeps every email
+  encrypted and only its own page can decrypt it. Fastmail (JMAP) and Zoho are the realistic next candidates if
+  adding a provider sign-in becomes acceptable.
 - **Findings:** each email flagged or needing caution (or that the AI warns about) is listed with its subject,
   sender, date and why, with **Open in Gmail** (the whole conversation) and **Mark as phishing: move to Spam**
   (Gmail opens the conversation and the extension presses Report spam, whatever the automatic-move setting

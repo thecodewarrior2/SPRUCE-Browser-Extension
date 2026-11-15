@@ -1,5 +1,29 @@
 # Changelog
 
+## 5.94.29 — EXPERIMENT (branch `llm_testing`): the Re-check tab only for Gmail; no more runtime warnings on Chrome's Errors page
+
+Not for release.
+
+- **Settings → Re-check is Gmail only, and says so.** The tab (and its button) is hidden and off unless the webmail
+  the user last had in front of them in this browser is Gmail: each supported webmail's page tells the background
+  when it opens or comes back into view (`webmailSeen` in `content.js`; `webmailInUse` in storage: the site, its name
+  and the time only; written when it changes, at most every 10 minutes otherwise); before any was seen, an open Gmail
+  tab counts. It updates without reloading Settings. The background refuses to start a re-check otherwise, saying
+  why (`recheckAvailability`). The tab is marked *Gmail only*, with why; arrow keys skip a hidden tab.
+- **Why not the others** (researched; `docs/FEATURES.md`): only Gmail lets the extension list past mail and read
+  each email's original from the page with the user's own sign-in. Outlook needs undocumented internal calls (the
+  new Outlook's need a token the page keeps) or Microsoft Graph (app registration, publisher verification, often an
+  administrator's consent); Yahoo and AOL, undocumented calls or a commercial agreement; Zoho and Fastmail, their
+  documented APIs with a provider sign-in (the realistic next candidates); iCloud and GMX show no original; Proton
+  Mail's emails are encrypted and only its own page can decrypt them.
+- **ONNX Runtime's notes no longer show as errors.** On the graphics card (WebGPU), the runtime logged that "some
+  nodes were not assigned to the preferred execution providers" (shape steps it keeps on the processor on purpose)
+  to the console's error stream, and Chrome listed them on the extension's Errors page though nothing was wrong.
+  The sessions now log errors only (`logSeverityLevel: 3` in `ai-engine.js`).
+- Docs: the tab, the Help tab, `docs/FEATURES.md`, `PRIVACY.md`. Tests: `test-recheck.js` (Outlook in use: the tab
+  hidden and a start refused, saying why; Gmail in view again: the tab back; only the site, its name and the time
+  kept).
+
 ## 5.94.28 — EXPERIMENT (branch `llm_testing`): Settings → Re-check checks past Gmail email again
 
 Not for release. A new tab, **🔁 Re-check**, checks the Gmail email received over the last days again (1 to 365;

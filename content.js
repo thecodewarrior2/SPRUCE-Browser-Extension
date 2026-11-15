@@ -4905,6 +4905,14 @@ function recheckPendingSpam() {
     });
 }
 
+// [5.94.28] Which webmail the user has in front of them (Settings → Re-check is offered for Gmail only): said when the
+// page starts and whenever it comes back into view. Only the top page of a supported webmail says so.
+if (window === window.top && SITE.id !== 'other') {
+    const seen = () => { if (!document.hidden) recheckSend({ action: 'webmailSeen' }); };
+    document.addEventListener('visibilitychange', seen);
+    seen();
+}
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'toggleVisuals') {
         visualOverridesActive = request.enabled;
