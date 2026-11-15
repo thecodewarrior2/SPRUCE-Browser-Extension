@@ -1,5 +1,22 @@
 # Changelog
 
+## 5.94.32 — EXPERIMENT (branch `llm_testing`): phish-tiny 0.19.0, far fewer false alarms on a district's own mail
+
+Not for release. The AI model is now **phish-tiny 0.19.0** (TinyPhishLLM `a5e17c7`, `models/phish-tiny/SOURCE.json`;
+was 0.18.0). Same architecture (ELECTRA-small), size, vocabulary and input format (2): `modelInputParts` and the
+runtimes are unchanged (the sync checked all 94 reference cases). It was trained with one school district's own
+de-identified examples (in no repository) and two new training losses (a phishing email and its genuine twin kept
+apart; each training email pushed past 95% on its side).
+
+- **What changes**, against 0.18.0 at the 90% line (held-out sets, never trained on): the district's held-out
+  genuine emails called phishing 12 of 29 → 0 (the one phishing email among them still caught); published phishing
+  missed 13 of 681 variants → 6; published genuine called phishing 4 of 705 → 3; every regression and hand-written
+  case still right at 90%.
+- **Worse:** two more of the 14 platform-share check cases (a document shared through DocuSign or Adobe by another
+  organization's account) fall under 90%, though they stay above 50% and still add to the AI's opinion. One
+  training run; the district set is small.
+- Docs: `docs/FEATURES.md` (what the model learned from). Tests: `tests/fixtures/ai-vectors.json` is 0.19.0's.
+
 ## 5.94.31 — EXPERIMENT (branch `llm_testing`): Settings → Re-check removed
 
 Not for release. The re-check of past Gmail email (5.94.28–5.94.30) is removed: running it in a Gmail window of
