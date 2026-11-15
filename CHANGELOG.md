@@ -1,5 +1,39 @@
 # Changelog
 
+## 5.94.27 — EXPERIMENT (branch `llm_testing`): phish-tiny 0.18.0, an ELECTRA-small model
+
+Not for release. The AI model is now **phish-tiny 0.18.0** (TinyPhishLLM `2f596de`, `models/phish-tiny/SOURCE.json`;
+was 0.16.0), an **ELECTRA-small** classifier (12 layers, 13.5 million parameters; `model.bin` 13.9 MB,
+`model.onnx` 14 MB) instead of BERT-tiny. Same input format (2) and vocabulary: `modelInputParts` is unchanged
+(the sync checked all 94 reference cases). The BERT-tiny model is kept in TinyPhishLLM as `phish-tiny-old` and
+is not used. S.P.R.U.C.E Mail Protection Service runs the same model since 0.5.50.
+
+- **What changes:** on the training repository's held-out published emails, against the BERT-tiny 0.17.0, it
+  misses fewer phishing emails (8 instead of 14 of 681 variants at 50%; 14 instead of 18 at 95%) and calls far
+  fewer genuine ones phishing (5 instead of 20 of 705 at 50%; 4 instead of 14 at 95%); every regression case is
+  right, and it recognizes documents shared through Google Docs, OneDrive, DocuSign, Dropbox or Adobe by another
+  organization's account naming the reader's leaders (14 of 14 check cases). One training run; a district's own
+  examples are not in it.
+- **The JavaScript runtime runs ELECTRA** (`PhishModel.forward` in `ai.js`, by `model.json`'s `arch`): the
+  embeddings are 128 wide (`config.embedding`) and projected to 256 (`electra.embeddings_project`) after their
+  LayerNorm; the head is `classifier.dense`, GELU, `classifier.out_proj` on the first token. A BERT model
+  (no `arch`) still runs as before.
+- **ONNX Runtime Web runs at the "basic" graph optimization level** (`ai-engine.js`; was "all"): the higher levels
+  fuse kernels and moved ELECTRA's answers by up to 0.007; at "basic" they match the reference to 3e-6, as in the
+  service.
+- **Speed** (measured here, Chromium, WebAssembly, one thread): the engine loads in about 3 s the first time; an
+  ordinary email takes about 0.2 s (was under 0.1 s), one it warns about with its explanation about 0.8 s the
+  first time (a repeated sentence costs nothing). The JavaScript fallback takes 2–5 s (was about 1.4 s).
+- **The package grows by about 19 MB** (`model.bin` and `model.onnx` 28 MB together instead of 9 MB); neither is
+  committed, as before.
+- **Fix: a colleague's name is no longer missed when the background answers late.** The content script asks the
+  background for the learned colleagues' names once per page (`loadColleagueHashes` in `content.js`); an opened
+  email judged before the answer came back was judged without them, and never again. A share naming a learned
+  colleague then lost that sign (the full suite caught it as an intermittent `platformshare:share` failure, under
+  load). An email judged before the list arrives is now judged again when it does. (The same code is on `testing`.)
+- Docs: `docs/FEATURES.md`, the Settings card (the model's size). Tests: the unit tests hold the JavaScript runtime
+  to PyTorch's numbers (`tests/fixtures/ai-vectors.json`, 0.18.0's) and the e2e tests ONNX Runtime to it (0.001).
+
 ## 5.94.26 — EXPERIMENT (branch `llm_testing`): a share sent through Google Docs, OneDrive, DocuSign or Dropbox is judged by the person who shared it
 
 Not for release. The same change as 5.102 on `testing`, with the same switch and tag.

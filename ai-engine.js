@@ -33,13 +33,13 @@ async function createSession(bytes) {
         try {
             const adapter = await navigator.gpu.requestAdapter();
             if (adapter) {
-                const session = await ort.InferenceSession.create(bytes, { executionProviders: ['webgpu'], graphOptimizationLevel: 'all' });
+                const session = await ort.InferenceSession.create(bytes, { executionProviders: ['webgpu'], graphOptimizationLevel: 'basic' });
                 return { session, engine: 'WebGPU', tried };
             }
             tried.push('WebGPU: no adapter');
         } catch (e) { tried.push(`WebGPU: ${String(e && e.message || e).slice(0, 160)}`); }
     } else tried.push('WebGPU: not in this browser');
-    const session = await ort.InferenceSession.create(bytes, { executionProviders: ['wasm'], graphOptimizationLevel: 'all' });
+    const session = await ort.InferenceSession.create(bytes, { executionProviders: ['wasm'], graphOptimizationLevel: 'basic' });
     return { session, engine: 'WebAssembly', tried };
 }
 

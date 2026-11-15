@@ -1,17 +1,17 @@
 {
   "repository": "https://github.com/thecodewarrior2/TinyPhishLLM",
-  "commit": "78706ea4a989b0813104d3640651f294ca78676b",
-  "model": "phish-tiny 0.16.0",
-  "synced": "2026-11-14",
+  "commit": "2f596de48a940d7b44825e69620ca056bad6abbd",
+  "model": "phish-tiny 0.18.0",
+  "synced": "2026-11-15",
   "note": "Pinned by tools/sync-model.js. The model's files (models/phish-tiny/*) are not in this repository: tools/build.js adds them to every package from TinyPhishLLM at this commit (tools/fetch-model.js) and only with these SHA-256. Don't edit them here: change the model in TinyPhishLLM and sync again.",
   "files": {
     "models/phish-tiny/model.bin": {
       "from": "model/phish-tiny/model.bin",
-      "sha256": "952fad2c8a38daf2e0f35758707a3b2d6818f04dc5cbf65eba2cc6e8344af6d6"
+      "sha256": "a044684d3e0b71d396399a33fa2202f6109fb1fe391ae876a4c7e454dbcf8914"
     },
     "models/phish-tiny/model.json": {
       "from": "model/phish-tiny/model.json",
-      "sha256": "dfec0925f409deaa391e5ee56a9b254fcd53f0fc3d96d50134bd6482bf27b13e"
+      "sha256": "b5a31eab88af3b0b056b61fffe3130ed14702a96bab3376f8c97d6808b72de1f"
     },
     "models/phish-tiny/vocab.txt": {
       "from": "model/phish-tiny/vocab.txt",
@@ -19,15 +19,15 @@
     },
     "models/phish-tiny/model.onnx": {
       "from": "model/phish-tiny/model.onnx",
-      "sha256": "7692c4814ceff391d042e127335d3002a9295e5fb05adb78380a053e11beb3c9"
+      "sha256": "0ec6bc0fb625edf98d74de161acbf0af898e0f70b12e04eb48a4043fc067ead8"
     },
     "models/phish-tiny/MODEL_CARD.md": {
       "from": "model/phish-tiny/MODEL_CARD.md",
-      "sha256": "62957010fbd0d4df03069c27f1b72d17a64ceb07e852a7e742cdff5e81b6fcd4"
+      "sha256": "1fd3d1266a80df2ce94671aebf281b6d2e396e373487b159d553c89513337903"
     },
     "tests/fixtures/ai-vectors.json": {
       "from": "model/reference/ai-vectors.json",
-      "sha256": "21a8c0a5e0060a247103ad2639aabb54fb7002174a9277254006bb35f686e5b7"
+      "sha256": "df416b3b381f44a68a2cfdf62f3a08cd98f45fcf68c8a9f42dc884530618d2fd"
     },
     "tests/fixtures/ai-input-format.jsonl": {
       "from": "model/reference/input-format.jsonl",

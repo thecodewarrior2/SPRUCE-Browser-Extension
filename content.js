@@ -2484,13 +2484,22 @@ function rowSenders(row) {
 
 // Colleagues' names (look-alike check), as hashes only: learned from your own organization's senders in
 // the inbox list, so an outside address using one of those names is noticed. Loaded once per page.
-let colleagueHashes = null;
-const colleagueLearnQueue = new Set();
-function loadColleagueHashes() {
+// (5.94.27) Until the list has come back from the background, an opened email judged with it is remembered and
+// judged again when it arrives (a busy background answered after the verdict, and a share naming a learned
+// colleague went without that sign). safeSend counts the page busy until the answer is handled.
+let colleagueHashes = null, colleagueHashesLoaded = false;
+const colleagueLearnQueue = new Set(), colleagueWaiters = new Set();
+function loadColleagueHashes(body) {
     if (!colleagueHashes) {
         colleagueHashes = new Set();
-        safeSend({ action: 'getColleagueNames' }, (list) => { if (Array.isArray(list)) list.forEach(h => colleagueHashes.add(h)); });
+        safeSend({ action: 'getColleagueNames' }, (list) => {
+            colleagueHashesLoaded = true;
+            if (Array.isArray(list)) list.forEach(h => colleagueHashes.add(h));
+            for (const b of colleagueWaiters) if (b.isConnected) scheduleBannerRefresh(b);
+            colleagueWaiters.clear();
+        });
     }
+    if (body && !colleagueHashesLoaded) colleagueWaiters.add(body);
     return colleagueHashes;
 }
 function learnColleagueName(name) {
@@ -3411,13 +3420,13 @@ function updateOpenedVerdict(body) {
                      ...(CHANGES_5_100.hiddenAiInstructions ? aiInstructionSigns(hiddenEmailText(body)) : []),
                      ...serviceWarningSigns(webmailTextAround(body), SITE.name),
                      // [5.99-1] With the subject, the email's text (read only for a colleague's name) and the headers' signs and reply domains.
-                     ...(lastSettings.enableLookalikeCheck !== false && st.base.status !== 'trusted' ? nameAddressSigns(st.name, st.address, ownOrgDomain(), loadColleagueHashes(), st.ownership,
+                     ...(lastSettings.enableLookalikeCheck !== false && st.base.status !== 'trusted' ? nameAddressSigns(st.name, st.address, ownOrgDomain(), loadColleagueHashes(body), st.ownership,
                          { subject: openedSubject(), text: () => body.innerText, signals: hdr ? hdr.an : [], replyTo: hdr ? replyToDomains(hdr.pl) : [] }) : []),
                      // [5.96-2] A colleague's name in Reply-To, Cc or To on an outside address.
-                     ...(lastSettings.enableLookalikeCheck !== false && st.base.status !== 'trusted' && st.info && st.info.fh === addressFingerprint(st.address) ? colleagueLineSigns(st.info.pl, ownOrgDomain(), loadColleagueHashes(), '') : []),
+                     ...(lastSettings.enableLookalikeCheck !== false && st.base.status !== 'trusted' && st.info && st.info.fh === addressFingerprint(st.address) ? colleagueLineSigns(st.info.pl, ownOrgDomain(), loadColleagueHashes(body), '') : []),
                      // [5.102] A share sent through a platform, judged by the person who shared it.
                      ...(CHANGES_5_102.platformShares && lastSettings.enableLookalikeCheck !== false && st.base.status !== 'trusted'
-                         ? platformShareSigns(platformNotificationOf(st.name, st.address, st.auth), { own: ownOrgDomain(), colleagues: loadColleagueHashes(), replyTo: hdr ? replyToDomains(hdr.pl) : [],
+                         ? platformShareSigns(platformNotificationOf(st.name, st.address, st.auth), { own: ownOrgDomain(), colleagues: loadColleagueHashes(body), replyTo: hdr ? replyToDomains(hdr.pl) : [],
                              text: () => body.innerText, subject: openedSubject(), recipients: hdr ? hdr.rc : [], self: accountAddress() }) : []),
                      ...(lastSettings.enableOwnNameCheck !== false && st.base.status !== 'trusted' ? ownNameSigns(st.name, st.address, accountAddress()) : []),
                      ...(lastSettings.enableCallbackScamCheck !== false && st.base.status !== 'trusted' ? [...subjectScamSigns(openedSubject()), ...bodyScamSigns(body.innerText)] : []),

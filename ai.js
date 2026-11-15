@@ -1,8 +1,9 @@
 // ai.js — EXPERIMENT (branch llm_testing): the extension's own small language model reads an opened
 // email and gives its opinion on whether it is phishing, and which sentences made it think so.
 //
-// The model (models/phish-tiny/) is a BERT-tiny classifier (2 layers, 4.4 million parameters, about
-// 4.5 MB with 8-bit weights) that WE train, in TinyPhishLLM, the model's own repository (shared with
+// The model (models/phish-tiny/) is an ELECTRA-small classifier since phish-tiny 0.18.0 (5.94.27: 12 layers,
+// 13.5 million parameters, about 14 MB with 8-bit weights; the BERT-tiny model before it is kept in TinyPhishLLM
+// as phish-tiny-old and not used) that WE train, in TinyPhishLLM, the model's own repository (shared with
 // S.P.R.U.C.E Mail Protection Service); tools/sync-model.js copies it here (models/phish-tiny/SOURCE.json). Since 5.94.25 the
 // opinion comes from ONNX Runtime Web (ai-engine.js: WebGPU, else WebAssembly; in Chrome's offscreen
 // document, in Firefox's and Safari's background page), and this file's own runtime, in plain JavaScript
@@ -268,7 +269,7 @@ class WordPiece {
 }
 
 // ---------------------------------------------------------------------------------------------------
-// BERT forward pass in plain JavaScript. Weights come from model.bin as described by model.json:
+// The forward pass (ELECTRA, or BERT for an older model) in plain JavaScript. Weights come from model.bin as described by model.json:
 // 8-bit tensors (one scale per row) are turned back into floats once, when the model loads.
 // ---------------------------------------------------------------------------------------------------
 function loadTensors(manifest, buffer) {
@@ -332,11 +333,16 @@ class PhishModel {
     // ids: token ids → [logit legitimate, logit phishing]
     forward(ids) {
         const { hidden: H, heads, layers, intermediate: I, eps } = this.cfg;
-        const W = this.W, T = ids.length, dh = H / heads, P = 'bert.';
-        let x = new Float32Array(T * H);
+        // ELECTRA (phish-tiny since 0.18.0, model.json "arch": "electra"): narrower embeddings (config.embedding),
+        // projected to the hidden width, and a two-layer head on the first token. BERT (before): no projection,
+        // the pooler and one layer.
+        const electra = this.meta.arch === 'electra', E = electra ? (this.cfg.embedding || H) : H;
+        const W = this.W, T = ids.length, dh = H / heads, P = electra ? 'electra.' : 'bert.';
+        let x = new Float32Array(T * E);
         const we = W[P + 'embeddings.word_embeddings.weight'], pe = W[P + 'embeddings.position_embeddings.weight'], te = W[P + 'embeddings.token_type_embeddings.weight'];
-        for (let t = 0; t < T; t++) for (let i = 0; i < H; i++) x[t * H + i] = we[ids[t] * H + i] + pe[t * H + i] + te[i];
-        layerNorm(x, T, H, W[P + 'embeddings.LayerNorm.weight'], W[P + 'embeddings.LayerNorm.bias'], eps);
+        for (let t = 0; t < T; t++) for (let i = 0; i < E; i++) x[t * E + i] = we[ids[t] * E + i] + pe[t * E + i] + te[i];
+        layerNorm(x, T, E, W[P + 'embeddings.LayerNorm.weight'], W[P + 'embeddings.LayerNorm.bias'], eps);
+        if (electra) x = linear(x, T, E, W[P + 'embeddings_project.weight'], W[P + 'embeddings_project.bias'], H);
         for (let l = 0; l < layers; l++) {
             const L = `${P}encoder.layer.${l}.`;
             const q = linear(x, T, H, W[L + 'attention.self.query.weight'], W[L + 'attention.self.query.bias'], H);
@@ -368,6 +374,10 @@ class PhishModel {
             const out = linear(mid, T, I, W[L + 'output.dense.weight'], W[L + 'output.dense.bias'], H);
             for (let i = 0; i < out.length; i++) out[i] += att[i];
             x = layerNorm(out, T, H, W[L + 'output.LayerNorm.weight'], W[L + 'output.LayerNorm.bias'], eps);
+        }
+        if (electra) {
+            const mid = linear(x.subarray(0, H), 1, H, W['classifier.dense.weight'], W['classifier.dense.bias'], H).map(gelu);
+            return Array.from(linear(mid, 1, H, W['classifier.out_proj.weight'], W['classifier.out_proj.bias'], 2));
         }
         const pooled = linear(x.subarray(0, H), 1, H, W[P + 'pooler.dense.weight'], W[P + 'pooler.dense.bias'], H).map(Math.tanh);
         return Array.from(linear(pooled, 1, H, W['classifier.weight'], W['classifier.bias'], 2));

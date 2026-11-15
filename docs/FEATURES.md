@@ -223,14 +223,15 @@ the Inspector explains that no tool can read them offline.
 
 - **AI opinion of opened emails** (Settings → AI analysis, on by default): each email is analyzed as it
   opens (**Analyze opened emails automatically**, on by default; off: an **Ask the AI** button instead)
-  by the extension's own small AI model, `phish-tiny` (a BERT-tiny classifier, about 5 MB, trained by this
+  by the extension's own small AI model, `phish-tiny` (an ELECTRA-small classifier since 5.94.27, about 14 MB, trained by this
   project and published in its own repository, TinyPhishLLM, which S.P.R.U.C.E Mail Protection Service uses too;
   the build adds it to the package from there, checked byte for byte; it learned from synthetic emails and from
   phishing, spear-phishing and scam examples that schools and agencies published, paraphrased without
   personal data). It runs inside the extension on the
   computer: since 5.94.25 in ONNX Runtime Web, on the graphics card (WebGPU) when the browser gives one,
   else in WebAssembly, and in the extension's own JavaScript runtime when neither can run (or the setting
-  **AI engine** says so); all three give the same numbers. Nothing is sent anywhere. It says how likely the email is phishing and
+  **AI engine** says so); all three give the same numbers. In WebAssembly an email takes about 0.2 s, and one
+  it warns about, with its explanation, under 1 s; the JavaScript runtime takes 2–5 s. Nothing is sent anywhere. It says how likely the email is phishing and
   which sentences, on their own, read most like phishing. Email addresses keep only their domain and
   numbers are hidden before it sees the text. The automatic run waits (up to 3 seconds) for the email's
   own verdict, so the model sees it; when it finds nothing suspicious it shows one short line with
