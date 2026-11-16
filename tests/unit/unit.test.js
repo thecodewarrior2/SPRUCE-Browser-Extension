@@ -1101,6 +1101,11 @@ test('"call this number" scams: subject strong with the scam wording, body a cau
   assert.ok(S('displayNameBrand')('1Jo.Doe@gmail.com 27jodoe'), 'without the address: as before');
   assert.deepEqual(S('nameAddressSigns')('Google Security', 'jo.doe@gmail.com', '', new Set()).map(x => x.weight), [5], 'a personal account claiming Google still counts');
   assert.deepEqual(S('nameAddressSigns')('security@google.com', 'alerts@account-help.example', '', new Set()).map(x => x.weight), [5], 'another domain\'s address in the name still counts');
+  // (5.94.40) Government agencies send through GovDelivery (Granicus): an agency's name there is no sign; failed, forged.
+  const gov = (n, a, c) => S('nameAddressSigns')(n, a, '', new Set(), null, c).map(x => x.weight);
+  assert.deepEqual(gov('IRS Newswire', 'irs@service.govdelivery.com', { dmarc: 'pass' }), [0]);
+  assert.deepEqual(gov('IRS Newswire', 'irs@service.govdelivery.com', { signals: [{ text: "It failed its sender's verification (DMARC) for service.govdelivery.com." }] }), [5]);
+  assert.deepEqual(gov('PayPal', 'service@service.govdelivery.com', {}), [5], 'a company\'s name there still counts');
 });
 
 test('list storage: compressed, each entry once; old plain copies still read; a failed list keeps its domains', async () => {

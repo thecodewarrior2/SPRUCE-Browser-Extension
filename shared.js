@@ -2057,6 +2057,16 @@ function colleagueNameHash(name) {
 // from an earlier lookup. [5.99-1] context: what else the email says, for the colleague's name
 // (colleagueNameSign): { subject, text (or a function returning it), signals (the header signs),
 // replyTo (domains) }.
+// (5.94.40 / 0.5.70) Government agencies send their bulletins and alerts through GovDelivery (Granicus), which only
+// government organizations can use ("IRS Newswire" <irs@service.govdelivery.com>). An agency's name (a brand whose
+// own domains all end in .gov or .mil) on GovDelivery's address is the agency's own mail, unless its sender check
+// failed (GovDelivery's DMARC policy is "none", so a forgery is still delivered). DNS can't show this (GovDelivery's
+// records name only Granicus), so it is written here once, as the platforms that send for a person are.
+const GOV_MAIL_SERVICES = new Set(['govdelivery.com']);
+function govMailService(brand, reg) {
+    const homes = [...(brand.home || []), ...(brand.domains || [])];
+    return GOV_MAIL_SERVICES.has(reg) && homes.length > 0 && homes.every(d => /\.(gov|mil)$/.test(d));
+}
 function nameAddressSigns(name, address, own, colleagues, ownership, context) {
     const out = [];
     const domain = domainOfAddress(address);
@@ -2065,7 +2075,11 @@ function nameAddressSigns(name, address, own, colleagues, ownership, context) {
     if (claimed && !senderDomainOwnedBy(claimed, domain)) {
         const shown = String(name).trim().slice(0, 60);
         const reg = registrableDomain(domain) || domain;
-        if (ownership && ownership.state === 'owned') out.push({ weight: 0, text: `The sender's name says “${shown}”; ${ownershipNote(ownership, reg, claimed.name)}.` });
+        const dmarcFailed = !!context && (context.dmarc === 'fail' || [].concat(context.signals || []).some(s => s && /^It failed its sender's verification \(DMARC\)/.test(String(s.text || ''))));
+        if (govMailService(claimed, reg)) out.push(dmarcFailed
+            ? { weight: 5, text: `The sender's name says “${shown}”, sent through GovDelivery (${address}), but its sender check (DMARC) failed: it is forged.` }
+            : { weight: 0, text: `The sender's name says “${shown}”; ${address} is GovDelivery's (Granicus), the mail service government agencies use for their bulletins and alerts.` });
+        else if (ownership && ownership.state === 'owned') out.push({ weight: 0, text: `The sender's name says “${shown}”; ${ownershipNote(ownership, reg, claimed.name)}.` });
         else if (ownership && ownership.state === 'likely') out.push({ weight: SIGNAL_CAUTION_SCORE, text: `The sender's name says “${shown}”, and ${address} isn't a known ${claimed.name} address, though ${ownershipNote(ownership, reg, claimed.name)}. Make sure it's really who you expect.` });
         else if (nameOnOtherEnding(claimed, reg)) out.push({ weight: SIGNAL_CAUTION_SCORE, text: `The sender's name says “${shown}”, and ${reg} carries ${claimed.name}'s name under another ending, but it isn't known to be ${claimed.name}'s. Make sure it's really who you expect.` });   // [5.90-4] amber, never moved
         else if (nameSpeaksAboutBrand(name)) out.push({ weight: SIGNAL_CAUTION_SCORE, text: thirdPartyNameText(shown, address, claimed.name) });   // [5.92] amber, never moved
