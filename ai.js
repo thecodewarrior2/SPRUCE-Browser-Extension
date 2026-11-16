@@ -79,8 +79,9 @@ const AI_MAIL_CHECKS = Object.freeze({
 });
 const AI_LAYOUTS = new Set(['images only', 'text after a large blank gap']);
 
-// Format 2: the input format's version (model.json's inputFormat says which one a model reads).
-const AI_INPUT_FORMAT = 2;
+// The input format's version (model.json's inputFormat says which one a model reads).
+// (format 3, phish-tiny 0.21.0) A text of more than 60 sentences keeps its first 40 and its last 20 (splitSentences).
+const AI_INPUT_FORMAT = 3;
 
 // Who the sender claims to be, in words (identity, from the program's sender checks).
 const AI_IDENTITY_OWNER = Object.freeze({ yes: (b) => `the domain is ${b}'s`, no: (b) => `the domain is not ${b}'s`,
@@ -191,13 +192,15 @@ function modelInputParts(facts, format = AI_INPUT_FORMAT) {
     const layout = [...new Set([...(f.layout || []).filter(x => AI_LAYOUTS.has(x)), ...(v2 ? capitalsLayout(stripExternalTag(f.subject), f.bodyText) : [])])];
     if (layout.length) head.push(`layout: ${layout.join('; ')}.`);
     const body = mask(String(f.bodyText || '')).replace(/\s+/g, ' ').trim();
-    return { head: head.join(' '), sentences: splitSentences(body) };
+    return { head: head.join(' '), sentences: splitSentences(body, format) };
 }
 
 // Sentences (and line-like fragments), for the explanation; kept in order.
-function splitSentences(text) {
+function splitSentences(text, format = AI_INPUT_FORMAT) {
     // Only at an end mark followed by a space, so addresses (www.example.com) and numbers stay whole.
-    return String(text || '').split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(s => s.length > 1).slice(0, 60);
+    const all = String(text || '').split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(s => s.length > 1);
+    // Format 3: at most 60, the first 40 and the last 20; format 2 and older: the first 60.
+    return format >= 3 && all.length > 60 ? [...all.slice(0, 40), ...all.slice(-20)] : all.slice(0, 60);
 }
 
 function modelInputText(facts, format = AI_INPUT_FORMAT) {

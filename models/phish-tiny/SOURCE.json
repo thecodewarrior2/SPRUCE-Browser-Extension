@@ -1,7 +1,7 @@
 {
   "repository": "https://github.com/thecodewarrior2/tinyphishllm",
-  "commit": "9e716528e86ea9a747fb25bd569d72608b6bf19e",
-  "model": "phish-tiny 0.20.0",
+  "commit": "7e614821cdfea202571b4621d8b204df107307db",
+  "model": "phish-tiny 0.21.0",
   "synced": "2026-11-16",
   "note": "Pinned by tools/sync-model.js. The model's files (models/phish-tiny/*) are not in this repository: tools/build.js adds them to every package from TinyPhishLLM at this commit (tools/fetch-model.js) and only with these SHA-256. Don't edit them here: change the model in TinyPhishLLM and sync again.",
   "files": {
@@ -11,7 +11,7 @@
     },
     "models/phish-tiny/model.json": {
       "from": "model/phish-tiny/model.json",
-      "sha256": "91efe34839c39d32a394cdfd066a056af8c46cff2d474b6d054ec6dcf2f9646c"
+      "sha256": "04061bee9e9b534102ca4c95afc61cdc4e177d725472eb8a70860744c2f4ff63"
     },
     "models/phish-tiny/vocab.txt": {
       "from": "model/phish-tiny/vocab.txt",
@@ -19,19 +19,19 @@
     },
     "models/phish-tiny/model.onnx": {
       "from": "model/phish-tiny/model.onnx",
-      "sha256": "a63b2dccbc6ae0a248195aabcd18da1456816af49c1b17431e59eaa250025d2d"
+      "sha256": "d148b996be2ee217a09b653f7b633f4b98ac6e1897e3281f312535c786d7b8c3"
     },
     "models/phish-tiny/MODEL_CARD.md": {
       "from": "model/phish-tiny/MODEL_CARD.md",
-      "sha256": "f9927171eceb01716f13f71294d1e8637d6e0dc56616d65c5096bef950a5055f"
+      "sha256": "3a62923d3343de1817b87f3a3a0408a7a746d88a25201cb608c3548f0d0b8ba6"
     },
     "tests/fixtures/ai-vectors.json": {
       "from": "model/reference/ai-vectors.json",
-      "sha256": "14c4a3f09db154b2159ade57fdb51d52ab6778e7a7936f6ff6d5f5018085282e"
+      "sha256": "d8dbc94803a41ca1a1ee5e27a8c60a0bc8c956e01d247f450d4f7d08691369d3"
     },
     "tests/fixtures/ai-input-format.jsonl": {
       "from": "model/reference/input-format.jsonl",
-      "sha256": "128f5740c03061b3dd872e09da0186b65716d0286e9139abe34ddd4fdf03c739"
+      "sha256": "44d7aae454706e8d24073159be3aa659e5d3a1888fda1aa4c264682f6c7ccf18"
     }
   }
 }

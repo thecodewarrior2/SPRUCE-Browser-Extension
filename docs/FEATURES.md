@@ -233,7 +233,8 @@ the Inspector explains that no tool can read them offline.
   personal data, and since 5.94.32 (phish-tiny 0.19.0) also from one school district's own emails, de-identified
   and kept in no repository). A long email is read at its start and its end (since 5.94.33, phish-tiny 0.20.0:
   the first 6,000 and the last 2,000 characters of the text, of which the model reads the first 192 and the last 62
-  word pieces), because a long scam often asks at its end. It runs inside the extension on the
+  word pieces), because a long scam often asks at its end; since 5.94.37 (phish-tiny 0.21.0, input format 3) a text of
+  more than 60 sentences keeps its first 40 and its last 20, so that end is the email's real ending. It runs inside the extension on the
   computer: since 5.94.25 in ONNX Runtime Web, on the graphics card (WebGPU) when the browser gives one,
   else in WebAssembly, and in the extension's own JavaScript runtime when neither can run (or the setting
   **AI engine** says so); all three give the same numbers. In WebAssembly an email takes about 0.2 s, and one

@@ -1,5 +1,18 @@
 # Changelog
 
+## 5.94.37 — EXPERIMENT (branch `llm_testing`): phish-tiny 0.21.0, a long email's last sentences reach the model
+
+Not for release. The AI model is now **phish-tiny 0.21.0** (TinyPhishLLM `7e61482`, `models/phish-tiny/SOURCE.json`):
+0.20.0's weights, reading **input format 3**. The model's input kept only the first 60 sentences of an email's text,
+so in a longer email the end it read was the 60th sentence, not the real ending where a long scam often asks.
+Format 3 keeps a longer text's first 40 and last 20 sentences (`splitSentences(text, format)` and `AI_INPUT_FORMAT`
+in `ai.js`); shorter emails are read exactly as before (the sync checked all 95 reference cases, one of them a
+75-sentence text).
+
+- **What changes:** on held-out emails padded with 70 newsletter sentences before their own text, phishing flagged at
+  90%: 638 of 771 → 696; genuine flagged: 4 of 846 → 4. Every other score is 0.20.0's.
+- Docs: `docs/FEATURES.md`. Tests: `tests/fixtures/ai-input-format.jsonl` and `ai-vectors.json` are 0.21.0's.
+
 ## 5.94.36 — EXPERIMENT (branch `llm_testing`): a personal account's own address in its name is no claim to be Google
 
 Not for release. A parent writing from a Gmail account whose name shows its own address ("1Jo.Doe@gmail.com 27jodoe")
