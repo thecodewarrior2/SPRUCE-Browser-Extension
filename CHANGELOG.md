@@ -1,5 +1,19 @@
 # Changelog
 
+## 5.94.39 — EXPERIMENT (branch `llm_testing`): phish-tiny 0.22.0, far fewer false alarms on a district's own mail
+
+Not for release. The AI model is now **phish-tiny 0.22.0** (TinyPhishLLM `c37a8f0`, `models/phish-tiny/SOURCE.json`;
+was 0.21.0), input format 3 as before (the sync checked all 95 reference cases). It was trained with a third
+de-identified export of one school district's own mail (in no repository).
+
+- **What changes**, against 0.21.0 (held-out sets, never trained on): the district's held-out genuine emails called
+  phishing at 50%: 10 of 45 → 2 (at 90%: 4 → 2); its held-out phishing still all caught; every regression and
+  hand-written case right.
+- **Worse:** one reported scam from a compromised staff account is no longer caught by the AI (99% → 9%); the
+  extension's own checks are unchanged, and the AI never clears a warning. Published phishing missed at 90%: 16 of
+  771 → 18 (within chance).
+- Tests: `tests/fixtures/ai-vectors.json` is 0.22.0's.
+
 ## 5.94.38 — EXPERIMENT (branch `llm_testing`): your own messages
 
 Not for release. The AI read the messages people sent themselves, as they appear in a conversation ("Looks correct.
