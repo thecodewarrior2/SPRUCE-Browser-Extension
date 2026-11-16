@@ -2329,7 +2329,7 @@ function scanSenders() {
         const sender = openedSenderOf(body);
         if (!sender || !sender.address) continue;
         body.dataset.senderChecked = '1';
-        const claimed = displayNameBrand(sender.name);
+        const claimed = displayNameBrand(sender.name, sender.address);
         const needsVerdict = !!claimed || [...body.querySelectorAll('a[href]')].some(a => companyOnlyShortener(a.href));
         const ownership = claimed && !senderDomainOwnedBy(claimed, domainOfAddress(sender.address)) ? brandOwnershipFor(domainOfAddress(sender.address), claimed.name, lastSettings) : Promise.resolve(null);
         const finish = (auth, owned) => guarded('Checking the sender', () => {
@@ -2567,7 +2567,7 @@ function brandOwnershipFor(domain, brandName, S) {
 // The lookups for the senders whose name claims a brand their domain isn't known to be; null elsewhere.
 function ownershipsFor(senders, S) {
     return Promise.all(senders.map(s => {
-        const b = S.enableLookalikeCheck && s.name ? displayNameBrand(s.name) : null;
+        const b = S.enableLookalikeCheck && s.name ? displayNameBrand(s.name, s.address) : null;
         return b && s.domain && !isPersonalMailDomain(s.domain) && !senderDomainOwnedBy(b, s.domain) ? brandOwnershipFor(s.domain, b.name, S) : Promise.resolve(null);
     }));
 }
@@ -3610,7 +3610,7 @@ async function aiFactsFor(body) {
     const hdr = st && st.info && st.info.fh === addressFingerprint(st.address) ? st.info : null;
     let identity = null;
     try {
-        const claimed = sender.name ? displayNameBrand(sender.name) : null;
+        const claimed = sender.name ? displayNameBrand(sender.name, sender.address) : null;
         const domain = domainOfAddress(sender.address || '');
         const ownership = claimed && domain && !isPersonalMailDomain(domain) && !senderDomainOwnedBy(claimed, domain) ? await brandOwnershipFor(domain, claimed.name, lastSettings) : null;
         identity = sender.address ? aiSenderIdentity(sender.name || '', sender.address, { own: ownOrgDomains(), ownership,

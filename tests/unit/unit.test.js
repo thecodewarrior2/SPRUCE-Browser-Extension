@@ -1093,6 +1093,14 @@ test('"call this number" scams: subject strong with the scam wording, body a cau
   assert.deepEqual(S('nameAddressSigns')('OneDrive', 'photos@onedrive.com', '', new Set()), [], 'onedrive.com is Microsoft\'s');
   assert.equal(S('evaluateSender')({ displayName: 'OneDrive', address: 'photos@onedrive.com' }).findings.length, 0);
   assert.deepEqual(S('nameAddressSigns')('OneDrive', 'photos@onedrive-share.example', '', new Set()).map(x => x.weight), [5], 'still red elsewhere');
+  // (5.94.36) A personal account's own address in its name ("1Adammar@gmail.com 27anjanique" from that address) claims
+  // nothing (it named Google before); an address of another domain in the name still claims its brand.
+  assert.deepEqual(S('nameAddressSigns')('1Jo.Doe@gmail.com 27jodoe', '1jo.doe@gmail.com', '', new Set()), [], 'its own address');
+  assert.deepEqual(S('nameAddressSigns')('Jo Doe (gmail.com)', 'jo.doe@gmail.com', '', new Set()), [], 'its own domain');
+  assert.equal(S('displayNameBrand')('1Jo.Doe@gmail.com 27jodoe', '1jo.doe@gmail.com'), null);
+  assert.ok(S('displayNameBrand')('1Jo.Doe@gmail.com 27jodoe'), 'without the address: as before');
+  assert.deepEqual(S('nameAddressSigns')('Google Security', 'jo.doe@gmail.com', '', new Set()).map(x => x.weight), [5], 'a personal account claiming Google still counts');
+  assert.deepEqual(S('nameAddressSigns')('security@google.com', 'alerts@account-help.example', '', new Set()).map(x => x.weight), [5], 'another domain\'s address in the name still counts');
 });
 
 test('list storage: compressed, each entry once; old plain copies still read; a failed list keeps its domains', async () => {

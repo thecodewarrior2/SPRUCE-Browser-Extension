@@ -1,5 +1,18 @@
 # Changelog
 
+## 5.94.36 — EXPERIMENT (branch `llm_testing`): a personal account's own address in its name is no claim to be Google
+
+Not for release. A parent writing from a Gmail account whose name shows its own address ("1Jo.Doe@gmail.com 27jodoe")
+was flagged red: "The sender's name says … but … isn't Google's address", the word "gmail" in the name read as a
+claim to be Google. `displayNameBrand(name, address)` (`shared.js`) now takes a personal mail service's own address,
+or its domain, out of the name first (`nameWithoutOwnAddress`); every caller that knows the address passes it (the
+sender checks in the inbox list and an opened email, the AI's sender identity, `evaluateSender`). "Google Security"
+from a Gmail account still counts, as does another domain's address in the name ("security@google.com" from a
+stranger's domain) and a company domain in its own name ("Amazon.de" from amazon.de, amber as before).
+S.P.R.U.C.E Mail Protection Service does the same (0.5.65).
+
+- Tests: unit (the case, and the ones that still count).
+
 ## 5.94.35 — EXPERIMENT (branch `llm_testing`): your organization's other domains
 
 Not for release. A school district with two domains (staff and students) had mail between people on the second
