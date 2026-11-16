@@ -102,7 +102,8 @@ settings can't be locked). What leaves your device, and to whom, is in the [priv
 - **"Call this number" scams.** A subject with a phone number to call about a purchase you didn't
   make is flagged red and moved to Spam, even when the email really comes from a company's own system
   (attackers type the text into names that Microsoft's, PayPal's or Apple's systems mail out). In an
-  opened email, on every webmail, such text is a caution.
+  opened email, on every webmail, such text is a caution. A very long email is checked at its start and its end
+  (its first 15,000 and last 5,000 characters, since 5.94.34), so a request at the end of a long email is found too.
 - **Gmail's AI summary of a suspicious email.** Gemini's "Summarize this email" and "AI Overview"
   retell what an email asks in calm, ordinary words and don't check who sent it, so an impersonation
   ("Principal Smith requires your personal contact information") comes out harmless ("Benda is

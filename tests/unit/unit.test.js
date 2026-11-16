@@ -1055,6 +1055,13 @@ test('"call this number" scams: subject strong with the scam wording, body a cau
   assert.deepEqual(body('If you did not make this purchase of $499.99, call 1 (555) 010-0123 now to cancel.'), [3]);
   assert.deepEqual(body('Thank you for your order. Questions? Call 1-800-555-0100.'), [], 'a receipt with a support number');
   assert.deepEqual(body('Fraud alert: if you did not make this purchase, call the number on the back of your card.'), [], 'a bank alert without a number');
+  // (5.94.34) A very long email is checked at its start and its end (checkText), not only its first 20,000 characters.
+  const filler = 'The library is open late this week for families. '.repeat(600);
+  assert.deepEqual(body(filler + 'If you did not make this purchase of $499.99, call 1 (555) 010-0123 now to cancel.'), [3], 'a scam at the end of a long email');
+  const ct = S('checkText');
+  assert.equal(ct('short text'), 'short text');
+  const long = 'A'.repeat(15000) + 'B'.repeat(10000) + 'END';
+  assert.ok(ct(long).length === 20000 && ct(long).startsWith('A'.repeat(15000) + '\n') && ct(long).endsWith('BEND'), 'its first 15,000 and last 4,999 characters');
   // A genuine OneDrive email ("OneDrive" <photos@onedrive.com>) was flagged as a brand name on another address.
   assert.deepEqual(S('nameAddressSigns')('OneDrive', 'photos@onedrive.com', '', new Set()), [], 'onedrive.com is Microsoft\'s');
   assert.equal(S('evaluateSender')({ displayName: 'OneDrive', address: 'photos@onedrive.com' }).findings.length, 0);

@@ -2099,7 +2099,7 @@ function colleagueNameSign(name, address, own, colleagues, context) {
     const lower = shown.toLowerCase();
     if (INSIDE_TITLE_RE.test(shown) || orgWords.some(w => lower.includes(w))) why.push(`with a title or your organization's name in the sender's name (“${shown}”)`);
     let text = '';
-    try { text = String((typeof c.text === 'function' ? c.text() : c.text) || '').slice(0, 20000); } catch (e) { text = ''; }
+    try { text = checkText((typeof c.text === 'function' ? c.text() : c.text) || ''); } catch (e) { text = ''; }
     const said = `${c.subject || ''}\n${text}`;
     if (IMPERSONATOR_ASK_RE.test(said) || IMPERSONATOR_CODE_RE.test(said)) why.push('asking for what impersonators ask (a favor, a phone number, payment or payroll details, codes or passwords)');
     return why.length
@@ -2247,7 +2247,7 @@ function platformSharerDomain(pn, replyToDomains, text) {
     if (reply) return reply;
     if (!pn.name) return '';
     let t = '';
-    try { t = String((typeof text === 'function' ? text() : text) || '').slice(0, 20000); } catch (e) { t = ''; }
+    try { t = checkText((typeof text === 'function' ? text() : text) || ''); } catch (e) { t = ''; }
     const esc = pn.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const hit = new RegExp(`${esc}\\s*\\(\\s*[A-Za-z0-9._%+'-]+@([A-Za-z0-9.-]+\\.[A-Za-z]{2,})\\s*\\)`, 'i').exec(t);
     return hit && notPlatform(hit[1].toLowerCase()) ? hit[1].toLowerCase() : '';
@@ -2260,7 +2260,7 @@ function colleagueNamedIn(subject, text, colleagues, skipHashes, owns) {
     if (!colleagues || !colleagues.size) return false;
     const skip = new Set([].concat(skipHashes || []).filter(Boolean));
     let t = '';
-    try { t = String((typeof text === 'function' ? text() : text) || '').slice(0, 20000); } catch (e) { t = ''; }
+    try { t = checkText((typeof text === 'function' ? text() : text) || ''); } catch (e) { t = ''; }
     const quoting = (after) => { const a = /^[\s"']*(?:<|\()?\s*[A-Za-z0-9._%+'-]+@([A-Za-z0-9.-]+)/.exec(after); return (a && owns.some(o => isOwnDomain(a[1].toLowerCase(), o))) || /^[^\n.!?]{0,80}\bwrote:/i.test(after); };
     for (const part of [String(subject || ''), t]) {
         const words = [...part.matchAll(/[\p{L}][\p{L}'’-]*/gu)];
@@ -2505,6 +2505,14 @@ const CALLBACK_CALL_RE = /\b(call|contact|support|help ?line|customer (service|c
 const CALLBACK_URGE_RE = /\b(cancel(l?ation)?|dispute|refund|charged|immediately|urgent(ly)?|not you|wasn'?t you)\b/i;
 const CALLBACK_NOT_YOU_RE = /\b(not (made|authori[sz]ed|placed|requested) by you|did(n'?t| not) (make|authori[sz]e|place|request|order)|unauthori[sz]ed (purchase|charge|transaction|payment))\b/i;
 // Letters from the "mathematical" alphabets (𝐔𝐒𝐃), which look like ordinary ones but don't match a filter's words.
+// (5.94.34) At most CHECK_TEXT characters of an email's text for the checks below: a longer text keeps its first
+// 15,000 and its last 4,999 (with the newline between them, CHECK_TEXT in all), not its first 20,000, so a very long
+// email's ending (where a long scam often asks) is checked too. The service's email reader does the same (0.5.57).
+const CHECK_TEXT = 20000, CHECK_HEAD = 15000;
+function checkText(text) {
+    const s = String(text || '');
+    return s.length <= CHECK_TEXT ? s : `${s.slice(0, CHECK_HEAD)}\n${s.slice(-(CHECK_TEXT - CHECK_HEAD - 1))}`;
+}
 const MATH_LETTERS_RE = /[\u{1D400}-\u{1D7FF}]/gu;
 function subjectScamSigns(subject) {
     const s = String(subject || '').normalize('NFKC'), raw = String(subject || '');
@@ -2519,7 +2527,7 @@ function subjectScamSigns(subject) {
     return out;
 }
 function bodyScamSigns(text) {
-    const raw = String(text || '').slice(0, 20000), t = raw.normalize('NFKC');
+    const raw = checkText(text), t = raw.normalize('NFKC');
     const out = [];
     if (SCAM_PHONE_RE.test(t) && CALLBACK_MONEY_RE.test(t) && CALLBACK_NOT_YOU_RE.test(t)) {
         out.push({ weight: 3, text: 'It asks you to call a phone number if you didn\'t make a purchase: the "call this number" scam. Contact the company through its official website instead.' });
@@ -3378,7 +3386,7 @@ const SAFETY_CLAIMS = [
 // Text addressed to AI tools or filters is different: a mail program never writes it (5, red).
 const VOUCH_CHECKING_RE = /\b(confirm|verify|check|make sure|ensure|whether|if|unsure|not sure|to see|unlike|wonder(ing)?|how to tell)\b[^.!?]{0,60}$/i;
 function selfVouchingSigns(text) {
-    const t = String(text || '').normalize('NFKC').slice(0, 20000);
+    const t = checkText(String(text || '').normalize('NFKC'));
     const out = [];
     const ai = AI_DIRECTED_RE.exec(t);
     if (ai) out.push({ weight: 5, kind: 'ai-directed', text: `It contains text addressed to AI tools or filters (“${ai[0].slice(0, 80)}”), a trick to make automated checks call it safe. Genuine emails don't do this.` });
@@ -3415,7 +3423,7 @@ const HIGH_RISK_REQUESTS = [
 ];
 const HIGH_RISK_DENIAL_RE = /\b(never|not|n't|won't|will not|don't|do not|no one|nobody|without)\b[^.!?\n]{0,50}$/i;
 function highRiskRequestKinds(text) {
-    const t = String(text || '').normalize('NFKC').slice(0, 20000);
+    const t = checkText(String(text || '').normalize('NFKC'));
     const kinds = [];
     for (const r of HIGH_RISK_REQUESTS) {
         const re = new RegExp(r.re.source, 'gi');

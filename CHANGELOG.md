@@ -1,5 +1,17 @@
 # Changelog
 
+## 5.94.34 — EXPERIMENT (branch `llm_testing`): a very long email's ending is checked
+
+Not for release. The checks that read an opened email's text read at most its first 20,000 characters, so a very
+long email's ending (where a long scam often asks) wasn't checked. They now read its first 15,000 and last 4,999
+characters, 20,000 in all with the newline between them (`checkText` in `shared.js`): the "call this number" text
+(`bodyScamSigns`), text that vouches for itself (`selfVouchingSigns`), high-risk requests
+(`highRiskRequestKinds`), the impersonator's asks and the colleague-name checks, and the sender check's body text
+in `content.js`. Emails of 20,000 characters or less are checked as before. The AI model already reads a long
+email's start and end (5.94.33). S.P.R.U.C.E Mail Protection Service's email reader does the same (0.5.57).
+
+- Docs: `docs/FEATURES.md`. Tests: a callback scam at the end of a 29,000-character email is caught; `checkText`.
+
 ## 5.94.33 — EXPERIMENT (branch `llm_testing`): phish-tiny 0.20.0, reads a long email's start and its end
 
 Not for release. The AI model is now **phish-tiny 0.20.0** (TinyPhishLLM `9e71652`, `models/phish-tiny/SOURCE.json`;

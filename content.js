@@ -2332,7 +2332,7 @@ function scanSenders() {
         const ownership = claimed && !senderDomainOwnedBy(claimed, domainOfAddress(sender.address)) ? brandOwnershipFor(domainOfAddress(sender.address), claimed.name, lastSettings) : Promise.resolve(null);
         const finish = (auth, owned) => guarded('Checking the sender', () => {
             if (!body.isConnected) return;
-            const r = evaluateSender({ displayName: sender.name, address: sender.address, auth, bodyText: auth ? body.innerText.slice(0, 20000) : '', ownership: owned });
+            const r = evaluateSender({ displayName: sender.name, address: sender.address, auth, bodyText: auth ? checkText(body.innerText) : '', ownership: owned });
             // A brand's or a colleague's name on another address counts in the email's verdict (as in
             // the inbox list; see updateOpenedVerdict), which the banner shows: not repeated here.
             if (lastSettings.enableLookalikeCheck !== false) r.findings = r.findings.filter(f => !/^The sender's name says/.test(f.message));
