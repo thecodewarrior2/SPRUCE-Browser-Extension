@@ -6,6 +6,9 @@ const { launch, servePage, until, optionsReady, check, done } = require('./harne
 (async () => {
   const { ctx, sw } = await launch();
   const ID = new URL(sw.url()).host;
+  // (5.94.35) As the other suites: no online sender checks and no moving to Spam, so the made-up sender
+  // (evil-scam.test, a domain that doesn't exist) isn't moved away while the AI answers, whatever the network allows.
+  await sw.evaluate(() => chrome.storage.local.set({ enableDnsThreatCheck: false, enableAutoSpam: false }));
   await servePage(ctx, 'fake-gmail-thread.html');
   const errors = [];
 
