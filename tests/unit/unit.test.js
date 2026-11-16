@@ -381,6 +381,33 @@ test('backup includes and restores the phishing-sender list', () => {
   assert.ok(!('customTrustedSenders' in old.updates), 'an older backup leaves the list alone');
 });
 
+// (5.94.35) An organization with two domains (staff maple-schools.example, students mapleschools.example, which looks
+// like the first): mail from the second is the organization's own, never "outside", a colleague's name on an outside
+// address, or an imitation of the first. A look-alike of both still is. Made-up names and domains.
+test('the organization\'s other domains: never outside, never an imitation; a look-alike still is; backups keep the list', () => {
+  const ORG = 'maple-schools.example', SECOND = 'mapleschools.example';
+  const forOf = (a) => S('orgDomainFor')(a, ORG, [SECOND]);
+  assert.equal(forOf(`misty.hollins@${SECOND}`), SECOND);
+  assert.equal(forOf(`pat@${ORG}`), ORG);
+  assert.equal(forOf('misty@maple-schools-k12.example'), ORG, 'any other domain: the account\'s');
+  assert.equal(S('orgDomainFor')(`a@${SECOND}`, ORG, []), ORG, 'without the setting: as before');
+  const colleagues = new Set([S('colleagueNameHash')('Misty Hollins')]);
+  const signs = (address) => [...S('nameAddressSigns')('Misty Hollins', address, forOf(address), colleagues, null),
+                               ...S('senderContextSigns')(address, forOf(address), false)].filter(x => x.weight > 0);
+  assert.deepEqual(signs(`misty.hollins@${SECOND}`), [], 'the second domain: nothing');
+  const fake = signs('misty@maple-schools-k12.example');
+  assert.ok(fake.some(x => /imitating your organization's domain/.test(x.text)) && fake.some(x => /outside your organization/.test(x.text)), JSON.stringify(fake));
+  // Before 5.94.35 (only the account's domain): the second domain was outside and an imitation.
+  const before = [...S('nameAddressSigns')('Misty Hollins', `misty.hollins@${SECOND}`, ORG, colleagues, null), ...S('senderContextSigns')(`misty.hollins@${SECOND}`, ORG, false)].filter(x => x.weight > 0);
+  assert.ok(before.length >= 2, 'the case this fixes');
+  // The AI's input says "your organization" for either domain.
+  assert.match(JSON.stringify(S('aiSenderIdentity')('Misty Hollins', `misty.hollins@${SECOND}`, { own: [ORG, SECOND], colleagues })), /^(null|\{\})$|^(?![\s\S]*colleague)/);
+  // Backups: kept, restored, and an older backup leaves the list alone.
+  assert.deepEqual(S('buildBackup')({ customOrgDomains: [SECOND, 'Students.Maple.EXAMPLE'] }, 'x').customOrgDomains, [SECOND, 'students.maple.example']);
+  assert.deepEqual(S('planImport')({ exportFormat: 3, customOrgDomains: [SECOND], settings: {} }, { customOrgDomains: ['old.example'] }, 'merge').updates.customOrgDomains, ['old.example', SECOND]);
+  assert.ok(!('customOrgDomains' in S('planImport')({ exportFormat: 3, settings: {} }, {}, 'overwrite').updates), 'an older backup');
+});
+
 test('every new setting is on by default and has a policy key in schema.json', () => {
   const hasSchema = fs.existsSync(path.join(EXT, 'schema.json'));
   const schema = hasSchema ? JSON.parse(fs.readFileSync(path.join(EXT, 'schema.json'), 'utf8')) : null;
@@ -2442,7 +2469,7 @@ test('[5.101-1] opened emails: Gmail\'s picture box is known; only company sende
   assert.equal(R('WEBMAIL_SITES.find(w => w.id === "gmail").mail.message.avatar.slot'), '.aCi');
   assert.equal(R('CHANGES_5_101.openedAvatars'), true);
   const content = fs.readFileSync(path.join(EXT, 'content.js'), 'utf8');
-  assert.match(content, /if \(!d \|\| \(org && \(d === org \|\| d\.endsWith\('\.' \+ org\)\)\) \|\| isPersonalMailDomain\(reg\)\) return '';/, 'colleagues and personal accounts keep Gmail\'s picture');
+  assert.match(content, /if \(!d \|\| isOwnOrgDomain\(d\) \|\| isPersonalMailDomain\(reg\)\) return '';/, 'colleagues (any of the organization\'s domains, 5.94.35) and personal accounts keep Gmail\'s picture');
   assert.match(content, /if \(!r \|\| !slot\.isConnected \|\| r\.status === 'flagged' \|\| r\.status === 'caution' \|\| messageAvatarSlots\.has\(slot\)\) return;/, 'collapsed messages: the sender\'s own verdict decides, as in the list');
   assert.match(fs.readFileSync(path.join(EXT, 'content.css'), 'utf8'), /\[data-status="flagged"\], \[data-status="caution"\]\)\) \.unshortener-msg-avatar \{\s*display: none;/, 'none for a flagged or cautioned email');
   const Off = loadShared(['openedAvatars']);

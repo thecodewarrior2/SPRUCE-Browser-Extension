@@ -1,5 +1,26 @@
 # Changelog
 
+## 5.94.35 — EXPERIMENT (branch `llm_testing`): your organization's other domains
+
+Not for release. A school district with two domains (staff and students) had mail between people on the second
+domain flagged in the staff's Gmail and in S.P.R.U.C.E Mail Protection Service (fixed there in 0.5.59): the
+extension took only the reader's own account domain as the organization's, so a student's address was "from
+outside your organization", a colleague's name on an outside address and, the second domain looking like the
+first, "an address imitating your organization's domain".
+
+- **New: Settings → Senders → Your organization's other domains**, and the administrator policy
+  **`managedOrgDomains`** (merged; users can't remove the organization's entries; at most 50). In backups
+  (`customOrgDomains`; an older backup leaves the list alone) and in the policy the Options page copies.
+- **The checks:** `orgDomainFor` (`shared.js`) gives the checks that take one domain the organization's domain an
+  address is in (`ownOrgDomain(address)` in `content.js`): outside or not (`senderContextSigns`), a colleague's name
+  on an outside address (`nameAddressSigns`), and in the background the sender check (judged as the organization's
+  own, never as a whole domain; no look-alike verdict against its own domains). The checks that take a list (reply
+  and copied lines, platform shares, the AI's sender identity and its "your organization") get all of them; company
+  pictures, colleague photos and the colleague names learned for the check count every organization domain.
+  A look-alike of any of them is still flagged. Without the setting, everything works as before.
+- Docs: Help (Senders), `docs/FEATURES.md`, `docs/ADMIN-GUIDE.md`, `schema.json`, both policy examples. Tests: unit
+  (`orgDomainFor`, the signs with and without the setting, backups).
+
 ## 5.94.34 — EXPERIMENT (branch `llm_testing`): a very long email's ending is checked
 
 Not for release. The checks that read an opened email's text read at most its first 20,000 characters, so a very

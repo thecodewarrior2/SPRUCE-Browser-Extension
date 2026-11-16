@@ -225,6 +225,11 @@
       "partner.example"
     ]
   },
+  "managedOrgDomains": {
+    "Value": [
+      "students.maple-schools.example"
+    ]
+  },
   "managedHidePopupSettingsButton": {
     "Value": false
   },

@@ -83,7 +83,9 @@ settings can't be locked). What leaves your device, and to whom, is in the [priv
   (a domain that doesn't exist is flagged too, unless it's a subdomain of a company domain that does). Each email is also checked for signs of forgery: malformed
   addresses, forged delivery headers, padded names and subjects, unnamed or dangerous attachments, and
   links flagged as dangerous, so an email full of red links never shows a green sender. Trusted senders
-  (yours and your organization's) are never flagged. Emails from a **flagged** sender (never unverified, unknown or clean ones) are moved
+  (yours and your organization's) are never flagged. Your organization's other domains (a student domain next to
+  the staff domain; Settings → Senders, or `managedOrgDomains`, since 5.94.35) count as its own: never "from outside" or
+  an imitation of your domain. Emails from a **flagged** sender (never unverified, unknown or clean ones) are moved
   to Spam with Gmail's own Report spam, from the inbox and from search results (never a search in Spam, Trash or Sent), never while you're typing or have emails
   selected, and never your organization's phishing-training emails. Moving waits 10 seconds after
   your last click or key (so it never replaces the Undo of something you just did) and 2 seconds

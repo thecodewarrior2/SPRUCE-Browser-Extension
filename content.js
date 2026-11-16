@@ -425,6 +425,7 @@ function buildSvg([size, attrs, shapes]) {
 }
 
 let lastSettings = {};
+let lastOrgDomains = [];   // (5.94.35) the organization's other domains (Settings → Senders, managedOrgDomains)
 let lastPolicy = {};    // administrator-only policies (phishing simulation rules…)   // settings used for the most recent scan (needed when a link is revealed later)
 
 function findIcon(link) {
@@ -858,6 +859,7 @@ function unshortenLinks() {
         }
         lastSettings = cfg.values;
         lastPolicy = cfg.policy || {};
+        lastOrgDomains = Array.isArray(cfg.orgDomains) ? cfg.orgDomains : [];
         if (SITE.settingKey && !cfg.values[SITE.settingKey]) return;     // support for this webmail switched off
         guarded('Checking attachments', scanAttachments);
         guarded('Looking for drawn QR codes', scanDrawnQr);
@@ -2431,13 +2433,19 @@ function firstTimeSender(address) {
     return firstTimeAsks.get(k);
 }
 function senderContextFor(address, firstTime) {
-    return lastSettings.weighSenderHistory ? senderContextSigns(address, ownOrgDomain(), firstTime) : [];
+    return lastSettings.weighSenderHistory ? senderContextSigns(address, ownOrgDomain(address), firstTime) : [];
 }
 
-function ownOrgDomain() {
+// The account's own domain; with an address (or a domain), the organization's domain it is in, when it is in one of
+// the organization's other domains (5.94.35, orgDomainFor), else the account's.
+function ownOrgDomain(addressOrDomain) {
     const d = domainOfAddress(accountAddress());
-    return d && !isPersonalMailDomain(d) ? d : '';
+    const own = d && !isPersonalMailDomain(d) ? d : '';
+    return addressOrDomain ? orgDomainFor(addressOrDomain, own, lastOrgDomains) : own;
 }
+// The account's domain and the organization's other domains.
+function ownOrgDomains() { return [...new Set([ownOrgDomain(), ...lastOrgDomains].filter(Boolean))]; }
+function isOwnOrgDomain(domain) { const d = String(domain || '').toLowerCase(); return !!d && ownOrgDomains().some(o => isOwnDomain(d, o)); }
 
 // A sender as the webmail shows it: { raw, address, domain, name }. Broken addresses (encoded parts,
 // more than 64 characters before the @…) are kept: they are themselves a sign of forgery.
@@ -2786,8 +2794,8 @@ function messageAvatarsOn(S) {
 }
 // The site whose picture a sender gets, or '' for the organization's own senders and personal accounts.
 function companyPictureSite(domain) {
-    const org = ownOrgDomain(), d = String(domain || '').toLowerCase(), reg = registrableDomain(d) || d;
-    if (!d || (org && (d === org || d.endsWith('.' + org))) || isPersonalMailDomain(reg)) return '';
+    const d = String(domain || '').toLowerCase(), reg = registrableDomain(d) || d;
+    if (!d || isOwnOrgDomain(d) || isPersonalMailDomain(reg)) return '';
     const site = siteOfSender(d);
     return SENDER_DOMAIN_RE.test(site) ? site : '';
 }
@@ -3043,7 +3051,7 @@ function harvestPagePhotos(S) {
         const address = (img.getAttribute(A.addressAttr) || '').trim().toLowerCase();
         if (!/^[^@\s]+@[^@\s]+$/.test(address)) continue;
         const domain = domainOfAddress(address);
-        if (!domain || !(domain === org || domain.endsWith('.' + org))) continue;
+        if (!domain || !isOwnOrgDomain(domain)) continue;
         const url = img.getAttribute('src') || '';
         if (!A.photoHost.test(url) || A.placeholder.test(url) || img.closest(SITE.body)) continue;
         const key = address + '|' + url;
@@ -3061,7 +3069,7 @@ function harvestAvatar(body, who, auth) {
     const A = MAIL_CAN.avatars ? MAIL.message.avatar : null;
     if (!A || !lastSettings.enableSenderAvatars || !who || !who.address) return;
     const org = ownOrgDomain();
-    const own = !!org && (who.domain === org || who.domain.endsWith('.' + org));
+    const own = !!org && isOwnOrgDomain(who.domain);
     if (!own && isPersonalMailDomain(registrableDomain(who.domain) || who.domain)) {
         logAvatarSkip(who.address, 'it\'s a personal email service; its site icon is shown.');
         return;
@@ -3199,7 +3207,7 @@ function scanSenderRows(S) {
         const msgId = rowLastMessageId(row);
         const unread = rowIsUnread(row);
         noteReadState(thread, unread);
-        if (S.enableLookalikeCheck) for (const s of senders) if (s.name && isOwnDomain(s.domain, ownOrgDomain())) learnColleagueName(s.name);
+        if (S.enableLookalikeCheck) for (const s of senders) if (s.name && isOwnOrgDomain(s.domain)) learnColleagueName(s.name);
         const key = [thread, msgId, unread ? 'u' : 'r', ...senders.map(s => s.raw), S.enableSenderIdentity ? 'id' : '', S.enableSenderCountry ? 'cc' : '', S.enableSenderAvatars ? 'av' : '', pictures, spamFolder ? 'spam' : ''].join('|');
         // Unchanged since the last scan (and Gmail hasn't redrawn the row without our label).
         if (row.dataset.unshortenerSender === key && (!S.enableSenderIdentity || (row.querySelector('.unshortener-sender-chip') && !avatarLost(row)))) continue;
@@ -3231,13 +3239,12 @@ function scanSenderRows(S) {
         const show = (results, info, ours, owns, firsts) => guarded('Showing who sent an email', () => {
             if (!row.isConnected || row.dataset.unshortenerSender !== key) return;
             // Signs in this email: the names shown, and the headers when they belong to the last sender.
-            const org = ownOrgDomain();
             const finals = results.map((r, k) => {
                 const signals = displayNameAnomalies(senders[k].name);
                 // The name doesn't belong with the address (a brand's name, or a colleague's, outside).
                 // [5.99-1] With what the row shows (the subject) and the headers' signs and reply domains, when read.
                 const hdr = info && info.fh === addressFingerprint(senders[k].address) ? info : null;
-                if (S.enableLookalikeCheck && r && r.status !== 'trusted') signals.push(...nameAddressSigns(senders[k].name, senders[k].address, org, loadColleagueHashes(), owns && owns[k],
+                if (S.enableLookalikeCheck && r && r.status !== 'trusted') signals.push(...nameAddressSigns(senders[k].name, senders[k].address, ownOrgDomain(senders[k].address), loadColleagueHashes(), owns && owns[k],
                     { subject: subjectText, signals: hdr ? hdr.an : [], replyTo: hdr ? replyToDomains(hdr.pl) : [] }));
                 // The name is the user's own address or mailbox name, on someone else's address.
                 if (S.enableOwnNameCheck && r && r.status !== 'trusted') signals.push(...ownNameSigns(senders[k].name, senders[k].address, accountAddress()));
@@ -3246,7 +3253,7 @@ function scanSenderRows(S) {
                 if (info && info.fh === addressFingerprint(senders[k].address)) {
                     signals.push(...info.an);
                     // [5.96-2] A colleague's name in Reply-To, Cc or To on an outside address.
-                    if (S.enableLookalikeCheck && r && r.status !== 'trusted') signals.push(...colleagueLineSigns(info.pl, org, loadColleagueHashes(), ''));
+                    if (S.enableLookalikeCheck && r && r.status !== 'trusted') signals.push(...colleagueLineSigns(info.pl, ownOrgDomains(), loadColleagueHashes(), ''));
                 }
                 // Outside the user's organization, and a first email from the address (llm_testing).
                 if (r && r.status !== 'trusted') signals.push(...senderContextFor(senders[k].address, firsts && firsts[k]));
@@ -3420,13 +3427,13 @@ function updateOpenedVerdict(body) {
                      ...(CHANGES_5_100.hiddenAiInstructions ? aiInstructionSigns(hiddenEmailText(body)) : []),
                      ...serviceWarningSigns(webmailTextAround(body), SITE.name),
                      // [5.99-1] With the subject, the email's text (read only for a colleague's name) and the headers' signs and reply domains.
-                     ...(lastSettings.enableLookalikeCheck !== false && st.base.status !== 'trusted' ? nameAddressSigns(st.name, st.address, ownOrgDomain(), loadColleagueHashes(body), st.ownership,
+                     ...(lastSettings.enableLookalikeCheck !== false && st.base.status !== 'trusted' ? nameAddressSigns(st.name, st.address, ownOrgDomain(st.address), loadColleagueHashes(body), st.ownership,
                          { subject: openedSubject(), text: () => body.innerText, signals: hdr ? hdr.an : [], replyTo: hdr ? replyToDomains(hdr.pl) : [] }) : []),
                      // [5.96-2] A colleague's name in Reply-To, Cc or To on an outside address.
-                     ...(lastSettings.enableLookalikeCheck !== false && st.base.status !== 'trusted' && st.info && st.info.fh === addressFingerprint(st.address) ? colleagueLineSigns(st.info.pl, ownOrgDomain(), loadColleagueHashes(body), '') : []),
+                     ...(lastSettings.enableLookalikeCheck !== false && st.base.status !== 'trusted' && st.info && st.info.fh === addressFingerprint(st.address) ? colleagueLineSigns(st.info.pl, ownOrgDomains(), loadColleagueHashes(body), '') : []),
                      // [5.102] A share sent through a platform, judged by the person who shared it.
                      ...(CHANGES_5_102.platformShares && lastSettings.enableLookalikeCheck !== false && st.base.status !== 'trusted'
-                         ? platformShareSigns(platformNotificationOf(st.name, st.address, st.auth), { own: ownOrgDomain(), colleagues: loadColleagueHashes(body), replyTo: hdr ? replyToDomains(hdr.pl) : [],
+                         ? platformShareSigns(platformNotificationOf(st.name, st.address, st.auth), { own: ownOrgDomains(), colleagues: loadColleagueHashes(body), replyTo: hdr ? replyToDomains(hdr.pl) : [],
                              text: () => body.innerText, subject: openedSubject(), recipients: hdr ? hdr.rc : [], self: accountAddress() }) : []),
                      ...(lastSettings.enableOwnNameCheck !== false && st.base.status !== 'trusted' ? ownNameSigns(st.name, st.address, accountAddress()) : []),
                      ...(lastSettings.enableCallbackScamCheck !== false && st.base.status !== 'trusted' ? [...subjectScamSigns(openedSubject()), ...bodyScamSigns(body.innerText)] : []),
@@ -3606,7 +3613,7 @@ async function aiFactsFor(body) {
         const claimed = sender.name ? displayNameBrand(sender.name) : null;
         const domain = domainOfAddress(sender.address || '');
         const ownership = claimed && domain && !isPersonalMailDomain(domain) && !senderDomainOwnedBy(claimed, domain) ? await brandOwnershipFor(domain, claimed.name, lastSettings) : null;
-        identity = sender.address ? aiSenderIdentity(sender.name || '', sender.address, { own: ownOrgDomain() ? [ownOrgDomain()] : [], ownership,
+        identity = sender.address ? aiSenderIdentity(sender.name || '', sender.address, { own: ownOrgDomains(), ownership,
             colleagues: lastSettings.enableLookalikeCheck !== false ? loadColleagueHashes() : null }) : null;
     } catch (e) { identity = null; }
     const shown = emailLayout(body);
@@ -3623,7 +3630,7 @@ async function aiFactsFor(body) {
     }
     return {
         subject: openedSubject(), senderName: sender.name || '', senderAddress: sender.address || '',
-        org: ownOrgDomain() && sender.address ? (isOwnDomain(String(domainOfAddress(sender.address) || '').toLowerCase(), ownOrgDomain()) ? 'inside' : 'outside') : undefined,
+        org: ownOrgDomain() && sender.address ? (isOwnOrgDomain(domainOfAddress(sender.address)) ? 'inside' : 'outside') : undefined,
         auth: auth ? { dmarc: auth.dmarc, spf: auth.spf, dkim: auth.dkim, headerFrom: auth.headerFrom } : null,
         links, attachments: aiAttachmentFacts(messageAttachments(body)),
         identity, replyTo: hdr ? aiReplyToDomains(replyToDomains(hdr.pl), sender.address || '') : [],
@@ -4371,6 +4378,7 @@ async function runSpamMoves() {
         if (!cfg || !cfg.values) { wait = 'settings'; return; }
         lastSettings = cfg.values;
         lastPolicy = cfg.policy || {};
+        lastOrgDomains = Array.isArray(cfg.orgDomains) ? cfg.orgDomains : [];
         // Rows the user asked to move now (the row guard's "Move now") go first, on their own: their
         // move is the user's own request, so the quiet period doesn't apply to them — but it still
         // protects every other row, which waits for the next pass.
@@ -4550,6 +4558,7 @@ function scanSenderIdentity() {
         if (!cfg || !cfg.values) return;
         lastSettings = cfg.values;
         lastPolicy = cfg.policy || {};
+        lastOrgDomains = Array.isArray(cfg.orgDomains) ? cfg.orgDomains : [];
         lastLocked = cfg.locked || {};
         // [5.100-1] The setting (or its policy) may have changed: covered or shown again.
         if (suspiciousBodies.size || document.querySelector('[data-unshortener-ai-covered]')) scheduleAiSummaryCover();

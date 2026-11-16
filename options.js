@@ -303,10 +303,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const cfg = await loadEffectiveSettings();
         const policy = {};
         SETTING_DEFS.forEach(d => { policy[d.managedKey] = { Value: cfg.values[d.key] }; });
-        const local = await new Promise(r => chrome.storage.local.get({ customAllowlist: [], customBlocklist: [], customTrustedSenders: [] }, r));
+        const local = await new Promise(r => chrome.storage.local.get({ customAllowlist: [], customBlocklist: [], customTrustedSenders: [], customOrgDomains: [] }, r));
         policy.managedAllowlist = { Value: normalizeDomainList(local.customAllowlist) };
         policy.managedBlocklist = { Value: normalizeDomainList(local.customBlocklist) };
         policy.managedTrustedSenders = { Value: normalizeSenderList(local.customTrustedSenders) };
+        policy.managedOrgDomains = { Value: normalizeDomainList(local.customOrgDomains) };
         const out = document.getElementById('copyPolicyResult');
         try {
             await navigator.clipboard.writeText(JSON.stringify(policy, null, 2));
@@ -327,10 +328,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const cfg = await loadEffectiveSettings();
         const settings = {};
         SETTING_DEFS.forEach(d => { settings[d.managedKey] = cfg.values[d.key]; });
-        const local = await new Promise(r => chrome.storage.local.get({ customAllowlist: [], customBlocklist: [], customTrustedSenders: [] }, r));
+        const local = await new Promise(r => chrome.storage.local.get({ customAllowlist: [], customBlocklist: [], customTrustedSenders: [], customOrgDomains: [] }, r));
         settings.managedAllowlist = normalizeDomainList(local.customAllowlist);
         settings.managedBlocklist = normalizeDomainList(local.customBlocklist);
         settings.managedTrustedSenders = normalizeSenderList(local.customTrustedSenders);
+        settings.managedOrgDomains = normalizeDomainList(local.customOrgDomains);
         return settings;
     }
 
@@ -803,13 +805,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function renderPolicies() {
-        chrome.storage.local.get({ customBlocklist: [], customAllowlist: [], customTrustedSenders: [] }, (localResult) => {
-            const renderSenders = (managedSenders) => {
+        chrome.storage.local.get({ customBlocklist: [], customAllowlist: [], customTrustedSenders: [], customOrgDomains: [] }, (localResult) => {
+            const renderSenders = (managedSenders, managedOrg = []) => {
                 const mine = normalizeSenderList(localResult.customTrustedSenders);
                 renderPolicyTable('trustedSenderTable', [...new Set([...mine, ...managedSenders])], managedSenders, 'customTrustedSenders', 'No trusted senders added.');
+                const org = normalizeDomainList(localResult.customOrgDomains);
+                renderPolicyTable('orgDomainTable', [...new Set([...org, ...managedOrg])], managedOrg, 'customOrgDomains', 'None added: only your own account\'s domain is your organization\'s.');
             };
             if (chrome.storage.managed) {
-                chrome.storage.managed.get(['managedAllowlist', 'managedBlocklist', 'managedTrustedSenders'], (managedResult) => {
+                chrome.storage.managed.get(['managedAllowlist', 'managedBlocklist', 'managedTrustedSenders', 'managedOrgDomains'], (managedResult) => {
                     if (chrome.runtime.lastError || !managedResult) managedResult = {};
                     
                     if (managedResult.managedAllowlist || managedResult.managedBlocklist) {
@@ -821,7 +825,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     
                     renderPolicyTable('allowTable', combinedAllow, managedResult.managedAllowlist || [], 'customAllowlist');
                     renderPolicyTable('blockTable', combinedBlock, managedResult.managedBlocklist || [], 'customBlocklist');
-                    renderSenders(normalizeSenderList(managedResult.managedTrustedSenders));
+                    renderSenders(normalizeSenderList(managedResult.managedTrustedSenders), normalizeDomainList(managedResult.managedOrgDomains));
                 });
             } else {
                 renderPolicyTable('allowTable', localResult.customAllowlist || [], [], 'customAllowlist');
@@ -898,6 +902,9 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('addBlockBtn').addEventListener('click', () => {
         addDomainToPolicy('domainBlockInput', 'customBlocklist');
     });
+
+    // (5.94.35) The organization's other domains: a domain (an address or a link is reduced to its domain).
+    document.getElementById('addOrgDomainBtn').addEventListener('click', () => addDomainToPolicy('orgDomainInput', 'customOrgDomains'));
 
     // Trusted senders: an address or a whole domain, normalized ("@example.com" → "example.com").
     document.getElementById('addTrustedSenderBtn').addEventListener('click', () => {
@@ -1364,7 +1371,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function showImportPreview() {
         if (!pendingImportData) return;
         const mode = document.querySelector('input[name="importMode"]:checked').value;
-        chrome.storage.local.get({ customAllowlist: [], customBlocklist: [], customTrustedSenders: [] }, (current) => {
+        chrome.storage.local.get({ customAllowlist: [], customBlocklist: [], customTrustedSenders: [], customOrgDomains: [] }, (current) => {
             let plan;
             try { plan = planImport(pendingImportData, current, mode); }
             catch (err) {
@@ -1423,7 +1430,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const mode = document.querySelector('input[name="importMode"]:checked').value;
         const data = pendingImportData;
 
-        chrome.storage.local.get({ customAllowlist: [], customBlocklist: [], customTrustedSenders: [] }, (current) => {
+        chrome.storage.local.get({ customAllowlist: [], customBlocklist: [], customTrustedSenders: [], customOrgDomains: [] }, (current) => {
             let plan;
             try { plan = planImport(data, current, mode); }
             catch (err) { alert(err.message); return; }

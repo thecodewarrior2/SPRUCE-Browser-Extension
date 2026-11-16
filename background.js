@@ -2625,7 +2625,9 @@ async function checkSenders(list, ownDomain, account = '') {
         while (next < items.length) {
             const i = next++;
             const parsed = parseSenderAddress(items[i].address);
-            const key = `${parsed ? parsed.address : String(items[i].address || '').trim()}|${parsed && parsed.malformed.length ? 'malformed' : ''}|${normalizeDomain(ownDomain || '')}|${stamp}`;
+            // (5.94.35) A sender in one of the organization's other domains is judged as the organization's own.
+            const own = orgDomainFor(parsed ? parsed.domain : '', normalizeDomain(ownDomain || ''), cfg.orgDomains);
+            const key = `${parsed ? parsed.address : String(items[i].address || '').trim()}|${parsed && parsed.malformed.length ? 'malformed' : ''}|${own}|${stamp}`;
             try {
                 const hit = await senderResultCache.get(key);
                 if (hit && !hit.retry) {
@@ -2634,7 +2636,7 @@ async function checkSenders(list, ownDomain, account = '') {
                     if (account && !(Array.isArray(hit.seenIn) && hit.seenIn[0] === account)) senderResultCache.set(key, Object.assign({}, hit, { seenIn: withSeenIn(hit, account) }));
                     continue;
                 }
-                const r = await checkSender(items[i], ownDomain, cfg);
+                const r = await checkSender(items[i], own, cfg);
                 results[i] = r;
                 // Every sender is kept for Logging → Senders; a "not verified" one is checked again next time.
                 senderResultCache.set(key, { r, retry: r.status === 'unverified', seenIn: withSeenIn(hit || {}, account) });
@@ -3961,7 +3963,7 @@ const MESSAGE_HANDLERS = {
     getSettings(request, sender, sendResponse) {
         // Only what the Gmail tab uses (the synced shortener list can hold thousands of domains and is
         // needed only here in the background).
-        getConfig().then(cfg => sendResponse({ values: cfg.values, locked: cfg.locked, allowlist: cfg.allowlist, blocklist: cfg.blocklist, policy: cfg.policy })).catch((e) => { logError(`Settings could not be loaded: ${errorText(e)}`, 'Background'); sendResponse(null); });
+        getConfig().then(cfg => sendResponse({ values: cfg.values, locked: cfg.locked, allowlist: cfg.allowlist, blocklist: cfg.blocklist, policy: cfg.policy, orgDomains: cfg.orgDomains || [] })).catch((e) => { logError(`Settings could not be loaded: ${errorText(e)}`, 'Background'); sendResponse(null); });
         return true;
     },
     // EXPERIMENT (llm_testing): has this sender (hashed) been seen before?

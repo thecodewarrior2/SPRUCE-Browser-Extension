@@ -82,6 +82,9 @@
             "office@partner.example",
             "partner.example"
           ],
+          "managedOrgDomains": [
+            "students.maple-schools.example"
+          ],
           "managedHidePopupSettingsButton": false,
           "managedHideRecentActivity": false,
           "managedHideDonateButton": false,

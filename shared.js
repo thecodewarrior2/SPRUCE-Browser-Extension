@@ -266,6 +266,7 @@ async function loadEffectiveSettings() {
     defaults.customBlocklist = [];
     defaults.remoteShorteners = [];
     defaults.customTrustedSenders = [];
+    defaults.customOrgDomains = [];
 
     // Two independent storage areas: read side by side (this runs on every worker start).
     const [local, managed] = await Promise.all([storageGet('local', defaults), storageGet('managed', null)]);
@@ -287,6 +288,7 @@ async function loadEffectiveSettings() {
     const managedAllowlist = normalizeDomainList(managed.managedAllowlist);
     const managedBlocklist = normalizeDomainList(managed.managedBlocklist);
     const managedTrustedSenders = normalizeSenderList(managed.managedTrustedSenders);
+    const managedOrgDomains = normalizeDomainList(managed.managedOrgDomains).slice(0, 50);
     return {
         values,
         locked,
@@ -298,6 +300,10 @@ async function loadEffectiveSettings() {
         // Trusted senders (the allow list) by the user and the organization. There is no sender block
         // list: Gmail's own Report spam covers that.
         trustedSenders: [...new Set([...normalizeSenderList(local.customTrustedSenders), ...managedTrustedSenders])],
+        // (5.94.35) The organization's other domains (a district with a staff and a student domain): mail from any of
+        // them counts as your organization's, as mail from your own account's domain does. By the user and by policy.
+        managedOrgDomains,
+        orgDomains: [...new Set([...normalizeDomainList(local.customOrgDomains).slice(0, 50), ...managedOrgDomains])],
         remoteShorteners: Array.isArray(local.remoteShorteners) ? local.remoteShorteners : [],
         // Administrator-only policies: set by policy alone (no setting in the extension, not in backups).
         policy: {
@@ -878,6 +884,7 @@ function buildBackup(allItems, extensionVersion) {
         customAllowlist: normalizeDomainList(allItems.customAllowlist),
         customBlocklist: normalizeDomainList(allItems.customBlocklist),
         customTrustedSenders: normalizeSenderList(allItems.customTrustedSenders),
+        customOrgDomains: normalizeDomainList(allItems.customOrgDomains),
         settings: {},
         urlCacheNote: 'Included for your records only. Cached results are not restored on import; they are rebuilt automatically.',
         secretsNote: 'Request headers for custom resolvers (which may contain API keys) are not included. Re-enter them after restoring.',
@@ -897,7 +904,7 @@ function buildBackup(allItems, extensionVersion) {
 
 // Decides what a restore will do, without touching storage.
 //  data    : parsed backup file
-//  current : { customAllowlist, customBlocklist, customTrustedSenders } currently stored
+//  current : { customAllowlist, customBlocklist, customTrustedSenders, customOrgDomains } currently stored
 //  mode    : 'merge' | 'overwrite'
 // Returns { updates, removeKeys, notes, settingsCount, cacheCount, legacy }.
 function planImport(data, current, mode) {
@@ -911,9 +918,9 @@ function planImport(data, current, mode) {
 
     // Domain lists: normalized and size-limited.
     const lists = [['customAllowlist', 'allowlist', normalizeDomainList], ['customBlocklist', 'blocklist', normalizeDomainList],
-                   ['customTrustedSenders', 'trusted sender', normalizeSenderList]];
+                   ['customTrustedSenders', 'trusted sender', normalizeSenderList], ['customOrgDomains', 'organization domain', normalizeDomainList]];
     lists.forEach(([key, label, normalize]) => {
-        if (key === 'customTrustedSenders' && !Array.isArray(data[key])) return;   // older backups don't have this list
+        if ((key === 'customTrustedSenders' || key === 'customOrgDomains') && !Array.isArray(data[key])) return;   // older backups don't have these lists
         let incoming = normalize(data[key]);
         if (incoming.length > MAX_IMPORTED_DOMAINS) {
             notes.push(`Only the first ${MAX_IMPORTED_DOMAINS} ${label} entries were restored.`);
@@ -2875,6 +2882,15 @@ function isSearchView(hash, views) {
 // 'unknown' | 'trusted'. move is true only for flagged senders.
 const SENDER_DNS_NOT_SECURITY = new Set(['Cloudflare Family', 'AdGuard (backup)']);
 function isOwnDomain(domain, ownDomain) { return !!ownDomain && (domain === ownDomain || domain.endsWith('.' + ownDomain)); }
+// (5.94.35) The organization's domain an address (or a domain) is in: own (the account's domain) or one of the
+// organization's other domains (Settings → Senders, managedOrgDomains); else own. The checks that take one domain
+// (outside or not, a colleague's name on an outside address, look-alikes of your domain) are given this one, so mail
+// between two of the organization's domains is never "outside", nor an imitation of one of them.
+function orgDomainFor(addressOrDomain, own, others) {
+    const d = String(addressOrDomain || '').toLowerCase().split('@').pop();
+    const all = [own, ...[].concat(others || [])].map(x => String(x || '').toLowerCase()).filter(Boolean);
+    return (d && all.find(o => isOwnDomain(d, o))) || own || '';
+}
 // Big providers' and brands' own domains, and your own organization's, are never judged by
 // domain-wide lists or DNS filters (a false positive there would hit every sender on gmail.com);
 // their addresses still are.

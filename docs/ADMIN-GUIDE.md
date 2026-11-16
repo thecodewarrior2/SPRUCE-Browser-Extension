@@ -311,6 +311,7 @@ Safari has no extension policies; see [Safari](#safari) below.
 | managedUseUnshortenMeFallback | boolean | true | Try unshorten.me when the custom unshortener gives no answer |
 | managedAllowlist / managedBlocklist | string array | empty | Merged with the user's own lists. Blocklisted links are flagged with their destination hidden; users can reveal it with the 🔍 icon (sends the link to unshorten.me only if third-party resolution is on). The blocklist wins over the allowlist. A sender whose domain is on the allowlist is shown as trusted and never moved to Spam |
 | managedTrustedSenders | string array | empty | Gmail: the allow list of senders never flagged or moved to Spam (addresses or whole domains), for example your phishing-training provider or false positives. There is no sender block list (`managedPhishingSenders` from 5.40–5.42 is ignored). Merged with each user's own trusted senders (Settings → Senders → Trusted senders); users can't remove these entries |
+| managedOrgDomains | string array | empty | Your organization's other domains (5.94.35), for example a student domain next to the staff domain: mail from them counts as the organization's own, never "outside", a colleague's name on an outside address or an imitation of your domain. Merged with each user's own list (Settings → Senders → Your organization's other domains); users can't remove these entries; at most 50 |
 
 ## Notes
 - **Privacy-strict baseline:** set `managedEnableThirdPartyResolution`, `managedEnableDnsThreatCheck`,
@@ -588,6 +589,8 @@ Added to each user's own lists (users can add to them, not remove from them):
 
 - `managedTrustedSenders`: senders never flagged or moved to Spam (addresses or whole domains), for
   example your phishing-training provider or a false positive.
+- `managedOrgDomains`: your organization's other domains (a student domain next to the staff domain): mail
+  from them is the organization's own, never "from outside" or an imitation of your domain.
 - `managedAllowlist`: sites whose links are never checked or changed.
 - `managedBlocklist`: sites whose links are always flagged, their destination hidden.
 

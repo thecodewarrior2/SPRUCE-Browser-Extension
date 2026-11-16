@@ -434,6 +434,15 @@
         "description": "Email address or domain (e.g., office@partner.org or partner.org)"
       }
     },
+    "managedOrgDomains": {
+      "title": "Your organization's other domains",
+      "description": "Domains your organization owns besides each user's own account domain, for example a school district's student domain next to its staff domain. Mail from them counts as the organization's own: never \"from outside your organization\", never a colleague's name on an outside address, never an address imitating the organization's domain, and its senders are never judged as a whole domain. Merged with the user's own list (Settings → Senders → Your organization's other domains); users can't remove these entries. At most 50.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "description": "Domain name (e.g., myschools.org)"
+      }
+    },
     "managedHidePopupSettingsButton": {
       "title": "Hide the Settings button in the toolbar popup (administrator only)",
       "description": "true removes the \"Open Settings\" button from the toolbar popup. There is no matching setting in the extension. Settings can still be opened by typing chrome-extension://<extension ID>/options.html in the address bar, for example by IT staff. Default: false.",
