@@ -1797,7 +1797,7 @@ test('AI model: the input is built exactly as the model was trained (TinyPhishLL
 test('AI model: the JavaScript tokenizer and network give PyTorch\'s own answers (ai-vectors.json)', async () => {
   const model = await AI('loadPhishModel()');
   for (const v of JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'ai-vectors.json'), 'utf8'))) {
-    assert.deepEqual(Array.from(model.tok.encode(v.text, 256)), v.ids, `token ids: ${v.text.slice(0, 40)}`);
+    assert.deepEqual(Array.from(model.tok.encode(v.text, 256, model.cfg.headTokens || 0)), v.ids, `token ids: ${v.text.slice(0, 40)}`);
     const out = model.forward(v.ids);
     out.forEach((x, i) => assert.ok(Math.abs(x - v.logits[i]) < 1e-3, `logit ${i}: ${x} vs ${v.logits[i]}`));
   }

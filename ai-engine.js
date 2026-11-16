@@ -58,7 +58,7 @@ class OrtPhishModel {
         texts.forEach((t, i) => {
             const hit = this.margins.get(t);
             if (hit !== undefined) { this.margins.delete(t); this.margins.set(t, hit); out[i] = hit; }
-            else todo.push({ i, ids: this.tok.encode(t, this.cfg.maxLen) });
+            else todo.push({ i, ids: this.tok.encode(t, this.cfg.maxLen, this.cfg.headTokens || 0) });
         });
         for (let s = 0; s < todo.length; s += BATCH) {
             const part = todo.slice(s, s + BATCH), B = part.length, T = Math.max(...part.map(x => x.ids.length));

@@ -1,5 +1,26 @@
 # Changelog
 
+## 5.94.33 — EXPERIMENT (branch `llm_testing`): phish-tiny 0.20.0, reads a long email's start and its end
+
+Not for release. The AI model is now **phish-tiny 0.20.0** (TinyPhishLLM `9e71652`, `models/phish-tiny/SOURCE.json`;
+was 0.19.0). Same architecture (ELECTRA-small), size, vocabulary and input format (2), but it reads a long email's
+start and its end: an input longer than 256 word pieces keeps its first 192 and its last 62 (`model.json`
+`config.headTokens`), not its first 254, because a long scam often asks at its end (for example an "estate sale"
+list from a compromised staff account that ends "reply to my personal email").
+
+- **The cut:** `WordPiece.encode(text, maxLen, head)` in `ai.js` keeps `[CLS]`, the first `head` pieces, the last
+  `maxLen - 2 - head` and `[SEP]` when the model's `config.headTokens` is set (else the first `maxLen - 2`, as
+  before); `ai.js` and `ai-engine.js` pass it. `content.js` gives the model a long body's first 6,000 and last 2,000
+  characters (was its first 8,000).
+- **What changes**, against 0.19.0 at the 90% line (held-out sets, never trained on): published phishing missed
+  75 of 771 variants → 16; synthetic phishing missed 68 of 1,500 → 16; a district's reported estate-sale phishing
+  now caught; every regression and hand-written case right.
+- **Worse:** about six more genuine emails called phishing across the check sets at 90% (published genuine 3 of
+  774 → 5), mostly short account and security notices (a LinkedIn Learning access email, a mail scanner's virus
+  warning). The AI stays advisory: it adds a warning, never moves email to Spam.
+- Docs: `docs/FEATURES.md`. Tests: `tests/fixtures/ai-vectors.json` is 0.20.0's (it includes a long made-up text,
+  so the reference test checks the cut); the unit test passes `headTokens`.
+
 ## 5.94.32 — EXPERIMENT (branch `llm_testing`): phish-tiny 0.19.0, far fewer false alarms on a district's own mail
 
 Not for release. The AI model is now **phish-tiny 0.19.0** (TinyPhishLLM `a5e17c7`, `models/phish-tiny/SOURCE.json`;

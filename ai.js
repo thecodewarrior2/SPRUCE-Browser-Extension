@@ -257,14 +257,17 @@ class WordPiece {
         }
         return ids;
     }
-    encode(text, maxLen) {
-        const ids = [this.cls];
+    // [CLS], the text's word pieces, [SEP], at most maxLen. A longer text keeps its first maxLen - 2 pieces, or,
+    // with head (model.json config.headTokens, phish-tiny 0.20.0 and later), its first `head` and its last
+    // maxLen - 2 - head, so that what a long email asks at its end is read too (training's cut_ids does the same).
+    encode(text, maxLen, head = 0) {
+        const room = maxLen - 2, pieces = [];
         for (const w of this.basic(text)) {
-            for (const id of this.wordpiece(w)) { if (ids.length >= maxLen - 1) break; ids.push(id); }
-            if (ids.length >= maxLen - 1) break;
+            for (const id of this.wordpiece(w)) { pieces.push(id); if (!head && pieces.length >= room) break; }
+            if (!head && pieces.length >= room) break;
         }
-        ids.push(this.sep);
-        return ids;
+        const kept = pieces.length <= room ? pieces : head ? pieces.slice(0, head).concat(pieces.slice(pieces.length - (room - head))) : pieces.slice(0, room);
+        return [this.cls, ...kept, this.sep];
     }
 }
 
@@ -383,7 +386,7 @@ class PhishModel {
         return Array.from(linear(pooled, 1, H, W['classifier.weight'], W['classifier.bias'], 2));
     }
     // How strongly the model leans to phishing (its two scores' difference), and as a probability.
-    margin(text) { const [a, b] = this.forward(this.tok.encode(text, this.cfg.maxLen)); return b - a; }
+    margin(text) { const [a, b] = this.forward(this.tok.encode(text, this.cfg.maxLen, this.cfg.headTokens || 0)); return b - a; }
     probability(text) { return 1 / (1 + Math.exp(-this.margin(text))); }
     // The opinion, and what made it: each sentence is scored on its own ("does this sentence alone read
     // like phishing?"), and so are the facts about the sender and links without the text. The ones

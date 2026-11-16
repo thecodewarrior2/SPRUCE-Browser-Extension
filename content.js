@@ -3631,7 +3631,9 @@ async function aiFactsFor(body) {
         recipient: String(accountAddress() || '').split('@')[0] || '',
         mailChecks: hdr ? (hdr.an || []).map(x => x.kind).filter(Boolean) : [],
         layout: shown.layout,
-        bodyText: shown.text.slice(0, 8000)
+        // (5.94.33) At most 8,000 characters: a longer text keeps its first 6,000 and its last 2,000, since the model
+        // (phish-tiny 0.20.0) reads a long email's start and its end.
+        bodyText: shown.text.length > 8000 ? `${shown.text.slice(0, 6000)}\n${shown.text.slice(-2000)}` : shown.text
     };
 }
 
