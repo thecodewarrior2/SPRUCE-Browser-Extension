@@ -865,6 +865,7 @@ function unshortenLinks() {
         guarded('Looking for drawn QR codes', scanDrawnQr);
         guarded('Checking senders', scanSenders);
         guarded('Adding the AI button', scanAiButtons);       // EXPERIMENT (llm_testing)
+        guarded('Checking your own messages', scanOwnMessages);
         const S = cfg.values;
         visualOverridesActive = S.visualOverridesActive;
 
@@ -3476,12 +3477,36 @@ function updateOpenedVerdict(body) {
 // model sees it. The answer is advisory only: it never changes the email's verdict, its links' marks or
 // Spam moves. An automatic answer with nothing suspicious is one short line, so it doesn't crowd emails.
 // ---------------------------------------------------------------------------
+// (5.94.38) Whose an opened message is: 'own' (you sent it: your address, and it never went through your mailbox's
+// incoming checks, or did and passed them for your own domain, sent to yourself), 'forged' (it shows your address
+// but came from outside without passing them: the "I hacked your account" scams forge it), or 'other'. Without
+// the message's headers (another webmail), only 'other' is ever said: the checks then run as for any email.
+function ownMessageKind(body) {
+    const sender = openedSenderOf(body), me = accountAddress();
+    if (!sender || !sender.address || !me || sender.address.toLowerCase() !== me) return Promise.resolve('other');
+    if (body.__ownKind) return body.__ownKind;
+    body.__ownKind = getMessageHeaders(body).then(h => {
+        if (!h || !h.raw) return 'other';
+        if (!h.auth) return 'own';
+        return h.auth.dmarc === 'pass' && isOwnDomain(String(h.auth.headerFrom || ''), domainOfAddress(me)) ? 'own' : 'forged';
+    }).catch(() => 'other');
+    return body.__ownKind;
+}
+
 function scanAiButtons() {
     if (!lastSettings.enableAiAnalysis || !MAIL_CAN.opened) return;
     for (const body of inBodies('')) {
         if (body.dataset.aiBox || !isShown(body) || !body.parentElement) continue;
         const sender = openedSenderOf(body);
         if (!sender || !sender.address) continue;
+        // (5.94.38) A message you sent gets no AI opinion (nothing is shown); one that only shows your address does.
+        const me = accountAddress();
+        if (me && sender.address.toLowerCase() === me && !body.dataset.aiOwnChecked) {
+            body.dataset.aiOwnChecked = '1';
+            ownMessageKind(body).then(kind => guarded('Adding the AI button', () => { body.dataset.aiOwnKind = kind; if (kind === 'own') body.dataset.aiBox = 'own'; else scanAiButtons(); }));
+            continue;
+        }
+        if (body.dataset.aiOwnChecked && !body.dataset.aiOwnKind) continue;       // (still finding out whose it is)
         body.dataset.aiBox = '1';
         const box = document.createElement('div');
         box.className = 'unshortener-ai-box';
@@ -3506,6 +3531,72 @@ function scanAiButtons() {
         small.textContent = '(experimental; S.P.R.U.C.E+\'s own model, on this computer)';
         box.append(intro, btn, small);
     }
+}
+
+// (5.94.38) Opened messages that show your own address. Forged (it came from outside without passing your
+// mailbox's checks for your domain): a red note in its banner. Sent by you: its links are checked for whether they
+// work (checkOwnLinks); the AI doesn't read it (scanAiButtons).
+function scanOwnMessages() {
+    if (!MAIL_CAN.opened) return;
+    const me = accountAddress();
+    if (!me) return;
+    for (const body of inBodies('')) {
+        if (body.dataset.ownChecked || !isShown(body)) continue;
+        const sender = openedSenderOf(body);
+        if (!sender || !sender.address || sender.address.toLowerCase() !== me) continue;
+        body.dataset.ownChecked = '1';
+        ownMessageKind(body).then(kind => guarded('Checking your own messages', () => {
+            if (!body.isConnected) return;
+            if (kind === 'forged') {
+                getMessageHeaders(body).then(h => guarded('Checking your own messages', () => {
+                    const a = (h && h.auth) || {};
+                    const why = a.dmarc && a.dmarc !== 'none' ? `its sender check (DMARC) for your address ${a.dmarc === 'fail' ? 'failed' : `says ${a.dmarc}`}` : 'nothing in it confirms it came from your account (no DMARC result for your domain)';
+                    const message = `Forged: this email says it comes from you (${me}), but you didn't send it. It came from outside, and ${why}. Scammers put your own address on an email ("I hacked your account", "pay or else") so it seems to come from you: don't reply, pay or click.`;
+                    showSenderFindings(body, [{ severity: 'danger', message }]);
+                    reportEvent('warning', `Sender check: an email showing your own address came from outside without passing ${SITE.name}'s sender check for your domain: forged.`);
+                }));
+            } else if (kind === 'own') checkOwnLinks(body);
+        }));
+    }
+}
+// (5.94.38) The links in a message you sent: does each one work? Not in a quoted part, at most OWN_LINKS_MAX,
+// each address once; one-time links (sign-in, reset, unsubscribe, tracked) are never contacted (linkWorks in
+// background.js says which it skipped). A link that doesn't work is named in a note above the message.
+const OWN_LINKS_MAX = 12;
+function checkOwnLinks(body) {
+    if (lastSettings.enableDnsThreatCheck === false) return;      // Offline only: nothing is looked up
+    const urls = [];
+    for (const a of body.querySelectorAll('a[href]')) {
+        if (inQuotedSection(a)) continue;
+        const href = String(a.href || '');
+        if (!/^https?:\/\//i.test(href) || urls.includes(href)) continue;
+        if (isSingleUseToken(href, a.textContent || '')) continue;
+        urls.push(href);
+        if (urls.length >= OWN_LINKS_MAX) break;
+    }
+    if (!urls.length) return;
+    Promise.all(urls.map(url => new Promise(resolve => safeSend({ action: 'linkWorks', url }, (r) => resolve({ url, r })))))
+        .then(results => guarded('Checking your own messages', () => {
+            const broken = results.filter(x => x.r && x.r.state === 'broken');
+            if (!broken.length || !body.isConnected || !body.parentElement) return;
+            const box = document.createElement('div');
+            box.className = 'unshortener-own-links';
+            box.setAttribute('role', 'note');
+            styleNotice(box, body, 'warning');
+            box.style.margin = '0 0 12px';
+            const head = document.createElement('b');
+            head.textContent = broken.length === 1 ? '🔗 A link in your email doesn\'t work:' : `🔗 ${broken.length} links in your email don't work:`;
+            const list = document.createElement('ul');
+            list.style.cssText = 'margin:4px 0 0 18px;padding:0;';
+            for (const x of broken) {
+                const li = document.createElement('li');
+                li.textContent = `${x.url.length > 90 ? `${x.url.slice(0, 87)}…` : x.url}: ${x.r.why}`;
+                list.appendChild(li);
+            }
+            box.append(head, list);
+            body.parentElement.insertBefore(box, body);
+            reportEvent('info', `Your own email has ${broken.length === 1 ? 'a link that doesn\'t' : `${broken.length} links that don't`} work: ${broken.map(x => `${x.url.slice(0, 80)} (${x.r.why})`).join('; ')}.`);
+        }));
 }
 
 // Resolves once the opened email's own verdict is known, or after AI_AUTO_WAIT_MS (webmail without

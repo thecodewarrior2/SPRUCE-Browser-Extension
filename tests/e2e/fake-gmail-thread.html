@@ -19,6 +19,10 @@ const cloud = P.get('links') === 'cloud';
 // one link to its own ending (.amex), one to another domain of its; ?links=name: a company's name
 // under another ending.
 const LINKS = {
+  // ?links=own: a message the reader sent (test-ownmail.js, 5.94.38): a working link, one to a site that doesn't exist,
+  // and a one-time reset link, which is never contacted.
+  own: 'The agenda is at <a id="works" href="https://www.example.com/">example.com</a> and the slides at <a id="gone" href="https://slides.no-such-site.invalid/deck">our slides</a>. ' +
+       'Reset it with <a id="once" href="https://accounts.example.com/reset?token=8f3k2j9d7s6a5q4w3e2r">this link</a>.',
   company: 'Report phishing at <a id="own" href="https://go.amex/phishing-us??comm_track_id=1&dotAmexDomain=go">americanexpress.com/phishing</a>. ' +
            'Offers: <a id="other" href="https://www.aexp.com/offers">americanexpress.com/offers</a>.',
   name: 'Your order: <a id="name" href="https://www.amazon.de/gp/your-orders">amazon.com/orders</a>.',

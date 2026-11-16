@@ -3337,6 +3337,47 @@ async function internalDestination(url) {
     return '';
 }
 
+// (5.94.38) Does a link in a message the person sent work? { state: 'ok' | 'broken' | 'skipped', why }. Its site must
+// exist (DNS, as for any link, with lookups on); with access to websites granted (the Link Inspector's Follow it
+// asks for it), one request without cookies (HEAD, else GET without reading the page) says whether the page is
+// there: 404 or 410 is broken, as is a site that doesn't answer; a sign-in page (401, 403) works. One-time links and
+// open-tracking pixels are never contacted, nor anything inside a private network. Kept an hour per address.
+const linkWorksCache = new Map();
+async function linkWorks(url) {
+    const u = parseUrl(url);
+    if (!u || !/^https?:$/.test(u.protocol)) return { state: 'skipped', why: 'not a web link' };
+    if (isSingleUseToken(url) || openPixelRule(url) || emailTrackerProvider(url)) return { state: 'skipped', why: 'a one-time or tracked link: never contacted' };
+    const hit = linkWorksCache.get(url);
+    if (hit && Date.now() - hit.at < 60 * 60 * 1000) return hit.v;
+    const done = (v) => { if (linkWorksCache.size > 500) linkWorksCache.delete(linkWorksCache.keys().next().value); linkWorksCache.set(url, { at: Date.now(), v }); return v; };
+    const cfg = await getConfig();
+    if (!cfg.values.enableDnsThreatCheck) return { state: 'skipped', why: 'lookups are off (Offline only)' };
+    if (internalHost(u.hostname)) return { state: 'skipped', why: 'a private network\'s address: never contacted' };
+    if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(u.hostname) && !u.hostname.includes(':')) {
+        let found = null;
+        try {
+            const [a, aaaa] = await Promise.all([dnsQuery(u.hostname, 'A'), dnsQuery(u.hostname, 'AAAA')]);
+            found = [...a, ...aaaa].filter(r => r.type === 1 || r.type === 28).map(r => String(r.data || ''));
+        } catch (e) { found = null; }
+        if (found && !found.length) return done({ state: 'broken', why: `its site (${u.hostname}) doesn't exist` });
+        if (found && found.some(ip => !isPublicIp(ip))) return done({ state: 'skipped', why: 'leads into a private network: never contacted' });
+    }
+    let granted = false;
+    try { granted = await chrome.permissions.contains({ origins: ['https://*/*'] }); } catch (e) { granted = false; }
+    if (!granted || u.protocol !== 'https:') return done({ state: 'ok', why: 'its site exists (the page itself isn\'t asked for without access to websites)' });
+    const init = { method: 'HEAD', redirect: 'follow', credentials: 'omit', cache: 'no-store', referrerPolicy: 'no-referrer' };
+    let res;
+    try { res = await fetchWithTimeout(url, init, 8000); }
+    catch (e) { return done({ state: 'broken', why: e && e.name === 'AbortError' ? 'its site took too long to answer' : 'its site didn\'t answer' }); }
+    if (res.status === 405 || res.status === 501) {
+        try { res = await fetchWithTimeout(url, Object.assign({}, init, { method: 'GET' }), 8000); try { if (res.body && res.body.cancel) res.body.cancel(); } catch (e) { /* nothing to cancel */ } }
+        catch (e) { return done({ state: 'ok', why: 'its site answers' }); }
+    }
+    if (res.status === 404 || res.status === 410) return done({ state: 'broken', why: `the page isn't there (HTTP ${res.status})` });
+    if (res.status >= 500) return done({ state: 'broken', why: `its site had an error (HTTP ${res.status}); it may work later` });
+    return done({ state: 'ok', why: `it answers (HTTP ${res.status})` });
+}
+
 async function followLink(url) {
     if (!/^https:\/\//i.test(String(url || ''))) return { error: 'Only https:// links can be followed.' };
     if (openPixelRule(url)) return { error: 'This is an open-tracking pixel, not a link: it leads nowhere.' };
@@ -3721,6 +3762,7 @@ const MESSAGE_RULES = Object.freeze({
     // The extension's own pages only.
     aiStatus:              { from: 'page', refuse: null },
     followLink:            { from: 'page', refuse: { error: NOT_ALLOWED }, fields: { url: MSG_URL } },
+    linkWorks:             { from: 'any',  refuse: null, fields: { url: MSG_URL } },
     virusTotal:            { from: 'page', refuse: { error: NOT_ALLOWED }, fields: { url: MSG_URL, mode: MSG_STR(20) } },
     testUnwrap:            { from: 'page', refuse: null,  fields: { url: MSG_URL } },
     forceSync:             { from: 'page', refuse: { status: NOT_ALLOWED } },
@@ -3979,6 +4021,10 @@ const MESSAGE_HANDLERS = {
     },
     aiStatus(request, sender, sendResponse) {
         aiModelStatus().then(sendResponse);
+        return true;
+    },
+    linkWorks(request, sender, sendResponse) {
+        linkWorks(request.url).then(sendResponse).catch((e) => { logWarning(`Link check failed: ${errorText(e)}`, 'Sender checks'); sendResponse(null); });
         return true;
     },
     followLink(request, sender, sendResponse) {

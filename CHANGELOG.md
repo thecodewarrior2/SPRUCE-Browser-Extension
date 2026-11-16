@@ -1,5 +1,28 @@
 # Changelog
 
+## 5.94.38 — EXPERIMENT (branch `llm_testing`): your own messages
+
+Not for release. The AI read the messages people sent themselves, as they appear in a conversation ("Looks correct.
+Please close ticket." scored 83%): wasted work and a confusing warning. `ownMessageKind` (`content.js`) tells an opened
+message that shows your own address apart from one that only shows it, from its headers (`getMessageHeaders`):
+**own** when it carries no incoming checks (it never went through your mailbox's incoming mail) or passed them for
+your own domain (sent to yourself); **forged** when it came from outside without passing them; without the headers
+(another webmail), as any email.
+
+- **No AI opinion on your own messages:** nothing is shown (`scanAiButtons`). A forged one is read as any email.
+- **Your own links are checked for whether they work** (`checkOwnLinks`; `linkWorks` in `background.js`): the site
+  exists (DNS, with online lookups on); with access to websites granted, one request without cookies (HEAD, else GET
+  without reading the page): 404 or 410, a server error or no answer is "doesn't work"; a sign-in page (401, 403)
+  works. One-time links (sign-in, reset, unsubscribe), tracked links, open-tracking pixels and private-network
+  addresses are never contacted; at most 12 links, each once an hour. A note above the message names those that
+  don't work.
+- **Forged:** an email that only shows your address gets a red note in its banner: "Forged: this email says it comes
+  from you (…), but you didn't send it. It came from outside, and its sender check (DMARC) for your address failed.
+  …" (the "I hacked your account" scams).
+- S.P.R.U.C.E Mail Protection Service never judged sent mail (it reads the Inbox only).
+- Docs: Help (AI analysis), `docs/FEATURES.md`, `PRIVACY.md`. Tests: `test-ownmail.js` (sent: no AI, a broken link
+  named, a one-time link never contacted; forged: the note, the AI still reads it).
+
 ## 5.94.37 — EXPERIMENT (branch `llm_testing`): phish-tiny 0.21.0, a long email's last sentences reach the model
 
 Not for release. The AI model is now **phish-tiny 0.21.0** (TinyPhishLLM `7e61482`, `models/phish-tiny/SOURCE.json`):

@@ -248,6 +248,12 @@ the Inspector explains that no tool can read them offline.
   given to the model: the box says "S.P.R.U.C.E+'s AI can't read this email: it reads English only", and
   **Why?** names the language. A bilingual email with a real English part, and a short one, are read. The
   extension's own checks don't depend on the language.
+- **Your own messages** (5.94.38): a message you sent (your address, and it never went through your mailbox's incoming
+  checks, or passed them for your own domain) gets no AI opinion: nothing is shown. Its links are checked for whether
+  they work instead (their site exists; with access to websites granted, the page is there: one request without
+  cookies), and a note above the message names any that don't; one-time and tracked links are never contacted. An
+  email that only shows your address (it came from outside and didn't pass the sender check for your domain) is
+  marked **Forged** in its banner ("I hacked your account" scams), and the AI reads it like any email.
 - **Advisory only:** the model's opinion can add a warning but never clears one, marks anything safe
   or moves email to Spam; when the extension's own checks warn, it says to trust them.
 - **Text that vouches for itself counts toward phishing**, in the extension's own verdict for every
