@@ -2,7 +2,7 @@
 
 ## 5.94.41 — EXPERIMENT (branch `llm_testing`): "Business via QuickBooks" is no false alarm
 
-Not for release. "SWIFT INK LLC via QuickBooks" <sales@…> was red ("isn't Intuit's address"): QuickBooks sends a
+Not for release. "Lakeside Ink LLC via QuickBooks" (made up here) was red ("isn't Intuit's address"): QuickBooks sends a
 business's invoices through the business's own mailbox and names it "Business via QuickBooks", and Docusign, Dropbox and
 others name senders the same way. A brand named only after "via" is now a note with no weight when the address is the
 sender's own: its sender check (DMARC) passed for its domain, and the domain doesn't carry or imitate the brand's name

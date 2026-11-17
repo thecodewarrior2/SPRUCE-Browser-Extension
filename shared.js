@@ -2067,7 +2067,7 @@ function govMailService(brand, reg) {
     const homes = [...(brand.home || []), ...(brand.domains || [])];
     return GOV_MAIL_SERVICES.has(reg) && homes.length > 0 && homes.every(d => /\.(gov|mil)$/.test(d));
 }
-// (5.94.41 / 0.5.74) "Swift Ink LLC via QuickBooks": a business sending through a platform names itself, then the
+// (5.94.41 / 0.5.74) "Lakeside Ink LLC via QuickBooks" (made up): a business sending through a platform names itself, then the
 // platform it used (QuickBooks sends invoices through the business's own mailbox; Docusign, Dropbox and others name
 // people the same way). The brand only after "via" is no claim to be the brand when the address is the sender's own:
 // its sender check (DMARC) passed for its domain, and the domain doesn't carry or imitate the brand's name
