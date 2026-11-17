@@ -2637,7 +2637,9 @@ function messageInfo(msgId) {
             const pl = CHANGES_5_96.colleagueLines ? addressLinePeople(headers, parsed && parsed.address) : [];
             // [5.102] How many of the To and Cc lines' addresses are at each domain (counts and domains only).
             const rc = CHANGES_5_102.platformShares ? recipientDomainCounts(headers) : [];
-            const info = { fh: parsed ? addressFingerprint(parsed.address) : '', ip: deliveringIp(headers, receiver.host) || '', an, pl, rc, v: HEADER_SIGNS_VERSION, t: Date.now() };
+            // [5.94.41] The domain DMARC passed for (only a domain), for "Name via Platform".
+            const dp = h.auth && h.auth.dmarc === 'pass' ? String(h.auth.headerFrom || '').toLowerCase() : '';
+            const info = { fh: parsed ? addressFingerprint(parsed.address) : '', ip: deliveringIp(headers, receiver.host) || '', an, pl, rc, dp, v: HEADER_SIGNS_VERSION, t: Date.now() };
             cache[msgId] = info;
             saveSenderMessageCache();
             return info;
@@ -3246,7 +3248,7 @@ function scanSenderRows(S) {
                 // [5.99-1] With what the row shows (the subject) and the headers' signs and reply domains, when read.
                 const hdr = info && info.fh === addressFingerprint(senders[k].address) ? info : null;
                 if (S.enableLookalikeCheck && r && r.status !== 'trusted') signals.push(...nameAddressSigns(senders[k].name, senders[k].address, ownOrgDomain(senders[k].address), loadColleagueHashes(), owns && owns[k],
-                    { subject: subjectText, signals: hdr ? hdr.an : [], replyTo: hdr ? replyToDomains(hdr.pl) : [] }));
+                    { subject: subjectText, signals: hdr ? hdr.an : [], replyTo: hdr ? replyToDomains(hdr.pl) : [], dmarcPassFor: (hdr && hdr.dp) || '' }));
                 // The name is the user's own address or mailbox name, on someone else's address.
                 if (S.enableOwnNameCheck && r && r.status !== 'trusted') signals.push(...ownNameSigns(senders[k].name, senders[k].address, accountAddress()));
                 // A "call this number" subject (whoever sent it).
@@ -3429,7 +3431,7 @@ function updateOpenedVerdict(body) {
                      ...serviceWarningSigns(webmailTextAround(body), SITE.name),
                      // [5.99-1] With the subject, the email's text (read only for a colleague's name) and the headers' signs and reply domains.
                      ...(lastSettings.enableLookalikeCheck !== false && st.base.status !== 'trusted' ? nameAddressSigns(st.name, st.address, ownOrgDomain(st.address), loadColleagueHashes(body), st.ownership,
-                         { subject: openedSubject(), text: () => body.innerText, signals: hdr ? hdr.an : [], replyTo: hdr ? replyToDomains(hdr.pl) : [] }) : []),
+                         { subject: openedSubject(), text: () => body.innerText, signals: hdr ? hdr.an : [], replyTo: hdr ? replyToDomains(hdr.pl) : [], dmarcPassFor: st.auth && st.auth.dmarc === 'pass' ? String(st.auth.headerFrom || '') : (hdr && hdr.dp) || '' }) : []),
                      // [5.96-2] A colleague's name in Reply-To, Cc or To on an outside address.
                      ...(lastSettings.enableLookalikeCheck !== false && st.base.status !== 'trusted' && st.info && st.info.fh === addressFingerprint(st.address) ? colleagueLineSigns(st.info.pl, ownOrgDomains(), loadColleagueHashes(body), '') : []),
                      // [5.102] A share sent through a platform, judged by the person who shared it.

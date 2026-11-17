@@ -2067,6 +2067,38 @@ function govMailService(brand, reg) {
     const homes = [...(brand.home || []), ...(brand.domains || [])];
     return GOV_MAIL_SERVICES.has(reg) && homes.length > 0 && homes.every(d => /\.(gov|mil)$/.test(d));
 }
+// (5.94.41 / 0.5.74) "Swift Ink LLC via QuickBooks": a business sending through a platform names itself, then the
+// platform it used (QuickBooks sends invoices through the business's own mailbox; Docusign, Dropbox and others name
+// people the same way). The brand only after "via" is no claim to be the brand when the address is the sender's own:
+// its sender check (DMARC) passed for its domain, and the domain doesn't carry or imitate the brand's name
+// (quickbooks-billing.example, intuit-invoices.example). A personal mailbox (gmail.com…) anyone can open gets
+// amber; anything else, the name before "via" naming a brand itself, or no DMARC pass, is judged as before.
+const VIA_NAME_RE = /^(.*?\S)\s+via\s+(\S.*)$/i;
+function viaSenderName(name) {
+    const m = VIA_NAME_RE.exec(String(name || '').normalize('NFKC').replace(/["“”]/g, '').trim());
+    return m ? { who: m[1].trim(), platform: m[2].trim() } : null;
+}
+function dmarcPassedFor(context, domain) {
+    const pf = String((context && context.dmarcPassFor) || '').toLowerCase().replace(/\.$/, '');
+    if (!pf || !domain) return false;
+    const d = String(domain).toLowerCase();
+    return d === pf || (registrableDomain(d) || d) === (registrableDomain(pf) || pf);
+}
+function domainCarriesBrand(brand, domain) {
+    const reg = registrableDomain(domain) || domain;
+    const letters = reg.replace(/[^a-z0-9]/gi, '').toLowerCase();
+    if ((brand.tokens || []).some(t => { const w = String(t).replace(/[^a-z0-9]/gi, '').toLowerCase(); return w.length >= 4 && letters.includes(w); })) return true;
+    try { return !!lookalikeOf(domain); } catch (e) { return false; }
+}
+function viaPlatformSign(name, address, domain, claimed, context, shown) {
+    const via = viaSenderName(name);
+    if (!via || displayNameBrand(via.who, address)) return null;
+    const platformBrand = displayNameBrand(via.platform, address);
+    if (!platformBrand || platformBrand.name !== claimed.name) return null;
+    if (!dmarcPassedFor(context, domain) || domainCarriesBrand(claimed, domain)) return null;
+    if (isPersonalMailDomain(registrableDomain(domain) || domain)) return { weight: SIGNAL_CAUTION_SCORE, text: `The sender's name says “${shown}”: ${via.who}, sending through ${via.platform} from a personal mailbox (${address}), which anyone can open. Real for a small business, but make sure it's who you expect.` };
+    return { weight: 0, text: `The sender's name says “${shown}”: ${via.who}, sending through ${via.platform} from its own address (${address}, its sender check passed), not ${claimed.name} itself.` };
+}
 function nameAddressSigns(name, address, own, colleagues, ownership, context) {
     const out = [];
     const domain = domainOfAddress(address);
@@ -2080,6 +2112,7 @@ function nameAddressSigns(name, address, own, colleagues, ownership, context) {
             ? { weight: 5, text: `The sender's name says “${shown}”, sent through GovDelivery (${address}), but its sender check (DMARC) failed: it is forged.` }
             : { weight: 0, text: `The sender's name says “${shown}”; ${address} is GovDelivery's (Granicus), the mail service government agencies use for their bulletins and alerts.` });
         else if (ownership && ownership.state === 'owned') out.push({ weight: 0, text: `The sender's name says “${shown}”; ${ownershipNote(ownership, reg, claimed.name)}.` });
+        else if (viaPlatformSign(name, address, domain, claimed, context, shown)) out.push(viaPlatformSign(name, address, domain, claimed, context, shown));
         else if (ownership && ownership.state === 'likely') out.push({ weight: SIGNAL_CAUTION_SCORE, text: `The sender's name says “${shown}”, and ${address} isn't a known ${claimed.name} address, though ${ownershipNote(ownership, reg, claimed.name)}. Make sure it's really who you expect.` });
         else if (nameOnOtherEnding(claimed, reg)) out.push({ weight: SIGNAL_CAUTION_SCORE, text: `The sender's name says “${shown}”, and ${reg} carries ${claimed.name}'s name under another ending, but it isn't known to be ${claimed.name}'s. Make sure it's really who you expect.` });   // [5.90-4] amber, never moved
         else if (nameSpeaksAboutBrand(name)) out.push({ weight: SIGNAL_CAUTION_SCORE, text: thirdPartyNameText(shown, address, claimed.name) });   // [5.92] amber, never moved
@@ -3056,7 +3089,7 @@ const ESP_HEADER_MARKERS = [
 ];
 // Bumped whenever headerAnomalies learns new signs, so results saved by an older version are worked
 // out again (see messageInfo in content.js).
-const HEADER_SIGNS_VERSION = 9;   // 9: [5.102] the To and Cc lines' domain counts (rc); 7: [5.96-1] the To line person by person, [5.96-2] the people of Reply-To, Cc and To kept (as fingerprints); 8: [5.99-1] every Reply-To's domain kept
+const HEADER_SIGNS_VERSION = 10;   // 10: [5.94.41] the domain DMARC passed for (dp); 9: [5.102] the To and Cc lines' domain counts (rc); 7: [5.96-1] the To line person by person, [5.96-2] the people of Reply-To, Cc and To kept (as fingerprints); 8: [5.99-1] every Reply-To's domain kept
 // receiver: the webmail's receiving mail system, whose own records can be trusted:
 // { host: 'mx.google.com', name: 'Gmail' } (see the `mail.headers` entry of WEBMAIL_SITES).
 function headerAnomalies(raw, accountAddress, receiver = {}) {

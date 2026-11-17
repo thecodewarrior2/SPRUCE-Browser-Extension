@@ -1,5 +1,20 @@
 # Changelog
 
+## 5.94.41 — EXPERIMENT (branch `llm_testing`): "Business via QuickBooks" is no false alarm
+
+Not for release. "SWIFT INK LLC via QuickBooks" <sales@…> was red ("isn't Intuit's address"): QuickBooks sends a
+business's invoices through the business's own mailbox and names it "Business via QuickBooks", and Docusign, Dropbox and
+others name senders the same way. A brand named only after "via" is now a note with no weight when the address is the
+sender's own: its sender check (DMARC) passed for its domain, and the domain doesn't carry or imitate the brand's name
+(quickbooks-billing…, intuit-invoices…). From a personal mailbox (gmail.com…), which anyone can open, it is amber. The
+name before "via" naming a brand itself ("Intuit via QuickBooks"), no DMARC pass, or no "via" at all: judged as before
+(`viaPlatformSign` in `shared.js`). No list of platforms: any brand after "via" counts. The inbox list learns the
+domain DMARC passed for from the headers it already reads (`dp`, `HEADER_SIGNS_VERSION` 10), the opened email from its
+sender verification. S.P.R.U.C.E Mail Protection Service does the same (0.5.74).
+
+- Tests: unit (the invoice; without DMARC, DMARC for another domain, a brand before "via", a domain carrying the brand
+  or its other name, a personal mailbox, no "via").
+
 ## 5.94.40 — EXPERIMENT (branch `llm_testing`): a government agency's bulletin through GovDelivery is no false alarm
 
 Not for release. "IRS Newswire" <irs@service.govdelivery.com> was a caution ("isn't a known IRS address, though

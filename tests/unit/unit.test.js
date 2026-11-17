@@ -1106,6 +1106,19 @@ test('"call this number" scams: subject strong with the scam wording, body a cau
   assert.deepEqual(gov('IRS Newswire', 'irs@service.govdelivery.com', { dmarc: 'pass' }), [0]);
   assert.deepEqual(gov('IRS Newswire', 'irs@service.govdelivery.com', { signals: [{ text: "It failed its sender's verification (DMARC) for service.govdelivery.com." }] }), [5]);
   assert.deepEqual(gov('PayPal', 'service@service.govdelivery.com', {}), [5], 'a company\'s name there still counts');
+  // (5.94.41) "Name via Platform" from the sender's own address, its DMARC passed: no claim to be the platform's brand.
+  // Made-up businesses and domains.
+  const via = (n, a, c) => S('nameAddressSigns')(n, a, '', new Set(), null, c).map(x => x.weight);
+  const CAUTION = S('SIGNAL_CAUTION_SCORE');
+  assert.deepEqual(via('Lakeside Ink LLC via QuickBooks', 'sales@lakeside-ink.example', { dmarcPassFor: 'lakeside-ink.example' }), [0]);
+  assert.deepEqual(via('Lakeside Ink LLC via QuickBooks', 'sales@lakeside-ink.example', {}), [5], 'no DMARC pass: as before');
+  assert.deepEqual(via('Lakeside Ink LLC via QuickBooks', 'sales@lakeside-ink.example', { dmarcPassFor: 'other.example' }), [5], 'DMARC passed for another domain');
+  assert.deepEqual(via('Intuit Billing via QuickBooks', 'billing@lakeside-ink.example', { dmarcPassFor: 'lakeside-ink.example' }), [5], 'the name before "via" is the brand');
+  assert.deepEqual(via('PayPal via QuickBooks', 'billing@lakeside-ink.example', { dmarcPassFor: 'lakeside-ink.example' }), [5], 'another brand before "via"');
+  assert.deepEqual(via('Billing Dept via QuickBooks', 'billing@quickbooks-billing.example', { dmarcPassFor: 'quickbooks-billing.example' }), [5], 'a domain carrying the brand');
+  assert.deepEqual(via('Billing Dept via QuickBooks', 'billing@intuit-invoices.example', { dmarcPassFor: 'intuit-invoices.example' }), [5], 'a domain carrying the brand\'s other name');
+  assert.deepEqual(via('Lawn Care via QuickBooks', 'jo.lawncare@gmail.com', { dmarcPassFor: 'gmail.com' }), [CAUTION], 'a personal mailbox: amber');
+  assert.deepEqual(via('QuickBooks', 'sales@lakeside-ink.example', { dmarcPassFor: 'lakeside-ink.example' }), [5], 'no "via": as before');
 });
 
 test('list storage: compressed, each entry once; old plain copies still read; a failed list keeps its domains', async () => {
@@ -2431,7 +2444,8 @@ test('[5.99-1] a colleague\'s name on an outside address: amber only when the em
   assert.equal(Off(`addressLinePeople(parseRawHeaders(${JSON.stringify(raw)}), ${JSON.stringify(VENDOR)})`).length, 0);
   // The webmail page passes what the email says, in the inbox list and in the opened email.
   const content = fs.readFileSync(path.join(EXT, 'content.js'), 'utf8');
-  assert.equal((content.match(/signals: hdr \? hdr\.an : \[\], replyTo: hdr \? replyToDomains\(hdr\.pl\) : \[\] \}/g) || []).length, 2);
+  assert.equal((content.match(/signals: hdr \? hdr\.an : \[\], replyTo: hdr \? replyToDomains\(hdr\.pl\) : \[\][ ,]/g) || []).length, 2);
+  assert.equal((content.match(/dmarcPassFor: /g) || []).length, 2, '[5.94.41] and the domain DMARC passed for, in both');
   assert.match(content, /\{ subject: subjectText, signals: hdr/);
   assert.match(content, /\{ subject: openedSubject\(\), text: \(\) => body\.innerText, signals: hdr/);
 });
